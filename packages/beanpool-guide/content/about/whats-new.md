@@ -15,6 +15,7 @@ You get these when the global community's server is updated. On the phone they n
 - **New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.
 - **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See "Finding things near you".
 - **Polls** have no place of their own, so each is shown at the area of the member who made it.
+- **Type your town.** On the global community, **Find your community** on Home no longer needs your location: tap **or type your town** and pick your town. Only a rough point is kept. See "Finding a community near you".
 - **Posting without a price.** On the global community the post form asks for no price, because Beans live in local communities. In the web app, **Post Offer** and **Post Need** now work without one. A local community still asks for a price.
 
 ## Home
@@ -33,6 +34,8 @@ These changes live on your community's server. You get them when your community'
 - **Listings are for members.** Someone who has not joined can't see your community's listings or their photos. They are shown the way to the global community instead, where anyone can look around.
 - **Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.
 - **Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see.
+- **Who wrote a review.** Everyone in your community can read a review's stars and words. Only the two people in the trade can see who wrote it and which deal it was about.
+- **Child safety.** Every report screen, on the phone and in the web app, now offers **Child safety** as a reason. Choose it if a child may be at risk: the people who run your community's server are told at once and look at it first. See "Reporting a problem".
 
 ## Daily limits
 

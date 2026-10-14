@@ -18,6 +18,7 @@ import {
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
+import { REPORT_REASONS } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -6720,13 +6721,34 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
 }
 
 /**
+ * The report's reason as it goes for `id`: the reason picked (REPORT_REASONS, first, where the server reads it) always;
+ * the member's words after it only where refuseReadableIntoDm lets readable words through for that id. Where it refuses
+ * (a known DM's id, or a guard that can't tell) the reason picked goes alone, so a report is never held up and "Child
+ * safety" still alerts (#1938 confirmation 9, the director's ruling: no readable words for a known DM's id anywhere).
+ */
+async function reportReasonFor(id: string, reason: string): Promise<{ reason: string; wordsLeftOut: boolean }> {
+    const picked = REPORT_REASONS.find((r) => reason === r || reason.startsWith(`${r}: `));
+    if (picked && !reason.slice(picked.length + 2).trim()) return { reason, wordsLeftOut: false };
+    try {
+        await refuseReadableIntoDm(id);
+        return { reason, wordsLeftOut: false };
+    } catch {
+        return { reason: picked ?? 'Other', wordsLeftOut: true };
+    }
+}
+
+/**
  * Report a member, a post or an event (and, from the enterprise screen, an enterprise). The post and event screens show
  * a failure's message to the member, so it is the node's sentence when it sent one ("That post is not here any more."),
- * never its code (`not_found`), which stays on the error as `code`, with `status`.
+ * never its code (`not_found`), which stays on the error as `code`, with `status`. The node's answer comes back with
+ * `wordsLeftOut`: true when the report went with the reason picked but not the member's words (reportReasonFor), so the
+ * report box can say so (REPORT_WORDS_LEFT_OUT).
  */
 export async function reportAbuse(reporterPublicKey: string, targetPublicKey: string, reason: string, postId?: string) {
+    const sending = postId ? await reportReasonFor(postId, reason) : { reason, wordsLeftOut: false };
     try {
-        return await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+        const res = await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason: sending.reason, targetPostId: postId });
+        return { ...res, wordsLeftOut: sending.wordsLeftOut };
     } catch (e: any) {
         if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
         const said: any = new Error(e.nodeMessage);
@@ -7678,6 +7700,9 @@ export async function updateGroupApi(groupId: string, data: {
     category?: string;
     joinPolicy?: JoinPolicy;
 }): Promise<{ success: boolean; group: GroupItem }> {
+    // A group's name or about are words for its id (no screen sends one today: GroupDetailModal sends joinPolicy): a known
+    // DM's id refuses first; a held group never waits, as createPost (#1938 confirmation 9).
+    if ((data.name || data.description) && !(await isHeldGroupChat(groupId))) await refuseReadableIntoDm(groupId);
     return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}`, data);
 }
 

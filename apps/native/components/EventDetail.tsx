@@ -28,7 +28,7 @@ import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
-import { ReportReasonBox } from './ReportReasonBox';
+import { ReportReasonBox, ReportWordsLeftOut } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -162,11 +162,14 @@ export function EventDetail({ post }: EventDetailProps) {
 
     // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
     const [reporting, setReporting] = useState(false);
+    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under the button.
+    const [wordsLeftOut, setWordsLeftOut] = useState(false);
     const report = async (reason: string) => {
         if (!identity?.publicKey) return;
         try {
-            await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
+            const sent = await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
             setReporting(false);
+            setWordsLeftOut(sent?.wordsLeftOut === true);
             Alert.alert('Reported', "Thanks. This community's moderators will take a look.");
         } catch (e: any) {
             Alert.alert('Not sent', e?.message || 'Could not reach the node.');
@@ -351,10 +354,11 @@ export function EventDetail({ post }: EventDetailProps) {
 
                 {!isHost && identity?.publicKey && (
                     <>
-                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event" accessibilityState={{ expanded: reporting }}>
+                        <Pressable onPress={() => { setWordsLeftOut(false); setReporting((r) => !r); }} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event" accessibilityState={{ expanded: reporting }}>
                             <Text style={styles.reportText}>🚩 Report event</Text>
                         </Pressable>
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
+                        {wordsLeftOut && !reporting && <ReportWordsLeftOut />}
                     </>
                 )}
             </ScrollView>

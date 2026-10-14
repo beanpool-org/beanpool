@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useTheme } from '../app/ThemeContext';
 import { hapticTick } from '../utils/haptics';
-import { CHILD_SAFETY_HINT, CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../utils/reportReasons';
+import { CHILD_SAFETY_HINT, CHILD_SAFETY_REASON, REPORT_REASONS, REPORT_WORDS_LEFT_OUT, reportReasonWithWords } from '../utils/reportReasons';
 
 export function ReportReasonBox({ onSubmit, onCancel }: {
     /**
@@ -102,5 +102,18 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                 </Pressable>
             </View>
         </View>
+    );
+}
+
+/**
+ * The line under a report box (or where it was) right after a report that went with the reason picked but not the
+ * member's words: reportAbuse's `wordsLeftOut`. Never before a send, never as an error: the report itself went.
+ */
+export function ReportWordsLeftOut() {
+    const { colors } = useTheme();
+    return (
+        <Text accessibilityLiveRegion="polite" style={{ marginTop: 8, fontSize: 13, color: colors.text.secondary }}>
+            {REPORT_WORDS_LEFT_OUT}
+        </Text>
     );
 }

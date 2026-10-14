@@ -31,6 +31,7 @@ import { blockUser } from '../../utils/blocklist';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
+import { ReportWordsLeftOut } from '../../components/ReportReasonBox';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -415,6 +416,8 @@ export default function PostDetailModal() {
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [reportDetails, setReportDetails] = useState('');
+    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report.
+    const [reportWordsLeftOut, setReportWordsLeftOut] = useState(false);
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
@@ -1696,6 +1699,7 @@ export default function PostDetailModal() {
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 onPress={() => {
                                     const next = !showReportForm;
+                                    setReportWordsLeftOut(false);
                                     setShowReportForm(next);
                                     if (next) {
                                         setTimeout(() => {
@@ -1804,8 +1808,9 @@ export default function PostDetailModal() {
                                         try {
                                             setSubmittingReport(true);
                                             const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;
-                                            await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
+                                            const sent = await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
                                             setShowReportForm(false);
+                                            setReportWordsLeftOut(sent?.wordsLeftOut === true);
                                             setReportDetails('');
                                             setReportReason('');
                                             Alert.alert('Reported', "Thanks. Your community's moderators will review it.");
@@ -1820,6 +1825,7 @@ export default function PostDetailModal() {
                                 </Pressable>
                             </View>
                         )}
+                        {reportWordsLeftOut && !showReportForm && <ReportWordsLeftOut />}
                     </View>
                 )}
             </ScrollView>

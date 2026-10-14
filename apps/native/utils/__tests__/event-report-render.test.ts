@@ -48,11 +48,11 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: () => ({ theme: 'light', colors }), useStyles: (f: any) => f({ theme: 'light', colors }) };
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'me'.repeat(32) } }) }));
-const node = vi.hoisted(() => ({ fail: false, sent: [] as unknown[][] }));
+const node = vi.hoisted(() => ({ fail: false, leftOut: false, sent: [] as unknown[][] }));
 vi.mock('../db', () => ({
     fetchEventDetail: async () => null,
     rsvpEvent: vi.fn(), deletePost: vi.fn(),
-    reportAbuse: async (...a: unknown[]) => { if (node.fail) throw new Error('Could not reach the node.'); node.sent.push(a); return { success: true }; },
+    reportAbuse: async (...a: unknown[]) => { if (node.fail) throw new Error('Could not reach the node.'); node.sent.push(a); return { success: true, wordsLeftOut: node.leftOut }; },
 }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
@@ -61,9 +61,10 @@ vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }))
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
 
 import { EventDetail } from '../../components/EventDetail';
+import { REPORT_WORDS_LEFT_OUT } from '../reportReasons';
 
 let root: Root; let host: HTMLDivElement;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); alerts.length = 0; node.fail = false; node.sent.length = 0; });
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); alerts.length = 0; node.fail = false; node.leftOut = false; node.sent.length = 0; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 const button = (name: string | RegExp) => Array.from(host.querySelectorAll('[role=button]')).find((b) => (typeof name === 'string' ? (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name : name.test(b.textContent ?? ''))) as HTMLElement | undefined;
 const click = async (el: HTMLElement | undefined) => { expect(el).toBeTruthy(); await act(async () => { el!.click(); await new Promise((r) => setTimeout(r, 0)); }); };
@@ -114,5 +115,42 @@ describe('the event screen reports through the shared box (drawn)', () => {
         expect(kav).toBeTruthy();
         expect(kav!.contains(host.querySelector('input[aria-label="Add a few words (optional)"]'))).toBe(true);
         expect(kav!.contains(button('Submit report')!)).toBe(true);
+    });
+
+    // #1938 confirmation 9: where the guard refuses the event's id (a known DM's, or one it can't tell), reportAbuse sends
+    // the reason picked alone and says so; the screen then says the words were left out. Never before a send, never as an
+    // error (the title stays "Reported"), and never when the words went.
+    it('a report whose words were left out: "Reported", the box closes, and the one line says so; opening the box again clears it', async () => {
+        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
+        await click(button('Report event'));
+        await click(button('Child safety'));
+        await type('he asked my son for photos');
+        expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
+        node.leftOut = true;
+        await click(button('Submit report'));
+        expect(alerts.map((a) => a.title)).toEqual(['Reported']);
+        expect(host.textContent).not.toContain('WHY ARE YOU REPORTING IT?');
+        expect(host.textContent!.split(REPORT_WORDS_LEFT_OUT).length - 1).toBe(1);
+        await click(button('Report event'));
+        expect(host.textContent).toContain('WHY ARE YOU REPORTING IT?');
+        expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
+    });
+
+    it('a report whose words went, and a send that failed, never show the line', async () => {
+        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
+        await click(button('Report event'));
+        await click(button('Other'));
+        await type('loud music after midnight');
+        node.fail = true;
+        node.leftOut = true;
+        await click(button('Submit report'));
+        expect(alerts.map((a) => a.title)).toEqual(['Not sent']);
+        expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
+        node.fail = false;
+        node.leftOut = false;
+        await click(button('Submit report'));
+        expect(alerts.map((a) => a.title)).toEqual(['Not sent', 'Reported']);
+        expect(node.sent).toEqual([['me'.repeat(32), 'host'.repeat(16), 'Other: loud music after midnight', 'ev-1']]);
+        expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
     });
 });

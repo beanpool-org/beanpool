@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../reportReasons';
+import { CHILD_SAFETY_REASON, REPORT_REASONS, REPORT_WORDS_LEFT_OUT, reportReasonWithWords } from '../reportReasons';
 
 const APP = path.join(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(APP, rel), 'utf8');
@@ -71,7 +71,7 @@ describe('the phone\'s report lists', () => {
 
     it('the event screen (components/EventDetail.tsx) reports through the shared box, never a fixed reason', () => {
         const src = read('components/EventDetail.tsx');
-        expect(src).toContain("import { ReportReasonBox } from './ReportReasonBox';");
+        expect(src).toMatch(/import \{[^}]*\bReportReasonBox\b[^}]*\} from '\.\/ReportReasonBox';/);
         expect(src).toMatch(/<ReportReasonBox onSubmit=\{report\}/);
         expect(src).toMatch(/reportAbuse\(identity\.publicKey, [^,]+, reason, post\.id\)/);
         expect(src).not.toContain('Event reported from the event screen');
@@ -79,7 +79,7 @@ describe('the phone\'s report lists', () => {
 
     it('an enterprise or project (app/treasury-detail.tsx) reports through the shared box, never a free-text reason', () => {
         const src = read('app/treasury-detail.tsx');
-        expect(src).toContain("import { ReportReasonBox } from '../components/ReportReasonBox';");
+        expect(src).toMatch(/import \{[^}]*\bReportReasonBox\b[^}]*\} from '\.\.\/components\/ReportReasonBox';/);
         const b = box(src, '{showReportForm && (', 'Alert.alert(\'Reported\'');
         expect(b).toContain('<ReportReasonBox');
         expect(b).toContain('await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);');
@@ -87,6 +87,40 @@ describe('the phone\'s report lists', () => {
         // A failed send rethrows after its alert, so the box keeps the choice and the words (review of #1912, finding 3;
         // the event screen's side is drawn in event-report-render.test.ts).
         expect(src).toMatch(/Alert\.alert\('Error', e\.message \|\| 'Could not submit report\.'\);\s*throw e;/);
+    });
+
+    // #1938 confirmation 9: a report naming a known DM's id (or one the guard can't tell) goes with the reason picked alone,
+    // and reportAbuse says so (`wordsLeftOut`). Each screen keeps that answer and, once its box has closed, shows the one
+    // shared line (REPORT_WORDS_LEFT_OUT, ReportWordsLeftOut); opening the box again clears it. The event screen's side is
+    // drawn in event-report-render.test.ts; these two screens can't be drawn here, so their wiring is read.
+    for (const [rel, imports, flag, open] of [
+        ['app/treasury-detail.tsx', "'../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
+        ['app/post/[id].tsx', "'../../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
+    ] as const) {
+        it(`${rel} shows the words-left-out line only after a report that left them out, never while the box is open`, () => {
+            const src = read(rel);
+            expect(src).toMatch(new RegExp(`import \\{[^}]*\\bReportWordsLeftOut\\b[^}]*\\} from ${imports.replace(/[./[\]]/g, '\\$&')};`));
+            const setter = `set${flag[0].toUpperCase()}${flag.slice(1)}`;
+            // Set from what reportAbuse answered, right after the send; cleared when the member opens the box again.
+            expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\);[\\s\\S]{0,120}${setter}\\(sent\\?\\.wordsLeftOut === true\\);`));
+            expect(src.match(new RegExp(`${setter}\\(sent\\?\\.wordsLeftOut === true\\)`, 'g'))).toHaveLength(1);
+            expect(src).toMatch(new RegExp(`${setter}\\(false\\);\\s*set${open[0].toUpperCase()}${open.slice(1)}\\(`));
+            expect(src).toContain(`{${flag} && !${open} && <ReportWordsLeftOut />}`);
+        });
+    }
+
+    it('the line is the one shared sentence, said by one component', () => {
+        const box = read('components/ReportReasonBox.tsx');
+        expect(box).toMatch(/export function ReportWordsLeftOut\(\)/);
+        expect(box).toContain('{REPORT_WORDS_LEFT_OUT}');
+        // Its longest stretch with no quote in it, as a source spells it (an apostrophe is escaped there).
+        const piece = REPORT_WORDS_LEFT_OUT.split(/['"`\\]/).reduce((a, b) => (b.length > a.length ? b : a), '');
+        expect(piece.length).toBeGreaterThan(20);
+        const own = ['app', 'components', 'utils']
+            .flatMap((d) => sourceFiles(path.join(APP, d)))
+            .filter((f) => fs.readFileSync(f, 'utf8').includes(piece))
+            .map((f) => path.relative(APP, f));
+        expect(own).toEqual([path.join('utils', 'reportReasons.ts')]);
     });
 
     it('what a report sends: the picked reason first, then any words', () => {

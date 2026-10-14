@@ -506,7 +506,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
                     {loadingGroups ? (
-                        <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
+                        <div className="py-12 text-center text-sm text-nature-600 dark:text-nature-400">Loading groups...</div>
                     ) : filteredGroups.length === 0 ? (
                         <div className="text-center py-16 px-4 bg-white dark:bg-nature-950/40 rounded-2xl border border-nature-200 dark:border-nature-800/80">
                             <div className="text-4xl mb-3">👥</div>
@@ -538,17 +538,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             setSelectedGroupForDetail(g);
                                         }
                                     }}
-                                    className="p-4 bg-nature-950/70 hover:bg-nature-900/80 border border-nature-800 hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 hover:border-nature-300 dark:hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0 flex-1">
-                                            <h4 className="font-extrabold text-base text-white truncate">{g.name}</h4>
+                                            <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-[11px] font-bold text-nature-400 capitalize">
+                                                <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
                                                     🏷️ {g.category.replace(/_/g, ' ')}
                                                 </span>
                                                 <span className="text-nature-600 dark:text-nature-400">•</span>
-                                                <span className="text-[11px] text-nature-400">
+                                                <span className="text-[11px] text-nature-600 dark:text-nature-400">
                                                     {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
                                                 </span>
                                             </div>
@@ -556,27 +556,27 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         {g.viewerRole ? (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 g.viewerRole === 'convenor'
-                                                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-700/60'
+                                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60'
                                                     : 'bg-nature-800 text-nature-300'
                                             }`}>
                                                 {g.viewerRole}
                                             </span>
                                         ) : g.viewerStatus === 'pending_approval' ? (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-950/60 text-amber-300 border border-amber-700/60">
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/60">
                                                 Pending
                                             </span>
                                         ) : null}
                                     </div>
 
                                     {g.description && (
-                                        <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
+                                        <p className="text-xs text-nature-700 dark:text-nature-300 line-clamp-2 leading-relaxed">
                                             {g.description}
                                         </p>
                                     )}
 
-                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500 dark:text-nature-400">
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
                                         <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
-                                        <span className="text-emerald-500 font-bold hover:underline">View Details →</span>
+                                        <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">View Details →</span>
                                     </div>
                                 </div>
                             ))}
@@ -585,14 +585,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
                 )}
                 {!showEnterprises ? null : loading ? (
-                <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
+                <div className="p-8 text-center text-nature-600 dark:text-nature-500">Loading enterprises…</div>
                 ) : error ? (
-                    <div className="p-8 text-center text-red-500">{error}</div>
+                    <div className="p-8 text-center text-red-700 dark:text-red-500">{error}</div>
                 ) : filteredEnterprises.length === 0 ? (
                     <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
-                        <p className="text-base font-bold text-white mb-1">No enterprises found</p>
-                        <p className="text-sm text-nature-400 mb-6">
+                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">No enterprises found</p>
+                        <p className="text-sm text-nature-600 dark:text-nature-400 mb-6">
                             Got an idea that benefits the community? Start an enterprise or propose a project to get started.
                         </p>
                         {identity && (

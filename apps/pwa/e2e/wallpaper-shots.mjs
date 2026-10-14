@@ -38,7 +38,15 @@ html { font-size: ${scale * 100}% !important; }
 ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map(px => `.text-\\[${px}px\\] { font-size: ${px * scale}px !important; }`).join('\n')}
 `;
 
+/** A few groups, so the Commons body has cards on it and something to scroll under its pinned Decide/Groups row. */
+const GROUPS = ['Garden working bee', 'Tool library', 'Bike repair guild', 'Kids swap', 'Seed savers', 'Repair café'].map((name, i) => ({
+    id: `g${i}`, name, slug: `g${i}`, category: ['working_group', 'project', 'guild', 'social', 'general', 'guild'][i],
+    createdBy: 'x', joinPolicy: 'open', createdAt: '2026-09-01T00:00:00.000Z', memberCount: 3 + i * 4,
+    viewerRole: i === 0 ? 'convenor' : i === 1 ? 'member' : null, description: 'Meets on Saturdays at the hall.',
+}));
+
 function answer(pathname, search) {
+    if (pathname === '/api/groups') return GROUPS;
     if (pathname === '/api/commons/decisions') {
         return { decisions: [], myPoolVoting: { voiceCredits: 12, hasCompletedTrade: true }, canPropose: true };
     }
@@ -128,6 +136,20 @@ try {
                     const bad = !plain && m.grounds.length > 0;
                     if (bad) failed++;
                     rows.push({ name, ...m, bad });
+                    if (screen === 'commons' && !plain) {
+                        // Scrolled: the Decide/Groups row stays pinned with the group cards passing under it.
+                        await page.evaluate(() => { const el = document.querySelector('[data-testid="commons-section-tabs"]')?.parentElement; if (el) el.scrollTop = 900; });
+                        await page.waitForTimeout(200);
+                        await page.screenshot({ path: path.join(OUT, `${name}-scrolled.png`) });
+                        // And the Decide section, where the node has votes on.
+                        const decide = page.locator('[data-testid="commons-section-tabs"] button', { hasText: 'Decide' });
+                        if (await decide.count()) {
+                            await decide.first().click();
+                            await page.evaluate(() => { const el = document.querySelector('[data-testid="commons-section-tabs"]')?.parentElement; if (el) el.scrollTop = 0; });
+                            await page.waitForTimeout(300);
+                            await page.screenshot({ path: path.join(OUT, `${name}-decide.png`) });
+                        }
+                    }
                     console.log(`${bad ? 'FAIL' : 'ok  '} ${name.padEnd(40)} wallpaper ${String(m.wallpaperPct).padStart(5)}%${m.grounds.length ? '  full-width grounds: ' + m.grounds.map(g => `${g.key} (${g.bg}, ${g.height}px)`).join('; ') : ''}`);
                     await context.close();
                 }

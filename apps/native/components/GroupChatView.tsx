@@ -366,7 +366,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         () => (searchOpen && searchQuery.trim() ? searchShownLines(messages.filter(m => m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed), searchQuery) : messages),
         [messages, searchOpen, searchQuery],
     );
-    const listItems = useMemo(() => buildChatListItems(shownMessages, new Date(), kind), [shownMessages, kind]);
+    // Removed lines in a row drawn as one, but not in search results: hits in a row there need not be in a row in the chat.
+    const searching = searchOpen && !!searchQuery.trim();
+    const listItems = useMemo(() => buildChatListItems(shownMessages, new Date(), searching ? undefined : kind), [shownMessages, searching, kind]);
     const showAuthorById = useMemo(() => {
         const map = new Map<string, boolean>();
         messages.forEach((m, i) => map.set(m.id, showsAuthorName(m, messages[i - 1], { kind, myPubkey: me })));

@@ -291,7 +291,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return searchShownLines(texts, q).map((x) => x.m);
     }, [shownMessages, chatSearch, groupShown, groupLocked]);
     // Two or more removed lines in a row, of one kind, drawn as one line (Marty, 15 Oct): display only, every id kept.
-    const removedRuns = useMemo(() => groupRemovedRuns(searchedMessages, groupShown), [searchedMessages, groupShown]);
+    // Not while searching: hits in a row there need not be in a row in the chat, and each hit is drawn as itself.
+    const removedRuns = useMemo(
+        () => groupRemovedRuns(chatSearch?.trim() ? [] : shownMessages, groupShown),
+        [shownMessages, chatSearch, groupShown],
+    );
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
     // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;

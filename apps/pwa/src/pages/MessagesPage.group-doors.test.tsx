@@ -653,4 +653,16 @@ describe('removed lines in a row are one line (Marty, 15 Oct: "Yes, one line")',
         ]), { timeout: 3000 });
         expect(screen.getByText('Bring gloves')).toBeTruthy();
     });
+
+    it('a search draws each hit as itself: hits in a row need not be in a row in the chat', async () => {
+        tombstone('convenor'); tombstone('convenor');
+        await sealedLine('Bring gloves');
+        tombstone('convenor');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual(['2 messages removed by a convenor', 'Removed by a convenor']), { timeout: 3000 });
+        fireEvent.click(screen.getByTestId('group-chat-search-toggle'));
+        fireEvent.change(screen.getByTestId('group-chat-search'), { target: { value: 'convenor' } });
+        await waitFor(() => expect(drawn()).toEqual(['Removed by a convenor', 'Removed by a convenor', 'Removed by a convenor']));
+        expect(screen.queryByText('Bring gloves')).toBeNull();
+    });
 });

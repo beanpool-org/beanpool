@@ -2790,8 +2790,9 @@ async function heldInKeyMemory(conversationId: string, myPub?: string | null): P
  * known DM stays one (its pins asked first: §3.4 amendment 7 §3 iv). When the key memory can't be read, this answer
  * remembers nothing as a DM; the next sync asks again. DmGuardUnreadError when the node types it otherwise, nothing else
  * knows it as a DM and the DM list can't be read: the caller writes no row from the node's type (§3.4 amendment 7 §3 iii).
+ * `listedLater`: the caller remembers every conversation the node lists as a DM itself, in one write (a sync pass).
  */
-async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null): Promise<string> {
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null, listedLater = false): Promise<string> {
     const t = nodeType || 'dm';
     let held: boolean | null;
     try { held = await heldInKeyMemory(conversationId, myPub); } catch { held = null; }
@@ -2800,7 +2801,7 @@ async function heldConversationType(conversationId: string, nodeType: string | n
         return 'group_thread';
     }
     if (t === 'dm') {
-        if (held !== null) await rememberDmConversations([conversationId]);
+        if (held !== null && !listedLater) await rememberDmConversations([conversationId]);
         return 'dm';
     }
     if (await isKnownDmConversation(conversationId)) {
@@ -4176,7 +4177,7 @@ export async function syncMessages(publicKey: string) {
             // the guard can't decide (its list unreadable: §3.4 amendment 7 §3 iii) writes nothing of this conversation's this pass.
             let heldType: string;
             try {
-                heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey) : (conv.type || 'dm');
+                heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey, true) : (conv.type || 'dm');
             } catch (e) {
                 console.warn(`[DM guard] Could not tell whether ${String(conv.id).slice(0, 8)} is a DM: it waits for the next pass`, e);
                 continue;

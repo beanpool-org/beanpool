@@ -3604,3 +3604,256 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(((await getConversation(dm.id, ana.publicKey)) as any)?.otherPubkey).toBe(ben.publicKey);
     });
 });
+
+describe('the DM guard list: one bounded list per community file, never read as empty, the pins asked first (§3.4 amendment 7 §3)', () => {
+    // Confirmation 5, finding 6 (on main too): one community's node grew main's one guard list past Android's read window,
+    // the next small listing wrote it over from an empty read, and a pruned DM relisted as an unlocked group sent "The code is
+    // 4821" readable, while its pin (Ben, checked) sat unread in the pins. GD1-GD3 are amendment 7's table. The list's key
+    // and the refusal's sentence are written out here, so the cases run unchanged on a build without them (fail-first).
+    const FILE_B = 'community_castlemaine.db';
+    const WINDOW = 2 * 1024 * 1024;
+    const MiB = 1024 * 1024;
+    const OLD_KEY = 'beanpool_dm_conversations_seen';
+    const GUARD_UNREAD = "This phone couldn't read which chats here are private, so nothing was sent. Try again.";
+    const seenKey = (file = FILE_A) => `beanpool_dm_conversations_seen:${ana.publicKey.toLowerCase()}:${file}`;
+    const seenIn = (file = FILE_A): any => { const raw = h.store.get(seenKey(file)); if (raw == null) return null; try { return JSON.parse(raw); } catch { return 'unparseable'; } };
+    const bytesOf = (k: string) => Buffer.byteLength(h.store.get(k) ?? '');
+    const typeOf = (id: string) => (sql.prepare('SELECT type FROM conversations WHERE id = ?').get(id) as any)?.type ?? null;
+    let puppet: Person;
+    /** Groups whose chat the node answers with no `encryption` (an old node, §14.3): a phone that never held their keys may send them readable. */
+    let unlocked: Set<string>;
+    /** Every request a group's chat path made (a readable `{ text }` post would show here). */
+    let groupPosts: { path: string; body: any }[];
+    beforeEach(() => {
+        puppet = person('Puppet');
+        unlocked = new Set();
+        groupPosts = [];
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            const u = new URL(url);
+            const chat = u.pathname.match(/^\/api\/groups\/([^/]+)\/chat$/);
+            if (chat && (init.method ?? 'GET') === 'GET' && unlocked.has(decodeURIComponent(chat[1]))) return answer(200, { messages: [], canPost: true });
+            if ((init.method ?? 'GET') === 'POST' && u.pathname.startsWith('/api/groups/')) groupPosts.push({ path: u.pathname, body: JSON.parse(init.body ?? 'null') });
+            return fetchMock(url, init);
+        };
+    });
+    afterEach(() => {
+        vi.mocked(AsyncStorage.getItem).mockImplementation(async (k: string) => h.store.get(k) ?? null);
+        h.store.set('beanpool_anchor_url', ANCHOR);
+    });
+    function sealedLine(from: Person, to: Person, conv: Conv, text: string): Line {
+        const messageId = randomUUID().toLowerCase();
+        const p = phoneCrypto.sealDmLine(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: conv.id } as any,
+            { senderPubHex: from.publicKey, messageId, part: 'body', after: null, replyToId: null } as any);
+        return written(conv, from, p.ciphertext, p.nonce, { id: messageId });
+    }
+    const opensFor = (who: Person, l: Line) => {
+        try {
+            return phoneCrypto.openDmLine({ ciphertext: l.ciphertext, nonce: l.nonce }, { myEdPrivHex: who.privateKey, peerEdPubHex: ana.publicKey },
+                { conversationId: l.conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }).text;
+        } catch { return null; }
+    };
+    /** A send through the real path: its refusal and the line the screen shows for it, and what reached the node. */
+    async function sent(id: string, text: string) {
+        const before = node.lines.length;
+        let err: any = null;
+        try { await insertMessage(id, ana.publicKey, text); } catch (e) { err = e; }
+        if (!err) await vi.waitFor(() => expect(node.lines.length).toBe(before + 1)).catch(() => {});
+        await new Promise((r) => setTimeout(r, 20));
+        const lines = node.lines.slice(before);
+        return {
+            err: err ? (err.name && err.name !== 'Error' ? err.name : String(err.message)) : null,
+            notice: err ? refusedSendNotice(err) : null,
+            posts: lines.length,
+            plaintext: lines.filter((l) => l.nonce === 'plaintext-v1').map((l) => Buffer.from(l.ciphertext, 'base64').toString('utf8')),
+            readBy: [ben, puppet].filter((p) => lines.some((l) => opensFor(p, l) !== null)).map((p) => p.name),
+        };
+    }
+    /** Android's legacy AsyncStorage: a value whose row is bigger than the 2 MiB CursorWindow is written, and every read of it throws. */
+    function windowed(): string[] {
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        const refused: string[] = [];
+        getItem.mockImplementation(async (k: string) => {
+            const v = await real(k);
+            if (v != null && Buffer.byteLength(String(k)) + Buffer.byteLength(String(v)) > WINDOW) { refused.push(String(k)); throw new Error('Row too big to fit into CursorWindow'); }
+            return v;
+        });
+        return refused;
+    }
+    /** Ana and Ben's DM with two lines, Ana's phone, and her first line, which seals to Ben and checks his pin. */
+    async function anaHasSentToBen() {
+        sealedLine(ana, ben, dm, 'Shall I cancel the order?');
+        sealedLine(ben, ana, dm, 'No');
+        await phoneOf(ana);
+        const first = await sent(dm.id, 'Hello Ben');
+        return { first, pin: storedPins(ana)[dm.id.toLowerCase()] ?? null };
+    }
+    const sealedToBen = { err: null, notice: null, posts: 1, plaintext: [], readBy: ['Ben'] };
+    const relistedAsGroup = () => ({ id: dm.id, type: 'group_thread', participants: [ana.publicKey, ben.publicKey, puppet.publicKey] });
+
+    it('GD1 the node lists 22 ids of 100,000 characters, then one small DM, prunes Ana and Ben\'s DM and relists it as an unlocked group: the list stays small and whole, other files\' lists untouched, the DM stays a DM, nothing readable', async () => {
+        const { first, pin } = await anaHasSentToBen();
+        // Measured for the Argon shadow: Ben's pin is checked before the node does anything (on #1872 alone the line still went readable).
+        expect(first).toEqual(sealedToBen);
+        expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+        h.store.set(seenKey(FILE_B), JSON.stringify([randomUUID()]));
+        const otherFile = h.store.get(seenKey(FILE_B));
+        const refused = windowed();
+        node.convs = [dm, ...Array.from({ length: 22 }, (_, i) => ({ id: `${i}-${'d'.repeat(100_000)}`, type: 'dm', participants: [ana.publicKey, person(`L${i}`).publicKey] }))];
+        await syncMessages(ana.publicKey);
+        const afterLongs = { listBytes: bytesOf(seenKey()), oldListBytes: bytesOf(OLD_KEY) };
+        const small: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, person('S').publicKey] };
+        node.convs = [small];
+        await syncMessages(ana.publicKey);   // the prune of `dm`: on main the list's read threw here, and it was written as [small]
+        const afterPrune = seenIn();
+        node.lines = node.lines.filter((l) => l.conversationId !== dm.id);   // none of the DM's sealed lines served with the group
+        unlocked.add(dm.id);
+        node.convs = [small, relistedAsGroup()];
+        await syncMessages(ana.publicKey);
+        const code = await sent(dm.id, 'The code is 4821');
+        const r = {
+            listSmall: afterLongs.listBytes > 0 && afterLongs.listBytes < 2048,
+            oldListBytes: afterLongs.oldListBytes,
+            listAfterPrune: Array.isArray(afterPrune) ? { dm: afterPrune.includes(dm.id), small: afterPrune.includes(small.id), long: afterPrune.some((x: string) => x.length > 64) } : afterPrune,
+            otherFileUntouched: h.store.get(seenKey(FILE_B)) === otherFile,
+            refusedReads: refused.length,
+            typeHeld: typeOf(dm.id),
+            kind: await getConversationKind(dm.id),
+            code,
+            pinAfter: storedPins(ana)[dm.id.toLowerCase()]?.peer === ben.publicKey,
+        };
+        console.log(`GD1 ${JSON.stringify({ ...r, listBytes: afterLongs.listBytes })}`);
+        expect(r).toEqual({
+            listSmall: true, oldListBytes: 0, listAfterPrune: { dm: true, small: true, long: false }, otherFileUntouched: true, refusedReads: 0,
+            typeHeld: 'dm', kind: 'dm', code: sealedToBen, pinAfter: true,
+        });
+    }, 120_000);
+
+    it('GD1f the list full when the DM is met, so only its pin remembers it: after a prune, a relist as an unlocked group written while the pins couldn\'t be read, and the pins back, it is a DM and nothing goes readable', async () => {
+        // A's list at its cap before Ana meets the DM: 26,886 ids of 36 characters take 1,048,555 bytes, too full for one more.
+        const filler = Array.from({ length: 26_886 }, () => randomUUID());
+        h.store.set(seenKey(), JSON.stringify(filler));
+        expect(bytesOf(seenKey())).toBe(1_048_555);
+        const { first, pin } = await anaHasSentToBen();
+        expect(first).toEqual(sealedToBen);
+        expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+        const listedWhenMet = (seenIn() as string[]).includes(dm.id);
+        node.convs = [];
+        await syncMessages(ana.publicKey);   // the prune
+        node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+        unlocked.add(dm.id);
+        node.convs = [relistedAsGroup()];
+        // The relist lands while the pins can't be read (the app started again, its pin store failing once): the list is full
+        // and nothing else knows the id, so its row takes the node's type.
+        restarted();
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        getItem.mockImplementation(async (k: string) => { if (k.startsWith(dmPeerPinsStoreKey(ana.publicKey, ''))) throw new Error('storage unavailable'); return real(k); });
+        try { await syncMessages(ana.publicKey); } finally { getItem.mockImplementation(real); }
+        const typeWhilePinsUnread = typeOf(dm.id);
+        // The pins read again: the first send asks the DM's key context before any group sealing (the row still says group).
+        const codeBeforeSync = await sent(dm.id, 'The code is 4821');
+        await syncMessages(ana.publicKey);   // the type path asks the pins first: the row goes back to dm
+        const codeAfterSync = await sent(dm.id, 'The code is 4822');
+        const r = {
+            listedWhenMet, listBytes: bytesOf(seenKey()) <= MiB, fillerKept: ((kept) => filler.every((id) => kept.has(id)))(new Set(seenIn() as string[])),
+            typeWhilePinsUnread, codeBeforeSync: { plaintext: codeBeforeSync.plaintext, puppet: codeBeforeSync.readBy.includes('Puppet') },
+            typeAfter: typeOf(dm.id), kind: await getConversationKind(dm.id), codeAfterSync,
+        };
+        console.log(`GD1f ${JSON.stringify({ ...r, codeBeforeSync })}`);
+        expect(r).toEqual({
+            listedWhenMet: false, listBytes: true, fillerKept: true, typeWhilePinsUnread: 'group_thread',
+            codeBeforeSync: { plaintext: [], puppet: false }, typeAfter: 'dm', kind: 'dm', codeAfterSync: sealedToBen,
+        });
+    }, 120_000);
+
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GD2 the list unreadable (${how}) while the node relists the DM as a group and lists a true group: no list write, the DM's row keeps dm, the readable send refused with its own sentence; readable again, the group sends as an old node's`, async () => {
+            const { first } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            const group: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, puppet.publicKey] };
+            unlocked.add(group.id);
+            unlocked.add(dm.id);
+            const getItem = vi.mocked(AsyncStorage.getItem);
+            const real = getItem.getMockImplementation()!;
+            if (how === 'a corrupt value') h.store.set(seenKey(), '["' + dm.id + '", {unreadable');
+            else getItem.mockImplementation(async (k: string) => { if (k === seenKey()) throw new Error('storage unavailable'); return real(k); });
+            const stored = h.store.get(seenKey());
+            const setItem = vi.mocked(AsyncStorage.setItem);
+            const writesBefore = setItem.mock.calls.length;
+            node.convs = [relistedAsGroup(), group];
+            await syncMessages(ana.publicKey);
+            const toGroup = await sent(group.id, 'Hello group');
+            const postsBefore = groupPosts.length;
+            let viaGroupScreen: string | null = null;
+            try {
+                const { postGroupChatMessage } = await import('../db');
+                await postGroupChatMessage(group.id, 'Hello group, from its screen', randomUUID());
+                viaGroupScreen = 'went';
+            } catch (e: any) { viaGroupScreen = refusedSendNotice(e) ?? e?.message; }
+            const toDm = await sent(dm.id, 'The code is 4821');
+            const r = {
+                listWrites: setItem.mock.calls.slice(writesBefore).filter(([k]) => k === seenKey() || k === OLD_KEY).length,
+                storedKept: h.store.get(seenKey()) === stored,
+                dmRow: typeOf(dm.id), groupRow: typeOf(group.id),
+                toGroup, viaGroupScreen, groupScreenPosts: groupPosts.length - postsBefore, toDm,
+            };
+            getItem.mockImplementation(real);
+            if (how === 'a corrupt value') h.store.delete(seenKey());   // a fresh list: seeded again from this file's dm rows
+            await syncMessages(ana.publicKey);
+            const readable = { groupRow: typeOf(group.id), listHasDm: ((seenIn() as string[]) ?? []).includes(dm.id), toGroup: await sent(group.id, 'Hello again, group') };
+            console.log(`GD2 (${how}) ${JSON.stringify({ r, readable })}`);
+            expect(r).toEqual({
+                listWrites: 0, storedKept: true, dmRow: 'dm', groupRow: null,
+                toGroup: { err: 'DmGuardUnreadError', notice: GUARD_UNREAD, posts: 0, plaintext: [], readBy: [] },
+                viaGroupScreen: GUARD_UNREAD, groupScreenPosts: 0, toDm: sealedToBen,
+            });
+            expect(readable).toEqual({ groupRow: 'group_thread', listHasDm: true, toGroup: { err: null, notice: null, posts: 1, plaintext: ['Hello again, group'], readBy: [] } });
+        }, 120_000);
+    }
+
+    it('GD3 the caps: 30,000 UUID DMs in one listing; then, in another community, 22 ids of 100,000 characters and one each of 64 and 65: the value stays within 1 MiB, every id read before is still there, the newest are refused and logged; the long ids are never remembered', async () => {
+        await phoneOf(ana);
+        const before = seenIn() as string[];
+        expect(before).toEqual([dm.id]);
+        const warn = vi.spyOn(console, 'warn');
+        const many: Conv[] = Array.from({ length: 30_000 }, () => ({ id: randomUUID(), type: 'dm', participants: [ana.publicKey, '0'.repeat(64)] }));
+        // The stand-in node answers each of these chats' pages from a set (an empty chat), not by a scan of 30,000.
+        const manyIds = new Set(many.map((c) => c.id));
+        const fetchNow = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            const page = new URL(url).pathname.match(/^\/api\/messages\/([^/]+)$/);
+            if (page && manyIds.has(decodeURIComponent(page[1]))) return answer(200, { conversation: { id: decodeURIComponent(page[1]), type: 'dm', participants: [] }, messages: [] });
+            return fetchNow(url, init);
+        };
+        node.convs = [dm, ...many];
+        const started = Date.now();
+        try { await syncMessages(ana.publicKey); } finally { (globalThis as any).fetch = fetchNow; }
+        const ms = Date.now() - started;
+        const after = seenIn() as string[];
+        const kept = new Set(after);
+        const firstRefused = many.findIndex((c) => !kept.has(c.id));
+        const full = {
+            withinCap: bytesOf(seenKey()) <= MiB, roomForNoMore: MiB - bytesOf(seenKey()) < 39,
+            beforeKept: before.every((id) => kept.has(id)), oldestKept: kept.has(many[0].id), newestRefused: !kept.has(many[many.length - 1].id),
+            refusedAreTheNewest: firstRefused > 0 && many.slice(firstRefused).every((c) => !kept.has(c.id)),
+            logged: warn.mock.calls.some((c) => String(c[0]).includes('[DM guard]') && String(c[0]).includes('list is full')),
+        };
+        warn.mockRestore();
+        // Another community's node, with ids no honest node makes, into that file's own list.
+        h.store.set('beanpool_anchor_url', 'https://castlemaine.beanpool.org');
+        await getDb();
+        const id64 = `${'e'.repeat(28)}${randomUUID()}`;
+        const id65 = `${'f'.repeat(29)}${randomUUID()}`;
+        node.convs = [...Array.from({ length: 22 }, (_, i) => ({ id: `${i}-${'d'.repeat(100_000)}`, type: 'dm', participants: [ana.publicKey, person(`L${i}`).publicKey] })),
+            { id: id64, type: 'dm', participants: [ana.publicKey, person('S64').publicKey] }, { id: id65, type: 'dm', participants: [ana.publicKey, person('S65').publicKey] }];
+        await syncMessages(ana.publicKey);
+        const inB = (seenIn(FILE_B) ?? []) as string[];
+        h.store.set('beanpool_anchor_url', ANCHOR);
+        await getDb();
+        const b = { under1KB: bytesOf(seenKey(FILE_B)) > 0 && bytesOf(seenKey(FILE_B)) < 1024, has64: inB.includes(id64), has65: inB.includes(id65), longAbsent: !inB.some((x) => x.length > 65), aUnchanged: JSON.stringify(seenIn()) === JSON.stringify(after) };
+        console.log(`GD3 ${JSON.stringify({ full, bytesA: bytesOf(seenKey()), ms, b, bytesB: bytesOf(seenKey(FILE_B)) })}`);
+        expect(full).toEqual({ withinCap: true, roomForNoMore: true, beforeKept: true, oldestKept: true, newestRefused: true, refusedAreTheNewest: true, logged: true });
+        expect(b).toEqual({ under1KB: true, has64: true, has65: false, longAbsent: true, aUnchanged: true });
+    }, 300_000);
+});

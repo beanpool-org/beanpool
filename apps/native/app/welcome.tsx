@@ -2315,7 +2315,7 @@ export default function WelcomeScreen() {
                             {hasMnemonic(pendingIdentity) ? (
                                 <>
                                     <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
+                                        Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.
                                     </Text>
                                     <Text style={guideStyles.bulletItem}>
                                         📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.

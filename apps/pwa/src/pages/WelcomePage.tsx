@@ -1973,7 +1973,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         Your 12 words are your primary key to your account across devices.
                                         {signInRecovery
                                             ? <> Signing in with {providerLabel(signInRecovery)} also brings it back.</>
-                                            : <> Without them, account recovery requires operator-assisted re-enrolment.</>}
+                                            : <> Nobody can reset them: not us, not this community.</>}
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after

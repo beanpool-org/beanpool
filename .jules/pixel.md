@@ -190,3 +190,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-12-26 - Add dynamic accessibilityLabel to event reminder save button
 **Learning:** Event reminder save buttons whose text child is conditionally replaced by an `ActivityIndicator` during saving leave screen readers without explicit text feedback during loading unless dynamic `accessibilityLabel` and `accessibilityState={{ busy: saving, disabled: saving }}` are provided.
 **Action:** Always supply dynamic `accessibilityLabel` (`saving ? "Saving reminder for this event..." : "Save for this event"`) and `accessibilityState={{ busy: saving, disabled: saving }}` on save buttons rendering `ActivityIndicator` when saving.
+
+## 2027-01-02 - Add dynamic accessibilityLabel and busy state to report price submit button
+**Learning:** Submit buttons in report modals whose text child is conditionally replaced by an `ActivityIndicator` during submission leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'`) and `accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}`.
+**Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled, busy }}` on pricing report submit buttons rendering `ActivityIndicator` when submitting.

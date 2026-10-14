@@ -3376,10 +3376,12 @@ export default function WelcomeScreen() {
                     </Text>
 
                     {/* Nearly every first launch is a new user, so joining is THE primary action. Restoring an account on
-                        a new phone is the rare case and lives as a quiet link below. One line at 320dp and 1.3x text: the
-                        label shrinks rather than wraps. The hint reads true with or without the offer below it. */}
+                        a new phone is the rare case and lives as a quiet link below. One line in English at 320dp and 1.3x
+                        text, shrinking rather than wrapping; a longer language (ru, fr, ar, the pseudo-locale) may take a
+                        second line rather than shrink past 0.6 (utils/__tests__/language-switch-render.test.ts). The hint
+                        reads true with or without the offer below it. */}
                     <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel={t('Join with an invite')}>
-                        <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🎟️ Join with an invite')}</Text>
+                        <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🎟️ Join with an invite')}</Text>
                     </Pressable>
 
                     <Text style={styles.inviteOnlyHint}>
@@ -3423,7 +3425,7 @@ export default function WelcomeScreen() {
                     <Animated.View style={[styles.homeOffer, { opacity: offerFade }]}>
                         <Text style={styles.inviteOnlyHint}>{t('No invite? Explore BeanPool worldwide and find a community near you.')}</Text>
                         <Pressable style={[styles.memberBtn, styles.homeOfferBtn]} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel={t('Explore BeanPool worldwide')}>
-                            <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
+                            <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
                         </Pressable>
                     </Animated.View>
                 )}

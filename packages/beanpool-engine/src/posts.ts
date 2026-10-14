@@ -225,6 +225,11 @@ export interface PostFilter {
      */
     excludeEvents?: boolean;
     /**
+     * Online events only (DESIGN-event-times §9): no place, so no radius ever holds one. getNearbySet and Home's "Coming
+     * up" add them for every member (the design's Director amendment 2).
+     */
+    onlineEvents?: boolean;
+    /**
      * The viewer is a moderator (an owner, admin or moderator of this node): posts hidden by reports stay in,
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
      */
@@ -998,6 +1003,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
+    onlineEvents: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
@@ -1229,6 +1235,12 @@ export function authorsBlockedBy(db: Db, member: string): string[] {
     }
 }
 
+/**
+ * How many online events a member's set holds at most, the soonest first (DESIGN-event-times Director amendment 2): an
+ * online event has no place, so it is in every member's set, not in a radius.
+ */
+export const NEARBY_SET_ONLINE_EVENTS = 50;
+
 /** What a member's set is worked out from (getNearbySet). */
 export interface NearbySetQuery {
     /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
@@ -1346,6 +1358,25 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
+    // Online events (DESIGN-event-times §9, Director amendment 2): no place, so in nobody's radius; in every member's set
+    // instead, after the nearest, the soonest NEARBY_SET_ONLINE_EVENTS under the same listing rules (not ended, the
+    // audience, blocked authors out). A set whose read leaves events out holds none.
+    if (q.area && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
+        const inRanked = new Set(ranked.map(r => r.id));
+        let online: typeof ranked = [];
+        const rankOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
+            const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+                + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+            const whereParams = blocked.length > 0 ? [...listingParams, JSON.stringify(blocked)] : listingParams;
+            online = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where} ORDER BY p.event_start_at ASC, p.id ASC LIMIT ?`).all(...whereParams, NEARBY_SET_ONLINE_EVENTS) as typeof ranked;
+            return [];
+        };
+        getPostsRankedBy(db, { ...base, onlineEvents: true, near: { lat: 0, lng: 0 } }, rankOnline);
+        ranked.push(...online.filter(r => !inRanked.has(r.id)));
+    }
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.
@@ -1517,6 +1548,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.onlineEvents) { where += " AND p.type = 'event' AND p.event_online = 1"; }
     if (filter?.upcomingUntil) {
         // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
         where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"

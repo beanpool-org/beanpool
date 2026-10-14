@@ -269,5 +269,31 @@ describe('GroupDetailModal invite-only card loading (#1496)', () => {
         expect(await screen.findByText(fullDescription)).toBeInTheDocument();
         expect(screen.queryByText(previewDescription)).toBeNull();
     });
+
+    it('an outsider told to join to see who is here (join_to_see) gets the count and why, never "Roster (N)" over an empty box (#1939 review N5)', async () => {
+        const openGroup: Group = {
+            id: 'group-open-1', name: 'Open Garden', slug: 'open-garden', category: 'social', joinPolicy: 'open',
+            description: 'Anyone may join', memberCount: 4, createdBy: 'pk-lead', createdAt: '2026-01-01T00:00:00Z',
+        };
+        vi.mocked(getGroup).mockResolvedValue({ ...openGroup, viewerStatus: null } as Group);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Join the group to see who is here'), { status: 403, code: 'join_to_see' }));
+        render(<GroupDetailModal group={openGroup} isOpen={true} onClose={() => {}} myPubkey="pk-outsider" />);
+        expect(await screen.findByText('Join the group to see who is here')).toBeInTheDocument();
+        expect(screen.getByText('4 members')).toBeInTheDocument();
+        expect(screen.queryByText(/Roster \(/)).toBeNull();
+    });
+
+    it('any other roster failure, and a roster read, keep "Roster (N)" as before', async () => {
+        const openGroup: Group = {
+            id: 'group-open-2', name: 'Open Garden', slug: 'open-garden', category: 'social', joinPolicy: 'open',
+            description: 'Anyone may join', memberCount: 4, createdBy: 'pk-lead', createdAt: '2026-01-01T00:00:00Z',
+        };
+        vi.mocked(getGroup).mockResolvedValue({ ...openGroup, viewerStatus: null } as Group);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Busy'), { status: 503 }));
+        const { unmount } = render(<GroupDetailModal group={openGroup} isOpen={true} onClose={() => {}} myPubkey="pk-outsider" />);
+        expect(await screen.findByText('Roster (4)')).toBeInTheDocument();
+        expect(screen.queryByText('Join the group to see who is here')).toBeNull();
+        unmount();
+    });
 });
 

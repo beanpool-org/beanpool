@@ -84,6 +84,9 @@ async function child(): Promise<void> {
             noteFaceUrlShapeNow();
             return true;
         },
+        // The operator's override of `openMembership` (on by default on the global node, where it refuses the whole directory
+        // and its delta: test-open-membership-reads): this suite reads both to see the faces heal, or not, on a keyed node.
+        wholeReads: () => db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run().changes,
         // A node from before this record.
         dropRecords: () => db.prepare("DELETE FROM node_config WHERE key IN ('avatarKeysShape', 'avatarKeysSince')").run().changes,
     };
@@ -329,6 +332,7 @@ async function main(): Promise<void> {
         await section('5. a global node: faces were keyed already, so nothing heals', async () => {
             node = await boot({ NODE_PROFILE: 'global' }, 'global');
             await seed(node);
+            await node.send('wholeReads');
             const first = await node.send('records');
             assert(typeof first.shape === 'string' && first.shape.startsWith('keyed:') && Date.parse(first.since) === 0,
                 `its first boot with this record answers no delta whole (${first.shape} ${first.since})`);

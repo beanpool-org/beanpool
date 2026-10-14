@@ -4,7 +4,8 @@
  * (bg-bp-commit-fill, text-bp-commit-on, bg-bp-chip-ok-tint …) from @beanpool/core/brand-colours; these read every class
  * string in the source and fail when a role-coloured control goes back to a raw shade:
  *
- *   - words on a solid emerald / terra / red / orange / amber fill (a button, a count badge, a price tag) name the role;
+ *   - words on a solid emerald / terra / red / orange / amber fill, or a copied hex (a button, a count badge, a price
+ *     tag), name the role;
  *   - words on a role fill are that role's own `on` (charcoal on gold, never white);
  *   - a small chip (Offer/Need, verified, counts) is a chip role's ink on its tint, not a raw pale shade and a raw ink.
  *
@@ -26,8 +27,8 @@ const SRC = path.resolve(__dirname);
 const ALLOWED: Array<[string, string, string]> = [];
 
 const HUES = '(?:emerald|green|terra|red|rose|orange|amber|yellow)';
-/** A solid brand or status fill: what white words sat on before the roles. */
-const RAW_FILL = new RegExp(`^bg-${HUES}-(?:400|500|600|700|800|900)(?:/\\d+)?$`);
+/** A solid brand or status fill, or a copied hex: what white words sat on before the roles. */
+const RAW_FILL = new RegExp(`^bg-(?:${HUES}-(?:400|500|600|700|800|900)(?:/\\d+)?|\\[#[0-9a-fA-F]{3,8}\\])$`);
 const RAW_TINT = new RegExp(`^bg-${HUES}-(?:50|100|200)(?:/\\d+)?$`);
 const RAW_INK = new RegExp(`^text-${HUES}-(?:600|700|800|900)$`);
 const ROLE_FILL = /^bg-bp-(cta|commit|action|danger|gold|accent)-fill$/;
@@ -154,6 +155,7 @@ describe('role-coloured controls take their colours from the brand library', () 
     it('catches what it is for, and lets the rest pass', () => {
         expect(rawFillUnderWords(words('px-4 bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white'))).toBe('text-white on bg-emerald-600');
         expect(rawFillUnderWords(words('bg-terra-500/90 text-white'))).toBe('text-white on bg-terra-500/90');
+        expect(rawFillUnderWords(words('bg-[#d97757] text-white hover:bg-[#c26749]'))).toBe('text-white on bg-[#d97757]');
         expect(rawFillUnderWords(words('bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on'))).toBeNull();
         expect(rawFillUnderWords(words('w-2 h-2 rounded-full bg-emerald-500 animate-pulse'))).toBeNull();
         expect(wrongWordsOnRoleFill(words('bg-bp-gold-fill text-white'))).toBe('text-white on bg-bp-gold-fill');

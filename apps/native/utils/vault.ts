@@ -17,8 +17,9 @@
  *
  * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): global's door accepts
  * vault tickets, V5 (finding 5; the phone half is in, global-join.ts "Only at a door that takes the ticket", so a door
- * without them costs door joins their copy, never the join); and the custodians' parts are reshared, with the parked
- * guide pages (GitHub issue #1349). CLOSED:
+ * without them costs door joins their copy, never the join). The reshare gates the public launch, not a vault build
+ * (Marty, 2026-10-05: real copies may go in before it); the parked guide pages (GitHub issue #1349) ship with the
+ * first public vault build. CLOSED:
  * - the vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below);
  * - a member whose only copy is still at a community gets back in there: on the vault's signed "no copy" for a sign-in,
  *   the restore with that provider goes on at the community as a build without a vault does it, and the move card is

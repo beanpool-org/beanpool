@@ -7,7 +7,7 @@ tool), with `DESIGN-vault-host-tee-opus.md` §5.1 for the host checks.
 
 **Where it stands (say it this way, and no other).** The unlock is built 2 of 3, but until the reshare to the other
 custodians one person, BeanPool's founder, holds all three shares, every release key and the hosting login. The host
-(1984 Hosting in Iceland, not bought yet) is an ordinary rented server: **the host can read the vault's memory, and
+(1984 Hosting in Iceland) is an ordinary rented server: **the host can read the vault's memory, and
 nothing proves in hardware what it runs** (`platform: none`). **The vault can open every copy it keeps**: it checks the
 sign-in itself, so it learns the `sub` that opens a copy, at every deposit and every restore. Against the vault itself,
 only who runs it protects a member; against someone else using their sign-in, the 24-hour wait on every restore (unless another of the member's own devices approves it), the

@@ -78,6 +78,7 @@ matches the file.
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
 | `ink.warning` | `#92400e` | `#fbbf24` |
 | `ink.accent` | `#5b6b5b` | `#c0ccc0` |
+| `ink.terra` | `#a3472e` | `#e5967f` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
 
@@ -96,6 +97,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |
 | `ink.warning` | gold as words: Action Required, tips, nudges | 6.17 | 6.42 |
 | `ink.accent` | the sage accent as words and icons | 4.94 | 6.45 |
+| `ink.terra` | terracotta as words: the manager's links, labels, hovered titles | 5.22 | 4.60 |
 
 ## Not covered (they keep their own hex)
 
@@ -118,8 +120,9 @@ five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and cat
   `brandCssVariableMap('light')` / `('dark')` under `:root` / `:root.dark` with `addBase` (the same blocks
   `brandCssVariables()` writes), so no stylesheet is generated or committed. Buttons with words use a fill role
   (`bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`); badges, chips and the tinted buttons that look like
-  them use a chip role (`bg-bp-chip-warn-tint text-bp-chip-warn-ink`; terracotta chips are `chip.need`). Status dots
-  and meters keep their Tailwind shades. `src/brand-roles-sources.test.ts` fails on a raw terracotta, emerald, red,
+  them use a chip role (`bg-bp-chip-warn-tint text-bp-chip-warn-ink`; terracotta chips are `chip.need`). Terracotta words and icons are `text-bp-ink-terra`;
+  status dots, meters, rings and deep tints keep the two shades the config defines (`terra-500`, `terra-600`), never
+  another: Tailwind drops an undefined shade without a warning. `src/brand-roles-sources.test.ts` fails on a raw terracotta, emerald, red,
   rose, amber, orange, green or yellow shade on a control, and on a fill whose words are not its own `on`.
 - **Web app** (next): generate a stylesheet from the same file and use the variables.
 

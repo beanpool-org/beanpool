@@ -553,14 +553,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     {/* Nodes Table */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden">
                         <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
-                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0 min-w-0">
+                            <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0 min-w-0">
                                 Harvested Node Replicas & Identity Bundles
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
                         </div>
                         {fleetNodesList.length === 0 ? (
                             <div className="p-8 text-center space-y-3 font-sans">
-                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-terra-400 flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
+                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-bp-ink-terra flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
                                     📦
                                 </div>
                                 <div>
@@ -741,14 +741,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden">
                         <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between">
-                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                            <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                                 On-Device SQLite Snapshots ({targetSnapshotNode?.name})
                             </h4>
                             {snapshotLoading && <span className="text-xs text-sky-400 animate-pulse">Loading snapshots…</span>}
                         </div>
                         {snapshots.length === 0 ? (
                             <div className="p-8 text-center space-y-3 font-sans">
-                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-terra-400 flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
+                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-bp-ink-terra flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
                                     📸
                                 </div>
                                 <div>
@@ -812,7 +812,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Standby Cadence Form */}
                     <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-2xl space-y-4">
-                        <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                        <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                             Replication Pull & Reconcile Cadence ({activeNode?.name})
                         </h4>
                         <p className="text-xs text-nature-300">
@@ -872,7 +872,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* Standby Actions & Resync */}
                     <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-2xl space-y-4">
-                        <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                        <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                             Standby Maintenance & Resync
                         </h4>
                         <p className="text-xs text-nature-300">
@@ -900,7 +900,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             {activeTab === 'runbook' && (
                 <div className="bg-nature-950/60 border border-nature-800 p-6 rounded-2xl space-y-6">
                     <div>
-                        <h4 className="text-sm font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                        <h4 className="text-sm font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                             🛠️ Turnkey Disaster Recovery Runbook
                         </h4>
                         <p className="text-xs text-nature-300 mt-1">
@@ -964,7 +964,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     {/* Controls Banner */}
                     <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                            <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                                 Sovereign Node DNS Registrar Management
                             </h4>
                             <p className="text-xs text-nature-300 m-0 mt-1">
@@ -977,7 +977,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                     type="checkbox"
                                     checked={autoRefreshRegistrar}
                                     onChange={(e) => setAutoRefreshRegistrar(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-900 text-terra-500 focus:ring-terra-500"
+                                    className="rounded border-nature-700 bg-nature-900 text-bp-ink-terra focus:ring-terra-500"
                                 />
                                 <span>Auto-refresh (10s)</span>
                             </label>
@@ -1152,7 +1152,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                         <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 bg-nature-900/30">
                             <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-base">🌐</span>
-                                <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                                <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider m-0">
                                     Active Registrar Allocations
                                 </h4>
                             </div>

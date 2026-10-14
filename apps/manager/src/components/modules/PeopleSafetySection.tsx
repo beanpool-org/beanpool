@@ -532,7 +532,7 @@ export function PeopleSafetySection({
                                                         <span className="font-semibold text-white">{postTitle || 'Untitled Post'}</span>
                                                         {authorCallsign && (
                                                             <span className="text-nature-400">
-                                                                by <span className="text-terra-300 font-medium">@{authorCallsign.replace(/^@/, '')}</span>
+                                                                by <span className="text-bp-ink-terra font-medium">@{authorCallsign.replace(/^@/, '')}</span>
                                                             </span>
                                                         )}
                                                         {isRemoved && (
@@ -566,7 +566,7 @@ export function PeopleSafetySection({
                                                                 href={report.pulseItem.url}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-300 underline break-all"
+                                                                className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-bp-ink-terra underline break-all"
                                                             >
                                                                 {report.pulseItem.title || report.pulseItem.url}
                                                             </a>
@@ -651,7 +651,7 @@ export function PeopleSafetySection({
                             </button>
 
                             {bulkDeleteResult && (
-                                <span className="text-xs font-mono text-terra-300">{bulkDeleteResult}</span>
+                                <span className="text-xs font-mono text-bp-ink-terra">{bulkDeleteResult}</span>
                             )}
                         </div>
                     </div>

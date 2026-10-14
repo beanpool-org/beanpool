@@ -50,6 +50,7 @@ const WHITE = '#ffffff';
 const CHARCOAL = '#1d231d'; // nature-950, the brand charcoal
 const TERRA_600_DEEP = '#b85236';
 const TERRA_700 = '#a3472e';
+const TERRA_400 = '#e5967f'; // the web's terra-400
 const EMERALD_100 = '#d1fae5';
 const EMERALD_300 = '#6ee7b7';
 const EMERALD_400 = '#34d399';
@@ -136,6 +137,8 @@ export const BRAND_COLOURS = {
         warning: themed(AMBER_800, AMBER_400),
         /** The sage accent as text and icons. */
         accent: themed(SAGE_650, NATURE_300),
+        /** Terracotta as words and icons: the manager's links, section labels and hovered titles. */
+        terra: themed(TERRA_700, TERRA_400),
     },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };

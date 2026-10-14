@@ -49,7 +49,7 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra']) {
             expect(roles, role).toContain(role);
         }
         // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme.

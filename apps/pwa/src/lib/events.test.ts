@@ -177,6 +177,8 @@ describe('editing an event (events round 2, decision 29)', () => {
             title: 'Working bee', description: 'Clearing the back garden', start: '2030-09-28T09:00', end: '2030-09-28T12:00',
             placeName: 'The hall', lat: -28.5, lng: 153.5, privateNote: 'Gate 1234',
             photos: ['https://node/api/marketplace/posts/ev/photos/0?v=1'],
+            // An event from a node before clocks (DESIGN-event-times §2 Edit): in this device's time, no zone, in person.
+            online: false, link: '', tz: null,
         });
         expect(localInputToIso(isoToLocalInput(ev.eventStartAt))).toBe(ev.eventStartAt);
     });

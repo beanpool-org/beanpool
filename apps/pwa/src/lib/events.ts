@@ -185,6 +185,10 @@ export interface EventCopy {
     enterprisePubkey: string | null;
     /** The group a group-only event belongs to; null for a whole-community event. */
     groupId: string | null;
+    /** Online, with its link (the host sees it), and the zone the host's times are in (DESIGN-event-times §3). */
+    online: boolean;
+    link: string;
+    tz: string | null;
 }
 
 /**
@@ -207,6 +211,9 @@ export function buildEventCopy(post: MarketplacePost, viewerPubkey?: string | nu
         privateNote: post.eventPrivateNote || '',
         enterprisePubkey: !groupId && author && viewerPubkey && author !== viewerPubkey ? author : null,
         groupId,
+        online: post.eventOnline === true,
+        link: post.eventLink || '',
+        tz: post.eventTz || null,
     };
 }
 
@@ -243,7 +250,12 @@ export function isoToLocalInput(iso: string | null | undefined): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** What the edit form holds. Dates are datetime-local values; photos are the node's URLs or new data URLs. */
+/**
+ * What the edit form holds. Dates are datetime-local values; photos are the node's URLs or new data URLs.
+ *
+ * Start and end are the host's clock in `tz` (DESIGN-event-times §2 Edit), as the node stores them. An event from a node
+ * before clocks has none: the form shows it in this device's time and `tz` is null, and a moved time goes as an instant.
+ */
 export interface EventEditForm {
     title: string;
     description: string;
@@ -254,20 +266,29 @@ export interface EventEditForm {
     lng: number | null;
     privateNote: string;
     photos: string[];
+    /** Online: no pin, and a link to join. */
+    online?: boolean;
+    link?: string;
+    /** The zone the times are in; null when the event has no stored clock. */
+    tz?: string | null;
 }
 
 /** The form, filled from the event as it is now — every field the create form has. */
 export function eventEditForm(post: MarketplacePost): EventEditForm {
+    const clocks = !!(post.eventStartLocal && post.eventTz);
     return {
         title: post.title || '',
         description: post.description || '',
-        start: isoToLocalInput(post.eventStartAt),
-        end: isoToLocalInput(post.eventEndAt),
+        start: clocks ? post.eventStartLocal! : isoToLocalInput(post.eventStartAt),
+        end: clocks && post.eventEndLocal ? post.eventEndLocal : isoToLocalInput(post.eventEndAt),
         placeName: post.eventPlaceName || '',
         lat: post.lat ?? null,
         lng: post.lng ?? null,
         privateNote: post.eventPrivateNote || '',
         photos: Array.isArray(post.photos) ? post.photos : [],
+        online: post.eventOnline === true,
+        link: post.eventLink || '',
+        tz: clocks ? post.eventTz! : null,
     };
 }
 
@@ -278,6 +299,11 @@ export interface EventEditPayload {
     eventEndAt?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    eventOnline?: boolean;
+    eventLink?: string;
     lat?: number;
     lng?: number;
     photos?: string[];
@@ -293,17 +319,32 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
     const out: EventEditPayload = {};
     if (after.title.trim() !== before.title.trim()) out.title = after.title.trim();
     if (after.description.trim() !== before.description.trim()) out.description = after.description.trim();
-    if (after.start !== before.start) {
-        const iso = localInputToIso(after.start);
-        if (iso) out.eventStartAt = iso;
+    // The host's clock goes as typed, with its zone, for the node to resolve (DESIGN-event-times §2); a form with no zone
+    // (an event from a node before clocks, or an online one whose zone nobody can name) sends instants, as before.
+    const clocks = !!after.tz;
+    const startMoved = after.start !== before.start;
+    if (startMoved) {
+        if (clocks) out.eventStartLocal = after.start.slice(0, 16);
+        else {
+            const iso = localInputToIso(after.start);
+            if (iso) out.eventStartAt = iso;
+        }
     }
     // A cleared end is sent as an empty string, which the node turns into start + 2 hours. When the start
     // moves, the end the form shows goes with it: the node keeps the old LENGTH when no end is named, so
     // moving 9:00–11:00 to 10:00 would otherwise save 10:00–12:00 while the form said 11:00.
-    if (after.end !== before.end || (out.eventStartAt && after.end)) out.eventEndAt = localInputToIso(after.end) ?? '';
+    if (after.end !== before.end || ((out.eventStartAt || out.eventStartLocal) && after.end)) {
+        if (clocks) out.eventEndLocal = after.end ? after.end.slice(0, 16) : '';
+        else out.eventEndAt = localInputToIso(after.end) ?? '';
+    }
+    // A new zone with the clock kept is another instant, which the node works out (§2 Edit).
+    if (after.tz && after.tz !== before.tz) out.eventTz = after.tz;
+    const online = after.online === true;
+    if (online !== (before.online === true)) out.eventOnline = online;
+    if (online && (after.link ?? '').trim() !== (before.link ?? '').trim()) out.eventLink = (after.link ?? '').trim();
     if (after.placeName.trim() !== before.placeName.trim()) out.eventPlaceName = after.placeName.trim();
     if (after.privateNote.trim() !== before.privateNote.trim()) out.eventPrivateNote = after.privateNote.trim();
-    if (after.lat != null && after.lng != null && (after.lat !== before.lat || after.lng !== before.lng)) {
+    if (!online && after.lat != null && after.lng != null && (after.lat !== before.lat || after.lng !== before.lng)) {
         out.lat = after.lat;
         out.lng = after.lng;
     }
@@ -314,7 +355,9 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
 /** True when a save would move the event in time or place, so the form can say who will be told. */
 export function eventEditNotifies(payload: EventEditPayload): boolean {
     return payload.eventStartAt !== undefined || payload.eventEndAt !== undefined || payload.eventPlaceName !== undefined
-        || payload.lat !== undefined || payload.lng !== undefined;
+        || payload.lat !== undefined || payload.lng !== undefined
+        || payload.eventStartLocal !== undefined || payload.eventEndLocal !== undefined || payload.eventTz !== undefined
+        || payload.eventOnline !== undefined;
 }
 
 // ===================== THE FEED'S EVENTS FILTER (same behaviour as the phone, #895) =====================

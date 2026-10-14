@@ -540,9 +540,13 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(body).toMatchObject({
             type: 'event', category: 'community', credits: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
             lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
-            eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+            // The clock as typed, for the node to resolve in the pin's zone (DESIGN-event-times §2), not this device's instant.
+            eventStartLocal: '2030-09-28T09:00', audienceScope: 'public',
         });
+        expect(body).not.toHaveProperty('eventStartAt');
         expect(body).not.toHaveProperty('eventEndAt');
+        expect(body).not.toHaveProperty('eventEndLocal');
+        expect(body).not.toHaveProperty('eventOnline');
         expect(body).not.toHaveProperty('reach');
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-new');
     });
@@ -586,8 +590,9 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const body = entCreate.mock.calls[0][1];
             expect(body).toMatchObject({
                 title: 'Working bee', lat: -28.55, lng: 153.5, eventPlaceName: 'The hall',
-                eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+                eventStartLocal: '2030-09-28T09:00', audienceScope: 'public',
             });
+            expect(body).not.toHaveProperty('eventStartAt');
             // The node refuses any body field ending in publicKey that is not the signer.
             expect(body).not.toHaveProperty('authorPublicKey');
         });
@@ -1656,5 +1661,170 @@ describe('the post form opened from another tab (review #1936 N1)', () => {
         const view = await openFromAnotherTab(true);
         expect(await view.findByText(gate)).toBeInTheDocument();
         expect(view.queryByTestId('map-new-post-panel')).toBeNull();
+    });
+});
+
+describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
+    const savedTz = process.env.TZ;
+    const LAGOS = { tz: 'Africa/Lagos', label: 'Lagos time', offsetMinutes: 60 };
+    const ACCRA = { tz: 'Africa/Accra', label: 'Accra time', offsetMinutes: 0 };
+    const SYDNEY = { tz: 'Australia/Sydney', label: 'Sydney time', offsetMinutes: 660 };
+
+    beforeEach(() => {
+        // The host's device is in Sydney.
+        process.env.TZ = 'Australia/Sydney';
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getEventZones').mockResolvedValue({ zones: [SYDNEY, LAGOS, ACCRA] });
+    });
+    afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; });
+
+    async function openEventForm() {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost onNavigate={vi.fn()} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+        fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+        fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-10-19T20:50' } });
+        return panel;
+    }
+
+    async function dropPin(panel: HTMLElement, lat: number, lng: number) {
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const mapResults = vi.mocked(L.map).mock.results;
+        const map = mapResults[mapResults.length - 1].value as any;
+        const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat, lng } })); });
+    }
+
+    it('in person, a pin in another zone: the line names it, and the typed clock goes with that zone', async () => {
+        const zoneOf = vi.spyOn(api, 'getEventZone').mockResolvedValue(LAGOS);
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const panel = await openEventForm();
+        expect(within(panel).queryByTestId('event-zone-line')).toBeNull();
+        await dropPin(panel, 6.5244, 3.3792);
+        await waitFor(() => expect(zoneOf).toHaveBeenCalledWith(6.5244, 3.3792));
+        await waitFor(() => expect(within(panel).getByTestId('event-zone-line').textContent).toBe('Times are Lagos time (where the pin is) · Change'));
+
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        const body = create.mock.calls[0][0];
+        expect(body).toMatchObject({ lat: 6.5244, lng: 3.3792, eventStartLocal: '2030-10-19T20:50', eventTz: 'Africa/Lagos' });
+        expect(body).not.toHaveProperty('eventStartAt');
+        expect(body).not.toHaveProperty('eventOnline');
+    });
+
+    it("in person, a pin in this device's zone: nothing new on the form", async () => {
+        vi.spyOn(api, 'getEventZone').mockResolvedValue(SYDNEY);
+        const panel = await openEventForm();
+        await dropPin(panel, -33.86, 151.2);
+        await waitFor(() => expect(api.getEventZone).toHaveBeenCalled());
+        await act(async () => { await Promise.resolve(); });
+        expect(within(panel).queryByTestId('event-zone-line')).toBeNull();
+    });
+
+    it('online: no pin and no place; a link only Going sees; the zone is the device\'s and says so', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const panel = await openEventForm();
+        const where = within(panel).getByTestId('event-where');
+        expect(within(where).getByRole('radio', { name: /At a place/ }).getAttribute('aria-checked')).toBe('true');
+        await act(async () => { fireEvent.click(within(where).getByRole('radio', { name: /Online/ })); });
+        expect(within(where).getByRole('radio', { name: /Online/ }).getAttribute('aria-checked')).toBe('true');
+
+        expect(within(panel).queryByLabelText('Place name')).toBeNull();
+        expect(within(panel).queryByRole('button', { name: /Drop a pin/ })).toBeNull();
+        expect(within(panel).queryByTestId('event-location-visibility')).toBeNull();
+        expect(within(panel).getByText('Only people who tap Going see it.')).toBeInTheDocument();
+        expect(within(panel).getByTestId('event-zone-line').textContent).toBe('Times are Sydney time (your device) · Change');
+
+        fireEvent.change(within(panel).getByLabelText('Link to join'), { target: { value: ' https://meet.example/abc ' } });
+        const button = within(panel).getByRole('button', { name: 'Create Event' }) as HTMLButtonElement;
+        expect(button.disabled).toBe(false);
+        await act(async () => { fireEvent.click(button); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        const body = create.mock.calls[0][0];
+        expect(body).toMatchObject({
+            eventOnline: true, eventLink: 'https://meet.example/abc', eventStartLocal: '2030-10-19T20:50', eventTz: 'Australia/Sydney',
+        });
+        for (const key of ['lat', 'lng', 'eventPlaceName', 'eventStartAt']) expect(body).not.toHaveProperty(key);
+    });
+
+    it('refuses a link that is not http(s), in words, before sending', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const panel = await openEventForm();
+        await act(async () => { fireEvent.click(within(panel).getByRole('radio', { name: /Online/ })); });
+        fireEvent.change(within(panel).getByLabelText('Link to join'), { target: { value: 'javascript:alert(1)' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        expect(create).not.toHaveBeenCalled();
+        expect(within(panel).getByText('The link to join must start with https:// or http://')).toBeInTheDocument();
+    });
+
+    it("Change opens the node's list, \"Lagos (UTC+1)\"; a picked zone is shown and sent", async () => {
+        vi.spyOn(api, 'getEventZone').mockResolvedValue(LAGOS);
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const panel = await openEventForm();
+        await dropPin(panel, 6.5244, 3.3792);
+        await waitFor(() => expect(within(panel).getByTestId('event-zone-line')).toBeInTheDocument());
+        await act(async () => { fireEvent.click(within(panel).getByTestId('event-zone-change')); });
+        const select = await within(panel).findByTestId('event-zone-select') as HTMLSelectElement;
+        expect(Array.from(select.options).map(o => o.textContent)).toEqual(['Accra (UTC)', 'Lagos (UTC+1)', 'Sydney (UTC+11)']);
+        await act(async () => { fireEvent.change(select, { target: { value: 'Africa/Accra' } }); });
+        expect(within(panel).getByTestId('event-zone-line').textContent).toBe('Times are Accra time · Change');
+
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ eventStartLocal: '2030-10-19T20:50', eventTz: 'Africa/Accra' });
+    });
+
+    it('says what the node did with a clock in a DST gap, once the event is saved', async () => {
+        vi.spyOn(api, 'getEventZone').mockResolvedValue(SYDNEY);
+        vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({
+            success: true,
+            post: { id: 'ev-new', eventTz: 'Australia/Sydney', eventStartLocal: '2030-10-06T03:30', eventStartAt: '2030-10-05T16:30:00.000Z' },
+            eventTimeAdjusted: { start: { kind: 'gap', asked: '2030-10-06T02:30', saved: '2030-10-06T03:30' }, end: null },
+        } as any);
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const panel = await openEventForm();
+        fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-10-06T02:30' } });
+        await dropPin(panel, -33.86, 151.2);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('2:30 does not exist on 6 Oct in Sydney (clocks go forward). It was saved as 3:30.'));
+        alert.mockRestore();
+    });
+
+    it("editing an event with a stored clock shows the place's clock and sends the clock, not an instant", async () => {
+        const hosted: any = {
+            id: 'ev-lagos', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+            authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
+            status: 'active', repeatable: false, lat: 6.5244, lng: 3.3792, eventPlaceName: 'The hall', eventState: 'scheduled',
+            eventStartAt: '2030-10-19T19:50:00.000Z', eventEndAt: '2030-10-19T21:50:00.000Z',
+            eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50', eventTz: 'Africa/Lagos', eventOnline: false,
+            audienceScope: 'public', photos: [], eventRsvps: [],
+        };
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => (filter?.id === hosted.id ? [hosted] : []) as any);
+        vi.spyOn(api, 'getEventZone').mockResolvedValue(LAGOS);
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: hosted });
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} editEventPostId={hosted.id} onEditEventHandled={vi.fn()} onNavigate={vi.fn()} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect((within(panel).getByLabelText(/^Starts/i) as HTMLInputElement).value).toBe('2030-10-19T20:50');
+        expect((within(panel).getByLabelText(/^Ends/i) as HTMLInputElement).value).toBe('2030-10-19T22:50');
+        expect(within(panel).getByTestId('event-zone-line').textContent).toBe('Times are Lagos time · Change');
+        // The form opened on the event's own pin: its stored zone is not looked up again.
+        expect(api.getEventZone).not.toHaveBeenCalled();
+
+        fireEvent.change(within(panel).getByLabelText(/^Starts/i), { target: { value: '2030-10-19T21:00' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(update).toHaveBeenCalledWith('ev-lagos', mockIdentity.publicKey, { eventStartLocal: '2030-10-19T21:00', eventEndLocal: '2030-10-19T22:50' });
     });
 });

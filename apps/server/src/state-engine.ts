@@ -1629,6 +1629,15 @@ let listingPushIndex = true;
 export function setListingPushIndex(on: boolean): void {
     listingPushIndex = on;
 }
+/**
+ * For test-global-pins: the keys a listing's own event visits wherever they are (listingReach's parties), or null where it
+ * isn't measured by area. The sockets' index looks a degree past the radius, so leaving a member who has the place exactly
+ * out of the parties changes no socket today; this is how a test holds the rule that they are parties (#1965 confirmation
+ * finding 2).
+ */
+export function listingReachParties(event: any): string[] | null {
+    return listingReach(event)?.parties ?? null;
+}
 /** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
 export function inspectWsClients(): ReturnType<WsClients['inspect']> {
     return wsClients.inspect();

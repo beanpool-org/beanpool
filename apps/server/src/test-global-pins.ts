@@ -25,7 +25,12 @@
  *        listings posted through the route, about 25 members each set their area through the route at the 0.1° grid
  *        points 250 ± 0.8 km from the listing's neighbourhood; the members who get the copy are exactly those within
  *        250 km of the neighbourhood, and for at least one listing that differs from who is within 250 km of the place,
- *        so the check can tell (#1965 deciding review B1: from the place, ~25 such yes-or-no answers put it to ~100 m).
+ *        so the check can tell (#1965 deciding review B1: from the place, ~25 such yes-or-no answers put it to ~100 m);
+ *      - and a member who has the place exactly (let in to an event whose host lets people in) is reached as their set
+ *        holds it, from the place: on a ring point within 250 km of the place but not of its neighbourhood, she gets the
+ *        copy, exact, when someone taps Going, and a member there who isn't let in gets nothing, with the sockets' index
+ *        on and off (#1965 confirmation finding 2: measuring her from the neighbourhood, or leaving her out of the
+ *        index's parties, both passed before).
  *   3. The operator's override `nodeProfile.openMembership = false` on the global node: every place exact again.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-global-pins)
@@ -431,6 +436,46 @@ async function main() {
         authorSock.ws.close();
     }
     assert(tellsApart >= 1, `global: for ${tellsApart} of 3 listings who is within ${REACH_KM} km of the neighbourhood differs from who is within it of the place, so the check can tell`);
+
+    // A member who has the place exactly is measured from the place, and visited as a party whatever the index finds.
+    const exactRand = prng(91);
+    let target: { P: { lat: number; lng: number }; A: { lat: number; lng: number } } | null = null;
+    for (let tries = 0; tries < 40 && !target; tries++) {
+        const P = { lat: six(-33.9 + (exactRand() - 0.5) * 0.4), lng: six(151.1 + (exactRand() - 0.5) * 0.4) };
+        const c = { lat: nbhd(P.lat), lng: nbhd(P.lng) };
+        const A = ring(c, 0.8).find(a => haversine(a.lat, a.lng, P.lat, P.lng) <= REACH_KM && haversine(a.lat, a.lng, c.lat, c.lng) > REACH_KM);
+        if (A) target = { P, A };
+    }
+    if (!target) throw new Error('no ring point within reach of the place but not of its neighbourhood');
+    listing('ev-ring', alice, target.P.lat, target.P.lng, 304, { note: 'Side gate', letsIn: 1 });
+    const lin = member('Lin', null), wes = member('Wes', null);
+    for (const who of [lin, wes]) {
+        const r = await post('/api/community/me/area', { lat: target.A.lat, lng: target.A.lng }, who);
+        if (r.status !== 200) throw new Error(`area ${r.status} ${r.text.slice(0, 120)}`);
+    }
+    insRsvp.run('ev-ring', lin.pubKeyHex, iso(T0 + 7_200_000), alice.pubKeyHex, iso(T0 + 7_200_000));
+    const linSock = await openSocket(`${wsBase}?${signedWsQuery(lin)}`);
+    const wesSock = await openSocket(`${wsBase}?${signedWsQuery(wes)}`);
+    await sleep(300);
+    const ringCopies = (s: Sock) => s.raw.map(x => { try { return JSON.parse(x); } catch { return null; } }).filter(e => e?.post?.id === 'ev-ring');
+    for (const [indexOn, status] of [[true, 'going'], [false, 'interested']] as const) {
+        se.setListingPushIndex(indexOn);
+        linSock.raw.length = 0; wesSock.raw.length = 0;
+        const tapped = await post('/api/marketplace/posts/ev-ring/rsvp', { status }, dan);
+        await sleep(800);
+        const linGot = ringCopies(linSock), wesGot = ringCopies(wesSock);
+        assert(tapped.status === 200 && linGot.length > 0 && linGot.every(e => e.post.lat === target!.P.lat && e.post.lng === target!.P.lng),
+            `global (index ${indexOn ? 'on' : 'off'}): a member let in, ${haversine(target.A.lat, target.A.lng, target.P.lat, target.P.lng).toFixed(2)} km from the place and ${haversine(target.A.lat, target.A.lng, nbhd(target.P.lat), nbhd(target.P.lng)).toFixed(2)} km from its neighbourhood, gets the event's copy when someone taps Going, with the place (got ${linGot.length}; RSVP ${tapped.status})`);
+        assert(wesGot.length === 0, `global (index ${indexOn ? 'on' : 'off'}): a member at the same spot who isn't let in gets nothing, as her set holds the neighbourhood (got ${wesGot.length})`);
+    }
+    se.setListingPushIndex(true);
+    linSock.ws.close();
+    wesSock.ws.close();
+    // The sockets' index looks a degree past the radius, so through sockets a let-in member is visited either way; the
+    // rule that she is visited as a party, wherever the index looks, is held here.
+    const parties = se.listingReachParties({ type: 'post_updated', post: { id: 'ev-ring' } }) ?? [];
+    assert(parties.includes(lin.pubKeyHex) && parties.includes(alice.pubKeyHex) && !parties.includes(wes.pubKeyHex),
+        `global: the event's copy visits the host and the member let in as parties, wherever the index looks, and not the member who isn't (${parties.length} parties)`);
 
     // ── 3. The operator's override on the global node: every place exact again ──
     console.log('\n── 3. nodeProfile.openMembership = false on the global node ──');

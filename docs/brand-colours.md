@@ -79,6 +79,15 @@ matches the file.
 | `chip.accent.tint` | `#eef1ee` | `#384038` |
 | `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` |
 | `chip.accent.border` | `#dce3dc` | `#434e43` |
+| `deal.held.tint` | `#d1fae5` | `#022c22` |
+| `deal.held.ink` | `#065f46` | `#6ee7b7` |
+| `deal.held.border` | `#10b981` | `#34d399` |
+| `deal.released.tint` | `#a7f3d0` | `#064e3b` |
+| `deal.released.ink` | `#065f46` | `#6ee7b7` |
+| `deal.released.border` | `#059669` | `#10b981` |
+| `deal.cancelled.tint` | `#fee2e2` | `#450a0a` |
+| `deal.cancelled.ink` | `#991b1b` | `#fca5a5` |
+| `deal.cancelled.border` | `#ef4444` | `#f87171` |
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
@@ -101,6 +110,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `accent` | chat's send and unread badge, progress, selected toggles | 4.86 / hover 6.66 | 9.65 / 12.26 (charcoal words) |
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
+| `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |

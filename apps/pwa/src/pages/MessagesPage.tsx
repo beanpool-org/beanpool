@@ -42,6 +42,7 @@ import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, 
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { listPhotoUrl } from '@beanpool/core';
+import { systemLineColours } from '../lib/systemLineColours';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -1697,7 +1698,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // A tombstone, in the app's own words: no name, no actions.
                             return (
                                 <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
-                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
+                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted-on-hover)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
                                         {groupLine.text}
                                     </div>
                                 </div>
@@ -1753,33 +1754,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         
                         if (isSystem) {
                             let icon = 'ℹ️';
-                            let bgColor = 'var(--bg-hover)';
-                            let textColor = 'var(--text-secondary)';
-                            let borderColor = 'transparent';
+                            // A trade's lines take the colour library's deal roles; others the page's grey.
+                            const { background: bgColor, color: textColor, border: borderColor } = systemLineColours(msg.systemType);
                             let metaObj: any;
                             
                             try {
                                 if (msg.metadata) metaObj = JSON.parse(msg.metadata);
                             } catch {}
 
-                            if (msg.systemType === 'ESCROW_FUNDED') {
-                                icon = '🔐';
-                                bgColor = 'rgba(209, 250, 229, 0.4)';
-                                textColor = '#065f46';
-                                borderColor = '#10b981';
-                            }
-                            if (msg.systemType === 'ESCROW_RELEASED') {
-                                icon = '✅';
-                                bgColor = 'rgba(167, 243, 208, 0.4)';
-                                textColor = '#065f46';
-                                borderColor = '#059669';
-                            }
-                            if (msg.systemType === 'ESCROW_CANCELLED') {
-                                icon = '🚫';
-                                bgColor = 'rgba(254, 226, 226, 0.4)';
-                                textColor = '#991b1b';
-                                borderColor = '#ef4444';
-                            }
+                            if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
+                            if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
+                            if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
 
                             return (
                                 <div key={msg.id} style={{

@@ -199,6 +199,7 @@ export default function MarketScreen() {
         },
         chipText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         chipTextActive: { color: colors.text.inverse },
+        chipTextOnAccent: { color: colors.text.onAccent },
         chipAllActive: {
             backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray800,
             borderColor: theme === 'dark' ? colors.border.strong : palette.gray800
@@ -212,7 +213,7 @@ export default function MarketScreen() {
             borderColor: colors.market.need.fg
         },
         chipActive: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             borderColor: colors.accent.primary
         },
         chipDistanceActive: {
@@ -382,7 +383,7 @@ export default function MarketScreen() {
         liveBadgeText: {
             fontSize: 9,
             fontWeight: '900',
-            color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange600,
+            color: theme === 'dark' ? colors.feedback.warning.fg : colors.market.need.fg,
         },
         favPanel: {
             backgroundColor: colors.accent.tint,
@@ -403,7 +404,7 @@ export default function MarketScreen() {
         },
         favPanelSub: {
             fontSize: 11,
-            color: colors.text.secondary,
+            color: colors.text.body, // on accent.tint: text.secondary is 4.22 there in dark
             marginBottom: 10,
         },
         favTagsContainer: {
@@ -425,7 +426,7 @@ export default function MarketScreen() {
             elevation: 1,
         },
         favTagActive: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             borderColor: colors.accent.primary,
         },
         favTagText: {
@@ -434,7 +435,7 @@ export default function MarketScreen() {
             color: colors.text.secondary,
         },
         favTagTextActive: {
-            color: colors.text.inverse,
+            color: colors.text.onAccent,
         },
         favSummaryBanner: {
             flexDirection: 'row',
@@ -456,7 +457,10 @@ export default function MarketScreen() {
             flex: 1,
         },
         favSummaryEditBadge: {
-            backgroundColor: colors.accent.border,
+            // a card-coloured badge with the sage outline: accent.primary is 4.34 on accent.border in light
+            backgroundColor: colors.surface.card,
+            borderWidth: 1,
+            borderColor: colors.accent.border,
             paddingHorizontal: 8,
             paddingVertical: 3,
             borderRadius: 8,
@@ -895,16 +899,17 @@ export default function MarketScreen() {
     // "Beans only" is not offered where there are no Beans.
     const rowExtras = secondRow.kind === 'filters' ? marketExtras(secondRow.extras, nodeProfile?.features) : [];
     // The second row's chips fill with the type's colour, as the map's category chip does.
-    // Fill for the selected type pill, each carrying white text; the map's colours for Offers / Needs / Events.
+    // Fill for the selected type pill, each carrying white text (docs/brand-colours.md: deep fills, 4.5:1 or more),
+    // except For You's sage accent, which carries text.onAccent (charcoal on the light sage in dark).
     const typeColors: Record<MarketTypeFilter, string> = {
         all: theme === 'dark' ? palette.gray600 : palette.gray800,
-        'for-you': colors.accent.primary,
-        offers: '#10b981',
-        needs: '#ea580c',
+        'for-you': colors.accent.fill,
+        offers: colors.brand.fill,
+        needs: colors.action.fab,
         events: EVENT_ACCENT,
         polls: '#7c3aed',
     };
-    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.dark;
+    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.fill;
     const filterCtx = { blockedUsers, favCategories };
 
     let filteredPosts = basePosts.filter(p => {
@@ -1008,7 +1013,7 @@ export default function MarketScreen() {
                     accessibilityHint="Opens your active and pending deals sheet"
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: palette.amber700 }}>My Deals</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }}>My Deals</Text>
                     {pendingCount > 0 && (
                         <View style={styles.dealsIconBadge}>
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
@@ -1039,6 +1044,7 @@ export default function MarketScreen() {
                     selected={filter}
                     onSelect={selectType}
                     activeColor={typeColors[filter]}
+                    activeTextColor={filter === 'for-you' ? colors.text.onAccent : undefined}
                     fill
                     // One line that scrolls sideways at 320dp + 1.3x text (wrapping cost a second 38dp line).
                     moreHint
@@ -1126,7 +1132,7 @@ export default function MarketScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: groupFilter === 'all' }}
                         >
-                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextActive]}>
+                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextOnAccent]}>
                                 👥 All Groups & Public
                             </Text>
                         </Pressable>
@@ -1138,7 +1144,7 @@ export default function MarketScreen() {
                                     onPress={() => setGroupFilter(isSelected ? 'all' : g.id)}
                                     style={[
                                         styles.chip,
-                                        isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary }
+                                        isSelected && { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary }
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: isSelected }}
@@ -1220,11 +1226,11 @@ export default function MarketScreen() {
                         List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
                     </Text>
                     <Pressable
-                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+                        style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
                         onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                         accessibilityRole="button"
                     >
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
+                        <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
                     </Pressable>
                 </View>
             )}
@@ -1236,7 +1242,7 @@ export default function MarketScreen() {
                             <Text style={styles.favPanelTitle}>★ CUSTOMIZE INTERESTS</Text>
                             <Pressable
                                 onPress={() => setIsCustomizerExpanded(false)}
-                                style={{ backgroundColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
+                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent.primary }}>✕ HIDE</Text>
@@ -1451,7 +1457,7 @@ export default function MarketScreen() {
                                     borderWidth: 1,
                                 }
                             ]}>
-                                <Text style={[styles.gridPriceText, { color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                                <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>🗞️ PULSE</Text>
                             </View>
                         )}
                         {!!item.repeatable && !isPulse && (
@@ -1533,7 +1539,7 @@ export default function MarketScreen() {
                                 <Text style={[
                                     styles.compactBadgeText, 
                                     {
-                                        color: isPulse ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
+                                        color: isPulse ? colors.feedback.warning.fg : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
                                         fontWeight: '800',
                                     }
                                 ]}>
@@ -1583,7 +1589,7 @@ export default function MarketScreen() {
                                         <Text style={{
                                             fontSize: 10,
                                             fontWeight: '800',
-                                            color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e'
+                                            color: colors.feedback.warning.fg
                                         }}>🗞️ DAILY PULSE</Text>
                                     </View>
                                 )}
@@ -1680,7 +1686,7 @@ export default function MarketScreen() {
                             </Text>
                             <Pressable
                                 accessibilityRole="link"
-                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
+                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
                                 onPress={() => { Linking.openURL(GLOBAL_NODE_URL).catch(() => {}); }}
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>🌍 Look around the global community</Text>
@@ -1709,7 +1715,7 @@ export default function MarketScreen() {
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
+                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
                                 onPress={() => { armSyncWait(); requestSync(); }}
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>

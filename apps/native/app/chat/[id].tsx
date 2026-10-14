@@ -216,7 +216,7 @@ function ChatScreen({ id }: { id: string }) {
         stickyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.emerald50, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.emerald100 },
         stickyHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 16 },
         stickyPostTitle: { fontSize: 15, fontWeight: '700', color: theme === 'dark' ? colors.text.body : palette.emerald800 },
-        stickyPostCredits: { fontSize: 13, color: colors.brand.dark, fontWeight: '600', marginTop: 2 },
+        stickyPostCredits: { fontSize: 13, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
@@ -227,12 +227,12 @@ function ChatScreen({ id }: { id: string }) {
         dealCardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
         dealCardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
         dealBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-        dealBtnRelease: { backgroundColor: colors.brand.dark, flex: 1 },
+        dealBtnRelease: { backgroundColor: colors.brand.fill, flex: 1 },
         dealBtnReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         dealBtnCancel: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        dealBtnCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 13 },
+        dealBtnCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 13 },
         dealBtnReview: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.amber200, flex: 1 },
-        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : palette.amber600, fontWeight: '800', fontSize: 13 },
+        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : colors.feedback.warning.fg, fontWeight: '800', fontSize: 13 },
         dealAwaiting: { color: colors.text.secondary, fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
         // Full-screen image viewer
         imageViewerOverlay: { flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' },
@@ -241,12 +241,12 @@ function ChatScreen({ id }: { id: string }) {
         // Inline Action Bar
         inlineActionBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.yellow50, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.yellow200 },
         inlineActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
-        inlineActionRelease: { backgroundColor: colors.brand.dark },
+        inlineActionRelease: { backgroundColor: colors.brand.fill },
         inlineActionReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 14 },
         inlineActionCancel: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red300 },
-        inlineActionCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 },
+        inlineActionCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
         blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
-        blockedNoticeText: { color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' },
+        blockedNoticeText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' },
     }));
 
     const promptedRef = useRef(false);
@@ -897,13 +897,13 @@ function ChatScreen({ id }: { id: string }) {
         }
         if (item.systemType === 'ESCROW_RELEASED') {
             iconName = 'check-decagram';
-            iconColor = colors.brand.dark;
+            iconColor = colors.brand.primary;
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
         }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
-            iconColor = colors.feedback.danger.solid;
+            iconColor = colors.feedback.danger.fg;
             bgColor = colors.chatSystem.cancelledBg;
             borderColor = colors.feedback.danger.solid;
         }
@@ -962,10 +962,10 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons
                                 name={hasRated ? "star" : "star-outline"}
                                 size={14}
-                                color={hasRated ? colors.brand.primary : colors.feedback.warning.solid}
+                                color={hasRated ? colors.brand.primary : colors.feedback.warning.fg}
                                 style={{ marginRight: 4 }}
                             />
-                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                 {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
                             </Text>
                         </Pressable>
@@ -1075,7 +1075,7 @@ function ChatScreen({ id }: { id: string }) {
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
             ) : (
                 <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
                     {item.readByPeer ? ' ✓✓' : ' ✓'}
@@ -1239,7 +1239,7 @@ function ChatScreen({ id }: { id: string }) {
             {postContext && (
                 <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${postContext.id}`)} style={styles.stickyHeader}>
                     <View style={styles.stickyHeaderLeft}>
-                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
+                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>}
@@ -1252,7 +1252,7 @@ function ChatScreen({ id }: { id: string }) {
                     ]}>
                         <Text style={[styles.statusBadgeText,
                             postContext.status === 'active' ? { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark } :
-                            postContext.status === 'pending' ? { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600 } :
+                            postContext.status === 'pending' ? { color: colors.feedback.warning.fg } :
                             { color: theme === 'dark' ? colors.text.secondary : palette.gray600 }
                         ]}>{postContext.status?.toUpperCase() || 'UNKNOWN'}</Text>
                     </View>
@@ -1263,7 +1263,7 @@ function ChatScreen({ id }: { id: string }) {
             {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
-                        <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
                             ⚠️ Action Required: Release Credits
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>
@@ -1292,7 +1292,7 @@ function ChatScreen({ id }: { id: string }) {
                             onPress={handleCancelEscrow}
                             disabled={actionLoading}
                         >
-                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.solid} style={{ marginRight: 6 }} />
+                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
                             <Text style={styles.inlineActionCancelText}>Cancel</Text>
                         </Pressable>
                     </View>

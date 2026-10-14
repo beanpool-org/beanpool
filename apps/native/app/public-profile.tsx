@@ -231,7 +231,7 @@ export default function PublicProfileScreen() {
             marginBottom: 12,
         },
         synergyTakeQuizBtn: {
-            backgroundColor: colors.brand.dark,
+            backgroundColor: colors.brand.fill,
             paddingVertical: 10,
             paddingHorizontal: 16,
             borderRadius: 10,
@@ -320,8 +320,8 @@ export default function PublicProfileScreen() {
         creditAmount: { fontWeight: '900', fontSize: 15, color: colors.accent.primary },
         beanIcon: { width: 14, height: 14, marginLeft: 2, resizeMode: 'contain' },
         typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
-        badgeOffer: { backgroundColor: colors.brand.primary },
-        badgeNeed: { backgroundColor: palette.orange600 },
+        badgeOffer: { backgroundColor: colors.brand.fill },
+        badgeNeed: { backgroundColor: colors.action.fab },
         typeBadgeText: { fontSize: 10, fontWeight: '800', color: colors.text.inverse, letterSpacing: 0.5 },
 
         // Review cards
@@ -336,7 +336,7 @@ export default function PublicProfileScreen() {
         roleBadgeProvider: { backgroundColor: colors.profile.roleProviderBg },
         roleBadgeReceiver: { backgroundColor: colors.profile.roleReceiverBg },
         roleText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
-        roleTextProvider: { color: colors.brand.dark },
+        roleTextProvider: { color: colors.brand.primary },
         roleTextReceiver: { color: theme === 'dark' ? palette.indigo300 : palette.indigo600 },
         dateText: { fontSize: 10, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.3, flexShrink: 0, marginLeft: 8 },
         commentText: {
@@ -736,11 +736,11 @@ export default function PublicProfileScreen() {
                         onPress={handleBlockUser}
                     >
                         {isBlocking ? (
-                            <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                            <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                         ) : (
-                            <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.solid} />
+                            <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.fg} />
                         )}
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid }}>{isBlocking ? 'Blocking…' : 'Block'}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }}>{isBlocking ? 'Blocking…' : 'Block'}</Text>
                     </Pressable>
                 )}
             </View>
@@ -1057,9 +1057,9 @@ export default function PublicProfileScreen() {
                                     accessibilityRole="button"
                                     disabled={vouching}
                                     onPress={chooseVouchLevel}
-                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f59e0b', opacity: vouching ? 0.6 : 1 }}
+                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.feedback.warning.solid, opacity: vouching ? 0.6 : 1 }}
                                     >
-                                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
+                                    <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
                                 </Pressable>
                             )}
                         </>
@@ -1428,11 +1428,11 @@ export default function PublicProfileScreen() {
                                     onPress={handleBlockUser}
                                 >
                                     {isBlocking ? (
-                                        <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                        <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                                     ) : (
-                                        <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.solid} />
+                                        <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.fg} />
                                     )}
-                                    <Text style={{ color: colors.feedback.danger.solid, fontWeight: '800', fontSize: 14 }}>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '800', fontSize: 14 }}>
                                         {isBlocking ? 'Blocking…' : `Block ${callsignStr || 'User'}`}
                                     </Text>
                                 </Pressable>

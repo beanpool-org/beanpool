@@ -18,10 +18,10 @@ import { lightColors, type AppColors } from '../../constants/colors';
 import { contrastRatio } from '../../utils/readable-color';
 
 /**
- * The marker's colours: the theme's info tone, so it reads in light and dark alike. Where a palette's info tone doesn't
- * read at 4.5:1 on its own background, the card and the page (earth's is terra, 4.17:1 and 4.42:1, and an orange-red the
- * design rules out for the marker), the marker takes the classic blue, as on the web. Its dashed border takes the tone's
- * solid where the border would fade into the card (slate's, 1.49:1). Review of #1852, finding 6.
+ * The marker's colours: the theme's info tone, so it reads in light and dark alike. Where the info tone doesn't read at
+ * 4.5:1 on its own background, the card and the page, or is a hue the design rules out for the marker (an orange-red),
+ * the marker takes the classic blue, as on the web. Its dashed border takes the tone's solid where the border would fade
+ * into the card. Review of #1852, finding 6.
  */
 export function markTone(colors: AppColors) {
     const own = colors.feedback.info;

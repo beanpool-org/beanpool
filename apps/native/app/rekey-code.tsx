@@ -87,7 +87,7 @@ export default function RekeyCodeScreen() {
         label: { fontSize: 13, fontWeight: '700', color: c.text.secondary, marginTop: 16, marginBottom: 4 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: c.border.strong, backgroundColor: c.surface.app, color: c.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
         codeInput: { fontFamily: 'monospace', letterSpacing: 1 },
-        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: c.brand.primary, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: c.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
         primaryText: { color: c.text.inverse, fontSize: 16, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: c.border.strong, backgroundColor: c.surface.card, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 12 },
         secondaryText: { color: c.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center', flexShrink: 1 },

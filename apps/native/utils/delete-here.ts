@@ -13,7 +13,10 @@
  *   this community leaves the phone ({@link leaveThisCommunity}) and the phone moves to one of the others. The key and
  *   the 12 words stay.
  * - None does: this is the member's last community on the phone, and the delete wipes it as before
- *   (account-leaves-phone.ts `signOutOfThisPhone`).
+ *   (account-leaves-phone.ts `signOutOfThisPhone`). In a build with BeanPool's key vault, the key's copies there go
+ *   first ({@link removeVaultCopies}): the vault takes a Disconnect signed by the key alone, so after the wipe nobody
+ *   could remove them. A vault that doesn't confirm it leaves the phone as it was, and the member chooses: try again,
+ *   or delete anyway, and the copy stays ({@link finishLastDelete}).
  *
  * The node-mismatch screen asks the same question ({@link otherCommunitiesKeeping}): its delete takes the key off the
  * phone only when no saved community keeps it.
@@ -31,6 +34,7 @@ import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { communityAddress, dropFromRecord } from './push-registrations';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
+import { disconnectFromVault, hasVault, vaultCopyKnown, VaultError } from './vault';
 
 /** How long each community has to answer, as the phone's own membership check (NodeStatusContext). */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -227,13 +231,32 @@ export const NO_OTHER_COMMUNITY_LINE =
 export const SIGN_OUT_FROM_SETTINGS_LINE =
     'To take BeanPool off this phone altogether, switch, then use Settings → Account Deletion & Sign Out → Sign Out (Device Only).';
 
+/** In a build with BeanPool's key vault, under {@link lastCommunityLine}: the key's copies there go first. */
+export const VAULT_COPY_GOES_LINE = "A locked copy of your key at BeanPool's key vault, from a sign-in you linked, is removed first.";
+
 /** The last community on the phone: the key goes too. */
 export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, hasWords: boolean): string {
-    return hasWords
+    const line = hasWords
         ? `${plan.hereName} is the last community on this phone where you are a member, so this phone's key and 12 ` +
           'words go too. Only go ahead if you have written your 12 words down: they are the way back into any other ' +
           'community you belong to.'
         : `${plan.hereName} is the last community on this phone where you are a member, so this phone's key goes too.`;
+    return hasVault() ? `${line} ${VAULT_COPY_GOES_LINE}` : line;
+}
+
+/**
+ * The community deleted the account at the member's last one, but BeanPool's key vault did not remove its copy, so
+ * nothing on the phone was wiped ({@link DeleteOutcome} 'vault-copy-stays'): above Try Again and Delete Anyway.
+ */
+export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>): string {
+    const copy = outcome.copyKnown
+        ? "BeanPool's key vault still keeps a locked copy of your key, from a sign-in you linked"
+        : "BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook";
+    return `Your account at ${hereName} was deleted, but ${copy}: it couldn't be removed (${outcome.reason}). Only your ` +
+        'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
+        'Delete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To ' +
+        'remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has ' +
+        'you, to reach Settings → Account Protection → Disconnect.';
 }
 
 const keyAnd = (hasWords: boolean) => (hasWords ? "This phone's key and 12 words" : "This phone's key");
@@ -309,16 +332,84 @@ export type DeleteOutcome =
     /** Deleted at the member's last community, and the phone wiped as Sign Out wipes it. */
     | { kind: 'wiped' }
     /** Deleted at the last community, but the wipe did not finish. */
-    | { kind: 'wipe-unfinished'; reason: string };
+    | { kind: 'wipe-unfinished'; reason: string }
+    /**
+     * Deleted at the last community, but BeanPool's key vault did not confirm it removed its copies of the key
+     * ({@link removeVaultCopies}): nothing on the phone was wiped, so the key can still sign the Disconnect. The member
+     * chooses ({@link finishLastDelete}). `copyKnown`: the phone knows the vault keeps one (utils/vault.ts `vaultCopyKnown`).
+     */
+    | { kind: 'vault-copy-stays'; reason: string; copyKnown: boolean };
+
+/** What the member chose when the vault did not remove its copy ({@link DeleteOutcome} 'vault-copy-stays'). */
+export type VaultCopyChoice = 'try-again' | 'delete-anyway';
 
 const reasonOf = (e: unknown) => (e instanceof Error && e.message ? e.message : String(e));
+
+/** Why the vault did not remove its copy, in a few words for {@link vaultCopyStaysLine}. */
+function vaultCopyFailure(e: unknown): string {
+    if (e instanceof VaultError) {
+        if (e.reason === 'locked') return 'the vault is paused for a little while';
+        if (e.code === 'unverified') return "its answer didn't check out: check that your phone's date and time are right";
+        if (e.reason === 'unreachable') return "it didn't answer: check your connection";
+        if (e.reason === 'rate_limited') return 'too many tries just now';
+    }
+    return "it didn't confirm the delete";
+}
+
+/**
+ * Before the key leaves the phone for good (the delete at the member's last community), in a build with BeanPool's key
+ * vault: every copy of it the vault keeps goes, for every sign-in (utils/vault.ts `disconnectFromVault`, `all`), signed
+ * by the key while the phone still holds it. Afterwards nobody could remove them: the vault takes a Disconnect signed by
+ * the key alone, and finds a copy by nothing else. Null once the vault signed that it deleted them (none kept counts);
+ * otherwise why not ({@link vaultCopyFailure}). A build without a vault keeps the copies at the community, whose delete
+ * took them (server state-engine.ts `purgeMemberSelf`). Never throws.
+ */
+export async function removeVaultCopies(identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>): Promise<string | null> {
+    if (!hasVault()) return null;
+    try {
+        await disconnectFromVault(identity, 'all');
+        return null;
+    } catch (e) {
+        console.log(`[VAULT] the copies were not removed before the delete's wipe: ${reasonOf(e)}`);
+        return vaultCopyFailure(e);
+    }
+}
+
+/** The wipe at the member's last community: account-leaves-phone.ts `signOutOfThisPhone`. Never throws. */
+async function wipeAtLast(identity: BeanPoolIdentity): Promise<DeleteOutcome> {
+    try {
+        // This community dropped the key's push tokens with the account; the other communities it registered with are
+        // asked there.
+        await signOutOfThisPhone(identity);
+    } catch (e) {
+        return { kind: 'wipe-unfinished', reason: reasonOf(e) };
+    }
+    return { kind: 'wiped' };
+}
+
+/** The vault's copies go ({@link removeVaultCopies}), then the wipe; or, when they didn't, nothing is wiped. */
+async function removeVaultCopiesThenWipe(identity: BeanPoolIdentity): Promise<DeleteOutcome> {
+    const failed = await removeVaultCopies(identity);
+    if (failed) return { kind: 'vault-copy-stays', reason: failed, copyKnown: await vaultCopyKnown(identity.publicKey) };
+    return wipeAtLast(identity);
+}
+
+/**
+ * The member's answer to {@link DeleteOutcome} 'vault-copy-stays', once the community has deleted the account: Try Again
+ * asks the vault again and wipes the phone only once it removed the copies (or says the same again); Delete Anyway wipes
+ * it now, and the vault copy stays, as {@link vaultCopyStaysLine} said. Never throws.
+ */
+export async function finishLastDelete(identity: BeanPoolIdentity, choice: VaultCopyChoice): Promise<DeleteOutcome> {
+    return choice === 'try-again' ? removeVaultCopiesThenWipe(identity) : wipeAtLast(identity);
+}
 
 /**
  * Settings' Permanently Delete Account, once the member confirmed `plan` ({@link planDelete}): the node deletes the
  * account here (node-post.ts `purgeAccountOnNode`), and only once it has answered `{ ok: true }` within
  * `purgeTimeoutMs`, the phone does what the
  * plan says. Other communities keep the key: {@link leaveThisCommunity}, then the next one's copy is opened. The last
- * one: account-leaves-phone.ts `signOutOfThisPhone`. Never throws.
+ * one: the vault's copies of the key go ({@link removeVaultCopies}), then account-leaves-phone.ts `signOutOfThisPhone`.
+ * Never throws.
  *
  * The phone must still be set to the community the plan was made for: purgeAccountOnNode deletes at the one it is set
  * to.
@@ -349,12 +440,7 @@ export async function deleteAccountHere(
         return { kind: 'left' };
     }
 
-    try {
-        // This community dropped the key's push tokens with the account; the other communities it registered with are
-        // asked there.
-        await signOutOfThisPhone(identity);
-    } catch (e) {
-        return { kind: 'wipe-unfinished', reason: reasonOf(e) };
-    }
-    return { kind: 'wiped' };
+    // Only once the community deleted the account: a delete it refused (a deal under way) never costs the member their
+    // sign-in copy.
+    return removeVaultCopiesThenWipe(identity);
 }

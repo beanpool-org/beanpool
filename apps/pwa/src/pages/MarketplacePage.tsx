@@ -318,6 +318,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     );
     // A listing pushed over the live feed joins the list only inside the radius the list was read with.
     const fitsNear = useCallback((p: MarketplacePost): boolean => !near
+        || p.eventOnline === true
         || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm), [near]);
 
     // Layout configuration — default to 'grid' (Card View)
@@ -565,14 +566,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
                 const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
-                const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
+                // Online events have no place, so a read by radius never meets them: read beside it where the feed asks for
+                // events (DESIGN-event-times §9).
+                const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
+                const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents] = await Promise.all([
                     // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
                     // listings wherever they are.
                     getMarketplacePosts({ ...filter, ...nearParams(near) }),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
-                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
+                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] }))),
+                    near && wantsEvents ? getMarketplacePosts({ ...filter, online: true }).catch(() => []) : Promise.resolve([]),
                 ]);
 
                 const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
@@ -594,6 +599,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
                 const byId = new Map<string, MarketplacePost>();
                 for (const p of homeData) byId.set(p.id, p);
+                for (const p of (onlineEvents as MarketplacePost[])) if (!byId.has(p.id)) byId.set(p.id, p);
                 for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
                 let allPosts: MarketplacePost[] = Array.from(byId.values());
 

@@ -1363,7 +1363,9 @@ describe('MapPage: where the pins are read from (S5)', () => {
     };
     const NEARBY = { radiusKm: 250, max: 500 };
     const TYPES = 'offer,need,poll,event';
-    const listReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id);
+    // The read for online events beside a radius read (DESIGN-event-times §9) is its own: `onlineReads`.
+    const listReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id && !f?.online);
+    const onlineReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.online);
     const ownReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.author);
 
     beforeEach(async () => {
@@ -1389,6 +1391,8 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(listReads().length).toBe(1));
         expect(listReads()).toEqual([{ types: TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance', limit: 200 }]);
         expect(ownReads()).toEqual([{ types: TYPES, author: mockIdentity.publicKey, limit: 200 }]);
+        // Online events have no place, so the radius read never meets them: read beside it, wherever they are.
+        expect(onlineReads()).toEqual([{ types: TYPES, online: true, limit: 200 }]);
     });
 
     it('the Market\'s distance setting wins over the area', async () => {
@@ -1416,10 +1420,11 @@ describe('MapPage: where the pins are read from (S5)', () => {
         expect(listReads()).toEqual([{ types: TYPES }]);
         expect(ownReads()).toEqual([]);
         expect(api.getCommunityMe).not.toHaveBeenCalled();
+        expect(onlineReads()).toEqual([]);
     });
 
     it('nothing near the area is never a dead end: Show everywhere reads the newest', async () => {
-        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post]) as any);
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post]) as any);
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         const note = await view!.findByTestId('map-near-empty');
@@ -1430,7 +1435,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
     });
 
     it('after Show everywhere, Near your area reads from the area again', async () => {
-        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post]) as any);
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post]) as any);
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         const note = await view!.findByTestId('map-near-empty');
@@ -1445,12 +1450,25 @@ describe('MapPage: where the pins are read from (S5)', () => {
     // #1770: the event chips sat over the note (same spot, same layer, later in the page), so Near your area could not be
     // tapped whenever the newest from everywhere held an upcoming event. jsdom has no layout; e2e/market-near-check.mjs
     // makes the real tap.
+    it('online events never pin, so with only those and nothing near, the map still says nothing is near (DESIGN-event-times §9)', async () => {
+        const online = {
+            ...post, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', credits: 0, repeatable: false, lat: undefined, lng: undefined,
+            eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', eventOnline: true,
+        };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.online ? [online] : []) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(onlineReads().length).toBe(1));
+        expect(await view!.findByTestId('map-near-empty')).toHaveTextContent('Nothing within 250 km of your area yet.');
+        expect(mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'))).toEqual([]);
+    });
+
     it('after Show everywhere with an upcoming event loaded, the note sits under the event chips', async () => {
         const event = {
             ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
         };
-        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post, event]) as any);
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post, event]) as any);
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         const note = await view!.findByTestId('map-near-empty');

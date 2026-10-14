@@ -635,6 +635,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     );
     // A pin pushed over the live feed joins the map only inside the radius the map was read with.
     const fitsMap = useCallback((p: MarketplacePost): boolean => fitsMapList(p) && (!near
+        || p.eventOnline === true
         || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm)), [near]);
 
     // Load marketplace posts (home + enabled peers from localStorage)
@@ -664,16 +665,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
-                const [pinsRes, localData, ownData] = await Promise.all([
+                const [pinsRes, localData, ownData, onlineData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
                     // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
                     getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
                     near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
+                    // Online events have no place, so the radius read never meets them: read beside it (DESIGN-event-times §9).
+                    near ? getMarketplacePosts({ ...MAP_LIST_FILTER, online: true, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
                 const ownIds = new Set(localData.map(p => p.id));
                 let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];
+                const heldIds = new Set(allPosts.map(p => p.id));
+                allPosts = [...allPosts, ...onlineData.filter(p => !heldIds.has(p.id))];
 
                 // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
                 // guest list and no other community's (G9a §7).
@@ -1501,7 +1506,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .map(e => [e.lat!, e.lng!] as [number, number]),
     ], [posts, enterprises, blockedSet]);
     // Read by area and nothing near (lib/listings-near): its own line, never a dead end (DESIGN-global-sync-by-area §5).
-    const nearEmpty = !!near && pinsLoaded && posts.length === 0;
+    // Online events never pin (they have no place), so a map holding only those still has nothing near to show.
+    const nearEmpty = !!near && pinsLoaded && posts.every(p => p.eventOnline === true);
     const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0 && !nearEmpty;
     useEffect(() => {
         if (centredRef.current || !mapRef.current) return;

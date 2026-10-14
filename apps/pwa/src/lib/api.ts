@@ -1151,6 +1151,8 @@ export async function getMarketplacePosts(filter?: {
     lng?: number;
     radiusKm?: number;
     sort?: 'distance' | 'recent';
+    /** Online events only, wherever they are (DESIGN-event-times §9): a read by radius never meets them. Needs events in `types`. */
+    online?: boolean;
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1171,6 +1173,7 @@ export async function getMarketplacePosts(filter?: {
         if (filter.radiusKm != null) params.set('radiusKm', String(filter.radiusKm));
     }
     if (filter?.sort) params.set('sort', filter.sort);
+    if (filter?.online) params.set('online', '1');
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 

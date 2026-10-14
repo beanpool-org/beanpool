@@ -13,6 +13,8 @@
  *   4. the set's tag moves when an online event is posted: the held tag gets a 200 with the new event in the set;
  *   5. Home's "Coming up" (global: within 50 km of the reader's point) holds the online event wherever the reader is,
  *      with its clock, zone and `online`, and not the far in-person one.
+ *   6. a read within a radius (the web feed and map on the global node) holds none, and `online=1` beside it answers the
+ *      online events only, under the listing's rules; with no events asked for it answers none; nearby=1 refuses it.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-online-events-nearby)
  */
@@ -175,6 +177,23 @@ async function main(): Promise<void> {
     assert(item?.online === true && item?.tz === 'Africa/Lagos' && item?.startLocal === clockIn(3),
         `with online, its zone and its clock (got ${JSON.stringify(item && { online: item.online, tz: item.tz, startLocal: item.startLocal })})`);
     assert(!items.some(i => i.id === inPersonId), 'the in-person event at Lagos is not (15,000 km away)');
+
+    // ── 6. A read by radius, and online=1 beside it ──
+    console.log('\n── 6. A read within a radius, and online=1 beside it (the web feed and map) ──');
+    const near = `/api/marketplace/posts?types=${TYPES}&lat=${SYDNEY.lat}&lng=${SYDNEY.lng}&radiusKm=50`;
+    const within = await signed('GET', near, null, sydney);
+    const withinIds = (Array.isArray(within.body) ? within.body : within.body?.posts ?? []).map((p: any) => p.id);
+    assert(within.status === 200 && !withinIds.includes(onlineId), 'a read within 50 km of Sydney holds no online event (it has no place)');
+    const besides = await signed('GET', `/api/marketplace/posts?types=${TYPES}&online=1`, null, sydney);
+    const onlineRows: any[] = Array.isArray(besides.body) ? besides.body : besides.body?.posts ?? [];
+    assert(besides.status === 200 && onlineRows.some(p => p.id === onlineId), `online=1 answers the online event (got ${besides.status})`);
+    assert(onlineRows.length > 0 && onlineRows.every(p => p.type === 'event' && p.eventOnline === true), 'online=1 answers online events only');
+    assert(!onlineRows.some(p => p.id === forGroup || p.id === ended || p.id === cancelled), 'online=1 keeps the listing rules: no group event, ended or cancelled one');
+    const noEvents = await signed('GET', '/api/marketplace/posts?types=offer,need&online=1', null, sydney);
+    const noEventRows: any[] = Array.isArray(noEvents.body) ? noEvents.body : noEvents.body?.posts ?? [];
+    assert(noEvents.status === 200 && !noEventRows.some(p => p.type === 'event'), 'online=1 without events asked for answers no event');
+    const mixed = await signed('GET', `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}&nearby=1&online=1`, null, sydney);
+    assert(mixed.status === 400, `nearby=1 takes no online= (got ${mixed.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

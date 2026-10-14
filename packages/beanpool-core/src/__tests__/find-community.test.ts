@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, findCommunityState, knownCommunityCount } from '../find-community';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, communitiesNear, findCommunityState, isNearKm, knownCommunityCount } from '../find-community';
 
 const FETCHED = '2026-10-14T08:00:00.000Z';
 const at = (km: number | null) => ({ distanceKm: km });
@@ -39,6 +39,15 @@ describe('findCommunityState: what "Find your community" may say', () => {
     it('a community with no distance is near nothing', () => {
         expect(findCommunityState({ communities: [at(null)], communityCount: 1, point: null, directoryFetchedAt: FETCHED })).toBe('no_point');
         expect(findCommunityState({ communities: [at(null), at(30)], communityCount: 2, point: 'request', directoryFetchedAt: FETCHED })).toBe('near');
+    });
+
+    it('communitiesNear: only those within 250 km may be counted or named as near (#1935 finding 2)', () => {
+        // The review's case: Lismore at 12 km and Byron at 12,525 km. One is near, not two.
+        expect(communitiesNear([at(12), at(12_525)])).toEqual([at(12)]);
+        expect(communitiesNear([at(0), at(250), at(250.5), at(null), at(30)])).toEqual([at(0), at(250), at(30)]);
+        expect(communitiesNear([])).toEqual([]);
+        expect(isNearKm(250)).toBe(true);
+        for (const v of [250.01, -1, null, undefined, NaN, Infinity, '12']) expect(isNearKm(v)).toBe(false);
     });
 
     it('knownCommunityCount: a whole number from 0, else unknown', () => {

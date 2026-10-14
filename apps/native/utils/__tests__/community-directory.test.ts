@@ -140,6 +140,16 @@ describe('the "Find your community" card, in each state', () => {
             .toBe('Mullumbimby is 12 km away, and 1 more nearby. Ask to join, and trade with your neighbours there.');
     });
 
+    it('"more nearby" counts only communities within 250 km, never one 12,525 km away (#1935 finding 2)', () => {
+        const lismore = readCommunity(row({ key: 'l', name: 'Lismore', distanceKm: 12 }))!;
+        const byron = readCommunity(row({ key: 'b', name: 'Byron', distanceKm: 12_525 }))!;
+        expect(findCommunityCardCopy(home({ communities: [lismore, byron] }), true).body)
+            .toBe('Lismore is 12 km away. Ask to join, and trade with your neighbours there.');
+        const nimbin = readCommunity(row({ key: 'n', name: 'Nimbin', distanceKm: 250 }))!;
+        expect(findCommunityCardCopy(home({ communities: [lismore, nimbin, byron] }), true).body)
+            .toBe('Lismore is 12 km away, and 1 more nearby. Ask to join, and trade with your neighbours there.');
+    });
+
     it('no point yet: how many are listed, and a nudge to use the location or type the town (Marty 14 Oct)', () => {
         expect(findCommunityCardCopy(home({ point: null, communityCount: 10 }), false).body)
             .toBe('10 communities are listed. Use your location, or type your town, to see the nearest.');

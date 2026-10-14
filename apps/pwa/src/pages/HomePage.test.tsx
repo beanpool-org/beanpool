@@ -801,6 +801,16 @@ describe('Find your community on the web: far is not near, none only once loaded
         expect(within(card).getByTestId('home-find-body')).toHaveTextContent('The community nearest you.');
         expect(within(card).queryByTestId('home-find-start')).toBeNull();
     });
+
+    it('near: a community 12,525 km away is never listed under "nearest you" (#1935 finding 2)', async () => {
+        const byron = { ...lismore, key: 'byron', name: 'Byron', url: 'https://byron.example.org', distanceKm: 12_525 };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global' }, { find: { point: 'area', communities: [{ ...lismore, distanceKm: 12 }, byron], communityCount: 10, nearbyPosts: null, watches: [], knock: null, directoryFetchedAt: LOADED } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-find');
+        expect(within(card).getByTestId('home-find-body')).toHaveTextContent('The community nearest you.');
+        expect(card.textContent).toContain('12 km away');
+        expect(card.textContent).not.toMatch(/Byron|12,525/);
+    });
 });
 
 describe('First steps on the global node, on the web (PR #1479 review)', () => {

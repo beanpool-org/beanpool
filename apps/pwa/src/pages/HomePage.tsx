@@ -36,7 +36,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
-    decideLine, distanceText, findBody, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
+    decideLine, distanceText, findBody, findListed, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
@@ -1062,7 +1062,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'find': {
                 const f = c.find!;
-                const more = f.communities.slice(0, 3);
+                const more = findListed(f);
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>

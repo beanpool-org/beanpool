@@ -19,7 +19,7 @@
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { FIND_COMMUNITY_WORDS, findCommunityState, knownCommunityCount, type FindCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, type FindCommunityState } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
@@ -244,15 +244,6 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
 /** A member is new for this long: First steps stays while they are, even with every line done (the node's own rule). */
 export const STEPS_NEW_DAYS = 14;
 
-/**
- * "Within reach" for "Ask a community to let you in" (DESIGN-home-dashboard-fable.md §7: the ask shows "while there is
- * one within reach"): 250 km, the radius the global node's listings use (scratch/global-node/
- * DESIGN-global-sync-by-area-fable.md: a phone keeps the nearest 500 listings within 250 km), so a community 9,000 km
- * away is never suggested (#1517; the phone's
- * `ASK_WITHIN_KM`). A community the node lists with no distance is not within reach.
- */
-export const ASK_WITHIN_KM = 250;
-
 export interface StepLine {
     key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask';
     done: boolean;
@@ -266,7 +257,8 @@ export interface StepLine {
 /**
  * The lines First steps draws on the web (§3.1, §7). Local: a first Offer, a photo, interests (the chips' taps count at
  * once), and an invite once there is an Offer. Global: a first post, and "Ask X to let you in" where the nearest
- * community is within reach (`ASK_WITHIN_KM`). The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
+ * community is within reach (@beanpool/core's NEAR_COMMUNITY_KM, 250 km: the radius the global node's listings use and
+ * every "near you" on both apps, so a community 9,000 km away is never suggested, #1517). The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
  * the community knocked on, so it is a suggestion, never a step that holds the card.
  */
 export function stepLines(answer: HomeAnswer, interests: readonly string[]): StepLine[] {
@@ -275,7 +267,7 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
     if (answer.profile === 'global') {
         const nearest = answer.cards.find?.communities[0];
         const km = nearest?.distanceKm;
-        const near = typeof km === 'number' && Number.isFinite(km) && km >= 0 && km <= ASK_WITHIN_KM ? nearest : undefined;
+        const near = isNearKm(km) ? nearest : undefined;
         return [
             { key: 'firstPost', done: s.firstPost, text: 'Post something free or for swap' },
             ...(near?.url ? [{ key: 'ask' as const, done: false, text: `Ask ${near.name ?? 'a community'} to let you in`, untracked: true as const, href: near.url }] : []),
@@ -458,7 +450,7 @@ export function findBody(f: HomeFind): string {
     const state = findCommunityState(f);
     switch (state) {
         case 'near':
-            return f.communities.length === 1
+            return communitiesNear(f.communities).length === 1
                 ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
                 : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
         case 'far':
@@ -473,6 +465,15 @@ export function findBody(f: HomeFind): string {
             return n === null ? see : `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. ${see}`;
         }
     }
+}
+
+/**
+ * The communities the find card lists under its sentence, the first 3: while near, only those within 250 km, so none
+ * farther sits under "nearest you" (deciding review of #1935, finding 2); while far, the nearest listed, each with its
+ * distance.
+ */
+export function findListed(f: HomeFind): HomeFind['communities'] {
+    return (findCommunityState(f) === 'near' ? communitiesNear(f.communities) : f.communities).slice(0, 3);
 }
 
 /** Whether the find card offers Start a community: when nothing listed is near (and the list has loaded). */

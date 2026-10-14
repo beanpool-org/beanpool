@@ -7,9 +7,10 @@
  *   the directory once (the first minutes after a boot, a restore or a take-over, or while the registry is down). Until
  *   then an empty list is unknown, not empty. A count it did send is still a count, so a positive one is said.
  * - **An unknown count is unknown, never 0.**
- * - **Near is {@link NEAR_COMMUNITY_KM}, 250 km**: the radius both apps already call "within reach" (`ASK_WITHIN_KM`,
- *   the ask-to-join step) and the global node's listings use (a member's set is the nearest 500 within 250 km). One
- *   meaning of "near" on every screen: a community 12,000 km away is listed with its distance, never as "nearest you".
+ * - **Near is {@link NEAR_COMMUNITY_KM}, 250 km**: the radius both apps call "within reach" (the ask-to-join step reads
+ *   this constant) and the global node's listings use (a member's set is the nearest 500 within 250 km). One meaning of
+ *   "near" on every screen: a community 12,000 km away is listed with its distance, never as "nearest you", and never
+ *   counted as "more nearby" ({@link communitiesNear}).
  * - **One "none" sentence**, {@link FIND_COMMUNITY_WORDS}.noneNear, with Start a community beside it on both apps (a
  *   real control: the Start a community screen), and never "ask to be told" on the web, which has no place watches.
  */
@@ -39,6 +40,20 @@ export interface FindCommunityFacts {
 }
 
 const isKm = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+
+/** Whether a distance is "near": a number of km from 0 to {@link NEAR_COMMUNITY_KM}. No distance is near nothing. */
+export function isNearKm(km: unknown): boolean {
+    return isKm(km) && km <= NEAR_COMMUNITY_KM;
+}
+
+/**
+ * The communities within {@link NEAR_COMMUNITY_KM}, in the order given: the only ones a screen may count or name as
+ * "nearest you" or "nearby" (deciding review of #1935, finding 2: "Lismore is 12 km away, and 1 more nearby" counted
+ * Byron at 12,525 km).
+ */
+export function communitiesNear<T extends { distanceKm?: number | null }>(communities: readonly T[]): T[] {
+    return communities.filter(c => isNearKm(c.distanceKm));
+}
 
 /** A count the node said, or null: anything that isn't a whole number from 0 is no count. */
 export function knownCommunityCount(v: unknown): number | null {

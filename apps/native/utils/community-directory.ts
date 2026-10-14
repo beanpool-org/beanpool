@@ -21,7 +21,7 @@ import { communityOrigin } from './community-origin';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
-import { FIND_COMMUNITY_WORDS, findCommunityState, knownCommunityCount } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, knownCommunityCount } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
 export { communityOrigin };
@@ -276,7 +276,9 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
         case 'near': {
             const nearest = communities[0];
             const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null }).toLowerCase() || 'near you';
-            const more = communities.length > 1 ? `, and ${communities.length - 1} more nearby` : '';
+            // "More nearby" counts only those within 250 km: never one 12,000 km away.
+            const near = communitiesNear(communities);
+            const more = near.length > 1 ? `, and ${near.length - 1} more nearby` : '';
             return { title, body: `${communityLabel(nearest)} is ${where}${more}. Ask to join, and trade with your neighbours there.` };
         }
         case 'far': {

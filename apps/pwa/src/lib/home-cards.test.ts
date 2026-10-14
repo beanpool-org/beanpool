@@ -5,8 +5,9 @@
  * lib/home-layout.ts, proved in home-layout.test.ts.
  */
 import { describe, expect, it } from 'vitest';
+import { NEAR_COMMUNITY_KM } from '@beanpool/core';
 import {
-    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -203,6 +204,22 @@ describe('the words (§3.1, §9)', () => {
         expect(findOffersStart({ ...loaded, communities: [{ ...lismore, distanceKm: 251 }] })).toBe(true);
     });
 
+    it('near: only communities within 250 km are called nearest you or listed under it (#1935 finding 2)', () => {
+        const loaded = { ...find, directoryFetchedAt: '2026-10-14T08:00:00.000Z' };
+        const lismore = { key: 'l', name: 'Lismore', url: 'https://lismore.example', memberCount: 12, distanceKm: 12 };
+        const byron = { ...lismore, key: 'b', name: 'Byron', distanceKm: 12_525 };
+        const nimbin = { ...lismore, key: 'n', name: 'Nimbin', distanceKm: 40 };
+        // The review's render: "The communities nearest you, closest first" over Byron at 12,525 km.
+        expect(findBody({ ...loaded, communities: [lismore, byron] })).toBe('The community nearest you. Ask to join, and trade with your neighbours there.');
+        expect(findListed({ ...loaded, communities: [lismore, byron] }).map(c => c.key)).toEqual(['l']);
+        expect(findBody({ ...loaded, communities: [lismore, nimbin, byron] }))
+            .toBe('The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.');
+        expect(findListed({ ...loaded, communities: [lismore, nimbin, byron] }).map(c => c.key)).toEqual(['l', 'n']);
+        // Far: the nearest listed, each with its distance, at most 3.
+        const far = [byron, { ...byron, key: 'b2', distanceKm: 12_600 }, { ...byron, key: 'b3', distanceKm: 13_000 }, { ...byron, key: 'b4', distanceKm: 14_000 }];
+        expect(findListed({ ...loaded, communities: far }).map(c => c.key)).toEqual(['b', 'b2', 'b3']);
+    });
+
     it('the new-account limits from the node\'s own numbers: 3 days by sign-in, 7 by 12 words', () => {
         const p = (hours: number, posts: number, chats: number) => ({ onProbation: true, ageEndsAt: null, keptPosts: 0, keptPostsNeeded: 3, endsWhen: { hours, keptPosts: 3 }, limits: { posts: { limit: posts }, photos: { limit: 5 }, new_dm_recipients: { limit: chats } } });
         expect(probationSentence(p(72, 3, 10))).toBe('For your first 3 days: 3 posts and 10 new chats a day.');
@@ -233,7 +250,8 @@ describe('First steps goes when it has nothing to say on the web (§6.1, PR #147
     });
 
     it('"Ask X to let you in" only for a community within 250 km, the radius global\'s listings use (#1517)', () => {
-        expect(ASK_WITHIN_KM).toBe(250);
+        // Core's NEAR_COMMUNITY_KM: one meaning of near on every screen (#1935), no copy of its own.
+        expect(NEAR_COMMUNITY_KM).toBe(250);
         const at = (distanceKm: number | null) => stepLines(globalMember({ firstPost: true }, { ...find, communities: [{ ...find.communities[0], distanceKm: distanceKm as number }] }), ['food']).map(l => l.key);
         expect(at(12)).toEqual(['firstPost', 'ask']);
         expect(at(250)).toEqual(['firstPost', 'ask']);

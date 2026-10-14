@@ -99,6 +99,7 @@ import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRede
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
+import { directoryHeldBack } from '../services/directory-publisher.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
@@ -1214,6 +1215,10 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // can tell "none stored" from an answer that didn't load.
             contactEmail: config.contactEmail || null,
             contactPhone: config.contactPhone || null,
+            // Why the public directory doesn't list this community although it is set to publish: 'unnamed' (no name of
+            // its own yet) or 'unlisted' (DIRECTORY_UNLISTED in its .env), else null (services/directory-publisher.ts).
+            // The owners' Directory Publishing says it, with what to change.
+            directoryHeldBack: directoryHeldBack(),
             shutdownStatus: getShutdownStatus(),
             // The Settings banner when this server's standby needs its owners (services/standby-health.ts): the
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or

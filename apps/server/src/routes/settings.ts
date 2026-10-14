@@ -24,7 +24,7 @@ import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PAS
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import qrcode from 'qrcode';
-import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, HELD_BACK_NAME_MESSAGE, HELD_BACK_TEST_NODE_MESSAGE } from '../services/directory-publisher.js';
+import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
@@ -448,8 +448,9 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const result = await pushDirectoryNow();
     if (!result.success) {
-        // Not listed by the profile's switch (the global node) or held back by default name / test node is the node's setting, not a server failure.
-        ctx.status = (result.error === NOT_LISTED_MESSAGE || result.error === HELD_BACK_NAME_MESSAGE || result.error === HELD_BACK_TEST_NODE_MESSAGE) ? 409 : 500;
+        // Not listed by the profile's switch (the global node), or held back (no name of its own yet, DIRECTORY_UNLISTED),
+        // is the node's setting, not a server failure: 409, with the answer saying which.
+        ctx.status = (result.error === NOT_LISTED_MESSAGE || result.heldBack) ? 409 : 500;
     }
     ctx.body = result;
 });

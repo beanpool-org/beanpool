@@ -15,6 +15,8 @@
  *  3e. A node that holds the old single contacts switch, stored as true by every save whether anyone chose it or not:
  *     no contact is sent (a stored default is not a choice), and each is sent once the owner turns it on.
  *  4. `pushDirectoryNow()` error handling when directory registry returns non-2xx status code.
+ *  2b. Held back: a community with no name of its own (blank, or the default "BeanPool Community") or a server with
+ *     DIRECTORY_UNLISTED=1 sends nothing, and the answer says which (the rest: test-directory-hold-back.ts).
  *  5. `initDirectoryPublisher()` behavior when disabled or on backup node.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-directory-publisher.ts
@@ -63,7 +65,7 @@ const { initStateEngine, setNodeRole, getNodeConfig, updateNodeConfig, getDirect
 const { getVersion } = await import('./version.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
 const { startP2P } = await import('./p2p.js');
-const { initDirectoryPublisher, pushDirectoryNow, HELD_BACK_NAME_MESSAGE, HELD_BACK_TEST_NODE_MESSAGE } = await import('./services/directory-publisher.js');
+const { initDirectoryPublisher, pushDirectoryNow, HELD_BACK_NAME_MESSAGE, HELD_BACK_UNLISTED_MESSAGE } = await import('./services/directory-publisher.js');
 const { db } = await import('./db/db.js');
 
 let run = 0;
@@ -98,6 +100,8 @@ async function main() {
     setNodeRole('primary');
 
     // ── 2. Uninitialized P2P / Key Guard Check ──────────────────────────────
+    // A named community: an unnamed one is held back before the key is looked at (2b).
+    updateLocalConfig({ communityName: 'Mullum Creek' });
     const uninitRes = await pushDirectoryNow();
     assert(uninitRes.success === false, 'pushDirectoryNow fails when P2P node is not ready');
     assert(uninitRes.error === 'P2P node not ready', 'pushDirectoryNow reports P2P node not ready');
@@ -105,31 +109,27 @@ async function main() {
     // Initialize P2P node (ephemeral ports)
     const p2pNode = await startP2P(0, 0);
 
-    // ── 2b. Held Back: Default name, empty name, and test node guard checks ──
+    // ── 2b. Held back: no name of its own, or DIRECTORY_UNLISTED (test-directory-hold-back.ts boots the server for the rest)
     const requestsBefore = receivedRequests.length;
     updateLocalConfig({ communityName: 'BeanPool Community' });
     const defaultRes = await pushDirectoryNow();
-    assert(defaultRes.success === false && defaultRes.error === HELD_BACK_NAME_MESSAGE,
-        'pushDirectoryNow fails with HELD_BACK_NAME_MESSAGE when community name is default ("BeanPool Community")');
-    assert(initDirectoryPublisher() === false,
-        'initDirectoryPublisher returns false when community name is default');
+    assert(defaultRes.success === false && defaultRes.error === HELD_BACK_NAME_MESSAGE && defaultRes.heldBack === 'unnamed',
+        'pushDirectoryNow holds back a community still called the default "BeanPool Community", saying why');
 
     updateLocalConfig({ communityName: '   ' });
     const emptyRes = await pushDirectoryNow();
     assert(emptyRes.success === false && emptyRes.error === HELD_BACK_NAME_MESSAGE,
-        'pushDirectoryNow fails with HELD_BACK_NAME_MESSAGE when community name is empty');
-    assert(initDirectoryPublisher() === false,
-        'initDirectoryPublisher returns false when community name is empty');
+        'pushDirectoryNow holds back a community whose name is blank');
 
-    // Test/review node guard check
+    // Our own test and review nodes: DIRECTORY_UNLISTED in their .env, read at every push. Nothing else holds a named one back.
     updateLocalConfig({ communityName: 'Valid Community' });
-    process.env.CF_RECORD_NAME = 'test.beanpool.org';
-    const testNodeRes = await pushDirectoryNow();
-    assert(testNodeRes.success === false && testNodeRes.error === HELD_BACK_TEST_NODE_MESSAGE,
-        'pushDirectoryNow fails with HELD_BACK_TEST_NODE_MESSAGE when node is test node');
+    process.env.DIRECTORY_UNLISTED = '1';
+    const unlistedRes = await pushDirectoryNow();
+    assert(unlistedRes.success === false && unlistedRes.error === HELD_BACK_UNLISTED_MESSAGE && unlistedRes.heldBack === 'unlisted',
+        'pushDirectoryNow holds back a server with DIRECTORY_UNLISTED=1, saying why');
     assert(initDirectoryPublisher() === false,
-        'initDirectoryPublisher returns false when node is test node');
-    delete process.env.CF_RECORD_NAME;
+        'initDirectoryPublisher sets no timer under DIRECTORY_UNLISTED (only a restart changes the env)');
+    delete process.env.DIRECTORY_UNLISTED;
 
     assert(receivedRequests.length === requestsBefore,
         'no request was sent to directory registry when node was held back');

@@ -60,8 +60,8 @@ Opt-outs:
 
 Adding a friend is visible and bounded, because a connection in common is made of friendships both ways:
 - The person added is told: a quiet line on their People tab, "*name* added you · Add back", phone and web (no push).
-  Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or either
-  blocks the other; 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
+  Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or block
+  the adder (an adder's block of them changes nothing they read); 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
 - A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone counts
   too (its tombstone), so removing and adding again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
   writes its own row before the node has answered).

@@ -212,17 +212,24 @@ async function main() {
             `A6: the newest 20 of 25, newest first, and 5 more (${keysOf(r).length}, more ${r.body?.more})`);
     }
 
-    // A7 — the adder's own later block. E added B, then E blocked B: B's line for E goes (Add back would otherwise meet a
-    // block the blocker is never told of).
+    // A7 — the adder's own later block changes NOTHING the blocked member reads (engine/member-blocks.ts: "the blocked member is
+    // never told"; decision (a), 14 Oct). E added B, then E blocked B: B's line for E stays exactly as before the block; B's Add
+    // back is answered as any add; and E's own tab never shows B (E blocked B). Putting back a filter on the adder's block of the
+    // reader must fail here (#1913 confirmation 1, finding 1).
     {
         resetGatewayRateLimit();
-        const e = member('a7-e'), b = member('a7-b');
+        const e = member('a7-e'), b = member('a7-b'), c = member('a7-c');
         await add(e, b);
-        assert(keysOf(await addedYou(b)).includes(e.pk), 'A7: B sees E\'s add');
+        const before = await addedYou(b);
+        assert(keysOf(before).includes(e.pk), 'A7: B sees E\'s add');
         const blocked = await block(e, b);
         const after = await addedYou(b);
-        assert(blocked.status === 200 && after.status === 200 && !keysOf(after).includes(e.pk),
-            `A7: E blocks B, and B's line for E goes (${blocked.status}, ${keysOf(after).length})`);
+        assert(blocked.status === 200 && after.status === 200 && JSON.stringify(after.body) === JSON.stringify(before.body),
+            `A7: E blocks B, and B's "added you" reads byte for byte as before the block (${blocked.status}, ${keysOf(after).length})`);
+        const back = await add(b, e), other = await add(b, c);
+        assert(back.status === other.status && back.status === 200,
+            `A7: B's Add back to E is answered as B's add of C (${back.status} vs ${other.status})`);
+        assert(!keysOf(await addedYou(e)).includes(b.pk), 'A7: E, who blocked B, never sees B in "added you"');
     }
 
     // A8 — only members of this node are named. An adder who has since been pruned, or whose row is a visitor's, is not.

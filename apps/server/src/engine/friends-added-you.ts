@@ -10,8 +10,8 @@
  * - The member's own, read with their own signed request (GET /api/friends/added-you). Nobody else's.
  * - New adds only: rows added since this server first told anyone (ADDED_YOU_SINCE_ROW, stamped by the first add or
  *   read after this version starts, so a row from before it never comes back as news), within ADDED_YOU_DAYS.
- * - Gone once they are added back (it is a friendship both ways then), once either has blocked the other on this node
- *   (member_blocks, engine/member-blocks.ts), and when the adder is no member here (a visitor, pruned, a replaced key).
+ * - Gone once they are added back (it is a friendship both ways then), once the member has blocked the adder on this node
+ *   (member_blocks; an adder's block of the member changes nothing the member reads, engine/member-blocks.ts), and when the adder is no member here (a visitor, pruned, a replaced key).
  * - Newest first, at most ADDED_YOU_MAX named, with how many more there are. Each adder adds at most
  *   WRITER_LIMITS.friendAddsPerDay people a day (engine/writer-bounds.ts assertMayAddFriendToday).
  */
@@ -53,9 +53,8 @@ export function getAddedYou(member: string, now = Date.now()): { addedYou: Added
            AND f.added_at >= ? AND f.added_at >= ?
            AND NOT EXISTS (SELECT 1 FROM friends back WHERE back.owner_pubkey = ? AND back.friend_pubkey = f.owner_pubkey)
            AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = ? AND b.blocked_pubkey = f.owner_pubkey)
-           AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = f.owner_pubkey AND b.blocked_pubkey = ?)
          ORDER BY f.added_at DESC, f.owner_pubkey
-         LIMIT ?`).all(member, member, since, windowStart, member, member, member, ADDED_YOU_SCAN) as
+         LIMIT ?`).all(member, member, since, windowStart, member, member, ADDED_YOU_SCAN) as
         { publicKey: string; callsign: string; avatarRef: string | null; addedAt: string }[];
     const adders = rows.filter(r => isNodeMember(db, r.publicKey));
     return {

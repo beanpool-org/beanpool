@@ -30,7 +30,7 @@ export function FormerAddressBanner({ signedIn = false }: { signedIn?: boolean }
         <div
             role="status"
             data-testid="former-address-banner"
-            className="relative z-[110] w-full shrink-0 bg-amber-600 dark:bg-amber-700 text-white px-4 py-2.5 text-sm font-medium border-b border-amber-700 dark:border-amber-800 shadow-md"
+            className="relative z-[110] w-full shrink-0 bg-bp-gold-fill text-bp-gold-on px-4 py-2.5 text-sm font-medium border-b border-bp-gold-fill shadow-md"
         >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="m-0 flex-1 min-w-0 basis-48 leading-snug [overflow-wrap:anywhere]">
@@ -46,7 +46,7 @@ export function FormerAddressBanner({ signedIn = false }: { signedIn?: boolean }
                 </a>
             </div>
             {signedIn && (
-                <p className="m-0 mt-1.5 text-amber-50 text-xs sm:text-sm leading-snug">
+                <p className="m-0 mt-1.5 text-xs sm:text-sm leading-snug">
                     You&apos;ll sign in there again, as you would in a new browser.
                 </p>
             )}

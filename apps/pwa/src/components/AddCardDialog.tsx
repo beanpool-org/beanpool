@@ -18,7 +18,7 @@ import { type PickerGroup, type PickerRow } from '../lib/home-layout';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
 
-const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
+const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const plain = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 
 function Shell({ id, testId, title, children, onClose, dialog }: {
@@ -140,7 +140,7 @@ export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label
 ];
 
 const chip = (on: boolean) => `min-w-[44px] min-h-[44px] px-3 rounded-full border text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-    on ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-transparent border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100'}`;
+    on ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on' : 'bg-transparent border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100'}`;
 
 function Chips<T>({ legend, testId, options, value, onPick }: {
     legend: string; testId: string; options: ReadonlyArray<{ value: T; label: string }>; value: T; onPick: (v: T) => void;

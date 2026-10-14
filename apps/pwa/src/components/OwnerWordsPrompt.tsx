@@ -46,7 +46,7 @@ export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
                 <button
                     type="button"
                     onClick={() => { setShow(false); onCheckNow(); }}
-                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl bg-emerald-700 text-white font-bold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
                     {COPY.checkNow}
                 </button>

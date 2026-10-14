@@ -17,7 +17,7 @@
  * Run:  node e2e/wallpaper-shots.mjs   (from apps/pwa; WALLPAPER_ONLY=commons limits the screens)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global console, process, document, getComputedStyle, window -- Node, and the page's side of evaluate() */
+/* global console, process, document, getComputedStyle, window, localStorage, URL -- Node, and the page's side of evaluate() */
 import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';

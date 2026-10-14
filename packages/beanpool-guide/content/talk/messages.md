@@ -2,7 +2,7 @@
 slug: messages
 title: Messages
 summary: Start a chat, send photos, reply, react, edit, delete, mute, and what is private.
-help: Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a member's profile.
+help: Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a post or from your friends.
 related: people, blocking, event-chat, groups, mute, the-top-bar
 ---
 
@@ -10,19 +10,23 @@ related: people, blocking, event-chat, groups, mute, the-top-bar
 
 **Talk** has three buttons at the top: **Messages**, **Groups** and **People**.
 
-Tap **Talk** in the row of tabs, then **Messages**. Your chats with people are listed under **Inbox**. Deals that need you are at the top, under **Action Required**.
+Tap **Talk** in the row of tabs, then **Messages**. Your chats with people are listed there. Deals that need you are at the top, under **Action Required**.
 
 Chats that belong to a group, an enterprise or an event are under **Groups**, not here. See "Groups".
 
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.
-- The search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
+- On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
+
+In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions** and **Direct** at the top, and it has no search or filter.
 
 ## Starting a chat
 
 - From a post: tap **Message** and the person's name.
-- From **Talk**: tap the pencil button, then find the person by name.
+- From **Talk**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name.
 - From your friends: **Talk**, then **People**, then **Friends**, and tap the message button next to a name.
+
+In the web app, use **✉️ New DM**, or the **💬 Message** button on a post. Your friends are under the **People** tab.
 
 ## Sending
 
@@ -36,9 +40,11 @@ The ticks under your message:
 - a clock: still sending;
 - **not delivered**: it failed. Tap it to **Resend** or **Discard** it.
 
+The clock and **not delivered** are on the phone. In the web app a message that fails stays in the box, and the app says so.
+
 ## Reply, react, edit, delete
 
-Tap a message. Small round buttons appear beside it:
+On the phone, tap a message. Small round buttons appear beside it:
 
 - **Reply** quotes it above what you write next. Tap the quote in a sent message to jump back to what it answers.
 - **React** opens seven emojis. Tap one to add it, tap it again to take it back. One reaction each; tapping a different one swaps it. The reactions show as a small badge under the message.
@@ -47,15 +53,17 @@ Tap a message. Small round buttons appear beside it:
 
 The same buttons are in a group's chat. See "Groups".
 
+In the web app, **Reply**, **React** and **Edit** are small words on each message, and there is no **Delete**: delete a message from the phone app.
+
 Deleting takes the words off your community's server too, so a new phone signing in later never sees them.
 
 ## Muting a chat
 
-Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap **⋮** and **Unmute** to undo it. See "Muting a chat".
+Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap the same button and **Unmute** to undo it. The web app cannot mute a chat yet. See "Muting a chat".
 
 ## What is private
 
-- A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.
+- A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. On the phone, the chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.
 - Each message is also locked to who sent it, to that one message, to its chat and, if it is a reply, to the message it answers. So the server cannot show your message as the other person's, send it again as a new message, or point your answer at a different message. Where it tries, the app shows **This message couldn't be verified, so it isn't shown.** in the middle of the chat, as nobody's, instead of the words. A photo the server swaps for another reads **Image unavailable**.
 - If the server puts a message into another chat, the app refuses it there. When two of your chats with the same person are joined into one, each message carries the chat it came from. One sent since this update then shows with **Moved here from another conversation.** underneath. One sent before it shows the older-version line instead (see below).
 - Each message also remembers the newest message its writer had when they wrote it. If the server shows it before that one, it reads **Shown out of the order it was written in.** underneath. Two messages written at the same moment, neither after the other, can come in either order without it.
@@ -69,8 +77,8 @@ Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **Fo
 - A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.
 - The notices BeanPool adds to a chat about a deal are not encrypted: Beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.
 - The server also knows who messaged whom, and when, which message each one answers, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.
-- A group's chat on the phone is **end-to-end encrypted** too: only the group's members can read it, and the people who run your community's server cannot. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions. You see a group's chat only from the day you joined: nothing written before is shown, and your phone never holds the key to it. A message that cannot be locked is not sent. A line that cannot be checked as written by a member reads **This message couldn't be verified.**, as nobody's. If your community's server is older and cannot lock group chats yet, the chat says so, and the server can read it. When the server is updated, those earlier messages are removed, and a line in the chat says so. See "Groups".
-- The web app cannot yet read or write in a group's chat: your community's server turns away a group message that is not locked, and the web app does not lock them. Use the phone for a group's chat.
+- A group's chat is **end-to-end encrypted** too, on the phone and in the web app: only the group's members can read it, and the people who run your community's server cannot. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions. You see a group's chat only from the day you joined: nothing written before is shown, and your phone never holds the key to it. A message that cannot be locked is not sent. A line that cannot be checked as written by a member reads **This message couldn't be verified.**, as nobody's. If your community's server is older and cannot lock group chats yet, the chat says so, and the server can read it. When the server is updated, those earlier messages are removed, and a line in the chat says so. See "Groups".
+- In the web app a group's chat works the same way, but you can't send photos in it.
 - Enterprise and event chats are not encrypted. The people who run your community's server can read them, and the server could write in them in anyone's name.
 - A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.
 - Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.
@@ -80,4 +88,4 @@ Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **Fo
 
 ## Blocking someone from a chat
 
-Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. See "Blocking someone".
+Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. In the web app, tap **Block** at the top of the chat, then **OK**. See "Blocking someone".

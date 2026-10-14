@@ -9,10 +9,12 @@ related: notifications, blocking, groups, mentions, messages
 
 In any chat with a person, a group or an enterprise:
 
-- Tap **⋮** at the top right, then **Mute notifications**.
+- Tap **⋮** at the top right (**⋯** in a chat with one person), then **Mute notifications**.
 - Choose **For 8 hours**, **For a week** or **Always**.
 
-To undo it, tap **⋮**, then **Unmute**.
+To undo it, tap the same button, then **Unmute**.
+
+Muting is in the phone app only for now.
 
 ## What muting does
 

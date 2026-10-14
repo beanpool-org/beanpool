@@ -97,7 +97,7 @@ The steps are in "First-time setup", in the guide for people who run a community
 On the phone:
 
 - **Communities near you** lists the communities nearest you that chose to be listed.
-- Tap **Ask to join**: any member there can let you in.
+- Tap **Ask to join**: a member there can let you in. Where the community lets only its admins invite, an owner or admin does.
 - Nothing near you yet? **Tell me when one starts here** tells you when one does.
 
 In the web app, Home's **Find your community** card links each community near you to its own page.

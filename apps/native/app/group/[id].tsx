@@ -26,11 +26,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../ThemeContext';
 import { getGroupForLanding, getGroupActiveMembers, joinGroupApi, type GroupItem, type GroupMemberItem } from '../../utils/db';
 import {
-    chatEmoji, chatHref, inviteLandingAction, inviteLandingPhase, inviteLandingFacts, inviteLandingPreviewFromParams,
+    chatEmoji, chatHref, inviteLandingAction, inviteLandingConvenor, inviteLandingPhase, inviteLandingFacts, inviteLandingPreviewFromParams,
 } from '../../utils/your-groups';
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { hapticSuccess } from '../../utils/haptics';
+import { t } from '@beanpool/core';
 
 export default function GroupInviteLanding() {
     const params = useLocalSearchParams<{
@@ -77,7 +78,7 @@ export default function GroupInviteLanding() {
     const viewerStatus = g?.viewerStatus ?? null;
     const inviter = g?.viewerInvitedBy;
     const active = members || [];
-    const convenor = active.find(m => m.role === 'convenor');
+    const convenor = inviteLandingConvenor(active, g);
     const action = g ? inviteLandingAction({ joinPolicy: g.joinPolicy, viewerStatus }) : null;
     const name = g?.name || preview.name || '';
     const category = g?.category || preview.category || null;
@@ -200,10 +201,12 @@ export default function GroupInviteLanding() {
                         <Text style={styles.peopleText}>
                             {active.slice(0, 3).map(m => m.callsign || m.memberPubkey.slice(0, 6)).join(', ')}
                             {active.length > 3 ? ` and ${active.length - 3} more` : ''}
-                            {convenor ? `\nConvenor: ${convenor.callsign || convenor.memberPubkey.slice(0, 6)}` : ''}
+                            {convenor ? `\nConvenor: ${convenor}` : ''}
                         </Text>
                     </View>
                 )}
+                {/* No faces (an invitee where the roster is its members', #1939 review N4): the card still names its convenor. */}
+                {active.length === 0 && (membersFailed || members !== null) && !!convenor && <Text style={styles.peopleText}>{t('Convenor: {name}', { name: convenor })}</Text>}
 
                 <View style={styles.notice}>
                     <MaterialCommunityIcons name="eye-outline" size={18} color={colors.text.secondary} />

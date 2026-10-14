@@ -29,7 +29,7 @@ import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from 
 import { MemberAvatar } from './MemberAvatar';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
-import { buildRosterView } from '../utils/group-roster';
+import { buildRosterView, rosterHeading } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
 
@@ -57,6 +57,7 @@ export function GroupDetailModal({
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [members, setMembers] = useState<GroupMemberItem[]>([]);
+    const [rosterRefused, setRosterRefused] = useState(false);
     const [groupData, setGroupData] = useState<GroupItem | null>(group);
     const [showPolicyPicker, setShowPolicyPicker] = useState(false);
     const insets = useSafeAreaInsets();
@@ -70,6 +71,7 @@ export function GroupDetailModal({
                 setGroupData(data.group);
                 // No roster this time (the node busy, or offline): keep the one on screen.
                 if (data.members) setMembers(data.members);
+                setRosterRefused(data.rosterRefused === true);
             }
         } catch (e) {
             console.warn('[GroupDetail] Failed to load:', e);
@@ -386,6 +388,7 @@ export function GroupDetailModal({
 
     const pendingMembers = members.filter(m => m.status === 'pending_approval');
     const activeMembers = members.filter(m => m.status === 'active');
+    const heading = rosterHeading({ refused: rosterRefused, rows: activeMembers.length, memberCount: groupData.memberCount });
     // Who leads the group, and what each row may offer (lead convenor, 2026-09-23). One source of truth, shared
     // with the PWA and with the engine that enforces it: a convenor never sees Role or ✕ on the lead, or on
     // another convenor.
@@ -847,8 +850,9 @@ export function GroupDetailModal({
                         )}
 
                         <Text style={styles.sectionTitle}>
-                            Roster ({activeMembers.length || groupData.memberCount || 0})
+                            {heading.title}
                         </Text>
+                        {heading.note && <Text style={styles.description}>{heading.note}</Text>}
 
                         {loading ? (
                             <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginVertical: 20 }} />

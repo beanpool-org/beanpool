@@ -17,6 +17,7 @@
  * the opened keys and the opener.
  */
 import type { FormerKey, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupLineVerifyMemo, OpenedGroupLine } from './group-chat-crypto';
+import { formatDate } from '@beanpool/core';
 import { isGroupEncryptedNonce, walkKeySuccession } from './group-chat-crypto';
 
 /** Exact words (line-display design §6; core's own sentence for a line that doesn't verify). */
@@ -32,11 +33,10 @@ export function earlierKeyDetails(name: string, at: string): string {
     return `Sent from an earlier key of ${name}'s, replaced ${shortDate(at)}.`;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function shortDate(iso: string): string {
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return 'earlier';
-    return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    return formatDate(d, 'day-month-year', { utc: true });
 }
 
 /** A roster row as the app holds it (GET /api/groups/:id/members), with the §5 node's `formerKeys` when served. */

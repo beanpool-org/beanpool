@@ -97,6 +97,9 @@ async function main() {
     const BASE = `http://127.0.0.1:${httpPort}`;
     const WS = `ws://127.0.0.1:${httpPort}/ws`;
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
+    // This suite reads the whole directory, its ETag and its delta to see which renames and photos reach whom. Where `openMembership` is on (the global node's default) those reads are refused, which
+    // test-open-membership-reads proves; here the operator's override keeps them, and nothing this suite measures depends on it.
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
     const setProfile = (p: 'local' | 'global') => {
         if (p === 'global') process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;
         wsl.setWsLimitsForTests?.(undefined);

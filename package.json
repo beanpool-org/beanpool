@@ -10,6 +10,10 @@
     "test": "turbo run test",
     "test-all": "bash scripts/test-all.sh",
     "guide:publish": "node packages/beanpool-guide/scripts/publish.mjs",
+    "words:check": "node scripts/words/words.mjs check",
+    "words:lint": "node scripts/words/words.mjs lint",
+    "words:extract": "node scripts/words/words.mjs extract",
+    "words:count": "node scripts/words/words.mjs count",
     "clean": "turbo run clean"
   },
   "devDependencies": {
@@ -17,6 +21,7 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^10.4.0",
     "turbo": "^2.8.17",
+    "typescript": "^5.6.3",
     "typescript-eslint": "^8.59.4",
     "vitest": "^3.0.5"
   },

@@ -8,7 +8,7 @@
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
-import { keeperWords } from '@beanpool/core';
+import { formatDate, keeperWords } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -130,9 +130,8 @@ export function rowTime(iso: string | null | undefined, now: Date = new Date()):
     const sameDay = t.toDateString() === now.toDateString();
     if (sameDay) return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
     const ageDays = (now.getTime() - t.getTime()) / 86_400_000;
-    if (ageDays >= 0 && ageDays < 6) return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.getDay()];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${t.getDate()} ${months[t.getMonth()]}`;
+    if (ageDays >= 0 && ageDays < 6) return formatDate(t, 'weekday');
+    return formatDate(t, 'day-month');
 }
 
 /**
@@ -336,6 +335,20 @@ export function inviteLandingPhase(s: {
     const stillLive = status === 'invited' || status === 'active' || status === 'pending_approval' || status === 'removed';
     if (s.openedAsInvite && !stillLive && s.group.joinPolicy === 'invite_only') return 'expired';
     return 'ready';
+}
+
+/**
+ * The landing's "Convenor: X": from the roster's faces when they were read, else from the group's own card. Where anyone
+ * can join in a minute (openMembership) an invitee's faces read is refused, and the card still names its convenor
+ * (#1939 review N4). Null when neither does.
+ */
+export function inviteLandingConvenor(
+    active: ReadonlyArray<{ role: string; callsign?: string | null; memberPubkey: string }>,
+    card: { convenorCallsign?: string | null } | null | undefined,
+): string | null {
+    const fromRoster = active.find(m => m.role === 'convenor');
+    if (fromRoster) return fromRoster.callsign || fromRoster.memberPubkey.slice(0, 6);
+    return card?.convenorCallsign || null;
 }
 
 /** "Garden Crew · 4 members": the facts line, from the node's answer or the tap's preview. */

@@ -47,6 +47,8 @@ let run: TourRun | null = null;
 let home: TourHome | null = null;
 let pendingEnd: { publicKey: string; kind: 'done' | 'skipped' } | null = null;
 let pendingAgain: string | null = null;
+/** Whether Home's Getting started card is up for an account: the tour is offered and has not ended (App holds the install banner back meanwhile). */
+let offered: { publicKey: string; up: boolean } | null = null;
 const listeners = new Set<() => void>();
 const publish = () => listeners.forEach((l) => l());
 
@@ -89,6 +91,13 @@ export function closeTour(): void {
     publish();
 }
 
+/** Home says whether its Getting started card is up for this account (the install banner waits while it is). */
+export function offerTour(publicKey: string, up: boolean): void {
+    if (offered?.publicKey === publicKey && offered.up === up) return;
+    offered = { publicKey, up };
+    publish();
+}
+
 /** Home takes the end waiting for this account (once). */
 export function takePendingEnd(publicKey: string): 'done' | 'skipped' | null {
     if (!pendingEnd || pendingEnd.publicKey !== publicKey) return null;
@@ -97,14 +106,14 @@ export function takePendingEnd(publicKey: string): 'done' | 'skipped' | null {
     return kind;
 }
 
-export function useTour(): { run: TourRun | null; home: TourHome | null; pendingEnd: typeof pendingEnd; pendingAgain: string | null } {
+export function useTour(): { run: TourRun | null; home: TourHome | null; pendingEnd: typeof pendingEnd; pendingAgain: string | null; offered: typeof offered } {
     const [, tick] = useState(0);
     useEffect(() => {
         const l = () => tick((n) => n + 1);
         listeners.add(l);
         return () => { listeners.delete(l); };
     }, []);
-    return { run, home, pendingEnd, pendingAgain };
+    return { run, home, pendingEnd, pendingAgain, offered };
 }
 
 /** The step a tour part way is at in this browser for this account, or null. */

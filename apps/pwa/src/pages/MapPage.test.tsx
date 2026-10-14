@@ -1481,3 +1481,53 @@ describe('MapPage: where the pins are read from (S5)', () => {
         expect(view!.queryByTestId('map-area-failed')).toBeNull();
     });
 });
+
+/*
+ * A newcomer's first post where Beans are off (rehearsal 2026-10-14 B4; global review M2): no "Contributions First"
+ * notice, no "List an Offer first" button, and a Need's photo is optional. A local community keeps all three, even when
+ * an older node still says the member is blocked.
+ */
+describe('a Need where Beans are off (B4/M2)', () => {
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: { openJoin: !beans, guestListingsOnly: !beans, beans } });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        // As a node from before this change answers: blocked until an Offer is listed.
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: true } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    async function openNeed(beans: boolean) {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(beans) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟠 Need' })); });
+        return panel;
+    }
+
+    it('Beans off (the global node): no Contributions First notice, no "List an Offer first", and the photo is optional', async () => {
+        const panel = await openNeed(false);
+        expect(within(panel).queryByText(/Contributions First/)).toBeNull();
+        expect(within(panel).queryByText(/ask an Elder/)).toBeNull();
+        expect(within(panel).queryByText(/List an Offer first/)).toBeNull();
+        expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(optional)');
+    });
+
+    it('Beans on (a local community): the notice, the button and the photo rule stay', async () => {
+        const panel = await openNeed(true);
+        expect(within(panel).getByText(/Contributions First/)).toBeInTheDocument();
+        expect(within(panel).getByText(/List an Offer first to post Needs/)).toBeInTheDocument();
+        expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(at least 1 required)');
+    });
+});

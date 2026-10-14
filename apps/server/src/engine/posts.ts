@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -122,7 +122,7 @@ function assertProfileComplete(publicKey: string): void {
     // phone's self-heal never got the signal to republish the real one. Held either way: moved (the row's reference) or
     // still inline while a stopped move leaves the old column (db.ts memberHasPhoto, #1482). A node with Beans off (the
     // global node) asks for no photo: a stranger posts, polls and makes an event without showing a face (S6, 14 Oct).
-    if (getProfileSwitches().beans && !memberHasPhoto(publicKey)) {
+    if (postRulesFor(getProfileSwitches().beans).profilePhoto && !memberHasPhoto(publicKey)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -532,7 +532,7 @@ export function createPost(
 
     // Offer first keeps a community's credit pool healthy; where Beans are off there is no credit to protect, so a newcomer's
     // first post may be a Need (M2/B4, 14 Oct).
-    if (type === 'need' && getProfileSwitches().beans && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
+    if (type === 'need' && postRulesFor(getProfileSwitches().beans).offerFirst && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     options?.beforeWrite?.();
 
     const finalId = id || crypto.randomUUID();

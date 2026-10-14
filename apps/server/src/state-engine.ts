@@ -5164,6 +5164,12 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
+        eventStartLocal?: unknown;
+        eventEndLocal?: unknown;
+        eventTz?: unknown;
+        eventOnline?: unknown;
+        eventLink?: unknown;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }

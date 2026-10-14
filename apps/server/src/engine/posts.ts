@@ -16,10 +16,14 @@ import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './pos
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
+import { zoneOfPin } from './event-zone.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
+    canonicalZone,
+    zonedToInstant,
+    instantToLocal,
     getMember,
     getPosts,
     readsAsMember,
@@ -295,6 +299,46 @@ function resolveEventEnd(startIso: string, rawEnd: unknown): string {
     return endIso;
 }
 
+/** What a refused zone says, on the form under the picker (DESIGN-event-times §2). */
+export const EVENT_ZONE_REFUSED = 'Pick a time zone from the list';
+export const EVENT_LINK_MAX = 500;
+
+/** A zone the app sent: the node's spelling of it, or refused. Absent (undefined, null, '') is null. */
+function cleanEventTz(raw: unknown): string | null {
+    if (raw == null || raw === '') return null;
+    const tz = canonicalZone(raw);
+    if (!tz) throw new Error(EVENT_ZONE_REFUSED);
+    return tz;
+}
+
+/** An online event's join link: http(s) only, ≤ 500 characters, trimmed. Blank is none. */
+function cleanEventLink(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (typeof raw !== 'string') throw new Error('The link to join must be text');
+    const v = raw.trim();
+    if (!v) return null;
+    if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    let ok = false;
+    try { ok = /^https?:$/.test(new URL(v).protocol); } catch { ok = false; }
+    if (!ok || !/^https?:\/\//i.test(v)) throw new Error('The link to join must start with https:// or http://');
+    return v;
+}
+
+/** A clock the app sent, resolved in the zone: the instant, or refused in words the form shows. */
+function instantOfClock(raw: unknown, tz: string, label: string): string {
+    const resolved = typeof raw === 'string' ? zonedToInstant(raw, tz) : null;
+    if (!resolved) throw new Error(`${label} must be a valid date and time`);
+    return resolved.instant;
+}
+
+/**
+ * The zone an event's clock belongs to, when the app named none: an in-person event's pin decides (offline lookup), an
+ * online one falls back to UTC, which reads "UTC time" (DESIGN-event-times §2, an old client's instant-only body).
+ */
+function defaultEventTz(online: boolean, lat: unknown, lng: unknown): string {
+    return (!online && zoneOfPin(lat, lng)) || 'UTC';
+}
+
 function audienceRecipients(row: { audience_scope?: string | null; target_group_id?: string | null }): string[] | undefined {
     if (row.audience_scope === 'group' && row.target_group_id) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(row.target_group_id) as any[];
@@ -363,6 +407,12 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
+        eventStartLocal?: unknown;
+        eventEndLocal?: unknown;
+        eventTz?: unknown;
+        eventOnline?: unknown;
+        eventLink?: unknown;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -457,6 +507,11 @@ export function createPost(
     let eventEndAt: string | null = null;
     let eventPlaceName: string | null = null;
     let eventPrivateNote: string | null = null;
+    let eventStartLocal: string | null = null;
+    let eventEndLocal: string | null = null;
+    let eventTz: string | null = null;
+    let eventOnline = false;
+    let eventLink: string | null = null;
 
     if (type === 'poll') {
         const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
@@ -507,11 +562,24 @@ export function createPost(
         cashAlsoNeeded = false;
         options = { ...options, reach: 'local', reachPeers: null };
     } else if (type === 'event') {
-        eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
+        // Online: no pin, no place name, and a join link; in person: a pin, and no link (DESIGN-event-times §9).
+        eventOnline = options?.eventOnline === true;
+        if (eventOnline) { lat = undefined; lng = undefined; } else assertEventPin(lat, lng);
+        // The host's clock in its zone, made into the instant by this node. An old client's instant-only body has its
+        // clock read off the instant in the same zone, so both doors land as one stored triple (§2).
+        eventTz = cleanEventTz(options?.eventTz) ?? defaultEventTz(eventOnline, lat, lng);
+        eventStartAt = options?.eventStartLocal != null && options.eventStartLocal !== ''
+            ? instantOfClock(options.eventStartLocal, eventTz, 'Start time')
+            : parseEventTime(options?.eventStartAt, 'Start time');
         if (Date.parse(eventStartAt) <= Date.now()) throw new Error('An event must start in the future');
-        eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
-        assertEventPin(lat, lng);
-        eventPlaceName = cleanPlaceName(options?.eventPlaceName);
+        eventEndAt = options?.eventEndLocal != null && options.eventEndLocal !== ''
+            ? instantOfClock(options.eventEndLocal, eventTz, 'End time')
+            : resolveEventEnd(eventStartAt, options?.eventEndAt);
+        if (Date.parse(eventEndAt) <= Date.parse(eventStartAt)) throw new Error('An event must end after it starts');
+        eventStartLocal = instantToLocal(eventStartAt, eventTz);
+        eventEndLocal = instantToLocal(eventEndAt, eventTz);
+        eventLink = eventOnline ? cleanEventLink(options?.eventLink) : null;
+        eventPlaceName = eventOnline ? null : cleanPlaceName(options?.eventPlaceName);
         eventPrivateNote = cleanPrivateNote(options?.eventPrivateNote);
         validatePostPhotos(photos);
 
@@ -569,8 +637,9 @@ export function createPost(
 
         db.prepare(`INSERT INTO posts (
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
-            event_start_at, event_end_at, event_place_name, event_private_note, event_state
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            event_start_at, event_end_at, event_place_name, event_private_note, event_state,
+            event_start_local, event_end_local, event_tz, event_online, event_link
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -584,7 +653,8 @@ export function createPost(
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
             audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
             eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote,
-            type === 'event' ? 'scheduled' : null
+            type === 'event' ? 'scheduled' : null,
+            eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink
         );
 
         if (photoColumns.length > 0) {
@@ -889,15 +959,42 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         const raw = updates as any;
         const prevStart = existingPost.eventStartAt!;
         const prevEnd = existingPost.eventEndAt!;
+        // Online or in person (DESIGN-event-times §9): an online event holds no pin, no place name, and may hold a link.
+        const prevOnline = existingPost.eventOnline === true;
+        const nextOnline = raw.eventOnline !== undefined ? raw.eventOnline === true : prevOnline;
+        if (nextOnline) { updates.lat = null as any; updates.lng = null as any; }
+
+        const nextLat = updates.lat !== undefined ? updates.lat : existingPost.lat;
+        const nextLng = updates.lng !== undefined ? updates.lng : existingPost.lng;
+        if (!nextOnline) assertEventPin(nextLat, nextLng);
+        const pinMoved = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
+
+        // The zone: the one the app sent, never replaced; else a moved pin's; else the event's own, or (an event from before
+        // zones) its pin's, or UTC.
+        const sentTz = cleanEventTz(raw.eventTz);
+        const nextTz = sentTz
+            ?? (pinMoved && !nextOnline ? zoneOfPin(nextLat, nextLng) : null)
+            ?? existingPost.eventTz
+            ?? defaultEventTz(nextOnline, nextLat, nextLng);
+
         let nextStart = prevStart;
-        if (raw.eventStartAt !== undefined) {
+        if (raw.eventStartLocal != null && raw.eventStartLocal !== '') {
+            nextStart = instantOfClock(raw.eventStartLocal, nextTz, 'Start time');
+        } else if (raw.eventStartAt !== undefined) {
             nextStart = parseEventTime(raw.eventStartAt, 'Start time');
-            if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
-                throw new Error('An event must start in the future');
-            }
+        } else if (sentTz && existingPost.eventStartLocal && sentTz !== existingPost.eventTz) {
+            // A new zone with the clock kept: the same clock, somewhere else, is another instant (§2 Edit).
+            nextStart = instantOfClock(existingPost.eventStartLocal, nextTz, 'Start time');
+        }
+        if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
+            throw new Error('An event must start in the future');
         }
         let nextEnd: string;
-        if (raw.eventEndAt === undefined) {
+        if (raw.eventEndLocal != null && raw.eventEndLocal !== '') {
+            nextEnd = instantOfClock(raw.eventEndLocal, nextTz, 'End time');
+        } else if (raw.eventEndLocal === '') {
+            nextEnd = resolveEventEnd(nextStart, null);
+        } else if (raw.eventEndAt === undefined) {
             // Moving the start without naming an end keeps the event's length.
             nextEnd = nextStart === prevStart
                 ? prevEnd
@@ -907,12 +1004,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
         if (Date.parse(nextEnd) <= Date.parse(nextStart)) throw new Error('An event must end after it starts');
 
-        const nextLat = updates.lat !== undefined ? updates.lat : existingPost.lat;
-        const nextLng = updates.lng !== undefined ? updates.lng : existingPost.lng;
-        assertEventPin(nextLat, nextLng);
-
-        let placeChanged = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
-        if (raw.eventPlaceName !== undefined) {
+        let placeChanged = pinMoved || nextOnline !== prevOnline;
+        if (nextOnline) {
+            eventFields.push('event_place_name = ?'); eventValues.push(null);
+        } else if (raw.eventPlaceName !== undefined) {
             const nextPlace = cleanPlaceName(raw.eventPlaceName);
             if (nextPlace !== (existingPost.eventPlaceName ?? null)) placeChanged = true;
             eventFields.push('event_place_name = ?'); eventValues.push(nextPlace);
@@ -920,6 +1015,13 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (raw.eventPrivateNote !== undefined) {
             eventFields.push('event_private_note = ?'); eventValues.push(cleanPrivateNote(raw.eventPrivateNote));
         }
+        if (!nextOnline) {
+            eventFields.push('event_link = ?'); eventValues.push(null);
+        } else if (raw.eventLink !== undefined) {
+            eventFields.push('event_link = ?'); eventValues.push(cleanEventLink(raw.eventLink));
+        }
+        eventFields.push('event_start_local = ?', 'event_end_local = ?', 'event_tz = ?', 'event_online = ?');
+        eventValues.push(instantToLocal(nextStart, nextTz), instantToLocal(nextEnd, nextTz), nextTz, nextOnline ? 1 : 0);
         const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
@@ -1600,6 +1702,7 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
                 db.prepare(`
                     UPDATE posts
                        SET event_private_note = NULL,
+                           event_link = NULL,
                            active = 0,
                            status = 'completed',
                            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')

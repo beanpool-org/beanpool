@@ -45,6 +45,8 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             audienceScope: b.audienceScope, targetGroupId: b.targetGroupId,
             eventStartAt: b.eventStartAt, eventEndAt: b.eventEndAt,
             eventPlaceName: b.eventPlaceName, eventPrivateNote: b.eventPrivateNote,
+            eventStartLocal: b.eventStartLocal, eventEndLocal: b.eventEndLocal, eventTz: b.eventTz,
+            eventOnline: b.eventOnline, eventLink: b.eventLink,
             createdBy,
             beforeWrite,
         }

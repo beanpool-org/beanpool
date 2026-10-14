@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { brandCssVariableMap, brandTailwindColours } from '../../../packages/beanpool-core/src/brand-colours';
+// @ts-expect-error -- tailwind.config.js is plain JS with no types (the manager's tsconfig has no allowJs); the test reads its shape.
 import tailwindConfig from '../tailwind.config.js';
 
 /**

@@ -54,17 +54,26 @@ export const RECENT_LOOKUP_MS = 2 * 60 * 1000;
 const RECENT_LOOKUPS_MAX = 50;
 const recentLookups = new Map<string, { at: number; rows: any[] }>();
 const COUNTED_LOOKUP = /^\/api\/members\?(q|lat)=/;
-let lastRefusedAsSpent = false;
+/** Which day the last refused lookup had used up: the searches by name, the "near you" reads, or neither. */
+let lastSpent: 'search' | 'near' | null = null;
 
 /** Whether the last lookup the node refused was refused because the member had used up today's (a 429 day budget). */
 export function lookUpWasSpent(): boolean {
-    return lastRefusedAsSpent;
+    return lastSpent !== null;
 }
 
-/** Forget the answers kept (tests, and a new identity or node). */
+/**
+ * Which of today's lookups is used up, by the last refusal: 'near' while a search by name still works (the node's own
+ * words say so), 'search' for the searches by name, or null (#1965 review N4).
+ */
+export function lookUpSpentKind(): 'search' | 'near' | null {
+    return lastSpent;
+}
+
+/** Forget the answers kept (tests). Another identity or node never reads them: each is kept under its copy's name and generation. */
 export function forgetRecentLookups(): void {
     recentLookups.clear();
-    lastRefusedAsSpent = false;
+    lastSpent = null;
 }
 
 /**
@@ -82,7 +91,8 @@ export async function lookUpMembers(path: string, options?: { signal?: AbortSign
         if (!res.ok) {
             if (res.status === 429) {
                 const refusal = await res.json().catch(() => null);
-                lastRefusedAsSpent = typeof refusal?.code === 'string' && refusal.code.endsWith('_day_budget');
+                const code = typeof refusal?.code === 'string' ? refusal.code : '';
+                lastSpent = !code.endsWith('_day_budget') ? null : code.startsWith('nearest') ? 'near' : 'search';
             }
             return null;
         }
@@ -90,7 +100,7 @@ export async function lookUpMembers(path: string, options?: { signal?: AbortSign
         if (!Array.isArray(body)) return null;
         const rows = body.map(asHeldRow).filter((r): r is NonNullable<ReturnType<typeof asHeldRow>> => r !== null);
         for (const r of rows) readFor.set(r, copy);
-        lastRefusedAsSpent = false;
+        lastSpent = null;
         if (counted) {
             recentLookups.delete(key);
             recentLookups.set(key, { at: nowMs, rows });

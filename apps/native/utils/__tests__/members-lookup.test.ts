@@ -20,7 +20,7 @@ vi.mock('../db', () => ({
     copyForRead: vi.fn(async () => ({ dbName: 'beanpool_global.example.db', generation: 3 })),
 }));
 
-import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, keepCards, asHeldRow, CARD_FRESH_MS, forgetRecentLookups, lookUpWasSpent, RECENT_LOOKUP_MS } from '../members-lookup';
+import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, keepCards, asHeldRow, CARD_FRESH_MS, forgetRecentLookups, lookUpWasSpent, lookUpSpentKind, RECENT_LOOKUP_MS } from '../members-lookup';
 import { membersKeysPath } from '../members-on-demand';
 import { communityListEmpty, communityListNote } from '../community-list-note';
 
@@ -99,6 +99,18 @@ describe('never spending a member\'s day of lookups in the background (Marty\'s 
         answer = { ok: true, body: CY };
         await lookUpMembers('/api/members?q=Al&limit=20');
         expect(lookUpWasSpent()).toBe(false);
+    });
+    it('a spent "near you" is told apart from a spent search: a search by name still works then (#1965 review N4)', async () => {
+        answer = { ok: false, status: 429, body: { code: 'nearest_people_day_budget', error: 'You have looked up the people near a place 100 times today' } };
+        expect(await lookUpMembers(nearPath({ lat: -28.5, lng: 153.5 }))).toBeNull();
+        expect(lookUpSpentKind()).toBe('near');
+        expect(communityListNote('spentNear', '')).toMatch(/Search a name to find anyone\./);
+        expect(communityListNote('spentNear', '')).not.toMatch(/Connect|Try again later/);
+        expect(communityListEmpty('spentNear', '')).toMatch(/Search a name/);
+        answer = { ok: false, status: 429, body: { code: 'people_search_day_budget', error: 'You have searched for people by name 100 times today' } };
+        await lookUpMembers('/api/members?q=Al&limit=20');
+        expect(lookUpSpentKind()).toBe('search');
+        expect(communityListNote('spent', 'Al')).toMatch(/Try again later/);
     });
 });
 

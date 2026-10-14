@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import {
     memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
     MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
-    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS,
+    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS, dayBudgetWords,
 } from './members-on-demand';
 import * as api from './api';
 
@@ -133,6 +133,24 @@ describe("members on demand: never spending a member's day of lookups in the bac
     });
 });
 
+describe("members on demand: a spent day says so in the node's words (#1965 review N4)", () => {
+    it('only for a day budget, and only with words', () => {
+        const spent = Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' });
+        expect(dayBudgetWords(spent)).toBe('You have searched for people by name 100 times today');
+        expect(dayBudgetWords(Object.assign(new Error('Too many'), { status: 429, code: 'rate_limited' }))).toBeNull();
+        expect(dayBudgetWords(new TypeError('Failed to fetch'))).toBeNull();
+        expect(dayBudgetWords(Object.assign(new Error(' '), { code: 'nearest_people_day_budget' }))).toBeNull();
+        expect(dayBudgetWords(null)).toBeNull();
+    });
+    it('the search box carries them with its failed state', async () => {
+        vi.spyOn(api, 'getMemberCards').mockRejectedValue(Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' }));
+        const { result } = renderHook(() => useMemberSearch('al', true));
+        await waitFor(() => expect(result.current.state).toBe('failed'), { timeout: 3000 });
+        expect(result.current.refusal).toBe('You have searched for people by name 100 times today');
+        vi.restoreAllMocks();
+    });
+});
+
 describe('members on demand: the search box (review of #1861, N3)', () => {
     const card = (k: string, callsign: string) => ({ publicKey: k.repeat(64), callsign, joinedAt: '2026-01-01T00:00:00.000Z' });
     afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -152,7 +170,7 @@ describe('members on demand: the search box (review of #1861, N3)', () => {
         expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?q=alm&limit=20']);
         expect(MEMBERS_SEARCH_DEBOUNCE_MS).toBe(400);
         await act(async () => { await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
     });
 
     it("an older search's late answer never replaces a newer one's, and the older request is stopped (L9)", async () => {
@@ -171,9 +189,9 @@ describe('members on demand: the search box (review of #1861, N3)', () => {
         expect(signals['/api/members?q=al&limit=20']?.aborted).toBe(true);
         await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS); });
         await act(async () => { await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
         await act(async () => { answerOld([card('f', 'Alder')]); await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
     });
 });
 
@@ -210,6 +228,6 @@ describe('members on demand: a node that never answers (review of #1861, N4)', (
         await act(async () => { await vi.advanceTimersByTimeAsync(MEMBERS_SEARCH_DEBOUNCE_MS + MEMBERS_REQUEST_TIMEOUT_MS - 1); });
         expect(result.current.state).toBe('searching');
         await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-        expect(result.current).toEqual({ found: null, state: 'failed' });
+        expect(result.current).toEqual({ found: null, state: 'failed', refusal: null });
     });
 });

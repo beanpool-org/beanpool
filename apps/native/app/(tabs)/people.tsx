@@ -39,7 +39,7 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
-import { lookUpMembers, lookUpWasSpent, nearPath, searchPath } from '../../utils/members-lookup';
+import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
 
@@ -745,7 +745,8 @@ export default function PeopleScreen() {
             if (membersOnDemand) {
                 if (await loadMembersOnDemand(query)) return;
                 // One letter asked the node nothing: the cards held, but not "Connect" to a phone that is online.
-                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : lookUpWasSpent() ? 'spent' : 'held');
+                const spent = lookUpSpentKind();
+                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : spent === 'near' ? 'spentNear' : spent === 'search' ? 'spent' : 'held');
             } else {
                 setListNote(null);
             }

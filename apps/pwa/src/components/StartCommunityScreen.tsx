@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { startCommunityUrl, useCommunityInfo } from '../lib/features';
+import { useCoversScreen } from '../lib/screen-cover';
 import {
     START_COMMUNITY_COPY as COPY, START_COMMUNITY_KNOW as KNOW, SETUP_CHAPTER_URL, canCopyDetails, communityDetailsText,
 } from '../lib/start-community';
@@ -17,6 +18,7 @@ const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600
 
 export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => void; onNearYou?: () => void }) {
     const info = useCommunityInfo();
+    useCoversScreen();
     const backRef = useRef<HTMLButtonElement>(null);
     const [name, setName] = useState('');
     const [place, setPlace] = useState('');

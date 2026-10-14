@@ -6091,6 +6091,11 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     }
 }
 
+/** A list of keys as a set to compare: each lower-cased, once, sorted. */
+function keySetOf(keys: unknown[]): string[] {
+    return [...new Set(keys.map((k) => String(k ?? '').toLowerCase()))].sort();
+}
+
 // Only DMs are created here: the old chat group was removed (2026-09-19); a group chat is a Commons group's.
 export async function createConversationApi(type: 'dm', participants: string[], createdBy: string, name?: string, postId?: string): Promise<any> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -6130,6 +6135,17 @@ export async function createConversationApi(type: 'dm', participants: string[], 
         }
         const data = await res.json();
         const conv = data.conversation;
+
+        // The keys this phone asked for are the member's intent; the answer's are the node's word (Fable's security review
+        // of the trio, finding 2). An answer naming any other key is refused and nothing is written: its rows were the first
+        // send's first sight, so a node answering [me, PUPPET] to a request for [me, Ben] had the first line sealed to PUPPET.
+        // Honest answers name exactly the keys asked for (the conversation made with them, or the one already between them).
+        const asked = keySetOf(participants);
+        const answered = Array.isArray(conv?.participants) && conv.participants.length > 0 ? keySetOf(conv.participants) : asked;
+        if (answered.length !== asked.length || answered.some((k, i) => k !== asked[i])) {
+            console.warn('[DM pins] the node answered a new DM with keys this phone did not ask for: refused, nothing written');
+            throw new Error(t("This community answered with someone else for this chat, so it wasn't started."));
+        }
 
         // Persist the conv + participants locally so the Inbox sees it
         // immediately, without waiting for the next syncMessages cycle.
@@ -6172,7 +6188,15 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                     postCredits
                 ]
             );
-            const partList: string[] = Array.isArray(conv.participants) && conv.participants.length > 0 ? conv.participants : participants;
+            // The key asked for is pinned now, unchecked, as first sight would pin it with no line to check (the history rule
+            // still judges the thread's lines at the first send): a listing that names another key before then only offers it,
+            // the key-change banner, never a silent seal to the node's key. A pin kept already, or a rule-5 record, stands.
+            const others = participants.filter((k) => typeof k === 'string' && k.toLowerCase() !== identity.publicKey.toLowerCase());
+            if (convType === 'dm' && others.length === 1) {
+                const now = new Date().toISOString();
+                await dmPins.update(identity.publicKey, database, (pins) => pinAtFirstSight(pins, conv.id, others[0], now));
+            }
+            const partList: string[] = participants;
             for (const pub of partList) {
                 await database.runAsync(
                     'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)',

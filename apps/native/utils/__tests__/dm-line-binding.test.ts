@@ -2270,7 +2270,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
 
-    it('the update, Ana\'s first act a new chat with Ben, the node answering with their held DM (no line in it yet) and [Ana, PUPPET]: Ben pinned checked from the rows held, PUPPET offered, nothing goes', async () => {
+    it('the update, Ana\'s first act a new chat with Ben, the node answering with their held DM (no line in it yet) and [Ana, PUPPET]: the new chat is refused (SEC2, nothing written); the next pass pins Ben checked from the rows held, PUPPET offered, nothing goes', async () => {
         node.lines = [];
         await phoneOf(ana);
         noPinStore(ana);
@@ -2279,7 +2279,8 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         (globalThis as any).fetch = async (url: string, init: any = {}) => (init.method === 'POST' && new URL(url).pathname === '/api/messages/conversation'
             ? answer(200, { conversation: { id: dm.id, type: 'dm', participants: dm.participants, createdBy: ana.publicKey } })
             : fetchMock(url, init));
-        expect((await createConversationApi('dm', [ana.publicKey, ben.publicKey], ana.publicKey)).id).toBe(dm.id);
+        // Fable's security review, finding 2: an answer naming another key than the one asked for is refused, nothing written.
+        await expect(createConversationApi('dm', [ana.publicKey, ben.publicKey], ana.publicKey)).rejects.toThrow("This community answered with someone else for this chat, so it wasn't started.");
         await syncMessages(ana.publicKey);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
         expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
@@ -5010,6 +5011,77 @@ describe('the DM guard list: one bounded list per community file, never read as 
         warn.mockRestore();
         console.log(`SEC1h ${JSON.stringify(r)}`);
         expect(r).toEqual({ afterRetype: { row: 'group_thread', listed: false }, afterPass: { row: 'group_thread', listed: false }, back: { row: 'group_thread', listed: false } });
+    }, 120_000);
+
+    // SEC2 (Fable's security review of the trio, finding 2): a new DM the phone asks for with Ben. The rows came from the
+    // node's answer, so an answer naming PUPPET was pinned at the first send and sealed to: PUPPET read it. The phone holds
+    // the member's intent in its own request: an answer naming any other key is refused (nothing written, nothing sent),
+    // and the key asked for is pinned when the DM is made, so a listing that names another key before the first send only
+    // offers it (the key-change banner), never a silent seal.
+    async function askedForBen(answers: string[] | null) {
+        const f0 = (globalThis as any).fetch;
+        let asked: string[] | null = null;
+        let made: Conv | null = null;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if ((init.method ?? 'GET') === 'POST' && new URL(url).pathname === '/api/messages/conversation') {
+                asked = JSON.parse(init.body).participants;
+                made = { id: randomUUID(), type: 'dm', participants: answers ?? asked! };
+                node.convs.push(made);
+                return answer(200, { conversation: { id: made.id, type: 'dm', ...(answers ? { participants: answers } : {}), createdBy: ana.publicKey, createdAt: new Date().toISOString() } });
+            }
+            return f0(url, init);
+        };
+        let err: any = null;
+        let conv: any = null;
+        try { conv = await createConversationApi('dm', [ana.publicKey, ben.publicKey], ana.publicKey); } catch (e) { err = e; } finally { (globalThis as any).fetch = f0; }
+        const id = (made as Conv | null)?.id ?? '';
+        const names = (k: string) => (k === ana.publicKey ? 'Ana' : k === ben.publicKey ? 'Ben' : k === puppet.publicKey ? 'Puppet' : 'other');
+        const people = (sql.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(id) as any[]).map((r) => names(r.public_key)).sort();
+        const p = storedPins(ana)[id.toLowerCase()];
+        return {
+            id, conv, asked: (asked ?? []).map(names),
+            result: { err: err ? String(err.message) : null, row: typeOf(id), people, pin: p ? { peer: names(p.peer), by: p.by, checked: !!p.checked, offered: p.offered ? names(p.offered.peer) : null } : null },
+        };
+    }
+    const SEC2_REFUSED = "This community answered with someone else for this chat, so it wasn't started.";
+    for (const [label, answers, refused] of [
+        ['[Ana, Puppet] (the swap)', 'swap', true],
+        ['[Ana, Ben, Puppet] (a third key)', 'third', true],
+        ['[Ana, Ben] (honest)', 'honest', false],
+        ['no participants (the request stands)', 'none', false],
+    ] as const) {
+        it(`SEC2 ${label}: a new DM asked for with Ben ${refused ? 'is refused: no row, no pin, nothing written' : 'pins Ben when it is made; the first line seals to Ben'}`, async () => {
+            node.convs = [];
+            await phoneOf(ana);
+            const keys = answers === 'swap' ? [ana.publicKey, puppet.publicKey] : answers === 'third' ? [ana.publicKey, ben.publicKey, puppet.publicKey] : answers === 'honest' ? [ben.publicKey, ana.publicKey] : null;
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const made = await askedForBen(keys);
+            warn.mockRestore();
+            expect(made.asked).toEqual(['Ana', 'Ben']);
+            if (refused) {
+                // Nothing written: no row for the chat screen to open, no pin, no line.
+                expect(made.result).toEqual({ err: SEC2_REFUSED, row: null, people: [], pin: null });
+                expect(made.conv).toBeNull();
+                return;
+            }
+            expect(made.result).toEqual({ err: null, row: 'dm', people: ['Ana', 'Ben'], pin: { peer: 'Ben', by: 'first-seen', checked: false, offered: null } });
+            expect(await sent(made.id, 'The code is 4821')).toEqual(sealedToBen);
+            expect(storedPins(ana)[made.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, checked: true });
+        }, 120_000);
+    }
+
+    it('SEC2 an honest answer, then a listing that names Puppet before the first line: the send stops with the key change (Puppet\'s key on offer), nothing sent; no line ever seals to Puppet', async () => {
+        node.convs = [];
+        await phoneOf(ana);
+        const made = await askedForBen([ana.publicKey, ben.publicKey]);
+        expect(made.result.pin).toEqual({ peer: 'Ben', by: 'first-seen', checked: false, offered: null });
+        const listed = node.convs.find((c) => c.id === made.id)!;
+        listed.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        const s = await sent(made.id, 'The code is 4821');
+        expect(s).toMatchObject({ err: 'DmKeyChangedError', posts: 0, plaintext: [], readBy: [] });
+        expect(await isDmKeyChangePending(made.id)).toBe(true);
+        expect(storedPins(ana)[made.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
     }, 120_000);
 
     // ── §3.4 amendment 8 (DESIGN-dm-guard-reset-fable.md + the director's amendment): the member's way out of a list that

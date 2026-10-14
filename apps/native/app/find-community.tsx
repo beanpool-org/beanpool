@@ -61,7 +61,7 @@ export default function FindCommunityScreen() {
         placeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12 },
         placeName: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },
         linkBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 4, marginTop: 10 },
-        linkText: { fontSize: 15, fontWeight: '600', color: colors.brand.primary, textDecorationLine: 'underline' },
+        linkText: { fontSize: 15, fontWeight: '600', color: colors.text.link, textDecorationLine: 'underline' },
         pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, marginTop: 10 },
         pillText: { fontSize: 15, fontWeight: '700', color: colors.text.body, flexShrink: 1 },
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, marginBottom: 10 },
@@ -477,14 +477,14 @@ export default function FindCommunityScreen() {
                     </View>
                 )}
 
-                <Text style={[styles.label, { marginTop: 16 }]}>Know the community's name?</Text>
+                <Text style={[styles.label, { marginTop: 16 }]}>Know the community's name, or its server address?</Text>
                 <View style={styles.searchBox}>
                     <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} />
                     <TextInput
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Community name, or a server address"
+                        placeholder="Community name"
                         placeholderTextColor={colors.text.muted}
                         returnKeyType="search"
                         autoCorrect={false}

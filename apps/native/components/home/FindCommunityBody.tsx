@@ -83,7 +83,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {!point && (
                 <Pressable onPress={() => router.push({ pathname: '/find-community', params: { town: '1' } })} accessibilityRole="button"
                     style={{ minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' }} testID="home-find-type-town">
-                    <Text style={[s.rowLine, { color: colors.brand.primary, textDecorationLine: 'underline', fontWeight: '600' }]}>{TYPE_YOUR_TOWN}</Text>
+                    <Text style={[s.rowLine, { color: colors.text.link, textDecorationLine: 'underline', fontWeight: '600' }]}>{TYPE_YOUR_TOWN}</Text>
                 </Pressable>
             )}
         </>

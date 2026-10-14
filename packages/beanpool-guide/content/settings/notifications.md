@@ -14,6 +14,8 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed.
 - **Held in Trust & System:** beans held, released or in question.
 
+In the web app the first is called **Chat Messages**, and the third is the one named after **Deals**. They set what reaches your phone.
+
 Changes save by themselves. They are kept by your community's server, so they follow your account.
 
 Two alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, and that an admin started moving your account to a new phone. If you run your community's server, its alerts about the server always come through too.

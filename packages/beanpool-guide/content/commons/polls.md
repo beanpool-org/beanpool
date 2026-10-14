@@ -12,7 +12,7 @@ A **Poll** asks what people think: "Market on Sunday or Saturday?". It changes n
 
 On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could tip the count, and there are no Decisions there. Under it, "🏘️ In a local community a Decision binds ›" says why a vote binds only in a local community.
 
-When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from each kind, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
+When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from new or 12-word accounts, and the other votes are either none or at least 3, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
 
 While a poll is open it says nothing about this. If it did, someone checking the poll after each vote could tell what kind of account each vote came from, and how it chose. An open vote never says it, open or closed: it shows who voted, so the count would say which kind of account each voter has. A group's poll doesn't say it either, and nor does a poll on a local community.
 
@@ -26,6 +26,8 @@ While a poll is open it says nothing about this. If it did, someone checking the
 - Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.
 - Choose whether it is an **Open vote**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can change this until someone votes, and never after.
 - Tap **Create**.
+
+In the web app the type is **🗳️ Poll**, the notes are **Background / Context**, the option button is **+ Add option** and the last button is **🗳️ Create Poll**. On the web Map, tap the round **+**.
 
 You can have one poll open at a time, and a community can have 5 open at once. You need credit that is not frozen to start or answer a poll.
 
@@ -47,4 +49,4 @@ The owners and admins who run your community's server can still see every vote s
 
 ## Closing a poll early
 
-If you started it, tap **Close Poll**, then **Close Poll** again to confirm.
+If you started it, tap **Close Poll**, then **Close Poll** again to confirm (**OK** in the web app).

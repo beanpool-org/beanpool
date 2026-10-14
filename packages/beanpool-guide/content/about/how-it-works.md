@@ -50,7 +50,7 @@ Your credit line grows with your **trust**:
 - Trading with many different people builds more trust. Trade with any one person counts up to 500 beans.
 - Trust grows quickly at first, then more slowly.
 - Star ratings matter. If people rate you, your average rating scales the trust your trades earn: 5 stars keeps all of it, 1 star keeps 60%.
-- The deepest any credit line can go is 2,000 beans below zero.
+- The deepest any credit line can go is 2,000 beans below zero. A community that confirms its members can allow more (see below).
 
 ## Your Offers unlock your credit
 
@@ -65,9 +65,11 @@ Trust sets how deep you **could** go. Your live Offers set how deep you **may** 
 
 If you take Offers down while you are below zero, you may owe more than your Offers now cover. Then you cannot spend more until you are back within your limit. You can still earn beans, and nothing is taken from you.
 
+Some communities confirm who their members are. There, a confirmed member gets a credit line straight away: 1,000 beans, unless the community chose another amount. One live Offer unlocks all of it. The deepest line there can be up to 5,000. See "Your credit line".
+
 ## Trust badges
 
-Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades.
+Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, the credit line a confirmed member gets counts too.
 
 - Resident from 200 trust.
 - Steward from 600 trust.

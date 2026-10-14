@@ -3232,6 +3232,22 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         await thenPausedOnBen(dmB);
     });
 
+    it('G8 the gate in the open GROUP chat\'s poll (the narrow fix): with the pin store unreadable, the group\'s page reuses the ids of Ben\'s held DM lines; none of them moves or changes, the group\'s other line arrives, and the next run pauses on Ben', async () => {
+        const dmB = await heldInBThenUpdateInA({ puppetRow: true });
+        const before = rowsOf('B', dmB.id);
+        const group: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, ben.publicKey, puppet.publicKey] };
+        fileOf('B').prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'group_thread', ?, '2026-10-01T00:00:00.000Z')").run(group.id, ben.publicKey);
+        node.convs.push(group);
+        for (const l of node.lines.filter((x) => x.conversationId === dmB.id)) written(group, puppet, b64(`group line over ${l.id.slice(0, 4)}`), 'plaintext-v1', { id: l.id });
+        const own = written(group, ben, b64('See you all on Saturday'), 'plaintext-v1');
+        node.lines = node.lines.filter((l) => l.conversationId !== dmB.id);
+        restarted();
+        await unreadablePins(() => syncSingleConversation(group.id));
+        expect(rowsOf('B', dmB.id)).toEqual(before);
+        expect(rowsOf('B', group.id).lines.map((l) => l.split(':')[0])).toEqual([own.id]);
+        await thenPausedOnBen(dmB);
+    });
+
     it('Z1 one community\'s node can\'t make another\'s DMs stop: B lists 7,000 DMs in one pass; B\'s value stays under 1 MiB and A\'s is untouched; in the next run (Android reads a value through a 2 MiB window) A\'s DM with Ben syncs, reads and sends, and again after signing out and in', async () => {
         sealed(ana, ben, dm, 'Shall I cancel the order?');
         sealed(ben, ana, dm, 'No');

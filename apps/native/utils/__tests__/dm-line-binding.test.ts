@@ -285,6 +285,9 @@ let ben: Person;
 let dm: Conv;
 
 beforeEach(async () => {
+    // Call history only (implementations stay): the database and store mocks keep every argument and result otherwise,
+    // and the cap tests (Z1, Z3, Z10, R4) move megabytes through them, past the worker's heap over the whole file.
+    vi.clearAllMocks();
     h.store.clear();
     h.store.set('beanpool_anchor_url', ANCHOR);
     h.store.set('bp_trust_sync_v3', 'true');
@@ -3487,6 +3490,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         }
         expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
         expect((await getMessages(dmB.id)).map((m: any) => m.text)).toEqual(Array(4).fill(DM_PINS_UNREAD_LINE));
+        expect(DM_PINS_UNREAD_LINE).toBe("Can't be shown until this phone can read who this chat is with.");
         expect(h.store.get(PINS_B())).toBe(corrupt);
         expect(h.store.has(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B))).toBe(false);
         // A is its own value: it reads and sends.
@@ -3570,6 +3574,213 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         } finally { warn.mockRestore(); mcDbs.onQuery = null; }
         expect(h.store.has(PINS_B())).toBe(false);
     });
+
+    // ── §3.4 amendment 7: the member's reset judges before it trusts (confirmation 5, finding 1; its tail-a6, tail-rc, tail-gd parts) ──
+    const notLocked = { err: 'DmNotLockedError', posts: 0, readBy: [] };
+    const resetB = () => dbPort.resetDmChatMemory(B_URL);
+    /** The value B's pins key holds, as its own members' names (the marker is `reset` alone; held pins are `pins` alone). */
+    const membersOfB = () => Object.keys(JSON.parse(h.store.get(PINS_B())!));
+    /** R2's DM: first met in B as [Ana, PUPPET] whose thread holds Ben's 3 lines, never opened (an unchecked first-sight pin on PUPPET). */
+    async function firstMetWithBensLines(lines = 3): Promise<Conv> {
+        await phoneOf(ana);
+        await switchTo('B');
+        const e: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        node.convs = [e];
+        node.lines = [];
+        for (let i = 0; i < lines; i++) sealed(ben, ana, e, `Ben ${i}`);
+        await syncMessages(ana.publicKey);
+        expect(pinOf(e.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
+        expect(pinOf(e.id).checked).toBeFalsy();
+        return e;
+    }
+    /** R3's DM: a line it can't place (Q's, re-attributed to Ben) between two of Ben's, rows [Ana, PUPPET]; its first send refused for good (rule 5). */
+    async function ruleFiveDm(): Promise<Conv> {
+        const q = person('Q');
+        await phoneOf(ana);
+        await switchTo('B');
+        const g: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        node.convs = [g];
+        node.lines = [];
+        sealed(ben, ana, g, 'Ben 0');
+        const qLine = sealed(q, ana, g, 'Q, re-attributed to Ben');
+        qLine.authorPubkey = ben.publicKey;
+        sealed(ben, ana, g, 'Ben 1');
+        await syncMessages(ana.publicKey);
+        expect(await sendTo(g.id, 'first try')).toEqual(notLocked);
+        expect(pinOf(g.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+        await syncMessages(ana.publicKey);
+        expect(rowsOf('B', g.id).people).toEqual([ana.publicKey, puppet.publicKey].sort());
+        return g;
+    }
+    /** Rule 3 after a reset: the lines' key (Ben) pinned checked, the rows' key (PUPPET) offered, a first-sight pause the reset marks. */
+    const pausedOnBenAfterReset = (id: string) => expect(pinOf(id)).toEqual({
+        peer: ben.publicKey, since: expect.any(String), by: 'first-seen', checked: true,
+        offered: { peer: puppet.publicKey, at: expect.any(String), firstSight: true, afterReset: true },
+    });
+
+    for (const resetFirst of [false, true]) {
+        it(`R2 a DM first met in B as [Ana, PUPPET] whose thread holds Ben's 3 lines, never opened; ${resetFirst
+            ? 'the member resets B\'s chat memory: the re-seed judges it on its lines, rule 3: Ben pinned checked, PUPPET offered as a first-sight pause marked as the reset\'s, nothing goes, PUPPET reads nothing'
+            : 'control, no reset: the send judges it, rule 3: Ben pinned checked, PUPPET offered, nothing goes'}`, async () => {
+            const e = await firstMetWithBensLines();
+            if (resetFirst) {
+                expect(await resetB()).toBe('set-aside');
+                expect(membersOfB()).toEqual(['reset']);
+                await syncMessages(ana.publicKey);
+                expect(membersOfB()).toEqual(['pins']);
+                pausedOnBenAfterReset(e.id);
+            }
+            expect(await isDmKeyChangePending(e.id)).toBe(true);
+            expect(await sendTo(e.id, 'The code is 4821')).toEqual(paused);
+            expect(pinOf(e.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+            expect(!!pinOf(e.id).offered.afterReset).toBe(resetFirst);
+        });
+
+        it(`R3 a rule-5 DM in B (a line it can't place), rows [Ana, PUPPET]; ${resetFirst
+            ? 'the member resets B\'s chat memory: the re-seed judges it on its lines, rule 5: the record kept, listed = PUPPET, refused, PUPPET reads nothing'
+            : 'control, no reset: refused for good'}`, async () => {
+            const g = await ruleFiveDm();
+            if (resetFirst) {
+                expect(await resetB()).toBe('set-aside');
+                await syncMessages(ana.publicKey);
+                expect(pinOf(g.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+                expect(pinOf(g.id).peer).toBeUndefined();
+            }
+            expect(await sendTo(g.id, 'The code is 4821')).toEqual(notLocked);
+            expect(pinOf(g.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+        });
+    }
+
+    for (const kind of ['R2c', 'R3c'] as const) {
+        it(`${kind} the way a member reaches the reset: B's value goes corrupt after the DM was met, the send refuses with the sentence that names Chat memory, and the member resets there; ${kind === 'R2c' ? 'paused on Ben (rule 3)' : 'refused (rule 5)'}, PUPPET reads nothing`, async () => {
+            const e = kind === 'R2c' ? await firstMetWithBensLines() : await ruleFiveDm();
+            h.store.set(PINS_B(), '{"pins":{"x');
+            restarted();
+            await syncMessages(ana.publicKey);
+            let err: any = null;
+            try { await insertMessage(e.id, ana.publicKey, 'are you there?'); } catch (x) { err = x; }
+            expect(err?.name).toBe('DmPinStoreError');
+            expect(refusedSendNotice(err, 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);
+            expect(await resetB()).toBe('set-aside');
+            await syncMessages(ana.publicKey);
+            if (kind === 'R2c') {
+                pausedOnBenAfterReset(e.id);
+                expect(await sendTo(e.id, 'The code is 4821')).toEqual(paused);
+            } else {
+                expect(pinOf(e.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+                expect(await sendTo(e.id, 'The code is 4821')).toEqual(notLocked);
+            }
+        });
+    }
+
+    it('R2 with Ben\'s lines withheld until after the reset: rule 1 pins the rows\' key UNCHECKED (first sight\'s word); Ben\'s lines arrive; the first send judges them, rule 3: Ben pinned, PUPPET offered, nothing goes', async () => {
+        const e = await firstMetWithBensLines(0);
+        expect(await resetB()).toBe('set-aside');
+        await syncMessages(ana.publicKey);
+        expect(pinOf(e.id)).toEqual({ peer: puppet.publicKey, since: expect.any(String), by: 'first-seen' });
+        for (let i = 0; i < 3; i++) sealed(ben, ana, e, `Ben ${i}`);
+        await syncMessages(ana.publicKey);
+        expect(await sendTo(e.id, 'The code is 4821')).toEqual(paused);
+        expect(pinOf(e.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+    });
+
+    it('R4 the marker is the value itself: a phone whose held lines were never written (P29) still judges after the reset; a value storage can\'t return is removed and the marker written; the re-seed\'s pin write throws once and the marker outlives it, so the next run judges again; after the seed the one key holds pins and no marker', async () => {
+        // P29's phone: no held-lines key in B (the update's lines write failed). The reset still judges: paused on Ben.
+        const e = await firstMetWithBensLines();
+        h.store.delete(dmLinesAtUpdateStoreKey(ana.publicKey, FILE_B));
+        restarted();
+        expect(await resetB()).toBe('set-aside');
+        await syncMessages(ana.publicKey);
+        pausedOnBenAfterReset(e.id);
+        expect(await sendTo(e.id, 'The code is 4821')).toEqual(paused);
+        // A value storage can't return: removed, nothing set aside, and the marker written in its place.
+        const f = await firstMetWithBensLines();
+        h.store.delete(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try { expect(await unreadablePins(() => resetB())).toBe('unreadable-removed'); } finally { warn.mockRestore(); }
+        expect(h.store.has(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B))).toBe(false);
+        expect(membersOfB()).toEqual(['reset']);
+        const marker = h.store.get(PINS_B());
+        // The re-seed's one pin write throws once: the marker stays where it was, and nothing is pinned.
+        const setItem = vi.mocked(AsyncStorage.setItem);
+        const realSet = setItem.getMockImplementation()!;
+        let once = 1;
+        setItem.mockImplementation(async (k: string, v: string) => { if (k === PINS_B() && once-- > 0) throw new Error('disk full'); return realSet(k, v); });
+        try {
+            await syncMessages(ana.publicKey).catch(() => {});
+        } finally { setItem.mockImplementation(realSet); }
+        expect(once).toBeLessThan(1);
+        expect(h.store.get(PINS_B())).toBe(marker);
+        // The next run: the marker read again, the re-seed judges again, and its write replaces the marker.
+        restarted();
+        await syncMessages(ana.publicKey);
+        expect(membersOfB()).toEqual(['pins']);
+        pausedOnBenAfterReset(f.id);
+        expect(await sendTo(f.id, 'The code is 4821')).toEqual(paused);
+    });
+
+    it('R4 the cost: B holds 2,000 DMs whose rows name one key, 3 lines each; the first read after the reset judges each once (2,000), the next read none; A\'s file untouched', async () => {
+        await phoneOf(ana);
+        await switchTo('B');
+        const ids = Array.from({ length: 2000 }, () => randomUUID());
+        for (const id of ids) {
+            heldDm('B', id, [ben.publicKey]);
+            for (let i = 0; i < 3; i++) heldLine('B', id, ben, `Ben ${i}`);
+        }
+        await dbPort.seedDmPinsHere(ana.publicKey);
+        expect(pinOf(ids[0])).toMatchObject({ peer: ben.publicKey, checked: true });
+        const aBefore = h.store.get(PINS_A());
+        expect(await resetB()).toBe('set-aside');
+        const windows = { [FILE_A]: 0, [FILE_B]: 0 } as Record<string, number>;
+        mcDbs.onQuery = async (file: string, q: string) => { if (q.includes('ORDER BY rowid ASC LIMIT')) windows[file] = (windows[file] ?? 0) + 1; };
+        const t0 = performance.now();
+        await dbPort.seedDmPinsHere(ana.publicKey);
+        const ms = performance.now() - t0;
+        expect(windows[FILE_B]).toBe(2000);
+        expect(membersOfB()).toEqual(['pins']);
+        expect(ids.every((id) => pinOf(id)?.peer === ben.publicKey && pinOf(id)?.checked === true)).toBe(true);
+        windows[FILE_B] = 0;
+        await dbPort.seedDmPinsHere(ana.publicKey);
+        await isDmKeyChangePending(ids[1999]);
+        expect(windows[FILE_B]).toBe(0);
+        expect(windows[FILE_A]).toBe(0);
+        expect(h.store.get(PINS_A())).toBe(aBefore);
+        console.log(`[R4 cost] re-seed after the reset, 2,000 one-key DMs x 3 lines: ${Math.round(ms)} ms`);
+    }, 300_000);
+
+    it('Z10 B filled to exactly 1 MiB: Cat\'s honest DM, met before the flood and never sent in, is refused with the full sentence word for word, nothing posted; Ben\'s checked DM sends; after the member\'s reset Cat\'s sends', async () => {
+        const cat = person('Cat');
+        await phoneOf(ana);
+        await switchTo('B');
+        const dmB: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        const dmCat: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, cat.publicKey] };
+        node.convs = [dmB, dmCat];
+        node.lines = [];
+        sealed(ben, ana, dmB, 'Ben in B');
+        sealed(cat, ana, dmCat, 'Cat in B');
+        await syncMessages(ana.publicKey);
+        expect(await sendTo(dmB.id, 'Hi Ben', [ben, cat, puppet])).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
+        const flood = idsAdding(DM_PINS_MAX_BYTES - bytesOf(PINS_B()), 'z');
+        node.convs = [dmB, dmCat, ...flood.map((id) => ({ id, type: 'dm', participants: [ana.publicKey, someKey()] }))];
+        await syncMessages(ana.publicKey);
+        expect(bytesOf(PINS_B())).toBe(DM_PINS_MAX_BYTES);
+        expect(pinOf(dmCat.id)).toMatchObject({ peer: cat.publicKey, by: 'first-seen' });
+        expect(pinOf(dmCat.id).checked).toBeFalsy();
+        const before = node.lines.length;
+        let err: any = null;
+        try { await insertMessage(dmCat.id, ana.publicKey, 'Hi Cat'); } catch (x) { err = x; }
+        expect(err?.name).toBe('DmPinsFullError');
+        expect(refusedSendNotice(err, 'Cat')).toBe("This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.");
+        expect(refusedSendNotice(err, 'Cat')).toBe(DM_PINS_FULL_TEXT);
+        expect(node.lines.length).toBe(before);
+        expect(await sendTo(dmB.id, 'Hi again Ben', [ben, cat, puppet])).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
+        // The member's reset: the re-seed judges Cat's DM on Cat's line (rule 2, checked), so its send needs no write.
+        expect(await resetB()).toBe('set-aside');
+        await syncMessages(ana.publicKey);
+        expect(pinOf(dmCat.id)).toMatchObject({ peer: cat.publicKey, checked: true });
+        expect(await sendTo(dmCat.id, 'Hi Cat', [ben, cat, puppet])).toEqual({ err: null, posts: 1, readBy: ['Cat'] });
+        expect(await sendTo(dmB.id, 'And Ben', [ben, cat, puppet])).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
+    }, 300_000);
 
     it('U6 the gate is for DMs only: with the pin store unreadable, a push tap for a group the phone doesn\'t hold writes the group\'s row, so it routes as the group it is', async () => {
         await phoneOf(ana);

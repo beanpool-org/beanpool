@@ -5,10 +5,11 @@
  * Over the real HTTPS server, through every middleware a node runs:
  *  1. An admin's key session is refused (403, in words), with nothing changed, on the restore (the live database's roles
  *     and members as they were, no upload left), /backup, the snapshot download, the replication token's generate, mode
- *     and clear (the standby's token still works), replication-config/save, a snapshot delete (the file still there), a
+ *     and clear (the standby's token still works), replication-config/save, a
  *     change to the snapshot settings, a copy through the admin-password path
  *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
- *     list, download). A moderator's session too. An owner's key session and the node password get each of them. The
+ *     list, download). A moderator's session too. An owner's key session and the node password get each of them. No
+ *     route deletes a snapshot (design case 18, A3): 404 to an owner, an admin and a moderator, the file still there. The
  *     fleet manager's backup downloads are gone (deleted 2026-10-02): nobody gets a database there, an owner neither.
  *  2. The replication token alone, on every /api/local/admin/* route the node serves: it gets what
  *     no credential gets, and never a database, except on the standby's own routes (the copy routes, replication-access
@@ -272,9 +273,8 @@ async function main(): Promise<void> {
         { what: 'replication-config/save', method: 'POST', route: '/api/local/admin/replication-config/save',
             body: JSON.stringify({ primaryUrl: 'https://elsewhere.example', primaryToken: 'x' }),
             unchanged: () => !getLocalConfig().backupPrimaryUrl && !getLocalConfig().backupReplicationToken ? null : 'the copy source changed' },
-        { what: 'a snapshot delete', method: 'POST', route: '/api/local/admin/snapshots/delete', body: JSON.stringify({ name: snapA.name }),
-            unchanged: () => fs.existsSync(path.join(dataDir!, 'snapshots', snapA.name)) ? null : 'the snapshot is gone' },
-        { what: 'a snapshot settings change', method: 'POST', route: '/api/local/admin/snapshots/config', body: JSON.stringify({ keep: 1 }),
+        // A keep the floor allows (keep 1 is refused 400 to everyone now, design case 18 A4), so the refusal is the role's.
+        { what: 'a snapshot settings change', method: 'POST', route: '/api/local/admin/snapshots/config', body: JSON.stringify({ keep: 5 }),
             unchanged: () => JSON.stringify(getAutoSnapshotConfig()) === snapshotConfigBefore ? null : 'the settings changed' },
         { what: 'a copy through the admin-password path', method: 'GET', route: '/api/local/admin/sync-snapshot', headers: { 'x-admin-password': 'anything at all' }, unchanged: () => null },
         { what: 'the off-box backups status', method: 'POST', route: '/api/local/admin/offbox-backups/status', unchanged: () => null },
@@ -342,8 +342,11 @@ async function main(): Promise<void> {
     // The node's 2FA off again, as the rest of this suite was written for.
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
     tfa = null;
-    const del = await call('POST', '/api/local/admin/snapshots/delete', asOwner, JSON.stringify({ name: snapB.name }));
-    assert(del.status === 200 && !fs.existsSync(path.join(dataDir!, 'snapshots', snapB.name)), `1. a snapshot delete: an owner makes it (${del.status})`);
+    // No route deletes a snapshot any more (design case 18, A3): an owner, an admin and a moderator all get 404, and it stays.
+    for (const [who, creds] of [['an owner', asOwner], ['an admin', asAdmin], ['a moderator', asMod]] as const) {
+        const del = await call('POST', '/api/local/admin/snapshots/delete', creds, JSON.stringify({ name: snapB.name }));
+        assert(del.status === 404 && fs.existsSync(path.join(dataDir!, 'snapshots', snapB.name)), `1. a snapshot delete is gone: ${who} gets 404 and the snapshot stays (${del.status})`);
+    }
 
     // ── 2. The replication token alone: the standby's routes, and nothing else ─────────────────────────────────────
     const STANDBY_ROUTES = new Set([

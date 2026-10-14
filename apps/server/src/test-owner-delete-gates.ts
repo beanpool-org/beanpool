@@ -318,6 +318,10 @@ async function main(): Promise<void> {
             { what: 'shorten off-box retention (amendment 1)', method: 'POST', route: '/api/local/admin/offbox-backups/settings',
                 body: () => ({ retentionDays: retention - 1 }), ok: (r) => r.status === 200 && readOffboxSettings().retentionDays === --retention },
         ];
+        // The 4-hour 2FA session a password sign-in hands out is no fresh proof.
+        const signIn = await call('POST', '/api/local/verify-password', {}, { password: PW, totpCode: tfa.code() });
+        const tfaSession: string = signIn.json?.tfaSessionToken;
+        assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
         for (const row of fresh) {
             console.log(`  · ${row.what}`);
             const send = (headers: Record<string, string>, extra: Record<string, unknown> = {}, pw = false) => {
@@ -327,6 +331,9 @@ async function main(): Promise<void> {
             if (!row.keyOnly) {
                 const noCode = await send(pwSession(), {}, true);
                 assert(noCode.status === 401 && noCode.json?.totpRequired === true, `${row.what}: a password session without a code → 401 totpRequired (${short(noCode)})`);
+                const viaTfaSession = await send({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, {}, true);
+                assert(viaTfaSession.status === 401 && viaTfaSession.json?.totpRequired === true,
+                    `${row.what}: the password with an earlier 2FA session and no code → 401 totpRequired (${short(viaTfaSession)})`);
                 const code = tfa.code();
                 const withCode = await send(pwSession(), { code }, true);
                 assert(row.ok(withCode), `${row.what}: with a current code it goes through (${short(withCode)})`);

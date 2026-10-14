@@ -20,7 +20,7 @@
  *   5. L6: an origin listed in corsAllowedOrigins gets credentialed CORS on the member API, never on the admin surface
  *      (the price-report queue included, which the admin IP allowlist also guards).
  *   6. M2: Settings (the manager) is served under the web app's strict policy, every way it is reached; the old
- *      static page at /settings-legacy keeps its own.
+ *      static page at /settings-legacy is gone (design case 18, D9).
  *
  * The node serves a stand-in manager from a temporary public/ folder (process.chdir before https-server loads).
  *
@@ -43,7 +43,7 @@ import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCod
 import { resetAdminAuthTarpit, validateCsrfToken, PASSWORD_CSRF_BINDING, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, createPasswordSession, validateAdminSession, revokeAdminSession, MAX_PASSWORD_SESSIONS } from './admin-key-auth.js';
-import { APP_DOCUMENT_CSP, DOCUMENT_CSP } from './app-document-csp.js';
+import { APP_DOCUMENT_CSP } from './app-document-csp.js';
 
 let PORT = 0;
 let BASE = '';
@@ -424,9 +424,10 @@ async function main(): Promise<void> {
         const failedLink = await call('GET', '/settings?token=deadbeef');
         assert(failedLink.status === 400 && failedLink.headers.get('content-security-policy') === APP_DOCUMENT_CSP && !/<script/i.test(failedLink.text),
             `a sign-in link that fails gets a page with no script, under the strict policy (${failedLink.status})`);
+        // The old page with inline handlers is gone (design case 18, D9): nothing at /settings-legacy runs any script.
         const legacy = await call('GET', '/settings-legacy');
-        assert(legacy.status === 200 && legacy.headers.get('content-security-policy') === DOCUMENT_CSP,
-            `/settings-legacy, the old page with inline handlers, keeps its own policy (${legacy.status})`);
+        assert(legacy.status === 404 && !/<script/i.test(legacy.text),
+            `/settings-legacy, the old page with inline handlers, is gone (${legacy.status})`);
     } finally {
         process.chdir(os.tmpdir());
         fs.rmSync(webRoot, { recursive: true, force: true });

@@ -513,10 +513,19 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * change from the phone's Manage hand-off asks for its unlock again (admin-auth.ts requirePhoneStepUp), as every
  * owner-only route does; an admin appointing or removing a moderator is not asked.
  */
-/** requireAdminRole(owner) then requireFreshProof: 403 for an admin in words, before any code is looked at. */
-async function ownerWithFreshProof(ctx: any, code: unknown, action: string): Promise<boolean> {
-    if (!requireAdminRole(ctx, ['owner'], `Only an owner of this node can ${action}`)) return false;
-    return requireFreshProof(ctx, code, action);
+/**
+ * The proof a role change that needs an owner asks for (roleChangeNeedsOwner). An owner: the fresh proof every time
+ * (design case 18, C6 and C8), so a stolen session can neither leave an owner key of its own behind nor strip the other
+ * owners. Anyone else (an admin, a break-glass code) is asked what they were asked before, the phone step-up, and the
+ * engine decides as it always has: it refuses them unless the node has no acting owner (grantNodeRole's bootstrap, #1006),
+ * and a break-glass code is the owners' recovery factor itself.
+ */
+async function roleChangeProof(ctx: any, code: unknown, action: string): Promise<boolean> {
+    const state = ctx.state || {};
+    if (state.adminRole === 'owner' && !state.isBreakGlassAuth && !(isBreakGlassMode() && !state.isKeySession)) {
+        return requireFreshProof(ctx, code, action);
+    }
+    return requirePhoneStepUp(ctx);
 }
 
 function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
@@ -573,18 +582,7 @@ const handleEnrol = async (ctx: any) => {
     }
     // An owner's or admin's key, by an owner: the fresh proof every time (design case 18, C6), so a stolen session cannot
     // leave a key of its own behind. A break-glass code is the factor itself: unchanged.
-    if (roleChangeNeedsOwner(targetPubkey, requestedRole)) {
-        if (isBreakGlass) {
-            if (!requirePhoneStepUp(ctx)) return;
-        } else {
-            if (callerRole !== 'owner') {
-                ctx.status = 403;
-                ctx.body = { error: 'Only a node owner can enrol an owner or admin key' };
-                return;
-            }
-            if (!(await requireFreshProof(ctx, body.code, 'enrol an owner or admin key'))) return;
-        }
-    }
+    if (roleChangeNeedsOwner(targetPubkey, requestedRole) && !(await roleChangeProof(ctx, body.code, 'enrol an owner or admin key'))) return;
 
     try {
         const res = enrolAdminOwnerKey({
@@ -2376,7 +2374,7 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         return;
     }
     // Granting or taking owner or admin: an owner, with the fresh proof every time (design case 18, C8).
-    if (roleChangeNeedsOwner(targetPubkey, role) && !(await ownerWithFreshProof(ctx, body.code, 'change who is an owner or admin'))) return;
+    if (roleChangeNeedsOwner(targetPubkey, role) && !(await roleChangeProof(ctx, body.code, 'change who is an owner or admin'))) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -2407,7 +2405,7 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     // Taking an owner's or an admin's role: an owner, with the fresh proof every time (design case 18, C8). A DELETE has
     // no body, so the code may come as the X-Fresh-Proof header.
     const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
-    if (roleChangeNeedsOwner(pubkey, role) && !(await ownerWithFreshProof(ctx, code, 'change who is an owner or admin'))) return;
+    if (roleChangeNeedsOwner(pubkey, role) && !(await roleChangeProof(ctx, code, 'change who is an owner or admin'))) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).

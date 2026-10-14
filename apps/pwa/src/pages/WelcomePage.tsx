@@ -41,7 +41,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload, t, word } from '@beanpool/core';
+import { createPairingSession, currentLanguage, decryptPairingPayload, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -348,6 +348,20 @@ function HowItWorksWithoutBeans() {
             </p>
             <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 {copy.words}</p>
         </div>
+    );
+}
+
+/**
+ * The 12 words stay English in every language: the account key is derived from those exact words (design amendment 1;
+ * #1947 review N1), so a member reading another language is told to write and type them as shown. Not shown in English,
+ * where it says nothing new.
+ */
+function WordsAreEnglish() {
+    if (currentLanguage() === 'en') return null;
+    return (
+        <p data-testid="words-are-english" style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, margin: '0 0 0.75rem', textAlign: 'left' }}>
+            {t('These 12 words are English in every language: write them and type them exactly as shown.')}
+        </p>
     );
 }
 
@@ -1531,10 +1545,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                         ? (showHeldWords ? t("Hide {name}'s 12 words", { name: mine }) : t("Show {name}'s 12 words", { name: mine }))
                                                         : (showHeldWords ? t('Hide its 12 words') : t('Show its 12 words'))}
                                                 </button>
-                                                {showHeldWords && (
-                                                    // As the Safety Backup step lays them out: as many columns as whole words
-                                                    // fit, and a word copied onto paper is never broken across lines.
-                                                    <ol id={heldWordsId} data-testid="welcome-held-words" aria-label={mine ? t("{name}'s 12 words", { name: mine }) : t('Its 12 words')} style={{
+                                                {showHeldWords && (<>
+                                                    {/* As the Safety Backup step lays them out: as many columns as whole words
+                                                        fit, and a word copied onto paper is never broken across lines. Never
+                                                        translated, by us or by the browser (translate="no"). */}
+                                                    <ol id={heldWordsId} data-testid="welcome-held-words" translate="no" className="notranslate" aria-label={mine ? t("{name}'s 12 words", { name: mine }) : t('Its 12 words')} style={{
                                                         listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                                         gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                                     }}>
@@ -1548,7 +1563,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                             </li>
                                                         ))}
                                                     </ol>
-                                                )}
+                                                    <WordsAreEnglish />
+                                                </>)}
                                             </>
                                         )}
                                     </>
@@ -2116,7 +2132,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                               1.3x text, where three fixed columns left each word about 29px and pushed the page 50px
                               sideways. A word someone copies onto paper is never broken across lines to fit.
                             */}
-                            <div data-testid="backup-words" style={{
+                            <div data-testid="backup-words" translate="no" className="notranslate" style={{
                                 display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                 gap: '0.4rem', marginBottom: '1rem',
                             }}>
@@ -2132,6 +2148,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </div>
                                 ))}
                             </div>
+                            <WordsAreEnglish />
 
                             <RecoveryKitButton words={pendingWords} />
 
@@ -2284,7 +2301,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </button>
                                 </div>
 
-                                <div style={{
+                                <WordsAreEnglish />
+                                <div translate="no" className="notranslate" style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                                     gap: '0.5rem',

@@ -59,7 +59,8 @@
       "types": "./dist/words-check.d.ts",
       "import": "./dist/words-check.js",
       "default": "./dist/words-check.js"
-    }
+    },
+    "./words/*.json": "./words/*.json"
   },
   "scripts": {
     "build": "tsc",

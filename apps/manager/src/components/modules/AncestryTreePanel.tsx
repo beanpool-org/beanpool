@@ -535,7 +535,7 @@ export function AncestryTreePanel({
                             <button
                                 type="button"
                                 onClick={() => setPruneTarget({ pubkey: pk, callsign })}
-                                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-[11px] font-bold text-red-200 border border-red-800/80 transition-all"
+                                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-[11px] font-bold text-bp-chip-danger-ink border border-red-800/80 transition-all"
                                 title="Prune this member and all descendants in their invite tree"
                             >
                                 Prune Branch ({branchStats.memberCount})

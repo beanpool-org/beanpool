@@ -409,7 +409,7 @@ export function StandbyReplicationPanel({
                                 setResyncMsg(null);
                                 setShowResyncConfirm(true);
                             }}
-                            className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-800 text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 border border-amber-800 text-bp-chip-warn-ink text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                         >
                             <span>🔄</span>
                             <span>Force Full Resync</span>

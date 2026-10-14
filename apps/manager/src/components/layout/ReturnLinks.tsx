@@ -15,7 +15,7 @@ export function ReturnLinks({ links, large }: { links: ReturnLinksValue; large?:
         <nav aria-label="Leave Settings" className="px-3 pt-3 space-y-1">
             <a
                 href={links.back.href}
-                className={`${row} text-terra-200 bg-terra-500/10 border border-terra-500/30 hover:bg-terra-500/20 hover:text-white`}
+                className={`${row} text-bp-chip-need-ink bg-bp-chip-need-tint border border-terra-500/30 hover:opacity-90`}
             >
                 <span className="text-sm shrink-0" aria-hidden="true">{links.back.glyph}</span>
                 <span className="min-w-0 break-words">{links.back.label}</span>

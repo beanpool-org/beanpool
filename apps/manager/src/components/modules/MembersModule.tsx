@@ -618,7 +618,7 @@ export function MembersModule({
                                         setOfferCredits('12');
                                         setOfferDescription('Fresh daily from the community flock');
                                     }}
-                                    className="px-2.5 py-1.5 rounded-lg bg-terra-600/30 hover:bg-terra-600/50 text-terra-300 border border-terra-500/40 font-bold text-[11px] transition-all shrink-0 ml-2"
+                                    className="px-2.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink border border-terra-500/40 font-bold text-[11px] transition-all shrink-0 ml-2"
                                 >
                                     + Post Offer
                                 </button>
@@ -656,7 +656,7 @@ export function MembersModule({
                                 </div>
                                 <button
                                     onClick={() => setActiveThreat(flag)}
-                                    className="px-3 py-1 rounded-lg bg-red-900/50 hover:bg-red-900/80 text-red-200 text-[11px] font-bold transition-all border border-red-800 shrink-0"
+                                    className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-[11px] font-bold transition-all border border-red-800 shrink-0"
                                 >
                                     Review Threat
                                 </button>
@@ -682,7 +682,7 @@ export function MembersModule({
                                 </div>
                                 <button
                                     onClick={() => setActiveThreat({ ...report, isReport: true })}
-                                    className="px-3 py-1 rounded-lg bg-amber-900/50 hover:bg-amber-900/80 text-amber-200 text-[11px] font-bold transition-all border border-amber-800 shrink-0"
+                                    className="px-3 py-1 rounded-lg bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-[11px] font-bold transition-all border border-amber-800 shrink-0"
                                 >
                                     Moderate Report
                                 </button>
@@ -888,7 +888,7 @@ export function MembersModule({
                                                                 handleToggleVouchMember(pubkey, true);
                                                             }}
                                                             title="Click to toggle voucher authority"
-                                                            className="px-2 py-0.5 rounded-md bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
+                                                            className="px-2 py-0.5 rounded-md bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
                                                         >
                                                             🛡️ VOUCHER
                                                         </button>

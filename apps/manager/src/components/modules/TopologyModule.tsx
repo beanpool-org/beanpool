@@ -792,7 +792,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteSnapshot(snap.name)}
-                                                        className="px-3 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-400 font-bold text-[11px] border border-rose-800/60 transition-all"
+                                                        className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink font-bold text-[11px] border border-rose-800/60 transition-all"
                                                     >
                                                         🗑 Delete
                                                     </button>
@@ -883,7 +883,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={handleForceResync}
                                 disabled={resyncing}
-                                className="w-full py-2.5 rounded-xl bg-amber-950/60 hover:bg-amber-900 text-amber-300 font-bold text-xs border border-amber-800/60 shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full py-2.5 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink font-bold text-xs border border-amber-800/60 shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 <span className={resyncing ? 'animate-spin' : ''}>🔄</span>
                                 <span>{resyncing ? 'Requesting Resync...' : 'Force Full Replication Resync'}</span>
@@ -1123,14 +1123,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                             <div className="flex items-center justify-end gap-2">
                                                                 <button
                                                                     onClick={() => setConfirmAction({ name: claim.name, type: 'approve' })}
-                                                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+                                                                    className="px-3.5 py-1.5 rounded-xl bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink border border-emerald-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
                                                                 >
                                                                     <span>✅</span>
                                                                     <span>Approve</span>
                                                                 </button>
                                                                 <button
                                                                     onClick={() => setConfirmAction({ name: claim.name, type: 'reject' })}
-                                                                    className="px-3.5 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+                                                                    className="px-3.5 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border border-rose-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
                                                                 >
                                                                     <span>❌</span>
                                                                     <span>Reject</span>
@@ -1245,7 +1245,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                                 <span className="text-[11px] font-bold text-rose-400">Revoke Allocation?</span>
                                                                 <button
                                                                     onClick={() => handleRevokeAllocation(alloc.name)}
-                                                                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-all"
+                                                                    className="px-3 py-1 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-md transition-all"
                                                                 >
                                                                     Yes, Revoke
                                                                 </button>
@@ -1259,7 +1259,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         ) : (
                                                             <button
                                                                 onClick={() => setConfirmAction({ name: alloc.name, type: 'revoke' })}
-                                                                className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-800/80 font-bold text-xs transition-all active:scale-95 shadow-sm"
+                                                                className="px-3 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border border-rose-800/80 font-bold text-xs transition-all active:scale-95 shadow-sm"
                                                             >
                                                                 🚫 Revoke
                                                             </button>

@@ -593,7 +593,7 @@ export function PeerConnectorsPanel({
                                         type="button"
                                         onClick={() => requestRemoveConfirmation(c)}
                                         disabled={Boolean(currentAction)}
-                                        className="px-3 py-2 rounded-xl bg-red-950/50 hover:bg-red-900/60 text-xs font-bold text-red-400 hover:text-red-300 border border-red-800/60 transition-all disabled:opacity-50 min-h-[44px]"
+                                        className="px-3 py-2 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800/60 transition-all disabled:opacity-50 min-h-[44px]"
                                     >
                                         {currentAction === 'removing' ? 'Removing…' : 'Remove'}
                                     </button>

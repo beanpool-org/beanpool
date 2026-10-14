@@ -152,7 +152,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                                 <div className="flex justify-end">
                                     <button
                                         onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
-                                        className="px-3 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 text-xs font-bold text-red-200 border border-red-800"
+                                        className="px-3 py-2 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800"
                                     >
                                         Lift suspension now
                                     </button>
@@ -180,7 +180,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             <div className="flex justify-end">
                                 <button
                                     onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
-                                    className="px-3 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 text-xs font-bold text-red-200 border border-red-800"
+                                    className="px-3 py-2 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800"
                                 >
                                     Halt this Decision
                                 </button>

@@ -396,7 +396,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                                             onClick={() => { setRemoving(r); setNotice(null); }}
                                             disabled={busy}
                                             aria-label={`Remove ${name}'s ${ROLE_LABEL[r.role].toLowerCase()} role`}
-                                            className={`${btn} self-start sm:self-auto bg-red-500/10 text-red-300 border-red-500/30`}
+                                            className={`${btn} self-start sm:self-auto bg-bp-chip-danger-tint text-bp-chip-danger-ink border-red-500/30`}
                                         >
                                             Remove
                                         </button>

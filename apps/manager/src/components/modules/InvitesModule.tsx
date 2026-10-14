@@ -384,7 +384,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={handleCopyAllMessages}
-                                className="px-3 py-1.5 rounded-xl bg-terra-950 hover:bg-terra-900 text-terra-300 hover:text-white text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>💬</span>
                                 <span>{copiedIndex === 'all_messages' ? '✓ Messages Copied!' : 'Copy All Share Messages'}</span>
@@ -405,7 +405,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             </button>
                             <button
                                 onClick={handlePrintCards}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>🖨️</span>
                                 <span>Print Cards</span>

@@ -601,7 +601,7 @@ export function TelemetryModule({
 
                                             <button
                                                 onClick={() => onEditNode(profile)}
-                                                className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-terra-500/30 text-white font-bold transition-all border border-nature-700 flex items-center gap-2 text-xs shadow-sm active:scale-95"
+                                                className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-bp-chip-need-tint hover:text-bp-chip-need-ink text-white font-bold transition-all border border-nature-700 flex items-center gap-2 text-xs shadow-sm active:scale-95"
                                                 title="Configure Node Credentials & Admin Password"
                                             >
                                                 <span className="text-base">⚙️</span>
@@ -629,7 +629,7 @@ export function TelemetryModule({
                                              <span className="min-w-0 break-words">🔒 Token refused: {refusedToken}. {TOKEN_REPLACE_ADVICE}</span>
                                              <button
                                                  onClick={() => onEditNode(profile)}
-                                                 className="px-2.5 py-1 min-h-[44px] rounded text-[11px] font-sans font-bold border transition-all bg-amber-900/40 hover:bg-amber-900/60 text-amber-200 border-amber-800 shrink-0"
+                                                 className="px-2.5 py-1 min-h-[44px] rounded text-[11px] font-sans font-bold border transition-all bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800 shrink-0"
                                              >
                                                  🔑 Fix token
                                              </button>
@@ -647,8 +647,8 @@ export function TelemetryModule({
                                                  onClick={() => onEditNode(profile)}
                                                  className={`px-2.5 py-1 rounded text-[11px] font-sans font-bold border transition-all ${
                                                      error.includes('401')
-                                                         ? 'bg-amber-900/40 hover:bg-amber-900/60 text-amber-200 border-amber-800'
-                                                         : 'bg-red-900/40 hover:bg-red-900/60 text-red-200 border-red-800'
+                                                         ? 'bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800'
+                                                         : 'bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800'
                                                  }`}
                                              >
                                                  {error.includes('401') ? '🔑 Set Password' : '⚙️ Update Settings'}

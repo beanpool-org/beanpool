@@ -519,7 +519,7 @@ export function GatewayModule({
                                         });
                                     }
                                 }}
-                                className="px-2.5 py-1 rounded bg-terra-950 hover:bg-terra-900 text-terra-300 hover:text-white text-[10px] font-semibold border border-terra-800 transition-all"
+                                className="px-2.5 py-1 rounded bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-[10px] font-semibold border border-terra-800 transition-all"
                             >
                                 ➕ Include Current Manager Domain ({typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'})
                             </button>

@@ -247,13 +247,13 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                         </button>
                         {!line.exception?.frozen && (
                             <button type="button" onClick={() => { setPending({ kind: 'freeze' }); setStatus(null); }}
-                                className={`${button} bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700`}>
+                                className={`${button} bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border border-red-700`}>
                                 Freeze
                             </button>
                         )}
                         {line.exception && (
                             <button type="button" onClick={() => { setPending({ kind: 'restore' }); setStatus(null); }}
-                                className={`${button} bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800`}>
+                                className={`${button} bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink border border-emerald-800`}>
                                 Restore the default
                             </button>
                         )}

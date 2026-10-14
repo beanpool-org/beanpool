@@ -219,7 +219,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     type="button"
                     onClick={handleApproximate}
                     disabled={lat == null || lng == null}
-                    className="px-2.5 py-1 rounded-md bg-terra-900/40 hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-300 border border-terra-700/60 transition-colors"
+                    className="px-2.5 py-1 rounded-md bg-bp-chip-need-tint hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-bp-chip-need-ink border border-terra-700/60 transition-colors"
                 >
                     Approximate (~100m)
                 </button>
@@ -313,7 +313,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                             type="button"
                             onClick={handleClear}
                             disabled={clearing || saving}
-                            className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-xs font-semibold text-rose-300 border border-rose-800/60 transition-colors disabled:opacity-50"
+                            className="px-2.5 py-1.5 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-semibold text-bp-chip-danger-ink border border-rose-800/60 transition-colors disabled:opacity-50"
                         >
                             {clearing ? 'Clearing...' : 'Clear Location'}
                         </button>

@@ -639,7 +639,7 @@ function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpe
             <div className="flex-1 w-full overflow-y-auto overflow-x-hidden custom-scrollbar py-3 flex flex-col items-center gap-1">
                 {returnLinks && (
                     <nav aria-label="Leave Settings" className="flex flex-col items-center gap-1 pb-2 mb-1 border-b border-nature-800/80">
-                        <a href={returnLinks.back.href} aria-label={returnLinks.back.label} {...bind(returnLinks.back.label)} className={`${cell} text-terra-200 bg-terra-500/10 border border-terra-500/30 hover:bg-terra-500/20`}>
+                        <a href={returnLinks.back.href} aria-label={returnLinks.back.label} {...bind(returnLinks.back.label)} className={`${cell} text-bp-chip-need-ink bg-bp-chip-need-tint border border-terra-500/30 hover:opacity-90`}>
                             <span aria-hidden="true">{returnLinks.back.glyph}</span>
                         </a>
                         {returnLinks.profile && (

@@ -689,7 +689,7 @@ export function EconomySection({
                                                 </button>
                                                 <button
                                                     onClick={() => setSeedOfferTreasury(t)}
-                                                    className="px-2.5 py-1.5 rounded-lg bg-terra-900/30 hover:bg-terra-900/50 text-xs font-bold text-terra-300 border border-terra-700/50 transition-all"
+                                                    className="px-2.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-700/50 transition-all"
                                                 >
                                                     Seed Offer
                                                 </button>
@@ -1003,7 +1003,7 @@ export function EconomySection({
                                                             <button
                                                                 onClick={() => handleRevokeKeeper(pk)}
                                                                 disabled={keeperActionLoading}
-                                                                className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-xs font-bold text-red-300 border border-red-800/80 transition-all disabled:opacity-40 shrink-0"
+                                                                className="px-2.5 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800/80 transition-all disabled:opacity-40 shrink-0"
                                                             >
                                                                 Revoke
                                                             </button>

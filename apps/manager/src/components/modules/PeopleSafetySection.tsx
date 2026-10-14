@@ -511,7 +511,7 @@ export function PeopleSafetySection({
                                                     {report.outcome && report.outcome !== 'open' && (
                                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                                             report.outcome === 'actioned'
-                                                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                                                ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-rose-500/30'
                                                                 : 'bg-nature-800 text-nature-300 border border-nature-700'
                                                         }`}>
                                                             {report.outcome}

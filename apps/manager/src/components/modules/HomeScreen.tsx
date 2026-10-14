@@ -352,7 +352,7 @@ export function HomeScreen({
                             <button
                                 key={idx}
                                 onClick={() => onNavigate(item.tab, item.sub)}
-                                className="flex items-center justify-between p-3.5 rounded-xl bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/50 text-amber-200 text-xs font-bold transition-all text-left group"
+                                className="flex items-center justify-between p-3.5 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 border border-amber-800/50 text-bp-chip-warn-ink text-xs font-bold transition-all text-left group"
                             >
                                 <div className="flex items-center gap-2.5">
                                     <span className="text-base">{item.icon}</span>
@@ -526,7 +526,7 @@ export function HomeScreen({
                         <button
                             type="button"
                             onClick={onStartColdStartWizard}
-                            className="px-3.5 py-1.5 rounded-lg bg-terra-900/30 hover:bg-terra-900/50 text-xs font-bold text-terra-300 border border-terra-700/50 transition-all"
+                            className="px-3.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-700/50 transition-all"
                         >
                             Launch Cold-Start Wizard →
                         </button>

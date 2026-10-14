@@ -304,7 +304,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                                     </button>
                                 )}
                                 {d.source === 'settings' && (
-                                    <button type="button" onClick={() => remove(d)} className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-red-900 text-xs text-red-200">
+                                    <button type="button" onClick={() => remove(d)} className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-bp-chip-danger-tint hover:text-bp-chip-danger-ink text-xs text-red-200">
                                         Remove
                                     </button>
                                 )}

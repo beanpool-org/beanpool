@@ -302,7 +302,7 @@ export function PostModerationPanel({
                                         type="button"
                                         onClick={() => setDeletingPost(post)}
                                         aria-label={`Delete post ${post.title || post.id}`}
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
+                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 border border-red-800 text-bp-chip-danger-ink text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
                                     >
                                         <span>🗑️</span>
                                         <span>Delete</span>

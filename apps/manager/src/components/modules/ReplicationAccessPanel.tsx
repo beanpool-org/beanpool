@@ -355,7 +355,7 @@ export function ReplicationAccessPanel({
                                 type="button"
                                 id="rep-token-clear-btn"
                                 onClick={() => setShowClearConfirm(true)}
-                                className="min-h-[44px] px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-red-950/60 hover:text-red-300 text-xs font-semibold text-nature-400 border border-nature-700 transition-all"
+                                className="min-h-[44px] px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-bp-chip-danger-tint hover:text-bp-chip-danger-ink text-xs font-semibold text-nature-400 border border-nature-700 transition-all"
                             >
                                 Remove Token
                             </button>

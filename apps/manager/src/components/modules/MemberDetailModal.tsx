@@ -430,7 +430,7 @@ export function MemberDetailModal({
                             className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                                 currentRole === 'owner'
                                     ? 'bg-amber-950/50 text-amber-300/50 border-amber-900/40 cursor-default'
-                                    : 'bg-nature-950 text-amber-300 border-amber-600/50 hover:bg-amber-950 hover:border-amber-500'
+                                    : 'bg-nature-950 text-amber-300 border-amber-600/50 hover:bg-bp-chip-warn-tint hover:text-bp-chip-warn-ink hover:border-amber-500'
                             }`}
                         >
                             👑 Grant Owner
@@ -464,7 +464,7 @@ export function MemberDetailModal({
                                 type="button"
                                 disabled={roleLoading || isFrozen}
                                 onClick={handleRevokeRole}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-300 bg-red-950/40 border border-red-800/80 hover:bg-red-900/50 transition-all ml-auto"
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-bp-chip-danger-ink bg-bp-chip-danger-tint border border-red-800/80 hover:opacity-90 transition-all ml-auto"
                             >
                                 {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}
                             </button>
@@ -521,7 +521,7 @@ export function MemberDetailModal({
                                     <button
                                         onClick={handleLift}
                                         disabled={suspendBusy}
-                                        className="px-3 py-2 rounded-xl font-bold border bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-900 text-[11px] disabled:opacity-50"
+                                        className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-ok-tint text-bp-chip-ok-ink border-emerald-800 hover:opacity-90 text-[11px] disabled:opacity-50"
                                     >
                                         Lift suspension
                                     </button>
@@ -567,7 +567,7 @@ export function MemberDetailModal({
                                     <span className="text-nature-400">Emergency: suspend now, the community decides whether it stays.</span>
                                     <button
                                         onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
-                                        className="px-3 py-2 rounded-xl font-bold border bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-800/80 text-[11px] whitespace-nowrap"
+                                        className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800/80 text-[11px] whitespace-nowrap"
                                     >
                                         ⏸️ Suspend
                                     </button>
@@ -608,8 +608,8 @@ export function MemberDetailModal({
                                     isFrozen
                                         ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
                                         : isVoucher
-                                        ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 hover:bg-amber-900/80'
-                                        : 'bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-900'
+                                        ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-800/80 hover:opacity-90'
+                                        : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border-emerald-800 hover:opacity-90'
                                 }`}
                             >
                                 {isVoucher ? 'Demote' : '🛡️ Promote'}
@@ -649,7 +649,7 @@ export function MemberDetailModal({
                                 className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
                                     isFrozen
                                         ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
-                                        : 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-800/80'
+                                        : 'bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800/80'
                                 }`}
                                 title="Re-key member to a new device key after in-person verification (Lost Phone)"
                             >
@@ -658,7 +658,7 @@ export function MemberDetailModal({
 
                             <button
                                 onClick={() => setShowOffboardWizard(true)}
-                                className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800 text-[11px]"
+                                className="px-3 py-2 rounded-xl font-bold transition-all border bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800 text-[11px]"
                                 title="Offboard member: donate/gift surplus or formally write off debt before pruning"
                             >
                                 <span>🚪 Offboard</span>
@@ -676,7 +676,7 @@ export function MemberDetailModal({
                             {onPruneBranch && hasChildren && (
                                 <button
                                     onClick={() => setShowPruneBranch(true)}
-                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-200 border-red-700 text-[11px]"
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-700 text-[11px]"
                                     title="Prune this member and all invitees in their subtree"
                                 >
                                     <span>🗑️ Prune Branch</span>

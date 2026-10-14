@@ -27,6 +27,19 @@ import { createRoot, type Root } from 'react-dom/client';
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 
 const { FONT_SCALE, WINDOW } = vi.hoisted(() => ({ FONT_SCALE: 1.3, WINDOW: { width: 320, height: 569, scale: 1.5, fontScale: 1.3 } }));
+/** The screens' DeviceEventEmitter listeners, so a test can fire one (a sync finishing); `emit` from the code stays a no-op. */
+const events = vi.hoisted(() => {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+        listeners,
+        addListener: (name: string, fn: () => void) => {
+            if (!listeners.has(name)) listeners.set(name, new Set());
+            listeners.get(name)!.add(fn);
+            return { remove: () => { listeners.get(name)?.delete(fn); } };
+        },
+        fire: (name: string) => { for (const fn of [...(listeners.get(name) ?? [])]) fn(); },
+    };
+});
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
@@ -71,7 +84,7 @@ vi.mock('react-native', () => {
         PixelRatio: { getFontScale: () => FONT_SCALE, get: () => 1.5 },
         AccessibilityInfo: { isReduceMotionEnabled: async () => true, isScreenReaderEnabled: async () => false, announceForAccessibility: () => {}, addEventListener: () => ({ remove() {} }) },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
-        DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: () => {} },
+        DeviceEventEmitter: { addListener: events.addListener, emit: () => {} },
         Keyboard: { dismiss: () => {}, addListener: () => ({ remove() {} }) },
         Alert: { alert: vi.fn() },
         Share: { share: vi.fn(async () => ({})) },
@@ -287,6 +300,7 @@ afterAll(() => { (Module as any)._load = realLoad; });
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(async () => {
+    events.listeners.clear();
     mem.store.clear();
     mem.store.set('beanpool_anchor_url', NODE_URL);
     node.online = true;
@@ -450,6 +464,27 @@ for (const scheme of ['light', 'dark'] as const) {
                 await fits([OWN]);
                 // An answer is shown, not kept: the cards held are still only the member's own.
                 expect(await memberKeys()).toEqual([OWN]);
+            });
+
+            it('a sync finishing asks the node nothing: the nearest list is read when People opens, never in the background (#1939 review N1)', async () => {
+                await render(createElement(PeopleScreen));
+                await settle(450);
+                expect(membersRequests()).toEqual([`/api/members?lat=-28.55&lng=153.5&limit=50`]);
+                expect(events.listeners.get('sync_data_updated')?.size ?? 0).toBeGreaterThan(0);
+                // Each listing pushed to the member and each card refresh ends in a sync: none spends a nearest read
+                // of the day's budget, so an online member is never told "Connect to search everyone" by their own app.
+                for (let i = 0; i < 5; i++) {
+                    await act(async () => { events.fire('sync_data_updated'); });
+                    await settle(450);
+                }
+                expect(membersRequests()).toEqual([`/api/members?lat=-28.55&lng=153.5&limit=50`]);
+                expect(text()).toContain('Near you: the 50 closest members. Search a name to find anyone else.');
+                expect(text()).not.toContain('Connect to search everyone');
+                // A search the member typed still asks, once; a sync after it asks nothing more.
+                await type('Ro');
+                await act(async () => { events.fire('sync_data_updated'); });
+                await settle(450);
+                expect(membersRequests()).toEqual([`/api/members?lat=-28.55&lng=153.5&limit=50`, '/api/members?q=Ro&limit=20']);
             });
 
             it('online, a search of 2 letters asks the node; one letter asks it nothing; a long name ellipsises on one line', async () => {

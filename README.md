@@ -1,6 +1,6 @@
 # BeanPool
 
-> A decentralized mutual credit protocol for independent communities.
+> A free app a community runs for itself, to trade help, goods and skills in Beans instead of money.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Status: Beta](https://img.shields.io/badge/Status-Beta-emerald.svg)]()
@@ -9,9 +9,11 @@
 
 ## What is BeanPool?
 
-BeanPool is an open protocol for building a **post-extraction economy**. It connects communities through a decentralized mutual credit system where value is created through cooperation, not extraction. Nodes gossip state over a libp2p mesh, automatically applying progressive circulation (value decay) to prevent hoarding and fund a community Commons pool.
+BeanPool is a free app a community runs for itself. Members post what they can offer or need (a lift to town, eggs, fixing a bike, an hour of gardening), message each other, and settle trades in **Beans**, the community's own credit: you earn Beans by helping someone and spend them with anyone in your community, and your balance can go a little below zero on a credit line you earn by trading. There is no interest, no ads and no company in the middle.
 
-**Live network:** [mullum1.beanpool.org](https://mullum1.beanpool.org) · [mullum2.beanpool.org](https://mullum2.beanpool.org:8447) · [review.beanpool.org](https://review.beanpool.org:8445) · [test.beanpool.org](https://test.beanpool.org) · [test-mirror.beanpool.org](https://test-mirror.beanpool.org:8451) — federated via peer connectors with cross-community marketplace browsing and cryptographically secure Libp2p mesh trading.
+Each community runs its own server (a **node**) on a spare computer or a small rented server, so its listings, messages and balances stay with it. A small monthly circulation charge on the part of a balance above 200 Beans, and a small charge on trades, go into the community's **Commons Pool**, which members vote to spend. The **global community** at global.beanpool.org, which BeanPool runs, shows newcomers around and leads them to a community near them; it has no Beans, and today it is a private preview. iPhone, Android and web. The website says more: [beanpool.org](https://beanpool.org), and why we built it this way: [post-extraction](https://beanpool.org/post-extraction.html).
+
+**Communities running today:** see [the map on beanpool.org](https://beanpool.org/#find-or-start). Two communities can link so their members can trade with each other; Beans never leave home. Linking is built, has been tried only between two of our own test communities, never between live ones, and is off unless both operators switch it on.
 
 ---
 
@@ -41,7 +43,7 @@ Full-screen Leaflet/OSM map as the landing page:
 - **Post photos** — up to 3 photos per post, auto-resized to 400px, primary photo on tiles
 - **Post validation** — all fields required, red glow on empty fields, location must be set
 - **Post detail view** — Deals Hub UI parsing Payer/Payee roles for Escrow Settlement
-- **💬 Message** — opens a DM with the author directly from the post (cross-node messages route securely over the Libp2p mesh)
+- **💬 Message** — opens a DM with the author directly from the post (a message to a member of a linked community goes over the link between the two nodes: a libp2p stream, see `apps/server/src/federation-protocol.ts`)
 - **🫘 Rate** — rate the author 1-5 beans with optional comment
 - **🚩 Report** — report abuse with reason dropdown
 
@@ -63,7 +65,7 @@ Flag bad actors for admin review:
 DMs and group chats with real E2E encryption and transaction context:
 - **Smart CRM Inbox** — Message threads automatically link to their parent Marketplace post, displaying the active title and Object Status (Active/Escrow/Completed). 
 - **Unified Inbox** — Drop redundant tab filters to provide a single, streamlined conversations list.
-- **Direct messages** — tap any member or use "Message" from a post detail (cross-node DMs are authenticated via PeerID Noise streams)
+- **Direct messages** — tap any member or use "Message" from a post detail (a DM to a linked community travels over the two nodes' libp2p link, encrypted with Noise and tied to each node's PeerId)
 - **Group chats** — create named groups with multiple members
 - **E2E Encryption**: Real end-to-end encryption for direct messages (Noise/X25519/AES-GCM) protecting chat content from server visibility (NAT-1).
 - **Sent/Read Receipts**: Sent and read receipt indicators on direct messages.

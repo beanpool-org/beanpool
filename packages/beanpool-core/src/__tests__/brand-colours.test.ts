@@ -24,6 +24,8 @@ import {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const DOC = resolve(ROOT, 'docs/brand-colours.md');
 const WEB_CSS = resolve(ROOT, 'apps/pwa/src/index.css');
+const MANAGER_TAILWIND = resolve(ROOT, 'apps/manager/tailwind.config.js');
+const MANAGER_HTML = resolve(ROOT, 'apps/manager/index.html');
 
 describe('contrastRatio', () => {
     it('matches WCAG reference values', () => {
@@ -70,6 +72,16 @@ describe('brand colours are readable in both themes', () => {
             expect(INK_GROUNDS.light, `light --bg-${name}`).toContain(values[0]);
             expect(INK_GROUNDS.dark, `dark --bg-${name}`).toContain(values[1]);
         }
+    });
+
+    it("judges inks on the manager's page, card and raised grounds (its tailwind.config.js), in dark, the manager's only theme", () => {
+        const config = readFileSync(MANAGER_TAILWIND, 'utf8');
+        for (const shade of ['950', '900', '800']) {
+            const value = config.match(new RegExp(`\\b${shade}:\\s*'(#[0-9a-fA-F]{6})'`))?.[1]?.toLowerCase();
+            expect(value, `manager nature-${shade}`).toMatch(/^#[0-9a-f]{6}$/);
+            expect(INK_GROUNDS.dark, `manager nature-${shade}`).toContain(value);
+        }
+        expect(readFileSync(MANAGER_HTML, 'utf8'), 'the manager is dark only; add its light grounds if that changes').toMatch(/<html[^>]*class="dark"/);
     });
 
     it.each(pairs.map((p) => [`${p.theme} ${p.role} ${p.pair}`, p] as const))('%s', (_label, p) => {

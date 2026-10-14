@@ -420,7 +420,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         type="button"
                         disabled
                         data-testid="event-chat-waiting"
-                        className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-600 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
+                        className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-700 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
                     >
                         💬 {EVENT_CHAT_WAITING_TEXT}
                     </button>

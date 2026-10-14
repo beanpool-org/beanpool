@@ -146,6 +146,9 @@ function ChatScreen({ id }: { id: string }) {
     const [actionLoading, setActionLoading] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
     const [ratedPostIds, setRatedPostIds] = useState<Set<string>>(new Set());
+    // The trades I rated, by id: a release line names its own trade (metadata.transactionId), and one pair can trade the
+    // same repeatable offer twice, so "a rating on this post" can be the other deal's (Marty 15 Oct, web; same here).
+    const [ratedTxIds, setRatedTxIds] = useState<Set<string>>(new Set());
     const [replyToMessage, setReplyToMessage] = useState<any | null>(null);
     const [editingMessage, setEditingMessage] = useState<any | null>(null);
     const [deals, setDeals] = useState<any[]>([]);
@@ -275,11 +278,12 @@ function ChatScreen({ id }: { id: string }) {
         try {
             const db = await getDb();
             const ratedRows = await db.getAllAsync<any>(
-                "SELECT mt.post_id FROM ratings r JOIN marketplace_transactions mt ON r.transaction_id = mt.id WHERE r.rater_pubkey = ?",
+                "SELECT mt.post_id, mt.id AS tx_id FROM ratings r JOIN marketplace_transactions mt ON r.transaction_id = mt.id WHERE r.rater_pubkey = ?",
                 [identity.publicKey]
             );
             const ids = new Set<string>(ratedRows.map(r => r.post_id).filter(Boolean));
             setRatedPostIds(ids);
+            setRatedTxIds(new Set<string>(ratedRows.map(r => r.tx_id).filter(Boolean)));
         } catch (e) {
             console.error("[Chat] Failed to load rated transaction list:", e);
         }
@@ -931,7 +935,8 @@ function ChatScreen({ id }: { id: string }) {
                 )}
 
                 {item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
-                    const hasRated = ratedPostIds.has(item.metadata.postId);
+                    const lineTxId: string | null = typeof item.metadata.transactionId === 'string' && item.metadata.transactionId ? item.metadata.transactionId : null;
+                    const hasRated = lineTxId ? ratedTxIds.has(lineTxId) : ratedPostIds.has(item.metadata.postId);
                     return (
                         <Pressable
                             accessibilityRole="button"
@@ -939,10 +944,17 @@ function ChatScreen({ id }: { id: string }) {
                             onPress={async () => {
                                 try {
                                     const db = await getDb();
-                                    const txRow = await db.getFirstAsync<any>(
-                                        "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id=? AND status='completed' LIMIT 1",
-                                        [item.metadata.postId]
-                                    );
+                                    // This line's own trade; an older line without its id: the completed one on its post
+                                    // between me and this peer, never another buyer's.
+                                    const txRow = lineTxId
+                                        ? await db.getFirstAsync<any>(
+                                            "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE id=? AND status='completed'",
+                                            [lineTxId]
+                                        )
+                                        : await db.getFirstAsync<any>(
+                                            "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id=? AND status='completed' AND ((buyer_pubkey=? AND seller_pubkey=?) OR (buyer_pubkey=? AND seller_pubkey=?)) ORDER BY completed_at DESC LIMIT 1",
+                                            [item.metadata.postId, identity?.publicKey ?? '', peerPubkey ?? '', peerPubkey ?? '', identity?.publicKey ?? '']
+                                        );
                                     if (txRow && identity?.publicKey) {
                                         const targetPubkey = txRow.buyer_pubkey === identity.publicKey ? txRow.seller_pubkey : txRow.buyer_pubkey;
                                         setPromptReviewForTx({

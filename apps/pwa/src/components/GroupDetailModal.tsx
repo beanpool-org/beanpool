@@ -38,6 +38,9 @@ export function GroupDetailModal({
 }: Props) {
     const [groupData, setGroupData] = useState<Group | null>(group);
     const [members, setMembers] = useState<GroupMember[]>([]);
+    // Where anyone can join in a minute (openMembership) the roster is its members': anyone else is told to join
+    // (join_to_see), and sees the count and why, never "Roster (N)" over an empty box (#1939 review N5).
+    const [rosterRefused, setRosterRefused] = useState(false);
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,9 @@ export function GroupDetailModal({
         try {
             const m = await getGroupMembers(group.id);
             setMembers(Array.isArray(m) ? m : []);
+            setRosterRefused(false);
         } catch (err: any) {
+            setRosterRefused(err?.code === 'join_to_see');
             console.warn('[GroupDetail] Failed to load roster:', err);
         } finally {
             setLoading(false);
@@ -413,12 +418,15 @@ export function GroupDetailModal({
                     {/* Member Roster */}
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
-                            Roster ({roster.rows.length || groupData.memberCount || 0})
+                            {rosterRefused
+                                ? (typeof groupData.memberCount === 'number' ? `${groupData.memberCount} ${groupData.memberCount === 1 ? 'member' : 'members'}` : 'Members')
+                                : `Roster (${roster.rows.length || groupData.memberCount || 0})`}
                         </h3>
+                        {rosterRefused && <p className="text-sm text-nature-600 dark:text-nature-300">Join the group to see who is here</p>}
 
                         {loading ? (
                             <div className="py-4 text-center text-xs text-nature-500">Loading members...</div>
-                        ) : (
+                        ) : rosterRefused ? null : (
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
                                 {roster.rows.map((row) => {
                                     const m = row.member;

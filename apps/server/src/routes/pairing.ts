@@ -88,6 +88,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Cancels an active pairing session.
      */
     router.post('/api/pair/cancel', async (ctx) => {
+        if (!deps.rateLimit(ctx)) return;
+
         const { sessionId } = (ctx.request as any).body || {};
         if (!sessionId || typeof sessionId !== 'string') {
             // Reliability fix: return 400 Bad Request when sessionId parameter is missing

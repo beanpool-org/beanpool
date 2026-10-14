@@ -355,7 +355,8 @@ import {
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
-    type EscrowRefundShortfall
+    type EscrowRefundShortfall,
+    type EventTimeOut
 } from './engine/posts.js';
 import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
@@ -5170,6 +5171,8 @@ export function createPost(
         eventTz?: unknown;
         eventOnline?: unknown;
         eventLink?: unknown;
+        /** Filled when a clock the host set was adjusted (engine/posts.ts EventTimeOut). */
+        out?: EventTimeOut;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }
@@ -5223,14 +5226,14 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
     const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
-    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
+    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey, out);
 }
 
 /**

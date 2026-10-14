@@ -24,6 +24,7 @@ import {
     canonicalZone,
     zonedToInstant,
     instantToLocal,
+    type ZonedInstant,
     getMember,
     getPosts,
     readsAsMember,
@@ -311,24 +312,65 @@ function cleanEventTz(raw: unknown): string | null {
     return tz;
 }
 
-/** An online event's join link: http(s) only, ≤ 500 characters, trimmed. Blank is none. */
+/**
+ * An online event's join link: http(s) only, with no user name or password in it (`https://zoom.us@evil.example` goes to
+ * evil.example), ≤ 500 characters, stored as the URL parser writes it (`a b` → `a%20b`). Blank is none.
+ */
 function cleanEventLink(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('The link to join must be text');
     const v = raw.trim();
     if (!v) return null;
     if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
-    let ok = false;
-    try { ok = /^https?:$/.test(new URL(v).protocol); } catch { ok = false; }
-    if (!ok || !/^https?:\/\//i.test(v)) throw new Error('The link to join must start with https:// or http://');
-    return v;
+    let url: URL | null = null;
+    try { url = new URL(v); } catch { url = null; }
+    if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error('The link to join must start with https:// or http://');
+    if (url.username || url.password) throw new Error('The link to join must not hold a user name or password');
+    if (url.href.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    return url.href;
 }
 
-/** A clock the app sent, resolved in the zone: the instant, or refused in words the form shows. */
-function instantOfClock(raw: unknown, tz: string, label: string): string {
+/** A clock the app sent, resolved in the zone, or refused in words the form shows. */
+function instantOfClock(raw: unknown, tz: string, label: string): ZonedInstant {
     const resolved = typeof raw === 'string' ? zonedToInstant(raw, tz) : null;
     if (!resolved) throw new Error(`${label} must be a valid date and time`);
-    return resolved.instant;
+    return resolved;
+}
+
+/** Whether a body names a clock: an absent or blank one leaves the instant (an old client's body) or the stored clock to decide. */
+function clockSent(raw: unknown): boolean {
+    return raw != null && raw !== '';
+}
+
+/** A clock the node could not keep as typed (DESIGN-event-times §3, §7): a gap moved it forward; an overlap took the earlier. */
+export interface EventClockAdjustment {
+    kind: 'gap' | 'overlap';
+    /** The clock the host set. */
+    asked: string;
+    /** The clock saved: forward past a gap; for an overlap the same clock, at the earlier of its two instants. */
+    saved: string;
+}
+
+/**
+ * What create and edit answer next to the post, never on it (a post is broadcast, kept in phones' caches and copied, and
+ * this is said once), and only when a clock the host set was adjusted. An old client's instant-only body never gets it.
+ */
+export interface EventTimeAdjusted {
+    start: EventClockAdjustment | null;
+    end: EventClockAdjustment | null;
+}
+
+/** Where createPost and updatePost leave `eventTimeAdjusted` for the route to answer. */
+export interface EventTimeOut {
+    eventTimeAdjusted?: EventTimeAdjusted;
+}
+
+function adjustmentOf(asked: string, resolved: ZonedInstant): EventClockAdjustment | null {
+    return resolved.adjusted ? { kind: resolved.adjusted, asked, saved: resolved.local } : null;
+}
+
+function noteTimeAdjusted(out: EventTimeOut | undefined, start: EventClockAdjustment | null, end: EventClockAdjustment | null): void {
+    if (out && (start || end)) out.eventTimeAdjusted = { start, end };
 }
 
 /**
@@ -413,6 +455,8 @@ export function createPost(
         eventTz?: unknown;
         eventOnline?: unknown;
         eventLink?: unknown;
+        /** Filled when a clock the host set was adjusted (a DST gap or overlap); the route answers it next to the post. */
+        out?: EventTimeOut;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -566,16 +610,32 @@ export function createPost(
         eventOnline = options?.eventOnline === true;
         if (eventOnline) { lat = undefined; lng = undefined; } else assertEventPin(lat, lng);
         // The host's clock in its zone, made into the instant by this node. An old client's instant-only body has its
-        // clock read off the instant in the same zone, so both doors land as one stored triple (§2).
-        eventTz = cleanEventTz(options?.eventTz) ?? defaultEventTz(eventOnline, lat, lng);
-        eventStartAt = options?.eventStartLocal != null && options.eventStartLocal !== ''
-            ? instantOfClock(options.eventStartLocal, eventTz, 'Start time')
-            : parseEventTime(options?.eventStartAt, 'Start time');
+        // clock read off the instant in the same zone, so both doors land as one stored triple (§2). An online event's
+        // clock is the host's own zone's, which only the app knows: a clock with no zone is refused, not read as UTC.
+        const sentTz = cleanEventTz(options?.eventTz);
+        if (eventOnline && !sentTz && (clockSent(options?.eventStartLocal) || clockSent(options?.eventEndLocal))) {
+            throw new Error(EVENT_ZONE_REFUSED);
+        }
+        eventTz = sentTz ?? defaultEventTz(eventOnline, lat, lng);
+        let startAdjusted: EventClockAdjustment | null = null;
+        let endAdjusted: EventClockAdjustment | null = null;
+        if (clockSent(options?.eventStartLocal)) {
+            const resolved = instantOfClock(options!.eventStartLocal, eventTz, 'Start time');
+            eventStartAt = resolved.instant;
+            startAdjusted = adjustmentOf(options!.eventStartLocal as string, resolved);
+        } else {
+            eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
+        }
         if (Date.parse(eventStartAt) <= Date.now()) throw new Error('An event must start in the future');
-        eventEndAt = options?.eventEndLocal != null && options.eventEndLocal !== ''
-            ? instantOfClock(options.eventEndLocal, eventTz, 'End time')
-            : resolveEventEnd(eventStartAt, options?.eventEndAt);
+        if (clockSent(options?.eventEndLocal)) {
+            const resolved = instantOfClock(options!.eventEndLocal, eventTz, 'End time');
+            eventEndAt = resolved.instant;
+            endAdjusted = adjustmentOf(options!.eventEndLocal as string, resolved);
+        } else {
+            eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
+        }
         if (Date.parse(eventEndAt) <= Date.parse(eventStartAt)) throw new Error('An event must end after it starts');
+        noteTimeAdjusted(options?.out, startAdjusted, endAdjusted);
         eventStartLocal = instantToLocal(eventStartAt, eventTz);
         eventEndLocal = instantToLocal(eventEndAt, eventTz);
         eventLink = eventOnline ? cleanEventLink(options?.eventLink) : null;
@@ -864,7 +924,7 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
 
-export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string): MarketplacePost | null {
+export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
     // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
@@ -969,29 +1029,43 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (!nextOnline) assertEventPin(nextLat, nextLng);
         const pinMoved = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
 
-        // The zone: the one the app sent, never replaced; else a moved pin's; else the event's own, or (an event from before
+        // The zone: the one the app sent, never replaced; else the new pin's, when the pin moved into another zone (an old
+        // client's nudge within the zone keeps a zone the host picked); else the event's own, or (an event from before
         // zones) its pin's, or UTC.
         const sentTz = cleanEventTz(raw.eventTz);
-        const nextTz = sentTz
-            ?? (pinMoved && !nextOnline ? zoneOfPin(nextLat, nextLng) : null)
+        const newPinZone = pinMoved && !nextOnline ? zoneOfPin(nextLat, nextLng) : null;
+        const keptTz = sentTz
+            ?? (newPinZone && newPinZone !== zoneOfPin(existingPost.lat, existingPost.lng) ? newPinZone : null)
             ?? existingPost.eventTz
-            ?? defaultEventTz(nextOnline, nextLat, nextLng);
+            ?? null;
+        // An online event's clock with no zone named anywhere is refused, as at create, not read as UTC.
+        if (nextOnline && !keptTz && (clockSent(raw.eventStartLocal) || clockSent(raw.eventEndLocal))) throw new Error(EVENT_ZONE_REFUSED);
+        const nextTz = keptTz ?? defaultEventTz(nextOnline, nextLat, nextLng);
 
         let nextStart = prevStart;
-        if (raw.eventStartLocal != null && raw.eventStartLocal !== '') {
-            nextStart = instantOfClock(raw.eventStartLocal, nextTz, 'Start time');
+        let startAdjusted: EventClockAdjustment | null = null;
+        let endAdjusted: EventClockAdjustment | null = null;
+        if (clockSent(raw.eventStartLocal)) {
+            const resolved = instantOfClock(raw.eventStartLocal, nextTz, 'Start time');
+            nextStart = resolved.instant;
+            startAdjusted = adjustmentOf(raw.eventStartLocal, resolved);
         } else if (raw.eventStartAt !== undefined) {
             nextStart = parseEventTime(raw.eventStartAt, 'Start time');
         } else if (sentTz && existingPost.eventStartLocal && sentTz !== existingPost.eventTz) {
-            // A new zone with the clock kept: the same clock, somewhere else, is another instant (§2 Edit).
-            nextStart = instantOfClock(existingPost.eventStartLocal, nextTz, 'Start time');
+            // A new zone with the clock kept: the same clock, somewhere else, is another instant (§2 Edit); a clock that
+            // the new zone skips is said, like one the host typed.
+            const resolved = instantOfClock(existingPost.eventStartLocal, nextTz, 'Start time');
+            nextStart = resolved.instant;
+            startAdjusted = adjustmentOf(existingPost.eventStartLocal, resolved);
         }
         if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
             throw new Error('An event must start in the future');
         }
         let nextEnd: string;
-        if (raw.eventEndLocal != null && raw.eventEndLocal !== '') {
-            nextEnd = instantOfClock(raw.eventEndLocal, nextTz, 'End time');
+        if (clockSent(raw.eventEndLocal)) {
+            const resolved = instantOfClock(raw.eventEndLocal, nextTz, 'End time');
+            nextEnd = resolved.instant;
+            endAdjusted = adjustmentOf(raw.eventEndLocal, resolved);
         } else if (raw.eventEndLocal === '') {
             nextEnd = resolveEventEnd(nextStart, null);
         } else if (raw.eventEndAt === undefined) {
@@ -1020,9 +1094,16 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         } else if (raw.eventLink !== undefined) {
             eventFields.push('event_link = ?'); eventValues.push(cleanEventLink(raw.eventLink));
         }
-        eventFields.push('event_start_local = ?', 'event_end_local = ?', 'event_tz = ?', 'event_online = ?');
-        eventValues.push(instantToLocal(nextStart, nextTz), instantToLocal(nextEnd, nextTz), nextTz, nextOnline ? 1 : 0);
         const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
+        // The clocks are read off the instants only when the time, zone, pin or online flag changed, or the row has none
+        // yet (an event from before them): a title-only edit after a zone's rules change leaves the in-person clock as the
+        // host set it (§1, the clock wins), for the boot re-resolve to settle.
+        const clocksMissing = !existingPost.eventStartLocal || !existingPost.eventEndLocal || !existingPost.eventTz;
+        if (timeChanged || nextTz !== existingPost.eventTz || pinMoved || nextOnline !== prevOnline || clocksMissing) {
+            eventFields.push('event_start_local = ?', 'event_end_local = ?', 'event_tz = ?', 'event_online = ?');
+            eventValues.push(instantToLocal(nextStart, nextTz), instantToLocal(nextEnd, nextTz), nextTz, nextOnline ? 1 : 0);
+        }
+        noteTimeAdjusted(out, startAdjusted, endAdjusted);
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
             eventFields.push("event_state = 'updated'");

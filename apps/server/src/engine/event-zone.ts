@@ -35,13 +35,30 @@ export function describeZone(tz: string, at: number = Date.now()): ZoneAnswer {
 let zoneList: { at: number; zones: ZoneAnswer[]; etag: string } | null = null;
 
 /**
- * Every zone this node's Intl accepts, with its words and its offset now, for the picker. Rebuilt hourly, since an
- * offset moves with DST; the ETag changes with it.
+ * The zones that are an offset, not a place: `UTC` (an online event an old client sent with no zone) and `Etc/GMT-14` …
+ * `Etc/GMT+12` (a pin in the ocean). Intl.supportedValuesOf lists none of them (Node 22 and 26, measured), yet the node
+ * stores them, so the picker carries them too; each reads as its offset ("UTC+1 time" for `Etc/GMT-1`).
+ */
+export function offsetZones(): string[] {
+    const ids = ['UTC'];
+    for (let n = -14; n <= 12; n++) if (n !== 0) ids.push(`Etc/GMT${n > 0 ? '+' : '-'}${Math.abs(n)}`);
+    return ids;
+}
+
+/**
+ * Every zone this node stores, spelled as it stores them (canonicalZone: `Europe/Kyiv`, not `Europe/Kiev`), with its words
+ * and its offset now, for the picker: each place Intl knows, then the offset zones. Rebuilt hourly, since an offset moves
+ * with DST; the ETag changes with it.
  */
 export function acceptedZones(now = Date.now()): { zones: ZoneAnswer[]; etag: string } {
     if (zoneList && now - zoneList.at < 60 * 60 * 1000) return zoneList;
-    const supported = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? ['UTC'];
-    const zones = supported.map(tz => describeZone(tz, now));
+    const supported = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+    const ids = new Set<string>();
+    for (const tz of [...supported, ...offsetZones()]) {
+        const id = canonicalZone(tz);
+        if (id) ids.add(id);
+    }
+    const zones = [...ids].map(tz => describeZone(tz, now));
     const hour = Math.floor(now / (60 * 60 * 1000));
     zoneList = { at: now, zones, etag: `"zones-${process.versions.tz ?? 'x'}-${zones.length}-${hour}"` };
     return zoneList;

@@ -6,13 +6,21 @@
  * Verifies:
  *  1. A clock + zone body stores the instant the node resolved: Sydney 20:50 → 09:50Z, with the clock and zone kept.
  *  2. An old client's instant-only body gets its clock read off the instant in the PIN's zone (pin → Africa/Lagos).
- *  3. A zone the node does not know is refused in the form's words; a malformed clock is refused.
- *  4. GET /api/events/zone: the pin's zone, its words and offset; GET /api/events/zones: the picker list, ETag 304.
- *  5. Online: accepted with no pin (lat/lng NULL, no place name); the join link is http(s) only; the link reaches the
- *     host and Going and NOT Interested, a visitor's view (GUEST_FIELDS) or a broadcast; an online event with no zone
- *     falls back to UTC.
+ *  3. A zone the node does not know is refused in the form's words; a malformed clock is refused, and so is one with the
+ *     shape but no such date or time (30 Feb, 24:00, minute 60), rather than rolled into another date.
+ *     3b. A clock the zone skips (DST gap) or repeats (overlap) is answered as eventTimeAdjusted, next to the post and never
+ *     on it, from create and edit; never for a clock that exists as typed, nor for an old client's instant-only body.
+ *  4. GET /api/events/zone: the pin's zone, its words and offset; GET /api/events/zones: the picker list, ETag 304, a 401
+ *     unsigned, and every zone the node can store (each a pin answers, UTC, Etc/GMT±n), by its current name (Europe/Kyiv,
+ *     not Kiev), which is also what a create stores.
+ *  5. Online: accepted with no pin (lat/lng NULL, no place name); the join link is http(s) only, with no user name or
+ *     password, stored as the URL parser writes it; the link reaches the host and Going and NOT Interested, a visitor's
+ *     view (GUEST_FIELDS) or a broadcast; an online event from an old client with no zone falls back to UTC, and a clock
+ *     with no zone is refused.
  *  6. Edit: a new zone with the clock kept moves the instant and marks UPDATED; moving the pin with no zone sent takes
- *     the new pin's zone; switching to in person clears the link.
+ *     the new pin's zone when it is another zone, and a nudge within the zone keeps a zone the host picked; a title-only
+ *     edit leaves the stored clocks alone, and fills them in on an event from before them; switching to in person clears
+ *     the link.
  *  7. A copy carries the clock, zone, online and link, and an import restores them (REPLICA_FORMAT 10).
  *  8. The reminder push names the place's clock for an in-person event ("Starts in 1 day · Sat 20:50 Lagos time") and
  *     stays relative for an online one.
@@ -32,7 +40,9 @@ import { db } from './db/db.js';
 import { rsvpEvent } from './engine/posts.js';
 import { runEventReminderSweep } from './engine/event-reminders.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
-import { setMemberPhoto, guestPost, publicBroadcastPost } from '@beanpool/engine';
+import { setMemberPhoto, guestPost, publicBroadcastPost, canonicalZone } from '@beanpool/engine';
+import tzLookup from '@photostructure/tz-lookup';
+import { offsetZones } from './engine/event-zone.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 
@@ -41,6 +51,7 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const SYDNEY = { lat: -33.8688, lng: 151.2093 };
 const LAGOS = { lat: 6.5244, lng: 3.3792 };
 const ACCRA = { lat: 5.6037, lng: -0.187 };
+const KYIV = { lat: 50.4501, lng: 30.5234 };
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -104,6 +115,11 @@ async function main(): Promise<void> {
     const online = makeIdentity('OnlineOli');
     const goer = makeIdentity('GoingGus');
     const maybe = makeIdentity('MaybeMai');
+    // More hosts, each under the five-upcoming-events cap (engine/posts.ts EVENT_UPCOMING_CAP).
+    const dst = makeIdentity('DstDara');
+    const kyivHost = makeIdentity('KyivKira');
+    const picker = makeIdentity('PickerPia');
+    const linker = makeIdentity('LinkerLev');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
         type: 'event', title: 'Working bee', description: 'Bring gloves', authorPublicKey: who.pubKeyHex, ...body,
     }, who);
@@ -120,6 +136,7 @@ async function main(): Promise<void> {
     assert(sydRow.event_end_at === '2027-01-15T11:50:00.000Z' && sydRow.event_end_local === '2027-01-15T22:50',
         `no end given: start + 2 hours, clock too (got ${sydRow.event_end_at} ${sydRow.event_end_local})`);
     assert(sydRow.event_online === 0 && sydRow.event_link === null, 'in person: not online, no link');
+    assert(!!syd.body && !('eventTimeAdjusted' in syd.body), 'a clock that exists as typed answers no eventTimeAdjusted');
 
     // ── 2. An old client's instant ───────────────────────────────────────────────────────────
     console.log('\n── 2. An old client sends only the instant ──');
@@ -130,6 +147,7 @@ async function main(): Promise<void> {
     assert(oldRow.event_tz === 'Africa/Lagos', `the pin gives the zone: Africa/Lagos (got ${oldRow.event_tz})`);
     assert(oldRow.event_start_local === '2027-01-16T20:50' && oldRow.event_start_at === '2027-01-16T19:50:00.000Z',
         `the clock is read off the instant in that zone: 20:50 (got ${oldRow.event_start_local})`);
+    assert(!!old.body && !('eventTimeAdjusted' in old.body), "an old client's instant-only body never answers eventTimeAdjusted");
 
     // ── 3. Refusals ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 3. Refusals ──');
@@ -141,6 +159,42 @@ async function main(): Promise<void> {
     assert(past.status === 400 && /future/.test(past.error ?? ''), `a clock in the past is refused (got ${past.status} ${past.error})`);
     const noPin = await create(host, { eventStartLocal: '2027-01-15T20:50', eventTz: 'Australia/Sydney' });
     assert(noPin.status === 400 && /place on the map/.test(noPin.error ?? ''), `in person still needs a pin (got ${noPin.status} ${noPin.error})`);
+    // The shape is right but the date or time does not exist: refused, not rolled into 2 Mar, the next day or the next hour.
+    for (const impossible of ['2027-02-30T20:50', '2027-01-15T24:00', '2027-01-15T25:00', '2027-01-15T20:60', '2027-13-01T10:00']) {
+        const r = await create(host, { ...SYDNEY, eventStartLocal: impossible, eventTz: 'Australia/Sydney' });
+        assert(r.status === 400 && /^Start time must be a valid date and time/.test(r.error ?? ''), `${impossible} is refused (got ${r.status} ${r.error})`);
+    }
+    const badEnd = await create(host, { ...SYDNEY, eventStartLocal: '2027-01-15T20:50', eventEndLocal: '2027-01-15T22:60', eventTz: 'Australia/Sydney' });
+    assert(badEnd.status === 400 && /^End time must be a valid date and time/.test(badEnd.error ?? ''), `an end at 22:60 is refused (got ${badEnd.status} ${badEnd.error})`);
+
+    // ── 3b. A clock the zone skips or repeats ──────────────────────────────────────────────────
+    console.log('\n── 3b. A DST gap or overlap is said, next to the post ──');
+    const gap = await create(dst, { ...SYDNEY, eventStartLocal: '2027-10-03T02:30', eventTz: 'Australia/Sydney' });
+    const gapId = gap.body?.post?.id;
+    const gapRow = gapId ? row(gapId) : {};
+    assert(gap.status === 200 && JSON.stringify(gap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'gap', asked: '2027-10-03T02:30', saved: '2027-10-03T03:30' }, end: null })
+        && gapRow.event_start_local === '2027-10-03T03:30' && gapRow.event_start_at === '2027-10-02T16:30:00.000Z',
+        `Sydney 3 Oct 2027 02:30 does not exist: saved 03:30, and the answer says so (got ${gap.status} ${JSON.stringify(gap.body?.eventTimeAdjusted)} ${gapRow.event_start_local})`);
+    assert(!!gap.body?.post && !('eventTimeAdjusted' in gap.body.post), 'it rides next to the post, never on it (a post is broadcast, cached and copied)');
+    const overlap = await create(dst, { ...SYDNEY, eventStartLocal: '2027-04-04T02:30', eventEndLocal: '2027-04-04T04:00', eventTz: 'Australia/Sydney' });
+    const overlapId = overlap.body?.post?.id;
+    const overlapRow = overlapId ? row(overlapId) : {};
+    assert(overlap.status === 200 && JSON.stringify(overlap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'overlap', asked: '2027-04-04T02:30', saved: '2027-04-04T02:30' }, end: null })
+        && overlapRow.event_start_at === '2027-04-03T15:30:00.000Z',
+        `Sydney 4 Apr 2027 02:30 happens twice: the earlier (15:30Z), and the answer says so (got ${overlap.status} ${JSON.stringify(overlap.body?.eventTimeAdjusted)} ${overlapRow.event_start_at})`);
+    const endGap = await create(dst, { ...SYDNEY, eventStartLocal: '2027-10-03T01:00', eventEndLocal: '2027-10-03T02:15', eventTz: 'Australia/Sydney' });
+    assert(endGap.status === 200 && JSON.stringify(endGap.body?.eventTimeAdjusted) === JSON.stringify({ start: null, end: { kind: 'gap', asked: '2027-10-03T02:15', saved: '2027-10-03T03:15' } }),
+        `an end in the gap is said as the end (got ${endGap.status} ${JSON.stringify(endGap.body?.eventTimeAdjusted)})`);
+    if (overlapId) {
+        const editGap = await signed('POST', '/api/marketplace/posts/update', { id: overlapId, authorPublicKey: dst.pubKeyHex, eventStartLocal: '2027-10-03T02:30', eventEndLocal: '2027-10-03T05:00' }, dst);
+        assert(editGap.status === 200 && JSON.stringify(editGap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'gap', asked: '2027-10-03T02:30', saved: '2027-10-03T03:30' }, end: null })
+            && !('eventTimeAdjusted' in (editGap.body?.post ?? {})) && row(overlapId).event_start_local === '2027-10-03T03:30',
+            `the edit route answers it too (got ${editGap.status} ${JSON.stringify(editGap.body?.eventTimeAdjusted)} ${editGap.error ?? ''})`);
+        const editTitle = await signed('POST', '/api/marketplace/posts/update', { id: overlapId, authorPublicKey: dst.pubKeyHex, title: 'Renamed' }, dst);
+        const editInstant = await signed('POST', '/api/marketplace/posts/update', { id: overlapId, authorPublicKey: dst.pubKeyHex, eventStartAt: '2027-10-02T17:00:00.000Z' }, dst);
+        assert(editTitle.status === 200 && !('eventTimeAdjusted' in (editTitle.body ?? {})) && editInstant.status === 200 && !('eventTimeAdjusted' in (editInstant.body ?? {})),
+            `an edit that sends no clock (a title, an old client's instant) answers none (got ${editTitle.status} ${editInstant.status})`);
+    }
 
     // ── 4. The zone routes ───────────────────────────────────────────────────────────────────
     console.log('\n── 4. /api/events/zone and /api/events/zones ──');
@@ -159,8 +213,35 @@ async function main(): Promise<void> {
     const again = await signed('GET', '/api/events/zones', null, host, { 'If-None-Match': zones.etag ?? '' });
     assert(!!zones.etag && again.status === 304, `the list is ETag-cached (got ${again.status}, etag ${zones.etag})`);
     const unsignedZones = await fetch(`${BASE}/api/events/zones`);
-    assert(unsignedZones.status === 401 || unsignedZones.status === 403 || unsignedZones.status === 200,
-        `an unsigned read is answered by the middleware's rule for member reads (got ${unsignedZones.status})`);
+    assert(unsignedZones.status === 401, `an unsigned read is refused, 401, like every member read (got ${unsignedZones.status})`);
+    // Every zone this node can store is in the list: each a pin can answer (zoneOfPin is canonicalZone over tz-lookup,
+    // walked here on a 0.5° grid), UTC (an old client's online event) and Etc/GMT-14 … +12 (an app may send any of them).
+    const listed = new Set<string>((zones.body?.zones ?? []).map((x: any) => x.tz));
+    const answered = new Set<string>();
+    for (let la = -89.75; la < 90; la += 0.5) for (let lo = -179.75; lo < 180; lo += 0.5) answered.add(tzLookup(la, lo));
+    const storable = new Set<string>();
+    for (const tz of [...answered, ...offsetZones()]) storable.add(canonicalZone(tz)!);
+    const missing = [...storable].filter(tz => !listed.has(tz));
+    assert(missing.length === 0 && storable.size > 400 && listed.has('UTC') && listed.has('Etc/GMT+2') && listed.has('Etc/GMT-14'),
+        `the list holds every zone the node can store: ${storable.size}, with UTC and Etc/GMT±n (missing ${JSON.stringify(missing)})`);
+    const gmtMinus1 = (zones.body?.zones ?? []).find((x: any) => x.tz === 'Etc/GMT-1');
+    assert(gmtMinus1?.label === 'UTC+1 time' && gmtMinus1?.offsetMinutes === 60, `an offset zone reads as its offset (got ${JSON.stringify(gmtMinus1)})`);
+    assert(listed.has('Europe/Kyiv') && !listed.has('Europe/Kiev') && listed.has('Asia/Kolkata') && !listed.has('Asia/Calcutta')
+        && listed.has('America/Atikokan') && !listed.has('America/Coral_Harbour'),
+        'the list spells zones by their current names, as the node stores them (Kyiv, Kolkata, Atikokan)');
+    const kz = await signed('GET', `/api/events/zone?lat=${KYIV.lat}&lng=${KYIV.lng}`, null, kyivHost);
+    assert(kz.status === 200 && kz.body?.tz === 'Europe/Kyiv' && kz.body?.label === 'Kyiv time', `a Kyiv pin is Europe/Kyiv (got ${JSON.stringify(kz.body)})`);
+    const kyivOld = await create(kyivHost, { ...KYIV, eventStartLocal: '2027-01-15T20:50', eventTz: 'Europe/Kiev' });
+    const kyivOldRow = kyivOld.body?.post?.id ? row(kyivOld.body.post.id) : {};
+    assert(kyivOld.status === 200 && kyivOldRow.event_tz === 'Europe/Kyiv' && kyivOldRow.event_start_at === '2027-01-15T18:50:00.000Z',
+        `a create that sends the old spelling stores Europe/Kyiv (got ${kyivOld.status} ${kyivOldRow.event_tz} ${kyivOldRow.event_start_at})`);
+    const kyivPin = await create(kyivHost, { ...KYIV, eventStartAt: '2027-01-22T18:50:00.000Z' });
+    const kyivPinRow = kyivPin.body?.post?.id ? row(kyivPin.body.post.id) : {};
+    assert(kyivPin.status === 200 && kyivPinRow.event_tz === 'Europe/Kyiv' && kyivPinRow.event_start_local === '2027-01-22T20:50',
+        `an old client's Kyiv pin stores Europe/Kyiv too (got ${kyivPin.status} ${kyivPinRow.event_tz})`);
+    const atikokan = await create(kyivHost, { lat: 48.7584, lng: -91.6215, eventStartLocal: '2027-01-15T20:50', eventTz: 'America/Atikokan' });
+    const atikokanRow = atikokan.body?.post?.id ? row(atikokan.body.post.id) : {};
+    assert(atikokan.status === 200 && atikokanRow.event_tz === 'America/Atikokan', `America/Atikokan is stored as sent, not as Coral_Harbour (got ${atikokanRow.event_tz})`);
 
     // ── 5. Online ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. Online events ──');
@@ -185,6 +266,25 @@ async function main(): Promise<void> {
     const noZoneRow = noZone.body?.post?.id ? row(noZone.body.post.id) : {};
     assert(noZone.status === 200 && noZoneRow.event_tz === 'UTC' && noZoneRow.event_start_local === '2027-02-05T09:50',
         `an online event from an old client with no zone falls back to UTC (got ${noZoneRow.event_tz} ${noZoneRow.event_start_local})`);
+    // A clock means "this zone's clock", and online the node cannot know which: refused, not read as UTC.
+    const clockNoZone = await create(linker, { eventOnline: true, eventStartLocal: '2027-01-15T20:50' });
+    assert(clockNoZone.status === 400 && /Pick a time zone from the list/.test(clockNoZone.error ?? ''),
+        `an online event with a clock and no zone is refused (got ${clockNoZone.status} ${clockNoZone.error})`);
+    const endClockNoZone = await create(linker, { eventOnline: true, eventStartAt: '2027-02-05T09:50:00.000Z', eventEndLocal: '2027-02-05T22:50' });
+    assert(endClockNoZone.status === 400 && /Pick a time zone from the list/.test(endClockNoZone.error ?? ''),
+        `and so is one with only an end clock (got ${endClockNoZone.status} ${endClockNoZone.error})`);
+    // The link: no user name or password (a look-alike), stored as the URL parser writes it.
+    const onlineAt = { eventOnline: true, eventStartLocal: '2027-02-12T20:50', eventTz: 'Australia/Sydney' };
+    for (const bad of ['https://user:pw@meet.example/x', 'https://zoom.us@evil.example/j/1']) {
+        const r = await create(linker, { ...onlineAt, eventLink: bad });
+        assert(r.status === 400 && /user name or password/.test(r.error ?? ''), `a link with a user name is refused: ${bad} (got ${r.status} ${r.error})`);
+    }
+    const spaced = await create(linker, { ...onlineAt, eventLink: 'https://meet.example/a b' });
+    const upper = await create(linker, { ...onlineAt, eventLink: 'HTTPS://Meet.Example/Up' });
+    const spacedRow = spaced.body?.post?.id ? row(spaced.body.post.id) : {};
+    const upperRow = upper.body?.post?.id ? row(upper.body.post.id) : {};
+    assert(spaced.status === 200 && spacedRow.event_link === 'https://meet.example/a%20b' && upper.status === 200 && upperRow.event_link === 'https://meet.example/Up',
+        `a link is stored as the URL parser writes it (got ${spacedRow.event_link} ${upperRow.event_link})`);
 
     if (onId) {
         rsvpEvent(() => {}, onId, goer.pubKeyHex, 'going');
@@ -213,6 +313,37 @@ async function main(): Promise<void> {
             `moving the pin with no zone sent takes the new pin's zone (got ${moved.status} ${movedRow.event_tz} ${moved.error ?? ''})`);
         assert(movedRow.event_start_at === '2027-01-16T19:50:00.000Z' && movedRow.event_start_local === '2027-01-16T19:50',
             `an old client's move keeps the instant; the clock is re-read in the new zone (got ${movedRow.event_start_local})`);
+    }
+    // A zone the host picked that is not the pin's (Brisbane, at a Sydney pin): an old client's nudge within Sydney's zone
+    // keeps it, and the clock.
+    const picked = await create(picker, { ...SYDNEY, eventStartLocal: '2027-01-15T20:50', eventTz: 'Australia/Brisbane', eventPlaceName: 'Hall' });
+    const pickedId = picked.body?.post?.id;
+    if (pickedId) {
+        const p0 = row(pickedId);
+        const titleOnly = await signed('POST', '/api/marketplace/posts/update', { id: pickedId, authorPublicKey: picker.pubKeyHex, title: 'Title only' }, picker);
+        const p1 = row(pickedId);
+        const nudged = await signed('POST', '/api/marketplace/posts/update', { id: pickedId, authorPublicKey: picker.pubKeyHex, lat: SYDNEY.lat + 0.001, lng: SYDNEY.lng }, picker);
+        const p2 = row(pickedId);
+        assert(p0.event_tz === 'Australia/Brisbane' && p0.event_start_at === '2027-01-15T10:50:00.000Z' && titleOnly.status === 200 && p1.event_tz === 'Australia/Brisbane',
+            `a Brisbane-picked event at a Sydney pin is stored so, and a title edit keeps it (got ${p0.event_tz} ${p0.event_start_at} ${p1.event_tz})`);
+        assert(nudged.status === 200 && p2.event_tz === 'Australia/Brisbane' && p2.event_start_local === '2027-01-15T20:50' && p2.event_start_at === '2027-01-15T10:50:00.000Z',
+            `a pin nudged within the same zone keeps the zone the host picked, and 20:50 (got ${nudged.status} ${p2.event_tz} ${p2.event_start_local} ${nudged.error ?? ''})`);
+        // A zone's rules change after the event was set (simulated: the stored clock no longer matches the instant). A
+        // title-only edit leaves the clocks as the host set them; the boot re-resolve owns that case.
+        db.prepare(`UPDATE posts SET event_start_local = '2027-01-15T21:50', event_state = 'scheduled' WHERE id = ?`).run(pickedId);
+        const renamed = await signed('POST', '/api/marketplace/posts/update', { id: pickedId, authorPublicKey: picker.pubKeyHex, title: 'Renamed again' }, picker);
+        const p3 = row(pickedId);
+        assert(renamed.status === 200 && p3.event_start_local === '2027-01-15T21:50' && p3.event_start_at === '2027-01-15T10:50:00.000Z' && p3.event_state === 'scheduled',
+            `a title-only edit does not rewrite the clock from the instant (got ${p3.event_start_local} ${p3.event_state})`);
+        // An event from before the clocks: a title-only edit fills them in from the pin, and marks nothing.
+        db.prepare(`UPDATE posts SET event_start_local = NULL, event_end_local = NULL, event_tz = NULL, event_online = NULL WHERE id = ?`).run(pickedId);
+        const legacy = await signed('POST', '/api/marketplace/posts/update', { id: pickedId, authorPublicKey: picker.pubKeyHex, title: 'Legacy renamed' }, picker);
+        const p4 = row(pickedId);
+        assert(legacy.status === 200 && p4.event_tz === 'Australia/Sydney' && p4.event_start_local === '2027-01-15T21:50' && p4.event_end_local === '2027-01-15T23:50'
+            && p4.event_online === 0 && p4.event_state === 'scheduled',
+            `an event from before the clocks gets them on a title-only edit, from its pin (got ${JSON.stringify({ tz: p4.event_tz, s: p4.event_start_local, e: p4.event_end_local, on: p4.event_online, st: p4.event_state })})`);
+    } else {
+        assert(false, `the Brisbane-picked event is created (got ${picked.status} ${picked.error})`);
     }
     if (sydId) {
         db.prepare(`UPDATE posts SET event_state = 'scheduled' WHERE id = ?`).run(sydId);

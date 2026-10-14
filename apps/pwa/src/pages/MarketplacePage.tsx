@@ -9,6 +9,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { useCoversScreen } from '../lib/screen-cover';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
@@ -457,6 +458,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Report
     const [showReportForm, setShowReportForm] = useState(false);
+    // The install banner stays down while a listing's report form is open (rehearsal 14 Oct, B1).
+    useCoversScreen(showReportForm && !!selectedPost);
     const [reportReason, setReportReason] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
 

@@ -1796,7 +1796,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     borderRadius: '10px',
                                     border: 'none',
                                     background: !pendingAvatar ? 'var(--border-primary, #334155)' : loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)',
+                                    // White on the blue (and on the grey while it sends); the page's ink on the pale disabled fill.
+                                    color: !pendingAvatar ? 'var(--text-primary)' : 'var(--bp-commit-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
                                     cursor: !pendingAvatar || loading ? 'not-allowed' : 'pointer',
@@ -1972,7 +1973,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
                                     background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)', fontSize: '1rem',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2135,7 +2136,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
                                     background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)', fontSize: '1rem',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2296,7 +2297,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         width: '100%', padding: '0.85rem', borderRadius: '10px',
                                         border: 'none',
                                         background: loading ? '#555' : '#2563eb',
-                                        color: 'var(--text-primary)', fontSize: '1rem',
+                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
                                         fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                         fontFamily: 'inherit', transition: 'background 0.2s',
                                     }}

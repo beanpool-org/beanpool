@@ -4,9 +4,18 @@
  * Shows a floating prompt when the app isn't installed as a PWA.
  * Detects iOS vs Android and shows device-specific instructions.
  * Dismisses for 7 days on close.
+ *
+ * Never on top of the tour or a screen that fills the phone (rehearsal 14 Oct 2026, B1: at 320 px it took taps meant for
+ * the tour's Next and Skip, and covered Start a community and the report form): App passes `hidden` while the tour runs
+ * or is still offered, and any screen counted by lib/screen-cover keeps it down. It comes up 2 s after it may.
+ *
+ * The banner is navy in both themes, so its words are the brand's white ink (`--bp-commit-on`), never the page's ink.
  */
 
 import { useState, useEffect } from 'react';
+import { useScreenCovered } from '../lib/screen-cover';
+
+const ON_BRAND = 'var(--bp-commit-on)';
 
 // Detect if running as installed PWA (standalone mode)
 function isInstalled(): boolean {
@@ -29,7 +38,10 @@ const DISMISS_KEY = 'beanpool-install-dismissed';
 const DISMISS_FOREVER_KEY = 'beanpool-install-dismissed-forever';
 const DISMISS_DAYS = 7;
 
-export function InstallPrompt() {
+export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
+    const covered = useScreenCovered();
+    /** Not installed and not put away: the banner may come up once nothing else is in front. */
+    const [eligible, setEligible] = useState(false);
     const [show, setShow] = useState(false);
     const [showSteps, setShowSteps] = useState(false);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -45,8 +57,7 @@ export function InstallPrompt() {
         const dismissed = localStorage.getItem(DISMISS_KEY);
         if (dismissed && Date.now() - Number(dismissed) < DISMISS_DAYS * 86400000) return;
 
-        // Show after a short delay so it doesn't block first impression
-        const timer = setTimeout(() => setShow(true), 2000);
+        setEligible(true);
 
         // Listen for the Chrome/Android install prompt
         const handler = (e: Event) => {
@@ -56,18 +67,27 @@ export function InstallPrompt() {
         window.addEventListener('beforeinstallprompt', handler);
 
         return () => {
-            clearTimeout(timer);
             window.removeEventListener('beforeinstallprompt', handler);
         };
     }, []);
 
+    // Show after a short delay so it doesn't block first impression, counted from when nothing is in front of it.
+    const blocked = hidden || covered;
+    useEffect(() => {
+        if (!eligible || show || blocked) return;
+        const timer = setTimeout(() => setShow(true), 2000);
+        return () => clearTimeout(timer);
+    }, [eligible, show, blocked]);
+
     function handleDismiss() {
         localStorage.setItem(DISMISS_KEY, String(Date.now()));
+        setEligible(false);
         setShow(false);
     }
 
     function handleDismissForever() {
         localStorage.setItem(DISMISS_FOREVER_KEY, '1');
+        setEligible(false);
         setShow(false);
     }
 
@@ -76,13 +96,14 @@ export function InstallPrompt() {
             deferredPrompt.prompt();
             const result = await deferredPrompt.userChoice;
             if (result.outcome === 'accepted') {
+                setEligible(false);
                 setShow(false);
             }
             setDeferredPrompt(null);
         }
     }
 
-    if (!show) return null;
+    if (!show || blocked) return null;
 
     const ios = isIOS();
     const android = isAndroid();
@@ -118,7 +139,7 @@ export function InstallPrompt() {
                 onClick={handleDismiss}
                 style={{
                     position: 'absolute', top: '0.4rem', right: '0.5rem',
-                    background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+                    background: 'rgba(255,255,255,0.1)', border: 'none', color: ON_BRAND,
                     fontSize: '1rem', cursor: 'pointer', padding: '0.4rem 0.6rem',
                     borderRadius: '8px', lineHeight: 1,
                     minWidth: '44px', minHeight: '44px',
@@ -131,7 +152,7 @@ export function InstallPrompt() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: showSteps ? '0.75rem' : 0 }}>
                 <span style={{ fontSize: '2rem' }} aria-hidden="true">📲</span>
                 <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
+                    <p style={{ fontWeight: 700, fontSize: '0.95rem', color: ON_BRAND, marginBottom: '0.2rem' }}>
                         Install BeanPool
                     </p>
                     <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -144,7 +165,7 @@ export function InstallPrompt() {
                         onClick={handleNativeInstall}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: '#2563eb', color: 'var(--text-primary)', border: 'none',
+                            background: '#2563eb', color: ON_BRAND, border: 'none',
                             fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
                             fontFamily: 'inherit', whiteSpace: 'nowrap',
                             minWidth: '44px', minHeight: '44px',
@@ -160,7 +181,7 @@ export function InstallPrompt() {
                         aria-expanded={showSteps}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: showSteps ? '#333' : '#2563eb', color: 'var(--text-primary)',
+                            background: showSteps ? '#333' : '#2563eb', color: ON_BRAND,
                             border: 'none', fontSize: '0.85rem', fontWeight: 600,
                             cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
                             minWidth: '44px', minHeight: '44px',
@@ -198,21 +219,21 @@ export function InstallPrompt() {
                 }}>
                     {ios ? (
                         <>
-                            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>iPhone / iPad:</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>iPhone / iPad:</p>
                             <p>1. Tap the <strong style={{ color: '#60a5fa' }}>Share</strong> button <span style={{ fontSize: '1.1rem' }}>⬆</span> at the bottom</p>
                             <p>2. Scroll down and tap <strong style={{ color: '#60a5fa' }}>"Add to Home Screen"</strong></p>
                             <p>3. Tap <strong style={{ color: '#60a5fa' }}>"Add"</strong> in the top right</p>
                         </>
                     ) : android ? (
                         <>
-                            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>Android:</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>Android:</p>
                             <p>1. Tap the <strong style={{ color: '#60a5fa' }}>⋮ menu</strong> in the top right</p>
                             <p>2. Tap <strong style={{ color: '#60a5fa' }}>"Add to Home screen"</strong></p>
                             <p>3. Tap <strong style={{ color: '#60a5fa' }}>"Add"</strong> to confirm</p>
                         </>
                     ) : (
                         <>
-                            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>Desktop:</p>
+                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>Desktop:</p>
                             <p>Look for the <strong style={{ color: '#60a5fa' }}>install icon</strong> (⊕) in your browser's address bar, or use your browser menu → "Install app"</p>
                         </>
                     )}

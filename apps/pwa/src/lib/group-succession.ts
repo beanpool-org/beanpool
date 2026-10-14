@@ -12,6 +12,7 @@
  */
 
 import { timeLeftText } from './keeper-governance';
+import { formatDate } from '@beanpool/core';
 import type { GroupMember } from './api';
 
 export type GroupSuccessionClosedReason = 'rejected' | 'convenor_returned' | 'candidate_gone' | 'candidate_ineligible' | 'no_longer_needed';
@@ -116,13 +117,11 @@ export interface GroupSuccessionView {
     outcomeOnly: boolean;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** A date anyone reads the same way, in any locale: "7 Oct 2026". */
 export function closingDateText(iso: string): string | null {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
-    return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    return formatDate(d, 'day-month-year', { utc: true });
 }
 
 /** "Closes 7 Oct 2026 — 13 days left." The deadline is the server's; the countdown is only a kindness. */

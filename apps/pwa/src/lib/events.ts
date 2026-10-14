@@ -8,7 +8,7 @@
  * the same on every browser at 320px, and no zone arithmetic runs here: the viewer's clock comes from the Date getters.
  */
 
-import { deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, localClockMs, type EventWhenParts } from '@beanpool/core';
+import { deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, type EventWhenParts } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
 /** Every post type this client can render. Sent as `types=` so the node includes events (§2.6). */
@@ -70,9 +70,6 @@ export function formatEventWhen(post: EventTimeFields): string {
     return parts.note ? `${line} · ${parts.note}` : line;
 }
 
-const SHARE_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const SHARE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /**
  * The time in a shared message, which is read outside the app by someone whose zone nobody knows, so it always names its
  * zone (§4): "Sat 17 Oct, 20:50 Lagos time"; online "Fri 16 Oct, 20:50 Sydney time (online)". A node that sends no
@@ -86,7 +83,8 @@ export function eventShareWhen(post: EventTimeFields): string {
     const d = new Date(ms);
     // placeTime is "Sat 20:50 Lagos time": the date goes after the weekday.
     const rest = placeTime.slice(placeTime.indexOf(' ') + 1);
-    return `${SHARE_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${SHARE_MONTHS[d.getUTCMonth()]}, ${rest}${post.eventOnline ? ' (online)' : ''}`;
+    // The place's date, read off the stored clock (UTC getters on the clock-as-UTC), in the words layer's date table.
+    return `${formatDate(d, 'weekday-day-month', { utc: true })}, ${rest}${post.eventOnline ? ' (online)' : ''}`;
 }
 
 /** True while an event can still be joined: not cancelled, not removed, not over. */

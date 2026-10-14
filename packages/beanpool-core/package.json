@@ -54,6 +54,11 @@
       "types": "./dist/group-line-vectors.d.ts",
       "import": "./dist/group-line-vectors.js",
       "default": "./dist/group-line-vectors.js"
+    },
+    "./words-check": {
+      "types": "./dist/words-check.d.ts",
+      "import": "./dist/words-check.js",
+      "default": "./dist/words-check.js"
     }
   },
   "scripts": {

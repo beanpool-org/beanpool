@@ -2207,13 +2207,6 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
- * `viewerPubkey`. Aggregate signals are public; identities are graduated —
- * only connections in common are named: members who are friends both ways with
- * the viewer AND friends both ways with the target (all four friend rows).
- * See docs/trust-profile-and-trade-safety.md §2.
- */
-/**
  * "Vouched in by" — who brought this member in.
  *
  * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
@@ -2248,6 +2241,13 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     };
 }
 
+/**
+ * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
+ * `viewerPubkey`. Aggregate signals are public; identities are graduated —
+ * only connections in common are named: members who are friends both ways with
+ * the viewer AND friends both ways with the target (all four friend rows).
+ * See docs/trust-profile-and-trade-safety.md §2.
+ */
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;
@@ -2273,8 +2273,12 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // A friend row is one-way and needs nobody's consent, so trusting one row on either side made this a probe and a
     // forgery: a viewer who added everyone read the target's list by name, and a target who added everyone looked
     // "in your circle" to every viewer. With all four rows, the viewer's only probes are people who chose the viewer,
-    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. mutualCount and the
-    // risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
+    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. A member who turned off
+    // "show me as a connection in common" (SHOW_AS_CONNECTION_PREF) is never F. A block takes the trust out of the
+    // blocker's row to the blocked member for every reader but the blocked member; the row stays so their reads don't
+    // change: F is not counted on T's profile when F has blocked T, nor for V when V has blocked F. T's block of F does
+    // not hide F from T's profile: that would hand any blocked member a probe (F's friend reads T and watches F leave).
+    // mutualCount and the risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
             SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
@@ -2285,9 +2289,13 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             JOIN members m ON m.public_key = vf.friend_pubkey
             WHERE vf.owner_pubkey = ?
               AND vf.friend_pubkey != ? AND vf.friend_pubkey != ?
+              AND NOT EXISTS (SELECT 1 FROM member_preferences p
+                               WHERE p.public_key = vf.friend_pubkey AND p.pref_key = '${SHOW_AS_CONNECTION_PREF}' AND p.pref_value = 'false')
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = vf.friend_pubkey AND b.blocked_pubkey = ?)
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = ? AND b.blocked_pubkey = vf.friend_pubkey)
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey, targetPubkey, viewerPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)
@@ -9304,6 +9312,13 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
+/**
+ * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
+ * getTrustProfileForViewer never names them to anyone, nor counts them. Set with the push settings (setMemberPreferences,
+ * true or false) by a member, never a visitor; served to the member alone.
+ */
+export const SHOW_AS_CONNECTION_PREF = 'show_as_connection_in_common';
+
 /** A body of preferences that names push settings and nothing else: an object, not a list, whose every key is in PUSH_PREFERENCE_KEYS. */
 export function namesOnlyPushSettings(preferences: unknown): preferences is Record<string, unknown> {
     return !!preferences && typeof preferences === 'object' && !Array.isArray(preferences)
@@ -9312,9 +9327,10 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = 'Only a member of this community shows as a connection in common.';
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
-    `Only your notification settings and your Home are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS].join(', ')}, each sent by name.`;
+    `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
 export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
 
 /**
@@ -9343,7 +9359,10 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
-    if (reader === publicKey) Object.assign(prefs, ownHomePreferences(publicKey));
+    if (reader === publicKey) {
+        Object.assign(prefs, ownHomePreferences(publicKey));
+        prefs[SHOW_AS_CONNECTION_PREF] = rows.find(r => r.pref_key === SHOW_AS_CONNECTION_PREF)?.pref_value === 'false' ? 'false' : 'true';
+    }
     return prefs;
 }
 
@@ -9363,7 +9382,7 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     }
     const isHomeKey = (key: string) => HOME_PREFERENCE_KEYS.includes(key);
     if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
-        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key))) {
+        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key) || key === SHOW_AS_CONNECTION_PREF)) {
         throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
     }
     const body = preferences as Record<string, unknown>;
@@ -9379,6 +9398,7 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     // A Home is a member's: a key with no row here, or a visitor's row, keeps none (the visitor gate refuses it first).
     const namesHome = Object.keys(body).some(isHomeKey);
     if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
+    if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);

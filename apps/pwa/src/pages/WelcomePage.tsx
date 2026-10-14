@@ -1437,11 +1437,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
 
     return (
-        <div className="page-surface min-h-screen text-nature-950 dark:text-oat-50" style={{
+        // 2rem around the page and inside the card, 1rem each below 360 px: at 320 px with 130 % text the two 2rem paddings
+        // left the steps about 150 px for their words (rehearsal 14 Oct, B3 and S10).
+        <div data-testid="welcome-page" className="page-surface min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            padding: '2rem',
         }}>
             <div style={{
                 maxWidth: '480px',
@@ -1457,9 +1458,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     backed by cryptography — no passwords, no central accounts.
                 </p>
 
-                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm" style={{
+                <div data-testid="welcome-card" className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm p-8 max-[359px]:px-4" style={{
                     borderRadius: '16px',
-                    padding: '2rem',
                 }}>
                     {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && !finishJoining && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>

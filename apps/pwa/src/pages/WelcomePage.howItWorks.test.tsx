@@ -83,6 +83,12 @@ describe('How it works where Beans are off (the worldwide community)', () => {
         expect(screen.getByTestId('how-it-works-no-beans')).toBeInTheDocument();
         const boxed = Array.from(document.querySelectorAll<HTMLElement>('*')).filter(el => el.style.maxHeight !== '' || el.style.overflowY === 'auto');
         expect(boxed.map(el => el.outerHTML.slice(0, 80))).toEqual([]);
+        // The page and the card pad 1rem each side below 360 px, not 2rem (jsdom draws no layout: the walk at 320 px
+        // measures the width this gives).
+        for (const id of ['welcome-page', 'welcome-card']) {
+            expect(screen.getByTestId(id).className.split(' ')).toEqual(expect.arrayContaining(['p-8', 'max-[359px]:px-4']));
+            expect(screen.getByTestId(id).style.padding).toBe('');
+        }
     });
 });
 

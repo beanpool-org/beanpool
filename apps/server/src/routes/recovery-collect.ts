@@ -76,12 +76,22 @@ import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recov
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
-/** Callsign resolution by the one name rule (`foldName`, the engine's names.ts), with the status predicate of idx_members_callsign_unique. */
-function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolean } {
+/**
+ * The account a sign-in restore by `callsign` is for: by the one name rule (`foldName`, the engine's names.ts), with the
+ * status predicate of idx_members_callsign_unique, and never a visitor's row (a member of another community, or a key
+ * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3).
+ *
+ * `publicKey`, when the device sends one, is the account it chose from the lookup (findRecoveryCandidates, which lists
+ * the same rows): it must be one of the rows here, so two members whose names fold the same (kept, never renamed, by
+ * db.ts migrateCallsignFold) can each still restore theirs, while a key this name does not hold opens nothing. With no key
+ * (an app from before), a name two accounts hold is ambiguous, as it always was.
+ */
+function resolveCallsign(callsign: string, publicKey?: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND is_visitor = 0
     `).all(foldName(callsign)) as { public_key: string }[];
+    if (publicKey !== undefined) return { pubkey: rows.find((r) => r.public_key === publicKey)?.public_key, ambiguous: false };
     if (rows.length > 1) return { ambiguous: true };
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
@@ -178,11 +188,16 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
 
-        const { pubkey, ambiguous } = resolveCallsign(callsign);
+        // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
+        const sentKey = (ctx as any).requestBody?.publicKey;
+        if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
+            ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return;
+        }
+        const { pubkey, ambiguous } = resolveCallsign(callsign, sentKey ?? undefined);
         if (ambiguous) { ctx.status = 409; ctx.body = { error: 'That callsign is ambiguous on this node.' }; return; }
         if (!pubkey) {
             // Same shape a member with no split gets from openCollection, so this endpoint is no
-            // sharper an oracle than the public keeper summary already is.
+            // sharper an oracle than the public keeper summary already is. A key the name does not hold gets it too.
             ctx.status = 400;
             ctx.body = { error: 'That account has no recovery fragments to collect.' };
             return;

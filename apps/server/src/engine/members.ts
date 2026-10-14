@@ -181,6 +181,9 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
     // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
     // leading wildcard would not, and is not offered.
     //
+    // Never a visitor's row (a member of another community, or a key someone sent to): no restore here brings one back,
+    // and /api/recovery/collect's resolveCallsign leaves them out too, so the key the lookup lists is one it accepts.
+    //
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
     // perfectly able to recover through.
@@ -206,7 +209,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
             WHERE ${options.exact ? 'm.callsign_fold = ?' : "m.callsign_fold LIKE ? ESCAPE '\\'"}
-              AND m.status NOT IN ('migrated', 'pruned')
+              AND m.status NOT IN ('migrated', 'pruned') AND m.is_visitor = 0
         )
         WHERE sso_count > 0
         ORDER BY length(callsign), callsign
@@ -365,9 +368,18 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     // lines below: an enterprise or a project is keyed on its id. A reserved id is no one's key and no request names
     // one (the send and conversation routes refuse it): the admin inbox's own `system` sender gets its row, as before.
     if (!existing && !isMemberKeySpelling(publicKey) && !isSyntheticAccount(publicKey)) throw badKeyError();
+    // The name a peer or a sender gives a visitor is a member name here like any other, so it takes the one name rule
+    // (isCallsignAvailable), as federation-listings' safeVisitorCallsign did for its path alone: one held by anyone else
+    // (a member, another visitor) is not written, and the row keeps or gets its "Visitor-" name. Written unchecked, it
+    // read as that member's to anything that resolves a name (review of #1956, N3).
+    if (callsign !== undefined) {
+        const given = String(callsign).trim();
+        callsign = given && isCallsignAvailable(given, publicKey) ? given : undefined;
+    }
     if (existing) {
         let changed = false;
-        if (callsign && existing.callsign.startsWith('Visitor-')) {
+        // A visitor's own placeholder only: a member who named themselves "Visitor-…" is never renamed by a peer.
+        if (callsign && existing.is_visitor && existing.callsign.startsWith('Visitor-')) {
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }

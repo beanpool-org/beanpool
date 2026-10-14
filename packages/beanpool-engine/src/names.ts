@@ -30,6 +30,20 @@ export function foldName(name: string): string {
 }
 
 /**
+ * The member name of a project's enterprise row (a crowdfund's, a Commons proposal's) for `title`: its first 40 characters,
+ * or, when another live row (not migrated, not pruned) holds a name that folds the same, those cut to 33 with "-" and the
+ * row id's first six. A project's title is free text and two may be alike; the row's name is a member name like any other,
+ * so it takes the one name rule at the create and at every title edit, which wrote the title there unchecked (review of
+ * #1956, N3). The title itself is stored as typed (projects, commons_projects).
+ */
+export function projectRowName(db: Db, title: string, id: string): string {
+    const base = (title || 'Project').trim().slice(0, 40) || 'Project';
+    const taken = db.prepare(`SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`)
+        .get(foldName(base), id);
+    return taken ? `${base.slice(0, 33)}-${id.slice(0, 6)}` : base;
+}
+
+/**
  * Registers `name_fold(text)`, which is `foldName`, on a connection. NULL for NULL. A function lives on the connection,
  * not in the file, so nothing stored in the file (an index, a trigger, a view) may call it: SQLite compiles a trigger into
  * every statement that fires it, so a stored one would make every other handle on the file (the previous image after a

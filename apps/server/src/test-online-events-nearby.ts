@@ -106,6 +106,13 @@ async function main(): Promise<void> {
     const inPersonId = idOf(inPerson);
     assert(inPerson.status === 200 && !!inPersonId, `an in-person event at Lagos is created (got ${inPerson.status} ${inPerson.error ?? ''})`);
 
+    // The web's create body (review of #1952, finding 4): the clock + zone, and beside it the device's own reading as an
+    // instant (here a Sydney device's, 10 hours off) for a node from before clocks. This node reads the clock first.
+    const both = await create(host, { ...LAGOS, eventStartLocal: clockIn(6), eventTz: 'Africa/Lagos', eventStartAt: clockIn(6).replace('20:50', '09:50') + ':00.000Z' });
+    const bothRow = idOf(both) ? db.prepare('SELECT event_start_at, event_start_local, event_tz FROM posts WHERE id = ?').get(idOf(both)) as any : null;
+    assert(both.status === 200 && bothRow?.event_start_at === clockIn(6).replace('20:50', '19:50') + ':00.000Z' && bothRow?.event_start_local === clockIn(6),
+        `a body with the clock and an instant beside it: the node keeps the clock, Lagos 20:50 = 19:50Z (got ${both.status} ${JSON.stringify(bothRow)})`);
+
     const setOf = async (who: Id, types = TYPES, extra: Record<string, string> = {}) => {
         const r = await signed('GET', `/api/marketplace/posts?limit=200&sync=true&types=${types}&nearby=1`, null, who, extra);
         return { status: r.status, set: new Set<string>(r.body?.set ?? []), etag: r.etag };

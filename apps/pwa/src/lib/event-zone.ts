@@ -88,25 +88,27 @@ export function approxInstantMs(local: string, zone: EventZone | null): number {
 }
 
 /**
- * What the event's times go to the node as. The typed clock always, for the node to resolve: with the zone when the form
- * has one, and in person without it the node uses the pin's. An online event whose zone nobody can name goes as the
- * device's instant (§3: a one-off still saves).
+ * What the event's times go to the node as. The typed clock, for the node to resolve: with the zone when the form has one,
+ * and in person without it the node uses the pin's. Beside it, always, this device's reading of the same clock as an
+ * instant, as the base web sent it: a node from before clocks reads only that (a node with clocks reads the clock first),
+ * so a form pointed at an older node (Settings, Sovereign Node Connection) still saves (review of #1952, finding 4). An
+ * online event whose zone nobody can name goes as the instant alone (§3: a one-off still saves).
  */
 export function eventClockBody(start: string, end: string, online: boolean, zone: EventZone | null): {
     eventStartLocal?: string; eventEndLocal?: string; eventTz?: string; eventStartAt?: string; eventEndAt?: string;
 } {
-    if (online && !zone) {
-        const s = start ? new Date(start).getTime() : NaN;
-        const e = end ? new Date(end).getTime() : NaN;
-        return {
-            ...(Number.isFinite(s) ? { eventStartAt: new Date(s).toISOString() } : {}),
-            ...(Number.isFinite(e) ? { eventEndAt: new Date(e).toISOString() } : {}),
-        };
-    }
+    const s = start ? new Date(start).getTime() : NaN;
+    const e = end ? new Date(end).getTime() : NaN;
+    const instants = {
+        ...(Number.isFinite(s) ? { eventStartAt: new Date(s).toISOString() } : {}),
+        ...(Number.isFinite(e) ? { eventEndAt: new Date(e).toISOString() } : {}),
+    };
+    if (online && !zone) return instants;
     return {
         eventStartLocal: start.slice(0, 16),
         ...(end ? { eventEndLocal: end.slice(0, 16) } : {}),
         ...(zone ? { eventTz: zone.tz } : {}),
+        ...instants,
     };
 }
 

@@ -540,10 +540,10 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(body).toMatchObject({
             type: 'event', category: 'community', credits: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
             lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
-            // The clock as typed, for the node to resolve in the pin's zone (DESIGN-event-times §2), not this device's instant.
-            eventStartLocal: '2030-09-28T09:00', audienceScope: 'public',
+            // The clock as typed, for the node to resolve in the pin's zone (DESIGN-event-times §2), and this device's
+            // instant beside it, which a node from before clocks reads (review of #1952, finding 4).
+            eventStartLocal: '2030-09-28T09:00', eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
         });
-        expect(body).not.toHaveProperty('eventStartAt');
         expect(body).not.toHaveProperty('eventEndAt');
         expect(body).not.toHaveProperty('eventEndLocal');
         expect(body).not.toHaveProperty('eventOnline');
@@ -590,9 +590,8 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const body = entCreate.mock.calls[0][1];
             expect(body).toMatchObject({
                 title: 'Working bee', lat: -28.55, lng: 153.5, eventPlaceName: 'The hall',
-                eventStartLocal: '2030-09-28T09:00', audienceScope: 'public',
+                eventStartLocal: '2030-09-28T09:00', eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
             });
-            expect(body).not.toHaveProperty('eventStartAt');
             // The node refuses any body field ending in publicKey that is not the signer.
             expect(body).not.toHaveProperty('authorPublicKey');
         });
@@ -1739,7 +1738,8 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0];
         expect(body).toMatchObject({ lat: 6.5244, lng: 3.3792, eventStartLocal: '2030-10-19T20:50', eventTz: 'Africa/Lagos' });
-        expect(body).not.toHaveProperty('eventStartAt');
+        // This device's reading beside it (a node from before clocks reads only that); a node with clocks reads the clock.
+        expect(body).toHaveProperty('eventStartAt', new Date('2030-10-19T20:50').toISOString());
         expect(body).not.toHaveProperty('eventOnline');
     });
 
@@ -1775,7 +1775,8 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         expect(body).toMatchObject({
             eventOnline: true, eventLink: 'https://meet.example/abc', eventStartLocal: '2030-10-19T20:50', eventTz: 'Australia/Sydney',
         });
-        for (const key of ['lat', 'lng', 'eventPlaceName', 'eventStartAt']) expect(body).not.toHaveProperty(key);
+        for (const key of ['lat', 'lng', 'eventPlaceName']) expect(body).not.toHaveProperty(key);
+        expect(body).toHaveProperty('eventStartAt', new Date('2030-10-19T20:50').toISOString());
     });
 
     it('offers Online only where the node carries online events (features.onlineEvents)', async () => {

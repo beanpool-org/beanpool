@@ -39,9 +39,14 @@ describe('the picker', () => {
 });
 
 describe('what goes to the node', () => {
-    it('the typed clock, with the zone when there is one', () => {
-        expect(eventClockBody('2030-10-19T20:50', '', false, LAGOS)).toEqual({ eventStartLocal: '2030-10-19T20:50', eventTz: 'Africa/Lagos' });
-        expect(eventClockBody('2030-10-19T20:50', '2030-10-19T22:50', false, null)).toEqual({ eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50' });
+    it('the typed clock, with the zone when there is one, and this device\'s instants beside it for a node from before clocks', () => {
+        expect(eventClockBody('2030-10-19T20:50', '', false, LAGOS)).toEqual({
+            eventStartLocal: '2030-10-19T20:50', eventTz: 'Africa/Lagos', eventStartAt: new Date('2030-10-19T20:50').toISOString(),
+        });
+        expect(eventClockBody('2030-10-19T20:50', '2030-10-19T22:50', false, null)).toEqual({
+            eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50',
+            eventStartAt: new Date('2030-10-19T20:50').toISOString(), eventEndAt: new Date('2030-10-19T22:50').toISOString(),
+        });
     });
     it('online with no zone this device can name: the instant, so a one-off still saves', () => {
         const body = eventClockBody('2030-10-19T20:50', '', true, null);

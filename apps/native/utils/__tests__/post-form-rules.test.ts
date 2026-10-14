@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { postFormRules, postFormSubmitLabel, type PostFormState } from '../market-global';
+import { composerNeedsProfilePhoto, postFormRules, postFormSubmitLabel, type PostFormState } from '../market-global';
 import { readNodeProfile } from '../node-profile';
 
 const GLOBAL = readNodeProfile({ profile: 'global', features: { beans: false, escrow: false } })!;
@@ -47,7 +47,34 @@ describe('postFormRules', () => {
         expect(src).toContain('const { needBlocked, photoRequired } = postFormRules(nodeFeatures, postType, blockedFromTrading);');
         expect(src).toContain("if (photoRequired && postPhotos.length < 1) errors.add('photos');");
         expect(src).toContain('|| !postCategory || (photoRequired && postPhotos.length < 1);');
-        expect(src).toContain("const avatarOk = !postFormRules(nodeFeatures, 'offer', false).profilePhoto || await hasUsableAvatar();");
+        expect(src).toContain("const avatarOk = !(await composerNeedsProfilePhoto(nodeFeatures, readCachedProfile)) || await hasUsableAvatar();");
         expect(src).not.toContain('const needBlocked = blockedFromTrading');
+        // The photo label says "* (min 1)" only where a photo is required (review #1936 N4).
+        expect(src).toContain("Photos{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>(min 1)</Text></> : null}</Text>");
+        expect(src).not.toContain('Photos <Text style={styles.requiredStar}>*</Text>');
+    });
+});
+
+/*
+ * The post form opened from another tab (review #1936 N1): a `?newPost=` link mounts the map and opens the form before
+ * the screen has the node's profile (useNodeProfile is still null), so the phone's saved copy decides the photo rule.
+ */
+describe('composerNeedsProfilePhoto', () => {
+    const never = async () => { throw new Error('the saved copy is not read when the screen has the profile'); };
+
+    it('the screen has no profile yet: the saved copy of the global node says no profile photo', async () => {
+        expect(await composerNeedsProfilePhoto(null, async () => GLOBAL)).toBe(false);
+        expect(await composerNeedsProfilePhoto(undefined, async () => GLOBAL)).toBe(false);
+    });
+
+    it('the screen has no profile yet: a local copy, no copy, or one that cannot be read keeps the photo', async () => {
+        expect(await composerNeedsProfilePhoto(null, async () => LOCAL)).toBe(true);
+        expect(await composerNeedsProfilePhoto(null, async () => null)).toBe(true);
+        expect(await composerNeedsProfilePhoto(null, async () => { throw new Error('storage'); })).toBe(true);
+    });
+
+    it('the screen has the profile: it decides, and the saved copy is not read', async () => {
+        expect(await composerNeedsProfilePhoto(GLOBAL.features, never)).toBe(false);
+        expect(await composerNeedsProfilePhoto(LOCAL.features, never)).toBe(true);
     });
 });

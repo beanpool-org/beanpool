@@ -37,8 +37,9 @@ import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { getCachedNodeProfile } from '../../utils/node-profile';
 import {
-    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules,
+    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
     NO_BEANS_EDIT_NOTE,
 } from '../../utils/market-global';
 
@@ -851,8 +852,10 @@ export default function MapScreen() {
         // A name AND a photo are required before you can post — checked up front
         // (not after a whole draft) and routed to the setup wizard to fix.
         const nameOk = (identity?.callsign?.trim().length ?? 0) >= 2;
-        // Where Beans are off (the global node) no photo is asked for (postFormRules).
-        const avatarOk = !postFormRules(nodeFeatures, 'offer', false).profilePhoto || await hasUsableAvatar();
+        // Where Beans are off (the global node) no photo is asked for (postFormRules). Opened by a `?newPost=` link before
+        // this screen has the node's profile, the phone's saved copy decides (composerNeedsProfilePhoto).
+        const readCachedProfile = async () => getCachedNodeProfile(await AsyncStorage.getItem('beanpool_anchor_url'));
+        const avatarOk = !(await composerNeedsProfilePhoto(nodeFeatures, readCachedProfile)) || await hasUsableAvatar();
         if (!nameOk || !avatarOk) {
             const need = (!nameOk && !avatarOk) ? 'a name and a photo' : !nameOk ? 'a name' : 'a photo';
             Alert.alert(
@@ -1561,7 +1564,7 @@ export default function MapScreen() {
                             />
 
                             {/* Photos */}
-                            <Text style={styles.sectionLabel}>Photos <Text style={styles.requiredStar}>*</Text> <Text style={styles.sectionLabelHint}>(min 1)</Text></Text>
+                            <Text style={styles.sectionLabel}>Photos{photoRequired ? <>{' '}<Text style={styles.requiredStar}>*</Text>{' '}<Text style={styles.sectionLabelHint}>(min 1)</Text></> : null}</Text>
                             <View style={[styles.photosRow, fieldBorder('photos')]}>
                                 {postPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (

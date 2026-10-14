@@ -106,6 +106,20 @@ export function postFormRules(
     };
 }
 
+/**
+ * Whether opening the map's post form waits for a profile photo (postFormRules().profilePhoto): from the screen's copy of
+ * the node's profile when it has one, else from this phone's saved copy (`readCached`), read before deciding. A
+ * `?newPost=` link from another tab mounts the map and opens the form at once, before the screen's copy arrives; without
+ * the saved copy a member on the global node would be asked for a photo it doesn't need (review #1936 N1). No copy, or
+ * one that can't be read: the local rule.
+ */
+export async function composerNeedsProfilePhoto(
+    features: NodeFeatures | null | undefined, readCached: () => Promise<NodeProfile | null>,
+): Promise<boolean> {
+    const known = features ?? (await Promise.resolve().then(readCached).catch(() => null))?.features;
+    return postFormRules(known, 'offer', false).profilePhoto;
+}
+
 /** The submit button's words: the next thing missing, or Post Offer / Post Need. */
 export function postFormSubmitLabel(s: PostFormState, features: NodeFeatures | null | undefined): string {
     return s.posting ? 'Posting...'

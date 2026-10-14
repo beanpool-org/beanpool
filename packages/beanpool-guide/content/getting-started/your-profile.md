@@ -19,7 +19,7 @@ You can also tap **Re-run Setup** in Settings. It walks you through your name an
 
 ## A name and a photo come first
 
-You need a name and a photo before you can post or accept a trade. If one is missing, the app says **Finish your profile first**. Tap **Set up profile** to add it.
+In a community with Beans you need a name and a photo before you can post or accept a trade. Where there are no Beans, as on the global community, a name is enough. If something is missing, the app says **Finish your profile first**. Tap **Set up profile** to add it.
 
 ## Contact details
 

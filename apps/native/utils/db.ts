@@ -1938,6 +1938,8 @@ export async function createPost(post: any) {
     const enterpriseHost = post.type === 'event' && post.author_pubkey && post.author_pubkey !== identity.publicKey
         ? String(post.author_pubkey)
         : null;
+    // Words for a group's or an enterprise's id: a known DM's id refuses first; a held group never waits (#1938 confirmation 8, GXF).
+    for (const scope of [post.targetGroupId || post.target_group_id, enterpriseHost]) if (scope && !(await isHeldGroupChat(scope))) await refuseReadableIntoDm(scope);
     const { authorPublicKey: _authorInBody, ...bodyWithoutAuthor } = body;
     const path = enterpriseHost
         ? `/api/treasury/${encodeURIComponent(enterpriseHost)}/event`
@@ -2238,6 +2240,7 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
 export async function updateEvent(postId: string, patch: EventEditPatch): Promise<any> {
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
+    await refuseReadableIntoDm(postId);
     const json = await _signedRequest('/api/marketplace/posts/update', { id: postId, authorPublicKey: identity.publicKey, ...patch });
     const post = json?.post;
     if (post?.id) {
@@ -2405,6 +2408,7 @@ export interface TreasurySummary {
 }
 
 export async function treasuryPledge(treasury: string, amount: number, memo?: string) {
+    if (memo) await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
 }
 
@@ -2431,9 +2435,11 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
+    await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
 export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
+    await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 export async function treasuryApprove(treasury: string, transactionId: string) {
@@ -3096,6 +3102,8 @@ export async function createDecision(payload: {
     params?: any;
     closesAt?: string;
 }): Promise<{ success: boolean; decision: Decision }> {
+    // A decision's subject can be an enterprise's key, its thread's id: a known DM's id refuses first (#1938 confirmation 8).
+    if (payload.subject) await refuseReadableIntoDm(payload.subject);
     return _signedRequest('/api/commons/decisions', payload);
 }
 
@@ -3111,6 +3119,8 @@ export async function castDecisionVote(decisionId: string, payload: {
 export async function updatePost(id: string, updates: any) {
     const identity = await loadIdentity();
     if (!identity) throw new Error('Not logged in. Identity required.');
+    // A post's id is its event chat's id: a known DM's id refuses first, as updateEvent does (#1938 confirmation 8).
+    await refuseReadableIntoDm(id);
 
     // 1. Broadcast UPDATE to remote network
     await _signedRequest('/api/marketplace/posts/update', { 

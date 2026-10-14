@@ -4230,6 +4230,107 @@ describe('the DM guard list: one bounded list per community file, never read as 
         }, 180_000);
     }
 
+    // GXF, GXFh (#1938 confirmation 8, finding 1): the forms outside the chat screens that carry a group's, an event's or an
+    // enterprise's id with words the member types (an event's id is its chat's id, an enterprise's treasury its thread's): a
+    // group feed post and a group-only event (createPost's targetGroupId), an enterprise-hosted event (its treasury in the
+    // path), a pledge's memo, a treasury's offer and need, an event's edit and a post's edit (the same route), a commons
+    // decision about an enterprise (its subject). Each asks refuseReadableIntoDm first, so a known DM's id gets no readable
+    // words anywhere (the director's ruling, option (a)); a held group's post never waits, a pledge with no memo never asks.
+    /** Every non-GET body the node took that carries the member's words (any string with `marker`), answered as the node would. */
+    function formsTaken(marker: string): string[] {
+        const took: string[] = [];
+        const before = (globalThis as any).fetch;
+        const wordsIn = (x: unknown): string[] => typeof x === 'string' ? (x.includes(marker) ? [x] : []) : x && typeof x === 'object' ? Object.values(x).flatMap(wordsIn) : [];
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if ((init.method ?? 'GET') !== 'GET') {
+                let b: unknown = null;
+                try { b = JSON.parse(init.body ?? 'null'); } catch { b = init.body; }
+                const w = wordsIn(b);
+                if (w.length) { took.push(...w); return answer(201, { success: true, post: null, decision: { id: randomUUID() } }); }
+            }
+            return before(url, init);
+        };
+        return took;
+    }
+    const soon = () => ({ eventStartAt: new Date(Date.now() + 864e5).toISOString(), eventEndAt: new Date(Date.now() + 9e7).toISOString(), eventPlaceName: 'Hall' });
+    /** The id-keyed forms, each for a group id `g`, an event id `ev` and an enterprise id `ent` (app/group-post.tsx, NewEventModal, treasury-detail, treasury-post, ProposeDecisionModal). */
+    const ID_FORMS: Record<string, (ids: { g: string; ev: string; ent: string }, w: string) => Promise<unknown>> = {
+        'group feed post': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'offer', title: `${w} (post title)`, description: `${w} (post why)`, category: 'other', credits: 1, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }),
+        'group-only event': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (event title)`, description: `${w} (event why)`, category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon(), eventPrivateNote: `${w} (private note)`, audienceScope: 'group', targetGroupId: g }),
+        'enterprise-hosted event': ({ ent }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (enterprise event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ent, created_at: new Date().toISOString(), ...soon() }),
+        'pledge memo': ({ ent }, w) => dbPort.treasuryPledge(ent, 1, `${w} (pledge memo)`),
+        'treasury offer': ({ ent }, w) => dbPort.treasuryPostOffer(ent, { category: 'other', title: `${w} (offer)`, description: `${w} (offer why)`, credits: 1 }),
+        'treasury need': ({ ent }, w) => dbPort.treasuryPostNeed(ent, { category: 'other', title: `${w} (need)`, credits: 1 }),
+        'event edit': ({ ev }, w) => dbPort.updateEvent(ev, { title: `${w} (event edit)`, description: `${w} (event edit why)` } as any),
+        'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', credits: 0 }),
+        'commons decision about an enterprise': ({ ent }, w) => dbPort.createDecision({ authorPubkey: ana.publicKey, title: `${w} (decision)`, description: `${w} (decision why)`, touches: 'pool', effect: 'write_off_deficit' as any, subject: ent }),
+    };
+    const everyForm = (v: unknown) => Object.fromEntries(Object.keys(ID_FORMS).map((name) => [name, v]));
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GXF (${how}) the list full when the DM is met; pruned, then relisted as an unlocked group (and served as an event and a treasury) while the pins can't be read: every id-keyed form with typed words is refused and the node reads nothing, the pins back and after the sync too`, async () => {
+            const filler = Array.from({ length: 26_886 }, () => randomUUID());
+            h.store.set(seenKey(), JSON.stringify(filler));
+            const { first, pin } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+            expect((seenIn() as string[]).includes(dm.id)).toBe(false);
+            node.convs = [];
+            await syncMessages(ana.publicKey);   // the prune
+            node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+            unlocked.add(dm.id);
+            node.convs = [relistedAsGroup()];
+            const took = formsTaken('The code is');
+            const ids = { g: dm.id, ev: dm.id, ent: dm.id };
+            const all = async (words: string) => {
+                const out: Record<string, unknown> = {};
+                for (const [name, form] of Object.entries(ID_FORMS)) out[name] = await onScreen(took, () => form(ids, words));
+                return out;
+            };
+            const unread = await whilePinsUnread(how, async () => {
+                await syncMessages(ana.publicKey);
+                return { row: typeOf(dm.id), forms: await all('The code is 4821') };
+            });
+            const back = await all('The code is 4822');
+            await syncMessages(ana.publicKey);
+            const after = { row: typeOf(dm.id), forms: await all('The code is 4823') };
+            console.log(`GXF (${how}) ${JSON.stringify({ unread, back, after, took })}`);
+            expect(unread).toEqual({ row: 'group_thread', forms: everyForm(refusedUnread) });
+            expect(back).toEqual(everyForm(refusedAsDm));
+            expect(after).toEqual({ row: 'dm', forms: everyForm(refusedAsDm) });
+            expect(took).toEqual([]);
+        }, 180_000);
+    }
+
+    it('GXFh (a corrupt value) the cost: an honest group, event and enterprise, never a DM: every id-keyed form goes while the pins read, waits with the pins sentence while they can\'t (a community event and a pledge with no memo never ask), and goes again once they read; a held group\'s post never waits', async () => {
+        await phoneOf(ana);
+        const g: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, ben.publicKey] };
+        const ev: Conv = { id: randomUUID(), type: 'event_thread', participants: [ana.publicKey, ben.publicKey] };
+        const ent: Conv = { id: randomUUID(), type: 'enterprise_thread', participants: [ana.publicKey, ben.publicKey] };
+        unlocked.add(g.id);
+        node.convs = [g, ev, ent];
+        await syncMessages(ana.publicKey);
+        const took = formsTaken('Hello');
+        const ids = { g: g.id, ev: ev.id, ent: ent.id };
+        const all = async (w: string) => {
+            const out: Record<string, unknown> = {};
+            const went = (r: { err: string | null; nodeReads: string[] }) => r.err ?? (r.nodeReads.length ? 'went' : 'no post');
+            for (const [name, form] of Object.entries(ID_FORMS)) out[name] = went(await onScreen(took, () => form(ids, w)));
+            out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
+            let noMemo: string = 'went';
+            try { await dbPort.treasuryPledge(ent.id, 1); } catch (e: any) { if (e?.name && e.name !== 'Error') noMemo = e.name; }
+            out['pledge, no memo'] = noMemo;
+            return out;
+        };
+        const went = { ...everyForm('went'), 'community event (no group)': 'went', 'pledge, no memo': 'went' };
+        const readable = await all('Hello');
+        const unread = await whilePinsUnread('a corrupt value', () => all('Hello again'));
+        const back = await all('Hello once more');
+        console.log(`GXFh ${JSON.stringify({ readable, unread, back })}`);
+        expect(readable).toEqual(went);
+        expect(unread).toEqual({ ...everyForm('DmPinStoreError'), 'community event (no group)': 'went', 'pledge, no memo': 'went' });
+        expect(back).toEqual(went);
+    }, 180_000);
+
     it('GD3 the caps: 30,000 UUID DMs in one listing; then, in another community, 22 ids of 100,000 characters and one each of 64 and 65: the value stays within 1 MiB, every id read before is still there, the newest are refused and logged; the long ids are never remembered', async () => {
         await phoneOf(ana);
         const before = seenIn() as string[];

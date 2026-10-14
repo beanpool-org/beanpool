@@ -121,8 +121,10 @@ export function blockersOf(key: string): Set<string> {
  * tombstones, a whole copy's start, and any written later. A rolled-back write moves it too, which only empties the
  * kept lists once more.
  */
-let blocksVersion = 0;
+const BLOCKS_VERSION = Symbol.for('beanpool.memberBlocksVersion');
+const blocksVersion = (): number => (db as any)[BLOCKS_VERSION] ?? 0;
 let watching = false;
+let rebuildWarned = false;
 /** What blockersOfKept read, by key, at `keptAt` and `keptAtData`; emptied whenever either moves on. */
 const kept = new Map<string, Set<string>>();
 let keptAt = -1;
@@ -151,7 +153,7 @@ const triggersLeft = () => countingTriggers!.get() as number;
 
 /** The block lists' version (blocksVersion above). */
 export function blockListsVersion(): number {
-    return blocksVersion;
+    return blocksVersion();
 }
 
 /**
@@ -164,7 +166,10 @@ export function blockListsVersion(): number {
 function watchBlockWrites(): boolean {
     if (db.inTransaction) return false;
     if (!watching) {
-        db.function('member_blocks_written', { deterministic: false }, () => { blocksVersion++; return null; });
+        db.function('member_blocks_written', { deterministic: false }, () => {
+            (db as any)[BLOCKS_VERSION] = blocksVersion() + 1;
+            return null;
+        });
         countingTriggers = db.prepare(`SELECT COUNT(*) FROM temp.sqlite_master WHERE type = 'trigger' AND tbl_name = 'member_blocks'
             AND name IN (${COUNTED_TRIGGERS.map(n => `'${n}'`).join(', ')})`).pluck();
         dataVersion = db.prepare('PRAGMA data_version').pluck();
@@ -196,18 +201,29 @@ export function blockersOfKept(key: string): ReadonlySet<string> {
     if (db.inTransaction) return blockersOf(key);
     const left = watching ? triggersLeft() : 0;
     if (left !== COUNTED_TRIGGERS.length) {
-        if (watching) console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
+        const wasWatching = watching;
         kept.clear();
         keptKeys = 0;
         keptAt = -1;
-        if (!watchBlockWrites()) return blockersOf(key);
+        const remade = watchBlockWrites();
+        if (wasWatching) {
+            if (remade) {
+                rebuildWarned = false;
+                console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
+            } else if (!rebuildWarned) {
+                rebuildWarned = true;
+                console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers could not be made again; reading the table at every push`);
+            }
+        }
+        if (!remade) return blockersOf(key);
     }
     // Read before the table, so another connection's commit after it moves it past what is kept.
     const data = dataVersion!.get() as number;
-    if (keptAt !== blocksVersion || keptAtData !== data) {
+    const version = blocksVersion();
+    if (keptAt !== version || keptAtData !== data) {
         kept.clear();
         keptKeys = 0;
-        keptAt = blocksVersion;
+        keptAt = version;
         keptAtData = data;
     }
     const known = kept.get(key);

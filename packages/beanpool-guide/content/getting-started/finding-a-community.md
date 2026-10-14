@@ -13,7 +13,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and cannot be hidden; after that you can hide it like any other card. In the web app, each community on the card is a link to its own page, and **Share my area** helps if it does not know where you are. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
@@ -27,7 +27,7 @@ A community that hasn't published its address is listed, but it can't be asked f
 - Check your name, and write a few words about yourself, up to 280 characters: where you live, what you would like to share or learn.
 - Tap **Send**.
 
-Your request goes straight to that community, with your name, your words and your picture. Only its members see it. Any member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
+Your request goes straight to that community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
 While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
@@ -39,7 +39,7 @@ If a community can't take your request, the card shows its own words, for exampl
 
 The card says **A member invited you**. Tap **Join** with the community's name.
 
-- Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, you choose another.
+- Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, a number is added, such as "Sarah2". You can change it in the next step.
 - Your posts, chats and trades stay in each community. On the new one you start fresh.
 - Next you check your name and photo for the new community.
 - A sign-in that protects your account is kept by each community. The app asks you to protect your account in the new community too: tap **Protect it**, or **Later**, and do it any time in **Settings**.
@@ -53,9 +53,9 @@ You stay a member of the global community, and can switch between them: see "Mor
 
 ## If you are a member of a local community
 
-People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from.
+People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
 
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.
 
-Any member can answer: your trust badge does not matter. A community's admins can turn requests to join off.
+Any member can answer, whatever their trust badge, unless the community chose that only its admins invite (**Known** in Settings). Then only its owners and admins see the requests and answer them. A community's admins can turn requests to join off.

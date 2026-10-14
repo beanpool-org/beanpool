@@ -15,7 +15,9 @@ related: privacy, trust-badges, joining, people
 - Tap the photo to change it.
 - Tap **Save Profile**.
 
-You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community), and the short tour of how BeanPool works.
+In the web app, tap **Edit Profile**, change the photo with **Camera** or **Gallery**, and tap **Save Profile Changes**.
+
+You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community, in the phone app), and the short tour of how BeanPool works. In a web browser, set your area in **Settings**, under **Your area**.
 
 ## A name and a photo come first
 

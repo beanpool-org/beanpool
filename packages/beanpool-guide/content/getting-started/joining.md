@@ -25,7 +25,7 @@ An invite is a link, a QR code or a code. A code looks like **INV-** followed by
 To join:
 
 - Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.
-- On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. In the web app, the button says **I'm New Here**.
+- On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. On Android the button says **Been sent an invite? Tap to check your clipboard**. In the web app, the button says **I'm New Here**.
 - Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.
 - Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.
 - Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work.
@@ -49,7 +49,7 @@ If you sign in, the community keeps only a scrambled reference to your sign-in a
 
 If you join with 12 words, nothing about you reaches the community but your key and your name, and your 12 words are your only way back: nobody can reset them, not BeanPool and not the community. **Safety Backup** says so, and offers **Add a sign-in as a second way back**. After joining, a card on **Home** says **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** Tap **✕** to put it away: it comes back once after your first post and once after a week, then stays in **Settings**, under **Account Protection**, until you add a sign-in or tap **I still have my 12 words**. An account made with 12 words also has smaller limits for its first 7 days, and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message a day, and one report hides its post while it is new. Adding a sign-in, any time, lifts it to the usual new-account limits. You can add one from any phone where you are in your account, not only the one you joined on. If BeanPool's key vault already keeps a copy of your account, the card is not shown, and **Settings** offers **Add a sign-in** quietly.
 
-**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
+**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in**. You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
 
 ## The steps
 
@@ -58,7 +58,7 @@ The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **
 - **Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.
 - **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.
 - **Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.
-- **Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read "Your 12 words" soon. If you joined the global community with a sign-in, this step also shows your sign-in protecting your account. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.
+- **Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read "Your 12 words" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.
 - **How it Works:** a short tour. Tap **Let's Begin!** to start.
 
 If you close the app halfway, it carries on from the same step next time.
@@ -75,7 +75,7 @@ If you close the app halfway, it carries on from the same step next time.
 
 - **No Explore BeanPool worldwide button:** the global community isn't open yet, or the app couldn't reach it. Check your connection and open the app again. You can still join a community with an invite.
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
-- **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.
+- **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Choose another way** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.
 - **This sign-in already joined the global community with a different BeanPool account** (joining from the account on your phone): that sign-in has its own account there. Tap **Use a different sign-in**.
 - **This community can't check sign-ins right now:** the global community has moved to another server and can't yet tell a returning account from a new one, so for now it takes nobody new this way. Nothing was saved. Try again later.
@@ -90,6 +90,7 @@ Any member can invite people, unless the community has chosen that only its admi
 - If you like, write who the invite is for, just for your own records.
 - Tap **Generate Ticket**. Without a connection, the button says **Generate Offline Ticket**, and that works too.
 - Show them the QR code, or tap **Share Invite** to send the link and the code.
+- In the web app, open **People**, then **Invites**, and tap **Generate New Invite**. Then **Copy** or **Share** it.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
 - You can make 20 invites a day, and have 50 that nobody has used yet. An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
 
@@ -104,7 +105,7 @@ The global community has no invites: anyone joins it in the BeanPool app, with 1
 
 ## Requests to join
 
-People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**.
+People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Requests are answered in the phone app: the web app doesn't list them.
 
 - **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".

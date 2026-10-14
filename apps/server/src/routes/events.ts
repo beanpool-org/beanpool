@@ -55,7 +55,9 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
         const { zones, etag } = acceptedZones();
         ctx.set('ETag', etag);
         ctx.set('Cache-Control', 'private, max-age=3600');
-        if (ctx.get('If-None-Match') === etag) {
+        // A compressed answer goes out with the tag made weak (W/), and comes back that way.
+        const inm = ctx.get('If-None-Match');
+        if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag)) {
             ctx.status = 304;
             return;
         }

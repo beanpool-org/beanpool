@@ -198,6 +198,11 @@ export interface PostFilter {
      */
     excludeEvents?: boolean;
     /**
+     * Online events only (DESIGN-event-times §9): events with no pin, which a read near a point never meets. Home's "Coming
+     * up" and a member's set on a node that syncs by area add them wherever the reader is (director amendment 2).
+     */
+    eventOnline?: boolean;
+    /**
      * The viewer is a moderator (an owner, admin or moderator of this node): posts hidden by reports stay in,
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
      */
@@ -950,6 +955,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
+    eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
@@ -1298,6 +1304,26 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
+
+    // Online events (DESIGN-event-times §9, director amendment 2): no pin, so near nobody, and an event is never put at its
+    // author's area (placelessListingArea). Without this an online event on a node that syncs by area reaches only its
+    // host. The soonest `max` open ones are in every member's set, under the listing's own rules for this reader (open,
+    // not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever the member is.
+    let online: typeof ranked = [];
+    if (!q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
+        const pickOnline: RowsNear = (d, _near, where, whereParams) => {
+            const notBlocked = blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '';
+            online = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where}${notBlocked} ORDER BY p.event_start_at, p.id LIMIT ?`)
+                .all(...whereParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), q.max) as typeof online;
+            return [];
+        };
+        getPostsRankedBy(db, { ...base, eventOnline: true, near: { lat: 0, lng: 0 } }, pickOnline);
+    }
+    const inRanked = new Set(ranked.map(r => r.id));
+    for (const r of online) if (!inRanked.has(r.id)) ranked.push(r);
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.
@@ -1469,6 +1495,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.eventOnline) { where += " AND p.type = 'event' AND p.event_online = 1"; }
     if (filter?.upcomingUntil) {
         // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
         where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"

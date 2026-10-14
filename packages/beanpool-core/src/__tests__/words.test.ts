@@ -308,7 +308,7 @@ describe('dates and numbers from tables', () => {
 
     it('every language\'s month and day tables are CLDR\'s (checked against Node ICU)', () => {
         for (const lang of LANGS.filter((l) => l !== 'en')) {
-            const w = DATE_WORDS[lang];
+            const w = DATE_WORDS[lang]!;
             for (let m = 0; m < 12; m++) {
                 const d = new Date(Date.UTC(2026, m, 15, 12));
                 const part = (o: Intl.DateTimeFormatOptions) =>
@@ -413,7 +413,7 @@ describe('dates and numbers from tables', () => {
         }
         for (const lang of LANGS) {
             const icu = new Intl.NumberFormat(INTL_TAG(lang)).formatToParts(1.5).find((p) => p.type === 'decimal')!.value;
-            expect([lang, DATE_WORDS[lang].decimal], RECHECK).toEqual([lang, icu]);
+            expect([lang, DATE_WORDS[lang]!.decimal], RECHECK).toEqual([lang, icu]);
         }
     });
 
@@ -504,7 +504,7 @@ describe('one table of month and day names', () => {
                 const path = join(dir, name);
                 if (name === 'node_modules' || name === '__tests__' || name === 'dist') continue;
                 if (statSync(path).isDirectory()) walk(path);
-                else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) && !/beanpool-core\/src\/words(-dates)?\.ts$/.test(path)) {
+                else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) && !/beanpool-core\/src\/(words(-dates)?\.ts|words-dates\/[A-Za-z-]+\.ts)$/.test(path)) {
                     if (table.test(readFileSync(path, 'utf8'))) found.push(relative(root, path));
                 }
             }

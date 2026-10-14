@@ -272,22 +272,37 @@ const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July
 const EN_DATE_PATTERNS = { 'day-month': '{d} {M}', 'day-month-year': '{d} {M} {y}', 'weekday-day-month': '{W} {d} {M}' } as const;
 
 /** English as the apps have always printed it ("3 Oct", "Sat 3 Oct", "9:05"); every other language from CLDR. */
-export const DATE_WORDS: Readonly<Record<Lang, DateWords>> = Object.freeze({
-    en: {
-        monthsLong: EN_MONTHS,
-        // Ours, not CLDR's en-GB ("Sept"): the apps have always printed three letters.
-        monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        monthsStandalone: EN_MONTHS,
-        daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        daysLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-        patterns: { short: EN_DATE_PATTERNS, long: EN_DATE_PATTERNS },
-        time: '{h}:{mm}',
-        decimal: '.',
-        digits: null,
-        caps: 'upper',
-    },
-    ...CLDR_DATE_WORDS,
+const EN_DATE_WORDS: DateWords = Object.freeze({
+    monthsLong: EN_MONTHS,
+    // Ours, not CLDR's en-GB ("Sept"): the apps have always printed three letters.
+    monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    monthsStandalone: EN_MONTHS,
+    daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    daysLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    patterns: { short: EN_DATE_PATTERNS, long: EN_DATE_PATTERNS },
+    time: '{h}:{mm}',
+    decimal: '.',
+    digits: null,
+    caps: 'upper',
 });
+
+const dateTables: Partial<Record<Lang, DateWords>> = { en: EN_DATE_WORDS, ...CLDR_DATE_WORDS };
+
+/**
+ * The date words of each language this build carries. The phone and the server carry all of them (words-dates.ts
+ * gathers every language's module). The web app's first chunk carries English alone: its build puts an empty table in
+ * words-dates.ts's place, and a language's dates arrive with its words, in that language's own chunk, through
+ * `addDateWords` (apps/pwa/src/lib/language.ts; #1941 review N-f). A language whose table has not arrived writes its
+ * dates and numbers in English, never a throw.
+ */
+export const DATE_WORDS: Readonly<Partial<Record<Lang, DateWords>>> = dateTables;
+
+/** Add one language's date words (packages/beanpool-core/src/words-dates/<lang>.ts), as the web app loads that language. */
+export function addDateWords(lang: Lang, words: DateWords): void {
+    if (isLang(lang) && lang !== 'en') dateTables[lang] = words;
+}
+
+const dateWordsOf = (lang: UiLang): DateWords => dateTables[isLang(lang) ? lang : 'en'] ?? EN_DATE_WORDS;
 
 export interface DateOptions {
     /** 'short' (default): "3 Oct", "Sat"; 'long': "3 October", "Saturday". */
@@ -313,17 +328,15 @@ function inCapitals(text: string, caps: DateWords['caps']): string {
     return text.toUpperCase();
 }
 
-const dateLang = (lang: UiLang): Lang => (isLang(lang) ? lang : 'en');
-
 function numberIn(lang: UiLang, n: number, decimals?: number): string {
     if (!Number.isFinite(n)) return String(n);
-    const w = DATE_WORDS[dateLang(lang)];
+    const w = dateWordsOf(lang);
     const text = decimals === undefined ? String(n) : n.toFixed(decimals);
     return withDigits(w.decimal === '.' ? text : text.replace('.', w.decimal), w.digits);
 }
 
 function dateIn(lang: UiLang, d: Date, pattern: DatePattern, opts: DateOptions): string {
-    const w = DATE_WORDS[dateLang(lang)];
+    const w = dateWordsOf(lang);
     const width = opts.width === 'long' ? 'long' : 'short';
     const utc = opts.utc === true;
     const month = utc ? d.getUTCMonth() : d.getMonth();

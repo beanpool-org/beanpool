@@ -2431,7 +2431,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => onSaveSearch!(toSave)}
                         className="mt-1.5 w-full min-h-[44px] px-3 py-2 rounded-xl border border-border-primary bg-bg-card text-text-primary text-sm font-bold flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                        <span aria-hidden="true" className="text-accent text-base leading-none">＋</span>
+                        <span aria-hidden="true" className="text-text-primary text-base leading-none">＋</span>
                         <span className="min-w-0 flex-1 text-left break-words">{SAVE_SEARCH_BUTTON}</span>
                     </button>
                 )}

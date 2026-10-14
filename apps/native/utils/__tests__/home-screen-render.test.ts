@@ -814,11 +814,11 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
         ],
     },
     // Find your community (H4) right under Needs you, its three actions each opening a screen the global node shows (no
-    // place known here, so "Tell me" opens Communities near you to ask for one); First steps' global words for the
-    // member's first 14 days, the first post made or not (both cases are 3 days in; no limits sent here; #1517), with the
-    // ask, as the community listed is within reach; no money cards and no invite whatever the answer holds, no
-    // Decisions and no vote in Needs you (Commons is hidden there): the Decide card is polls only, opening the Market's
-    // Polls. Who joined is a count there, with nothing to open.
+    // place known here, so "Tell me" opens Communities near you to ask for one, and "or type your town" opens it with its
+    // town box open); First steps' global words for the member's first 14 days, the first post made or not (both cases
+    // are 3 days in; no limits sent here; #1517), with the ask, as the community listed is within reach; no money cards
+    // and no invite whatever the answer holds, no Decisions and no vote in Needs you (Commons is hidden there): the
+    // Decide card is polls only, opening the Market's Polls. Who joined is a count there, with nothing to open.
     global: {
         1: [
             'home-needs-message → /chat/[id] id=dm1',
@@ -826,6 +826,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-near → /find-community',
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
+            'home-find-type-town → /find-community town=1',
             'home-step-ask → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
@@ -845,6 +846,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-near → /find-community',
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
+            'home-find-type-town → /find-community town=1',
             'home-step-post → /map newPost=offer',
             'home-step-ask → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',

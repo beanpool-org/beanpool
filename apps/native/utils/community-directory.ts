@@ -267,7 +267,7 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
         return { title, body: `${communityLabel(nearest)} is ${where}${more}. Ask to join, and trade with your neighbours there.` };
     }
     if (!hasPoint && home.value.point === null) {
-        return { title, body: `${communityCount.toLocaleString('en')} communit${communityCount === 1 ? 'y is' : 'ies are'} listed. Share your location to see the nearest.` };
+        return { title, body: `${communityCount.toLocaleString('en')} communit${communityCount === 1 ? 'y is' : 'ies are'} listed. Use your location, or type your town, to see the nearest.` };
     }
     return { title, body: 'No community is listed near you yet. Start one, or ask to be told when one starts here.' };
 }

@@ -6,8 +6,9 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, findCommunityCardCopy, nearbyPostsLine, watchPlace, type GlobalHome, type Point,
 } from '../../utils/community-directory';
+import { TYPE_YOUR_TOWN } from '@beanpool/core';
 import { cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
-import { FabAware, HomeButton, homeStyles } from './HomeParts';
+import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /**
  * "Find your community" (design §3.1, §7) as a Home card on the global node (slice H4): the way out of the worldwide
@@ -18,6 +19,8 @@ import { FabAware, HomeButton, homeStyles } from './HomeParts';
  *
  * Three actions, each 48dp tall and wrapping rather than shrinking: communities near you, start one, or be told when one
  * starts here. They report where they rest to Home's floating "+ ADD POST" (FabAware), which steps aside for them.
+ * With no place yet, one quiet link under them, "or type your town ›" (Marty, 14 Oct): Home's own trailing link (48dp, and
+ * the "+ ADD POST" steps aside for it too), opening the find screen with its town box open.
  */
 export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors }: {
     home: GlobalHome;
@@ -78,6 +81,10 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                         onPress={() => void tellMe()} testID="home-find-watch" />
                 )}
             </FabAware>
+            {!point && (
+                <HomeLink id="find:town" colors={colors} text={TYPE_YOUR_TOWN} a11y="Or type your town, to see the communities near it"
+                    onPress={() => router.push({ pathname: '/find-community', params: { town: '1' } })} testID="home-find-type-town" />
+            )}
         </>
     );
 }

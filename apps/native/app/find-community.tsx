@@ -21,7 +21,7 @@ import {
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_TOWN_SEARCH_WORDS, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 
@@ -39,7 +39,8 @@ const LIST_LIMIT = 20;
  *
  * "Near" is the phone's location, or a town the member typed instead (Marty, 14 Oct: utils/typed-place.ts, with the
  * shared address search); the name box below is for a community whose name they know. `?town=1` opens the town box
- * (the Home card's "or type your town").
+ * (the Home card's "or type your town"); Cancel closes it, leaving the place as it was. A place from the phone's
+ * location keeps a quiet "Not here? Type your town".
  */
 export default function FindCommunityScreen() {
     const { colors } = useTheme();
@@ -470,10 +471,19 @@ export default function FindCommunityScreen() {
                         )}
                     </View>
                 )}
+                {!!point && !typed && !townOpen && (
+                    <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town-instead">
+                        <Text style={styles.linkText}>{NOT_HERE_TYPE_YOUR_TOWN}</Text>
+                    </Pressable>
+                )}
                 {!!locationNote && <Text style={[styles.rowSub, { marginTop: 6 }]} accessibilityLiveRegion="polite">{locationNote}</Text>}
                 {townOpen && (
                     <View style={{ marginTop: 10 }}>
                         <AddressSearch onPick={r => void pickTown(r)} accent={colors.brand.primary} words={FIND_TOWN_SEARCH_WORDS} />
+                        <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 4 }]} onPress={() => setTownOpen(false)} accessibilityRole="button"
+                            accessibilityLabel={typed ? `Cancel, and keep ${nearLine(typed)}` : 'Cancel the town search'} testID="find-town-cancel">
+                            <Text style={styles.linkText}>Cancel</Text>
+                        </Pressable>
                     </View>
                 )}
 

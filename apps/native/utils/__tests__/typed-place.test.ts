@@ -14,7 +14,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-import { parseNominatimResults, FIND_TOWN_SEARCH_WORDS } from '@beanpool/core';
+import { parseNominatimResults, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN } from '@beanpool/core';
 import {
     typedPlaceFrom, readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, TYPED_PLACE_STORE_KEY,
 } from '../typed-place';
@@ -86,6 +86,17 @@ describe('the lookup is the shared one (no second geocoder, no new host)', () =>
             expect(s, file).not.toMatch(/nominatim|geocod|openstreetmap\.org|mapbox|googleapis/i);
             expect(s, file).not.toMatch(/createAddressLookup/);
         }
+    });
+
+    // The #1917 check's findings 3 and 6 (phone side).
+    it('the town box can be closed with nothing picked; a place from the phone keeps a quiet "Not here? Type your town"', () => {
+        const screen = src('app/find-community.tsx');
+        expect(NOT_HERE_TYPE_YOUR_TOWN).toBe('Not here? Type your town');
+        // Cancel sits with the open box and only closes it: the typed town (and its "Near Lismore") stands.
+        expect(screen).toMatch(/\{townOpen && \([\s\S]*?<AddressSearch [\s\S]*?onPress=\{\(\) => setTownOpen\(false\)\}[\s\S]*?testID="find-town-cancel"[\s\S]*?>Cancel<\/Text>/);
+        expect(screen).toMatch(/\{typed && !townOpen && \(\s*<View style=\{styles\.placeRow\} testID="find-town-picked">/);
+        // A point the phone found (not typed): the town is still one tap away.
+        expect(screen).toMatch(/\{!!point && !typed && !townOpen && \(\s*<Pressable [^>]*onPress=\{\(\) => setTownOpen\(true\)\}[^>]*testID="find-type-town-instead">\s*<Text style=\{styles\.linkText\}>\{NOT_HERE_TYPE_YOUR_TOWN\}<\/Text>/);
     });
 
     it('Sign Out and Replace wipe the typed town with the account', () => {

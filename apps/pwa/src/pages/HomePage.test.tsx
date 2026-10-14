@@ -526,6 +526,46 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         expect(screen.getByTestId('town-search')).toBeInTheDocument();
     });
 
+    // The #1917 check's findings 3, 4 and 6 (web side).
+    it('after a town: "change" can be cancelled back to it, "Share my area" is still there and lets the town go; a known place keeps "Not here?"', async () => {
+        const placed = (): HomeAnswer => { const a = visitorAnswer(); a.cards.find!.point = 'request'; return a; };
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(visitorAnswer())).mockResolvedValue(fresh(placed()));
+        const getCurrentPosition = vi.fn((ok: PositionCallback) => ok({ coords: { latitude: -28.5543, longitude: 153.4999 } } as GeolocationPosition));
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(await screen.findByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        // The answer now has a point, from the town: the GPS route stays, the other town links don't repeat it.
+        expect(screen.getByTestId('home-share-area')).toBeInTheDocument();
+        expect(screen.queryByTestId('home-type-town')).toBeNull();
+        expect(screen.queryByTestId('home-type-town-instead')).toBeNull();
+        // change, then Cancel: the box closes with nothing picked, and the town stands.
+        fireEvent.click(within(screen.getByTestId('home-town-picked')).getByRole('button', { name: /change/i }));
+        expect(screen.queryByTestId('home-town-picked')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel, and keep near Lismore' }));
+        expect(screen.queryByTestId('town-search')).toBeNull();
+        expect(screen.getByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+        // Share my area: the browser's place, and the town is let go.
+        fireEvent.click(screen.getByTestId('home-share-area'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
+        expect(vi.mocked(api.getHome).mock.calls[2][0]).toEqual({ lat: -28.6, lng: 153.5 });
+        await waitFor(() => expect(screen.queryByTestId('home-town-picked')).toBeNull());
+        expect(screen.queryByTestId('home-share-area')).toBeNull();
+        // A known place still offers the town, quietly.
+        expect(screen.getByTestId('home-type-town-instead')).toHaveTextContent('Not here? Type your town');
+        // The library's link role, light and dark alike, never a raw shade (finding 5).
+        expect(screen.getByTestId('home-type-town-instead').className).toMatch(/\btext-link\b.*\bring-accent\b/);
+        expect(screen.getByTestId('home-type-town-instead').className).not.toMatch(/nature-|emerald-/);
+        fireEvent.click(screen.getByTestId('home-type-town-instead'));
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel the town search' }));
+        expect(screen.queryByTestId('town-search')).toBeNull();
+        expect(screen.getByTestId('home-type-town-instead')).toBeInTheDocument();
+    });
+
     it('a location the browser refused offers typing the town instead, and opens the box', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
         const getCurrentPosition = vi.fn((_ok: PositionCallback, no?: PositionErrorCallback | null) => no?.({ code: 1 } as GeolocationPositionError));

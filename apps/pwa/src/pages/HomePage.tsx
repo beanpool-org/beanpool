@@ -69,10 +69,13 @@ import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
+
+/** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
+const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
 /** Back in front after this long, Home asks again. */
@@ -808,6 +811,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 const p = { lat: coarse(pos.coords.latitude), lng: coarse(pos.coords.longitude) };
                 pointRef.current = p;
                 setPoint(p);
+                // The browser's place again, as the phone's "Use my location": a town picked before is let go.
+                setTownName(null);
+                setTownOpen(false);
                 void fetchHomeRef.current('point');
             },
             () => { setPointProblem("Your location wasn't shared. Type your town instead."); setTownOpen(true); },
@@ -1035,14 +1041,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
-                                <span className="min-w-0 break-words text-sm font-semibold text-nature-900 dark:text-white">Near {townName}</span>
-                                <button type="button" onClick={() => setTownOpen(true)} aria-label={`Change the town (near ${townName})`}
-                                    className="min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                <span className="min-w-0 break-words text-sm font-semibold text-text-primary">Near {townName}</span>
+                                <button type="button" onClick={() => setTownOpen(true)} aria-label={`Change the town (near ${townName})`} className={TOWN_LINK}>
                                     change
                                 </button>
                             </div>
                         )}
-                        {f.point === null && !townName && (
+                        {(f.point === null || townName) && (
                             <div className="mt-1">
                                 <button type="button" onClick={sharePoint} data-testid="home-share-area"
                                     className="w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -1050,15 +1055,27 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 </button>
                                 <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">Only a rough area (about 10 km) is used, to find what's near.</p>
                                 {pointProblem && <p role="alert" className="m-0 mt-1 text-xs text-nature-800 dark:text-nature-100">{pointProblem}</p>}
-                                {!townOpen && (
-                                    <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town"
-                                        className="min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                {!townOpen && !townName && (
+                                    <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town" className={TOWN_LINK}>
                                         {TYPE_YOUR_TOWN}
                                     </button>
                                 )}
                             </div>
                         )}
-                        {townOpen && <div className="mt-2"><AddressSearch words={FIND_TOWN_SEARCH_WORDS} onPick={pickTown} /></div>}
+                        {f.point !== null && !townName && !townOpen && (
+                            <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town-instead" className={TOWN_LINK}>
+                                {NOT_HERE_TYPE_YOUR_TOWN}
+                            </button>
+                        )}
+                        {townOpen && (
+                            <div className="mt-2">
+                                <AddressSearch words={FIND_TOWN_SEARCH_WORDS} onPick={pickTown} />
+                                <button type="button" onClick={() => setTownOpen(false)} data-testid="home-town-cancel" className={TOWN_LINK}
+                                    aria-label={townName ? `Cancel, and keep near ${townName}` : 'Cancel the town search'}>
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
                     </HomeCard>
                 );
             }

@@ -38,7 +38,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { createPairingSession, decryptPairingPayload, photoStepNote } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1823,26 +1823,32 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
+                            {/* No picture yet: Next still works (rehearsal 14 Oct S9, never a gate), and this says whether
+                                the node asks for one before a first post (core postRulesFor). */}
+                            {!pendingAvatar && (
+                                <p data-testid="photo-step-note" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {photoStepNote(!beansOff)}
+                                </p>
+                            )}
+
                             <button
                                 onClick={() => {
-                                    if (pendingAvatar) {
-                                        setShowAvatarSetup(false);
-                                        if (byArea) setShowAreaStep(true);
-                                        setError(null);
-                                    }
+                                    setShowAvatarSetup(false);
+                                    if (byArea) setShowAreaStep(true);
+                                    setError(null);
                                 }}
-                                disabled={!pendingAvatar || loading}
+                                disabled={loading}
                                 style={{
                                     width: '100%',
                                     padding: '0.85rem',
                                     borderRadius: '10px',
                                     border: 'none',
-                                    background: !pendingAvatar ? 'var(--border-primary, #334155)' : loading ? '#555' : '#2563eb',
-                                    // White on the blue (and on the grey while it sends); the page's ink on the pale disabled fill.
-                                    color: !pendingAvatar ? 'var(--text-primary)' : 'var(--bp-commit-on)',
+                                    background: loading ? '#555' : '#2563eb',
+                                    // White on the blue (and on the grey while it sends).
+                                    color: 'var(--bp-commit-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
-                                    cursor: !pendingAvatar || loading ? 'not-allowed' : 'pointer',
+                                    cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit',
                                     transition: 'background 0.2s',
                                 }}

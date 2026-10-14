@@ -16,6 +16,7 @@ import {
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
+import { photoStepNote } from '@beanpool/core';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
@@ -1828,7 +1829,15 @@ export default function WelcomeScreen() {
     // Moved to AvatarPickerSheet component
 
     async function handleCompleteProfile() {
-        if (!pendingIdentity || !pendingAvatar) return;
+        if (!pendingIdentity) return;
+        // No picture picked: on to the 12 words all the same (rehearsal 14 Oct S9, never a gate); the step said whether
+        // the node asks for one before a first post.
+        if (!pendingAvatar) {
+            setError(null);
+            await updatePendingOnboarding({ step: 'seedBackup', avatar: null }).catch(() => {});
+            setMode('seedBackup');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -1937,9 +1946,13 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
+                        {!pendingAvatar && (
+                            <Text style={styles.subtitle} testID="photo-step-note">{photoStepNote(joinBeansOn)}</Text>
+                        )}
+
                         <Pressable
-                            style={[styles.primaryBtn, !pendingAvatar && styles.disabledBtn]}
-                            disabled={!pendingAvatar || loading}
+                            style={styles.primaryBtn}
+                            disabled={loading}
                             onPress={handleCompleteProfile}
                             accessibilityRole="button"
                         >

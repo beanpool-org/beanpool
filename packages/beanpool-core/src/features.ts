@@ -127,3 +127,13 @@ export type PostRules = {
 export function postRulesFor(beansOn: boolean): PostRules {
     return { offerFirst: beansOn, profilePhoto: beansOn, needPhoto: beansOn };
 }
+
+/**
+ * Sign-up's photo step with no picture picked yet (rehearsal 14 Oct S9): Next works either way, never a gate (memory
+ * onboarding-no-hard-gates), and this says what the node will ask for, by the rule above.
+ */
+export function photoStepNote(beansOn: boolean): string {
+    return postRulesFor(beansOn).profilePhoto
+        ? 'This community asks for a profile picture before you post. You can add one later from your profile.'
+        : 'A picture is optional here. You can add one later from your profile.';
+}

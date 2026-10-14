@@ -294,7 +294,7 @@ export function registerMemberInternal(
     if (existing && !existing.is_visitor) {
         // Re-registration for a known key. Only touch the callsign if it actually
         // changed, and uniquify it (excluding self) so a re-register never collides.
-        if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+        if (foldName(callsign) !== foldName(String(existing.callsign || ''))) {
             callsign = uniquifyCallsign(callsign, publicKey);
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
@@ -462,9 +462,11 @@ export function updateProfile(
         const requested = update.callsign.trim().slice(0, 32);
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
-            if (foldName(requested) !== foldName(String(existing.callsign || ''))) {
-                if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
-            }
+            // Any change, a change of case included: the member's own row is left out of the check, so "marty" →
+            // "Marty" is free, but where a node already holds two names that fold the same (db.ts migrateCallsignFold),
+            // one of them may not take the other's spelling exactly (the unique index on lower(callsign) would refuse
+            // it as a raw error) or any other case of it.
+            if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
             callsign = requested;
         }
     }

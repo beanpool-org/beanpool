@@ -450,19 +450,19 @@ All endpoints are served on port 8443 (HTTPS):
 
 ## Status
 
-BeanPool is in active development. The PWA is **fully functional** and a **React Native / Expo companion app** has near-complete parity with 7 tabs (Map, Projects, Market, Chat, People, Ledger, Settings), SQLite persistence, and background Merkle sync. Five nodes (Mullum 1, Mullum 2, Review, Test, Test Mirror) are deployed with federation protocol for cross-community trading.
+BeanPool is in active development. The PWA is **fully functional** and a **React Native / Expo companion app** has near-complete parity with 7 tabs (Map, Projects, Market, Chat, People, Ledger, Settings), SQLite persistence, and background Merkle sync. The communities running today are on [the map on beanpool.org](https://beanpool.org/#find-or-start). Linking communities for cross-community trading is built and has been tried only between two of our own test communities.
 
-**What's working:**
-- ✅ **Alternative Palettes, Light Mode Map, and Chat Upgrades (v1.1.40)** — Shipped color tokenization across the native app (supporting Classic, Earth, and Slate palettes), defaulted maps to Light Mode with CartoDB Positron and a custom slate-blue dusk theme, generated transparent logos/icons, consolidated inbox tabs into a single list, added tap-to-enlarge chat images, lazy caches, 15-minute edit windows, node status mismatch checks, and Ed25519 PKCS8 signing fixes.
+**What's working** (a release log, kept for the record; lines marked ⛔ no longer describe today):
+- ✅ **Alternative Palettes, Light Mode Map, and Chat Upgrades (v1.1.40)** — Shipped color tokenization across the native app (the Earth and Slate palettes have since been removed), defaulted maps to Light Mode with CartoDB Positron and a custom slate-blue dusk theme, generated transparent logos/icons, consolidated inbox tabs into a single list, added tap-to-enlarge chat images, lazy caches, 15-minute edit windows, node status mismatch checks, and Ed25519 PKCS8 signing fixes.
 - ✅ **Active/Passive Collision & Deadlock HUD (v1.0.87 / v1.0.88)** — Resolves P2P Yamux concurrent dial-racing and silent listener deadlocks. Configures Active Dialer (`enabled: true`) and Passive Listener (`enabled: false`) roles that exchange enabled states on handshake, automatically rendering red `⚠️ Collision` and yellow `⚠️ Deadlock` warning badges with custom inline warning instructions.
-- ✅ **Push-on-Write Real-Time Replication (v1.0.87 / v1.0.88)** — Real-time event delta broadcasts using `/beanpool/sync/delta/2.0.0` secure WebSockets. Instantly signs delta event payloads with the node's libp2p Ed25519 private key upon any SQLite write, verified cryptographically by target mirrors.
+- ⛔ **Push-on-Write Real-Time Replication (v1.0.87 / v1.0.88)** — replaced: a backup now pulls a signed snapshot from its primary over HTTPS (`apps/server/src/services/backup-puller.ts`). Originally: — Real-time event delta broadcasts using `/beanpool/sync/delta/2.0.0` secure WebSockets. Instantly signs delta event payloads with the node's libp2p Ed25519 private key upon any SQLite write, verified cryptographically by target mirrors.
 - ✅ **15-Min Reconcile & 24h Tombstone Pruning** — Shipped a robust 15-minute background full Merkle-tree state comparison safety net to repair dropped delta frames, paired with a 24-hour database garbage collector that prunes soft-deleted tombstones older than 30 days once downstream peers' cursors have synced past them.
 - ✅ **P2P WebSocket Tunneling & Self-Healing (v1.0.85 / v1.0.86)** — Establish stable bidirectional P2P mirroring through Cloudflare Tunnels (port `443` secure WebSockets) using orange-clouded DNS subdomains (e.g. `p2p-mullum2.beanpool.org`). Automatic periodic Yamux handshake checks prune stale socket references forcefully using `p2pNode.hangUp` and trigger clean recovery dials within 30 seconds of a node restart.
 - ✅ **SQLite Diagnostics & Health Gates (v1.0.83 / v1.0.84)** — Active `PRAGMA integrity_check` scans and multi-table counters (Members, Posts, DMs, Txns) displaying database health indicators in Settings. Includes Koa health check `minAppVersion` gates matched dynamically on client boot to overlay updates.
 - ✅ Dynamic Node-Centered Mapping — Leaflet map bounds are dynamically tethered to the node's configured radius, and GPS pin-drop race conditions have been resolved
 - ✅ Invite-only membership with single-use codes + hierarchical invite tree
 - ✅ 12-word BIP-39 seed phrase — deterministic Ed25519 key derivation + recovery
-- ✅ People tab — Friends, Community browser, Invites, Guardians (up to 5)
+- ✅ People tab — Friends, Community browser, Invites (Guardians were removed with keeper recovery in September 2026)
 - ✅ Landing page welcome hub (HTTPS `/`) — 3 paths (join, transfer, recover) + admin contact info
 - ✅ Admin community config — name, email, phone in Settings → Community tab
 - ✅ Member profiles (avatar via camera/gallery, editable callsign, bio, contact visibility)
@@ -477,12 +477,12 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ Software update notifications — Docker Desktop-style header badge, auto-check with configurable interval
 - ✅ REST APIs (67+ endpoints) including friends, ratings, reports, admin thresholds, version check, push tokens, escrow lifecycle, and quadratic voting.
 - ✅ WebSocket real-time state feed
-- ✅ Federation protocol — peer/mirror/blocked trust levels
+- ✅ Federation protocol — peer/mirror/blocked trust levels (cross-community trading tried only between two test communities, off unless both operators switch it on)
 - ✅ Cross-community marketplace browsing (Connected Communities UI)
-- ✅ Mirror state sync (Merkle hash + delta exchange, 15-min intervals)
+- ✅ Mirror state sync — a backup pulls a signed snapshot from its primary every 60 seconds, with a full re-compare every 15 minutes
 - ✅ Handshake protocol (~570ms latency between continents)
 - ✅ Let's Encrypt auto-TLS via DNS-01 challenge (Cloudflare API)
-- ✅ 5 live nodes — Mullum 1 (Azure AU), Mullum 2 (bare metal), Review (bare metal), Test (bare metal, offline SQLite recovery node), and Test Mirror (bare metal real-time backup node)
+- ⛔ 5 live nodes (no longer the fleet; see the map on beanpool.org) — Mullum 1 (Azure AU), Mullum 2 (bare metal), Review (bare metal), Test (bare metal, offline SQLite recovery node), and Test Mirror (bare metal real-time backup node)
 - ✅ Node admin setup guide with LE and no-domain instructions
 - ✅ Database (SQLite) — `better-sqlite3` with WAL mode, self-healing schema migrations
 - ✅ FTS5 full-text search — marketplace search with synonym mapping
@@ -525,7 +525,7 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ **Ledger UI Enhancements** — Corrected credit slider visual representation for negative balances and improved feedback for locked 'Send Credits' functionality.
 - ✅ **Sentinel Security Hardening & Deny-by-Default (Sentinel)** — Inverted the Koa server `requireSignature` auth filter to deny-by-default on all mutating endpoints (`POST`, `PUT`, `DELETE` under `/api/*`), eliminating opt-in security drift. Binds verified request keys to `ctx.state.actor` as the authenticated source of truth, and enforces dynamic body spoof protection.
 - ✅ **Auth Boundary Verification** — Shipped `scripts/verify-auth-boundary.mjs` which dynamically asserts all 38 mutating endpoints across 114 test vectors (unsigned, wrong-key, spoofed-body) against the live server.
-- ✅ **Cryptographic P2P Sync Signatures** — Secured peer-to-peer Merkle replication by signing outgoing state payloads with the node's libp2p Ed25519 private key, and verifying payload signatures before database writes. Includes a dedicated `test-sync-signature.ts` integration suite.
+- ✅ **Cryptographic Sync Signatures** — Replication payloads are signed with the node's Ed25519 key (`data/libp2p_key`) and verified before database writes; replication is now one-way, primary → backup. Includes a dedicated `test-sync-signature.ts` integration suite.
 - ✅ **Native Identity SecureStore & Clipboard Privacy** — Eliminated plaintext fallback storage for identity private keys in favor of hardware-backed Expo `SecureStore`, and resolved OS spyware notifications by replacing background clipboard sniffing with user-initiated pasting.
 - ✅ Monorepo ESLint Flat Config — Configured monorepo-wide flat linting rules via `eslint.config.mjs` to maintain code health standards.
 - ✅ Release v1.0.76 Settings Lockout Fix — Resolved Admin Settings CSP lockouts by explicitly permitting Leaflet, OpenStreetMap, and geocoding API domains (`https://unpkg.com`, `https://*.tile.openstreetmap.org`, `https://nominatim.openstreetmap.org`).
@@ -533,7 +533,7 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ Release v1.0.77 SQLite Database Restoration — Restored SQLite database state on the `test.beanpool.org` node using simulator datasets to recover 28 members, 21 posts, and 24 messages.
 - ✅ Release v1.0.77 "Never" Sync Schedule — Added a "Never (Disabled)" option to Directory settings, allowing admins to completely bypass periodic directory pushes.
 - ✅ Production EAS Native Builds (v1.0.76-b97) — Successfully generated production iOS ipa bundle and Android aab bundle, distributing them to local and desktop build stores.
-- ✅ Global Mesh Node Deployment — Automated and verified the global mesh deployment of version `v1.1.40` using `deploy.sh` across all 5 mesh nodes (`mullum1.beanpool.org`, `mullum2.beanpool.org`, `review.beanpool.org`, `test.beanpool.org`, and `test-mirror.beanpool.org`) with valid Let's Encrypt TLS certificates.
+- ⛔ Global Mesh Node Deployment (June 2026; that fleet is gone) — Automated and verified the global mesh deployment of version `v1.1.40` using `deploy.sh` across all 5 mesh nodes (`mullum1.beanpool.org`, `mullum2.beanpool.org`, `review.beanpool.org`, `test.beanpool.org`, and `test-mirror.beanpool.org`) with valid Let's Encrypt TLS certificates.
 
 **Coming next:**
 - Native App Polish & App Store Submission (federation parity)
@@ -544,4 +544,4 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 
 [MIT](LICENSE)
 
-_Last updated: 2026-06-17_
+_Last updated: 2026-10-15_

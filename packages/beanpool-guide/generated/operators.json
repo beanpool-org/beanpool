@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 122,
-  "hash": "b439c42a6b00f53d9dcaa854f90353daa7bf6dc4c1f5a316f668b2d56af4a43e",
+  "version": 123,
+  "hash": "5c9646f396e990171f6ab0906453000f9341fe8dc1642ff0760e25390a494835",
   "sections": [
     {
       "id": "setup",
@@ -1788,13 +1788,13 @@
         },
         {
           "type": "p",
-          "text": "In the app, members report a post, a person or a Pulse item and choose a reason: spam or scam, offensive content, misleading post, or other. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report."
+          "text": "In the app, members report a post, an event, a Pulse item, a project or an enterprise (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report."
         },
         {
           "type": "ul",
           "items": [
             "A member can file at most **10 reports an hour**.",
-            "Reporting the same thing again, while the first report is still open, does nothing new.",
+            "Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.",
             "Nobody can report themselves."
           ]
         },
@@ -1814,6 +1814,7 @@
           "type": "ul",
           "items": [
             "In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.",
+            "A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.",
             "Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused."
           ]
         },
@@ -1848,6 +1849,7 @@
           "items": [
             "**Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.",
             "Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.",
+            "A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.",
             "**Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.",
             "**Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.",
             "**Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.",
@@ -4097,7 +4099,7 @@
             "**Health**: disk and memory, an unclean stop or a restart loop, the watchdog, a certificate problem, and, for an owner's assistant, a standby that needs you and the names of the alerts that are on (never their details).",
             "**Backups**: when the last snapshot was taken and whether it worked, failures in a row, how many off-box destinations there are and of what kind, whether backups are sealed and a recovery code is set, and how far behind the standby is.",
             "**Totals**: Beans in circulation, the credit and debt sums, how many members are in debit, the Commons pot, trades this month, new members, posts and trades. Never one member's balance.",
-            "**Reports**: their id, when, status, category and what was reported. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.",
+            "**Reports**: their id, when, status, whether it is a child-safety report, and what was reported. Open child-safety reports come first, then the rest newest first. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.",
             "**Join requests**: how many wait. Only when asked, each one's name and message, and the community it says it came from.",
             "**Safety settings**: yes or no only, for example whether two-factor sign-in is on, whether there are two owners, whether a recovery code is set.",
             "**Its own connection**: its name, who it acts for, until when, and its calls today."

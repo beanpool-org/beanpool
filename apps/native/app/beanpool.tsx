@@ -92,6 +92,7 @@ export default function BeanPoolSheet() {
         community: { paddingHorizontal: 4, paddingTop: 4 },
         communityName: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         rowCurrent: { backgroundColor: colors.accent.tint },
+        rowSubCurrent: { color: colors.text.body }, // text.secondary is 4.22 on the dark sage tint
         rowPressed: { backgroundColor: colors.surface.subtle },
         guestTag: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, flexShrink: 0 },
         cta: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, marginTop: 12 },
@@ -216,7 +217,7 @@ export default function BeanPoolSheet() {
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
                                 <View style={styles.rowText}>
                                     <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{r.name}</Text>
-                                    <Text style={styles.rowSub} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
+                                    <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
                                 </View>
                                 {isCurrent
                                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />

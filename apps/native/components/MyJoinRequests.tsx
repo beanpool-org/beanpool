@@ -20,7 +20,7 @@ export function MyJoinRequests({ identity }: { identity: BeanPoolIdentity }) {
         row: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10 },
         name: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
         note: { fontSize: 14, color: colors.text.body, marginTop: 4, lineHeight: 20 },
-        button: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+        button: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
         buttonText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', textAlign: 'center' },
         divider: { height: 1, backgroundColor: colors.border.default, marginVertical: 24 },
     }));

@@ -12,7 +12,7 @@ import { readableOn } from '../utils/readable-color';
 
 export function NoAreaLine({ onPress, colors = defaultColors }: { onPress: () => void; colors?: AppColors }): React.JSX.Element {
     const tone = colors.feedback.info;
-    // The action is 13 px bold at 1.3x, not large text: 4.5:1 on the box in every theme (earth's info tone is 4.17:1).
+    // The action is 13 px bold at 1.3x, not large text: 4.5:1 on the box in either theme, whatever the info tone becomes.
     const actionColor = readableOn(tone.fg, tone.bg);
     return (
         <Pressable

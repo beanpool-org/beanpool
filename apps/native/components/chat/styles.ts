@@ -60,7 +60,7 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         justifyContent: 'center', alignItems: 'center',
         shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2,
     },
-    circleActionButtonActive: { backgroundColor: colors.accent.primary },
+    circleActionButtonActive: { backgroundColor: colors.accent.fill },
     circleActionButtonDanger: { backgroundColor: colors.feedback.danger.solid },
 
     reactionPickerContainer: {
@@ -118,7 +118,7 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         maxHeight: CHAT_INPUT_MAX_HEIGHT, minHeight: CHAT_INPUT_MIN_HEIGHT, color: colors.text.body,
     },
     sendBtn: { flexShrink: 0, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-    sendBtnActive: { backgroundColor: colors.accent.primary },
+    sendBtnActive: { backgroundColor: colors.accent.fill },
     sendBtnInactive: { backgroundColor: colors.surface.subtle },
     composerNotice: { fontSize: 11, color: colors.text.muted, paddingHorizontal: 12, paddingTop: 6 },
 

@@ -160,7 +160,7 @@ async function kimsPhone() {
     mem.async.set(ANCHOR, MULLUM);
     mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM, alias: 'Mullum' }, { url: BELLINGEN }]));
     mem.async.set(GUESTS, JSON.stringify([BYRON]));
-    mem.async.set('beanpool_light_palette', 'sand');
+    mem.async.set('beanpool_theme_mode', 'dark');
     mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
     mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM, BYRON]));
 }
@@ -203,7 +203,7 @@ describe('Sign Out (Device Only)', () => {
 
         expect(await loadIdentity()).toBeNull();
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
-        expect(mem.async.get('beanpool_light_palette')).toBe('sand');
+        expect(mem.async.get('beanpool_theme_mode')).toBe('dark');
         expect(removeCommunityCaches).toHaveBeenCalledTimes(1);
         expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([MULLUM, BELLINGEN, BYRON].sort());
         // And every other community copy on the phone: one a Wipe left keeps this identity's group key memory

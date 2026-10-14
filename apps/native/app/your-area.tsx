@@ -95,7 +95,7 @@ export default function YourAreaScreen() {
                             accessibilityLabel="Clear your area"
                             testID="your-area-clear"
                         >
-                            {clearing ? <ActivityIndicator color={dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626')} /> : <Text style={styles.clearText}>Clear</Text>}
+                            {clearing ? <ActivityIndicator color={colors.feedback.danger.fg} /> : <Text style={styles.clearText}>Clear</Text>}
                         </Pressable>
                     )}
                     {error && <Text style={styles.error}>{error}</Text>}
@@ -131,8 +131,8 @@ function makeStyles(colors: AppColors, dark: boolean) {
         card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 12 },
         current: { fontSize: 17, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
         clearBtn: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), alignItems: 'center', justifyContent: 'center', padding: 12 },
-        clearText: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 15, fontWeight: '700' },
+        clearText: { color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700' },
         disabled: { opacity: 0.5 },
-        error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginTop: 8, textAlign: 'center' },
+        error: { color: colors.feedback.danger.fg, fontSize: 13, marginTop: 8, textAlign: 'center' },
     });
 }

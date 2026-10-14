@@ -154,7 +154,7 @@ export default function UnlockKeysScreen() {
                                     ? `Now finish on ${found.look.host}'s screen: it shows what will happen, then “Take over now”.`
                                     : `${found.look.host} is restoring the backup and will restart by itself.`}
                             </Text>
-                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.back()} accessibilityRole="button">
+                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.back()} accessibilityRole="button">
                                 <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
                             </Pressable>
                         </View>
@@ -171,14 +171,14 @@ export default function UnlockKeysScreen() {
         return (
             <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 56 }]}>
                 {close}
-                {checking && <ActivityIndicator size="large" color={palette.emerald500} />}
+                {checking && <ActivityIndicator size="large" color={colors.brand.primary} />}
                 {sheet}
             </View>
         );
     }
 
     if (!permission) {
-        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={palette.emerald500} /></View>;
+        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
     }
 
     if (!permission.granted) {
@@ -190,7 +190,7 @@ export default function UnlockKeysScreen() {
                     To take over or restore with this phone, BeanPool scans the code on the server's Settings page.
                 </Text>
                 <Pressable
-                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]}
+                    style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]}
                     onPress={permission.canAskAgain ? requestPermission : () => Linking.openSettings()}
                     accessibilityRole="button"
                 >
@@ -248,14 +248,14 @@ function UnlockDetails({ found, communityName, callsign, busy, fromLink, onAppro
             </Text>
             {fromLink && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
-                    <Text style={[styles.infoLine, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                    <Text style={[styles.infoLine, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
                         {openedFromLinkWarning(takeover ? 'takeover' : 'restore', look.host)}
                     </Text>
                 </View>
             )}
             {takeover && mainAnswers && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
-                    <Text style={[styles.infoLine, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                    <Text style={[styles.infoLine, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
                         Your main server still answers. Two servers with one identity will compete. Take over only if it is really gone, and never start it again.
                     </Text>
                 </View>
@@ -277,7 +277,7 @@ function UnlockDetails({ found, communityName, callsign, busy, fromLink, onAppro
                 Your phone opens its own key to the locked keys and hands it to that server, locked so only that server can read it. Your phone never sees what is inside.
             </Text>
             <Pressable
-                style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }, busy && { opacity: 0.7 }]}
+                style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, busy && { opacity: 0.7 }]}
                 onPress={onApprove}
                 disabled={busy}
                 accessibilityRole="button"

@@ -338,7 +338,7 @@ export function EventDetail({ post }: EventDetailProps) {
                                 accessibilityLabel="Cancel event"
                                 accessibilityState={{ busy: cancelling }}
                             >
-                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.solid} /> : <Text style={styles.cancelText}>Cancel event</Text>}
+                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.fg} /> : <Text style={styles.cancelText}>Cancel event</Text>}
                             </Pressable>
                         )}
                     </View>
@@ -440,7 +440,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         copyText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         cancelBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
-        cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.solid },
+        cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.fg },
         reportBtn: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
-        reportText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
+        reportText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg },
     });

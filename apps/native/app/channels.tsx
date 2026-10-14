@@ -850,7 +850,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     cardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
     shareBtn: {
         paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     shareBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
     secondaryBtn: {
@@ -862,7 +862,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     removeBtnText: { color: colors.market.need.fg, fontSize: 15 },
     primaryBtn: {
         paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     primaryBtnDisabled: { opacity: 0.5 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
@@ -894,7 +894,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     tileActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     tileIcon: { fontSize: 20 },
     tileLabel: { fontSize: 15, fontWeight: '600', color: colors.text.heading, marginTop: 2 },
-    tileLabelActive: { color: colors.brand.dark },
+    tileLabelActive: { color: colors.brand.primary },
     tileHint: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
 
     input: {
@@ -910,7 +910,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     },
     chipActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     chipText: { fontSize: 14, color: colors.text.body },
-    chipTextActive: { color: colors.brand.dark, fontWeight: '600' },
+    chipTextActive: { color: colors.brand.primary, fontWeight: '600' },
 
     verifiedBadgeRow: {
         flexDirection: 'row',
@@ -921,7 +921,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         borderRadius: 12,
     },
     verifiedText: {
-        color: colors.brand.dark,
+        color: colors.brand.primary,
         fontSize: 12,
         fontWeight: '700',
     },
@@ -929,7 +929,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     oauthConnectBtnText: {
         color: colors.text.inverse,

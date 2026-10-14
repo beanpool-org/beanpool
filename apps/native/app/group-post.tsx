@@ -101,12 +101,12 @@ export default function GroupPostScreen() {
             backgroundColor: colors.surface.card,
         },
         typeBtnActiveOffer: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.primary,
         },
         typeBtnActiveNeed: {
-            backgroundColor: colors.market.need.fg || '#ea580c',
-            borderColor: colors.market.need.fg || '#ea580c',
+            backgroundColor: colors.action.fab,
+            borderColor: colors.action.fab,
         },
         typeBtnText: {
             fontSize: 14,
@@ -156,7 +156,7 @@ export default function GroupPostScreen() {
             alignItems: 'center',
             justifyContent: 'center',
         },
-        checkboxOn: { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary },
+        checkboxOn: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
         toggleLabel: { fontSize: 14, color: colors.text.body, fontWeight: '600' },
         toggleHint: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
         footer: {
@@ -169,7 +169,7 @@ export default function GroupPostScreen() {
             paddingVertical: 15,
             borderRadius: 14,
             alignItems: 'center',
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             shadowColor: colors.brand.dark,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.25,

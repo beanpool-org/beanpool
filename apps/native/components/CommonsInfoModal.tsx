@@ -193,7 +193,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
             fontWeight: '500',
         },
         qvRowCost: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 16,
             fontWeight: 'bold',
         },
@@ -300,7 +300,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                             As a zero-sum mutual credit network, pruning inactive accounts requires balancing the ledger:
                         </Text>
                         <View style={styles.solvencyRow}>
-                            <MaterialCommunityIcons name="shield-alert" size={20} color={colors.feedback.danger.solid} style={styles.solvencyIcon} />
+                            <MaterialCommunityIcons name="shield-alert" size={20} color={colors.feedback.danger.fg} style={styles.solvencyIcon} />
                             <Text style={styles.solvencyText}>
                                 <Text style={styles.boldWhiteText}>Bad Debt Payouts:</Text> If an inactive account is pruned with a negative balance, the Commons Pool pays off their outstanding debt to maintain zero-sum equilibrium.
                             </Text>

@@ -166,7 +166,7 @@ export default function SettingsSigninScreen() {
     );
 
     if (!permission) {
-        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={palette.emerald500} /></View>;
+        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
     }
 
     if (!permission.granted) {
@@ -178,7 +178,7 @@ export default function SettingsSigninScreen() {
                     To sign a computer in to the community's Settings, BeanPool scans the code on its screen.
                 </Text>
                 <Pressable
-                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]}
+                    style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]}
                     onPress={permission.canAskAgain ? requestPermission : () => Linking.openSettings()}
                     accessibilityRole="button"
                 >
@@ -230,7 +230,7 @@ export default function SettingsSigninScreen() {
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.heading, fontWeight: '700' }]}>{DIGITS_PRIVATE}</Text>
                                 <Pressable
-                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: digitsDoneButton.enabled ? 1 : 0.5 }]}
+                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.fill, opacity: digitsDoneButton.enabled ? 1 : 0.5 }]}
                                     onPress={() => router.back()}
                                     disabled={!digitsDoneButton.enabled}
                                     accessibilityRole="button"
@@ -248,7 +248,7 @@ export default function SettingsSigninScreen() {
                                         ? `The assistant now reads ${communityName} as you. Disconnect it any time in Settings → Connected assistants.`
                                         : `The computer is now in ${communityName}'s Settings, signed in as you. Sign out there when you're done.`}
                                 </Text>
-                                <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.back()} accessibilityRole="button">
+                                <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.back()} accessibilityRole="button">
                                     <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
                                 </Pressable>
                             </View>
@@ -257,7 +257,7 @@ export default function SettingsSigninScreen() {
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
                                     {found.look.agent ? AGENT_QUESTION : SIGNIN_QUESTION}
                                 </Text>
-                                <Text style={[styles.body, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                                <Text style={[styles.body, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
                                     {found.look.agent ? AGENT_WARNING : SIGNIN_WARNING}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
@@ -280,7 +280,7 @@ export default function SettingsSigninScreen() {
                                     <Text style={[styles.body, { color: colors.text.secondary }]}>{formatTimeLeft(found.look.expiresInSeconds - openSeconds)}</Text>
                                 )}
                                 <Pressable
-                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }, busy && { opacity: 0.7 }]}
+                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, busy && { opacity: 0.7 }]}
                                     onPress={approve}
                                     disabled={busy}
                                     accessibilityRole="button"
@@ -291,7 +291,7 @@ export default function SettingsSigninScreen() {
                                     {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{found.look.agent ? 'Connect' : 'Sign in'}</Text>}
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={decline} disabled={busy} accessibilityRole="button">
-                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>{found.look.agent ? 'No, I did not add an assistant' : "No, that's not my computer"}</Text>
+                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{found.look.agent ? 'No, I did not add an assistant' : "No, that's not my computer"}</Text>
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={resumeScanning} disabled={busy} accessibilityRole="button">
                                     <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Scan again</Text>

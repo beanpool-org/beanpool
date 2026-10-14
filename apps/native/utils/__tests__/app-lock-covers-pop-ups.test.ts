@@ -51,7 +51,10 @@ vi.mock('react-native', async () => {
         Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => h('button', { onClick: onPress }, children),
     };
 });
-vi.mock('../../app/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
+vi.mock('../../app/ThemeContext', async () => {
+    const { lightColors } = await import('../../constants/colors');
+    return { useTheme: () => ({ theme: 'light', colors: lightColors }) };
+});
 
 import { AppLockSurface, installLockCovers } from '../../components/AppLock';
 import { setAppCovered, setAppLocked, setAppUnlockAction } from '../app-lock-screen';

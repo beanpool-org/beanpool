@@ -146,7 +146,7 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
         marginBottom: 12,
     },
     primary: {
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
         borderRadius: 12,
         paddingVertical: 12,
         alignItems: 'center',

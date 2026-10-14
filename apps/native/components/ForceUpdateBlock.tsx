@@ -313,7 +313,7 @@ export default function ForceUpdateBlock() {
     const secondary = [styles.secondaryButton, { borderColor: colors.border.default, backgroundColor: colors.surface.app }];
     const card = [styles.card, { backgroundColor: colors.surface.card, borderColor: colors.border.default }];
     const errorLine = pageError && (
-        <Text style={[styles.small, { color: colors.feedback.danger.solid, marginTop: 8 }]} accessibilityLiveRegion="polite">
+        <Text style={[styles.small, { color: colors.feedback.danger.fg, marginTop: 8 }]} accessibilityLiveRegion="polite">
             {pageError}
         </Text>
     );
@@ -375,7 +375,7 @@ export default function ForceUpdateBlock() {
             <WordsWindow onClose={toMain} background={colors.surface.app}>
                 {pageScroll(<>
                     <Text accessibilityRole="header" style={[styles.subtitle, { color: colors.text.heading }]}>Your 12 words</Text>
-                    <Text style={[styles.small, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                    <Text style={[styles.small, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
                         Never share them with anyone. Write them down on paper and keep it somewhere safe.
                     </Text>
                     {wordGrid(page.words)}
@@ -411,7 +411,7 @@ export default function ForceUpdateBlock() {
         const { plan } = page;
         const leaveButton = (label: string, checked: boolean) => (
             <Pressable onPress={() => { void leave(plan, checked); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>{busy ? 'Leaving…' : label}</Text>
+                <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>{busy ? 'Leaving…' : label}</Text>
             </Pressable>
         );
         const body = !identity ? (
@@ -456,7 +456,7 @@ export default function ForceUpdateBlock() {
                     </Pressable>
                 ) : (
                     <>
-                        <Text style={[styles.small, { color: colors.feedback.danger.solid }]}>{noWordsBeforeWipe()}</Text>
+                        <Text style={[styles.small, { color: colors.feedback.danger.fg }]}>{noWordsBeforeWipe()}</Text>
                         {leaveButton('Take my account off this phone', false)}
                     </>
                 )}
@@ -491,7 +491,7 @@ export default function ForceUpdateBlock() {
                     onPress={openStore}
                     accessibilityRole="button"
                     accessibilityLabel={`Update BeanPool in ${store}`}
-                    style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.dark : colors.brand.primary }]}
+                    style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.fill : colors.brand.fill }]}
                 >
                     <Text style={[styles.buttonText, { color: colors.text.inverse }]}>Update</Text>
                 </Pressable>
@@ -524,7 +524,7 @@ export default function ForceUpdateBlock() {
                         </Pressable>
                     ))}
                     {switchError && (
-                        <Text style={[styles.small, { color: colors.feedback.danger.solid, marginTop: 8 }]} accessibilityLiveRegion="polite">
+                        <Text style={[styles.small, { color: colors.feedback.danger.fg, marginTop: 8 }]} accessibilityLiveRegion="polite">
                             {switchError}
                         </Text>
                     )}
@@ -534,7 +534,7 @@ export default function ForceUpdateBlock() {
             {!identity && (
                 <View style={[...card, styles.next]}>
                     <Pressable onPress={() => { void openLeave(); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                        <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>
+                        <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>
                             Leave this community
                         </Text>
                     </Pressable>
@@ -560,7 +560,7 @@ export default function ForceUpdateBlock() {
                         </Pressable>
                     )}
                     <Pressable onPress={() => { void openLeave(); }} disabled={busy} accessibilityRole="button" style={secondary}>
-                        <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>
+                        <Text style={[styles.secondaryText, { color: colors.feedback.danger.fg }]}>
                             Leave this community
                         </Text>
                     </Pressable>

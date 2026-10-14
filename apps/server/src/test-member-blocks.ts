@@ -39,8 +39,9 @@
  *      in packages/ and apps/server is one this suite runs, none is in a file with a database of its own, nothing drops
  *      or alters the table; each shape of write moves the block lists' version, a rolled-back one too, and a read does not;
  *      what the version can't see (#1867): an unblock read inside a transaction that rolls back leaves the block held
- *      after it; a block and an unblock written by another connection hold from the next read; a counting trigger
- *      dropped, or all of them with a run-time temp_store, is made again and the kept lists read afresh
+ *      after it; a block and an unblock written by another connection hold from the next read; data_version recorded
+ *      before the table read catches a commit landing right after the SELECT; a counting trigger dropped, or all of
+ *      them with a run-time temp_store, is made again and the kept lists read afresh
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks.ts
  */
@@ -754,9 +755,43 @@ async function main(): Promise<void> {
         const otherBlock = holds(o2);
         other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(o2);
         const otherUnblock = !holds(o2);
-        other.close();
         assert(otherBlock && otherUnblock,
             `a block and an unblock written by another connection each hold from the next read (block: ${otherBlock ? 'held' : 'missed'}, unblock: ${otherUnblock ? 'held' : 'missed'})`);
+
+        // A commit landing between the table read and whatever the kept read records (NB-1): simulated by committing
+        // from a second connection right after the blockers' SELECT returns. data_version recorded BEFORE the table read
+        // empties the kept lists at the next read, so both a block and an unblock hold from the next read.
+        const realPrepare = db.prepare.bind(db);
+        let inject: (() => void) | null = null;
+        (db as any).prepare = (sql: string) => {
+            const st: any = realPrepare(sql);
+            if (sql.startsWith('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey')) {
+                const all = st.all.bind(st);
+                st.all = (...args: unknown[]) => { const r = all(...args); if (inject) { const f = inject; inject = null; f(); } return r; };
+            }
+            return st;
+        };
+        try {
+            const a3 = newKey(), o3 = newKey();
+            const holds3 = (who: string): boolean => blocks.blockersOfKept(a3).has(who);
+            const bumpOwn = () => { const x = newKey(), y = newKey(); db.prepare(insertRow).run(x, y, at, at); db.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(x); };
+            holds3(o3);
+            bumpOwn();
+            inject = () => other.prepare(insertRow).run(o3, a3, at, at);
+            const rFirst = holds3(o3);
+            const rNext = holds3(o3);
+            bumpOwn();
+            holds3(o3);
+            bumpOwn();
+            inject = () => other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').run(o3, a3);
+            const uFirst = holds3(o3);
+            const uNext = holds3(o3);
+            assert(!rFirst && rNext && uFirst && !uNext,
+                `data_version recorded before the table read catches another connection's commit right after the SELECT (block: ${rNext ? 'held' : 'missed'}, unblock: ${!uNext ? 'held' : 'missed'})`);
+        } finally {
+            (db as any).prepare = realPrepare;
+        }
+        other.close();
         db.exec('DROP TRIGGER temp.member_blocks_insert_counted');
         db.prepare(insertRow).run(o2, a, at, at);
         const afterDrop = holds(o2), remade = counting();

@@ -1,9 +1,9 @@
 /**
  * A text colour that reads on its background: WCAG 2's 4.5:1 for text that isn't large (under 18.66 px bold), as the
  * Market's no-area line's action is at 13 px x 1.3. `fg` itself when it already does; else the same hue moved toward black
- * on a light background (white on a dark one), in small steps, until it does. Colours the palette can't be relied on to
- * pair at that ratio (the earth theme's info tone, 4.17:1 on its own box: the review of #1778, finding 9) without
- * changing the palette every screen shares. #rrggbb only; anything else comes back as given.
+ * on a light background (white on a dark one), in small steps, until it does. For a pair the palette can't be relied on to
+ * reach that ratio (the review of #1778, finding 9, found one at 4.17:1 on its own box) without changing the palette
+ * every screen shares. #rrggbb only; anything else comes back as given.
  */
 const HEX = /^#[0-9a-f]{6}$/i;
 

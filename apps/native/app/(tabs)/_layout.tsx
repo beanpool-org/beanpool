@@ -47,6 +47,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
     count?: number;
     badge?: React.ReactNode;
 }) {
+    const { colors } = useTheme();
     return (
         <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingBottom: UNDERLINE_HEIGHT }}>
             {/* The emoji can't take a tint, so the inactive tabs are dimmed instead and the
@@ -77,7 +78,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
             {count !== undefined && count > 0 && (
                 <View style={{
                     position: 'absolute', top: 16, left: '50%', marginLeft: 6, minWidth: 16, height: 16,
-                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#dc2626',
+                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.feedback.danger.solid,
                     alignItems: 'center', justifyContent: 'center',
                 }}>
                     <Text allowFontScaling={false} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>

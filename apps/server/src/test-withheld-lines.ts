@@ -183,7 +183,7 @@ function main() {
     assert(withheldLine(msgId1) === undefined, 'dropWithheldOf removes author withheld lines');
 
     console.log(`\n${passed}/${run} withheld-lines tests passed.`);
-    process.exit(0);
+    process.exit(process.exitCode ?? 0);
 }
 
 main();

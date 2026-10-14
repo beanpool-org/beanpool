@@ -1912,6 +1912,8 @@ export async function createPost(post: any) {
             eventEndAt: post.eventEndAt,
             eventPlaceName: post.eventPlaceName,
             ...(post.eventPrivateNote ? { eventPrivateNote: post.eventPrivateNote } : {}),
+            // The host's "Only people I let in" choice, always sent (utils/events.ts buildEventDraft): left out, the node applies its own default.
+            ...(typeof post.eventHostLetsIn === 'boolean' ? { eventHostLetsIn: post.eventHostLetsIn } : {}),
         } : {}),
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),

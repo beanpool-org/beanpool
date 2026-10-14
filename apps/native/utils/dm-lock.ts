@@ -47,7 +47,7 @@ export function dmNotLockedLine(peerName?: string | null): string {
  */
 export class DmKeyChangedError extends Error {
     constructor() {
-        super('The key behind this chat changed, so the message wasn\'t sent.');
+        super(t("The key behind this chat changed, so the message wasn't sent."));
         this.name = 'DmKeyChangedError';
     }
 }
@@ -59,7 +59,9 @@ export function isDmKeyChanged(e: unknown): e is DmKeyChangedError {
 /** The one line the member sees while a key change waits (and for a send it refused): under the box, which stays disabled. */
 export function dmKeyChangedLine(peerName?: string | null): string {
     const name = peerName?.trim();
-    return `The key behind ${name && name !== 'Loading...' ? name : 'this chat'} changed, so sending is paused.`;
+    return name && name !== 'Loading...'
+        ? t('The key behind {name} changed, so sending is paused.', { name })
+        : t('The key behind this chat changed, so sending is paused.');
 }
 
 /**

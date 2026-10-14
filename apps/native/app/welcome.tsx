@@ -52,6 +52,7 @@ import { protectionFrom } from '../utils/protection-state';
 import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
+import { lowercaseRecoveryWords } from '@beanpool/core';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import {
@@ -1101,7 +1102,7 @@ export default function WelcomeScreen() {
     // back to the node. If the node can't be reached the account still restores —
     // it comes up nameless and adopts its real callsign on the first online sync.
     async function handleRecover() {
-        const words = recoveryWords.map(w => w.toLowerCase().trim());
+        const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
             setError('Please enter all 12 recovery words.');

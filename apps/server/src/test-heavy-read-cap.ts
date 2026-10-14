@@ -19,7 +19,9 @@
  *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
  *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget over what as many connections
  *      with nothing to send cost a server made ready the same way in this run (#1874), and each reader is served or
- *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB.
+ *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB historically (on modern Node
+ *      such as Node 26.5/macOS, handing the socket the whole body holds almost nothing, so the test does not claim to catch
+ *      the pre-#1523 bug directly on this Node; the per-send copy mutant stands in to verify that unbudgeted held bytes fail).
  *  1c. The same, with the version moved before each reader (24 and 48, plain and gzip), on the shared directory and on a
  *      20,000-member roster: each reader holds a snapshot no longer current, which the cap counts once at its full size
  *      for as long as any send holds it. What they hold (live buffers) stays within the budget and is all counted, the

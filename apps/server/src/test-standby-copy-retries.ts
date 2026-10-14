@@ -107,6 +107,10 @@ const schedule = (base: number, n: number) => Math.min(Math.max(CAP_MS, base), b
 /**
  * A failed pull's wait until `retryAt`, from a `timed-pull` or `timed-resync` answer (SLACK_MS): `short` from the pull's
  * return, for "never longer than"; `long` from the failure S recorded just before drawing it, for "never shorter than".
+ * (Why `long` is measured from the failure record rather than the draw: backup-puller.ts ~1126 computes `now + wait(...)`
+ * locally without persisting or exposing `now` or the raw draw to status or copy records; the failure record's
+ * `lastPullAt` at ~1101 is the closest timestamp preceding the draw, making `long = retryAt - failedAt` conservative
+ * by the few milliseconds of synchronous execution between ~1101 and ~1126, well inside SLACK_MS).
  * NaN when the pull recorded no failure, so that every check on it fails.
  */
 const waitOf = (retryAt: number, a: { at: number; failedAt: number | null }) =>
@@ -507,7 +511,9 @@ async function main(): Promise<void> {
 /**
  * When the pull that began at `t0` recorded its failure, on this server's clock: the copy record's lastPullAt, which the
  * puller's catch block writes in the same synchronous run as it draws the wait, just before it (services/backup-puller.ts,
- * noteCopyFailed then `now`). Null when this pull recorded none (it landed, or was not asked for).
+ * noteCopyFailed ~1101 then `now` and the draw at ~1126). Null when this pull recorded none (it landed, or was not asked for).
+ * Note: the draw itself at ~1126 does not expose its timestamp (only the resulting retryAt is saved), so `lastPullAt` is
+ * the closest available timestamp; measuring from here makes `long` upper-bound the wait by that small synchronous gap.
  */
 async function failedSince(t0: number): Promise<number | null> {
     const { readCopyRecord } = await import('./services/standby-copy-record.js');

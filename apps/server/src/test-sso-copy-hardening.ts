@@ -543,13 +543,16 @@ async function main(): Promise<void> {
 
     // A yardstick timed in this run, on this machine: one statement that reads every row of the pile, as a sweep statement
     // that examined the pile rather than its batch would. Read from a copy of the pile, so the sweep's deletes don't shrink
-    // it, the median of three before the sweep and of three after: a slow or busy runner slows it as it slows the sweep
-    // (#1874: on CI the absolute bounds below were p95 289 and 348 ms, a bystander's p99 1124 ms).
+    // it, the median of all six reads pooled (three before the sweep, three after): a slow or busy runner slows it as it
+    // slows the sweep (#1874: on CI the absolute bounds below were p95 289 and 348 ms, a bystander's p99 1124 ms).
+    // Note (NB2): this yardstick tracks CPU, not the disk; the temp table reads are in memory / cache, while the sweep's
+    // DELETE commits are fsync-bound. Using the median of all six reads prevents one noisy window from loosening the p95 bound (NB1).
     db.exec('CREATE TEMP TABLE yardstick AS SELECT * FROM recovery_collections');
     const yardRows = (db.prepare('SELECT COUNT(*) AS n FROM yardstick').get() as { n: number }).n;
     const readAll = db.prepare('SELECT SUM(length(id) + length(requester_ephemeral_pubkey)) AS n FROM yardstick WHERE status != ?');
-    const yard = () => [0, 1, 2].map(() => { const t = performance.now(); readAll.get('none'); return performance.now() - t; }).sort((x, y) => x - y)[1];
-    const yardBefore = yard();
+    const readYard = () => { const t = performance.now(); readAll.get('none'); return performance.now() - t; };
+    const yardBefore = [readYard(), readYard(), readYard()];
+    const yardBeforeMedian = [...yardBefore].sort((x, y) => x - y)[1];
 
     const times: number[] = [];
     let swept = 0;
@@ -569,24 +572,27 @@ async function main(): Promise<void> {
     const sweepMs = performance.now() - t7;
     sweepDone = true;
     await bystander;
-    const yardAfter = yard();
-    const scanMs = Math.max(yardBefore, yardAfter);
+    const yardAfter = [readYard(), readYard(), readYard()];
+    const yardAfterMedian = [...yardAfter].sort((x, y) => x - y)[1];
+    const allYard = [...yardBefore, ...yardAfter].sort((x, y) => x - y);
+    const scanMs = (allYard[2] + allYard[3]) / 2;
     db.exec('DROP TABLE yardstick');
     const pct = (xs: number[], p: number) => [...xs].sort((x, y) => x - y)[Math.min(xs.length - 1, Math.floor(xs.length * p))] ?? 0;
     const longest = Math.max(0, ...times);
     const longestWait = Math.max(0, ...waits);
     console.log(`  (swept ${swept} rows in ${times.length} statements, ${Math.round(sweepMs)} ms; statement median ${pct(times, 0.5).toFixed(1)} ms, `
         + `p95 ${pct(times, 0.95).toFixed(1)} ms, longest ${longest.toFixed(1)} ms; a bystander's wait median ${pct(waits, 0.5).toFixed(1)} ms, `
-        + `longest ${longestWait.toFixed(1)} ms over ${waits.length} requests; one read of all ${yardRows} rows ${yardBefore.toFixed(1)} ms before, ${yardAfter.toFixed(1)} after)`);
+        + `longest ${longestWait.toFixed(1)} ms over ${waits.length} requests; one read of all ${yardRows} rows ${yardBeforeMedian.toFixed(1)} ms before, ${yardAfterMedian.toFixed(1)} after; median ${scanMs.toFixed(1)} ms)`);
     assert(rowsFor(gus, EMPTY) <= 10 && pileLeft() === OWNERS * 10 && pileMax() === 10,
         `the sweep retires the piles: Gus's to ${rowsFor(gus, EMPTY)}, 2,000 members' 250,000 to their caps (${pileLeft()} left, at most ${pileMax()} each)`);
     // Batched by construction, then by time, against the yardstick: each statement is to examine its batch, not the pile,
     // so a statement that reads every row costs it at least about one yardstick. The time bounds are statistical, and
     // relative, so a loaded CI machine slows both sides. Four copies of this suite at once here gave p95 55-105 ms, and a
     // few single statements of 0.5-3 s, 53-row ones among them: the disk's fsyncs under four writers, not the statement's
-    // work, so no bound is put on the single longest. An unbatched sweep fails all three at once: one statement over these
-    // piles takes seconds (an aged 125,000 took 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a
-    // p95 of seconds; a batched one whose statements each scan the pile, a p95 of about a yardstick.
+    // work (the yardstick tracks CPU, not disk; temp-table reads don't slow with disk contention), so no bound is put on
+    // the single longest. An unbatched sweep fails all three at once: one statement over these piles takes seconds (an aged
+    // 125,000 took 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a p95 of seconds; a batched one
+    // whose statements each scan the pile, a p95 of about a yardstick.
     // The bounds in reads of the pile: on this Mac (a read 75-80 ms) they are the 250, 100 and 1,000 ms they were before
     // #1887 raised the first to 500 ms to stop the flakes.
     const SHORT = 3, WAIT_MEDIAN = 1.25, WAIT_P99 = 12;

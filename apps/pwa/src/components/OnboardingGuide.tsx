@@ -17,7 +17,7 @@ export function OnboardingGuide() {
                     <span aria-hidden="true">🟢 </span><strong>The best place to be is zero (0 Beans).</strong> This means you have given as much value to your community as you have received from it.
                 </div>
                 <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                    <span aria-hidden="true">🫘 </span><strong>Contributions First.</strong> To keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
+                    <span aria-hidden="true">🫘 </span><strong>Contributions First.</strong> In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
                 </div>
             </div>
 

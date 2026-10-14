@@ -50,6 +50,7 @@ export const SUITES = [
     'test-callsign-predicates',
     'test-callsign-any-alphabet',
     'test-callsign-fold-migration',
+    'test-name-writers',
     'test-message-tombstone',
     'test-recovery-shares',
     'test-sso',

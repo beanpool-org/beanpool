@@ -81,8 +81,9 @@ import type { RouteDeps } from './types.js';
  * status predicate of idx_members_callsign_unique, and never a visitor's row (a member of another community, or a key
  * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3).
  *
- * `publicKey`, when the device sends one, is the account it chose from the lookup (findRecoveryCandidates, which lists
- * the same rows): it must be one of the rows here, so two members whose names fold the same (kept, never renamed, by
+ * `publicKey`, when the device sends one (`candidatePublicKey`, a candidate's key from the lookup, findRecoveryCandidates,
+ * which lists the same rows; named so the middleware's spoof check reads it as someone else's key, as it is: the device
+ * signs with a throwaway key), is the account it chose: it must be one of the rows here, so two members whose names fold the same (kept, never renamed, by
  * db.ts migrateCallsignFold) can each still restore theirs, while a key this name does not hold opens nothing. With no key
  * (an app from before), a name two accounts hold is ambiguous, as it always was.
  */
@@ -189,7 +190,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
 
         // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
-        const sentKey = (ctx as any).requestBody?.publicKey;
+        const sentKey = (ctx as any).requestBody?.candidatePublicKey;
         if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
             ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return;
         }

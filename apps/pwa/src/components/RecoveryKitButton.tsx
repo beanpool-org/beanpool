@@ -1,6 +1,7 @@
 /**
  * "Print or save your recovery kit", by the 12 words: asks first (the save warning, Cancel / Continue), then prints the
- * kit (lib/recovery-kit.ts). Optional, and never a success message: the print dialog is the answer.
+ * kit (lib/recovery-kit.ts). Optional, and never a success message: the print dialog is the answer. Its words are the
+ * library's sage ink (docs/brand-colours.md): the blue it had read 2.07:1 on dark's --bg-secondary (rehearsal 14 Oct S12).
  */
 import { useState } from 'react';
 import { KIT_WEB_FAILED_LINE, KIT_WEB_LABEL, KIT_WEB_WARNING, printRecoveryKit } from '../lib/recovery-kit';
@@ -24,7 +25,7 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
         <div data-testid="recovery-kit" style={{ marginBottom: '0.75rem' }}>
             {!asking ? (
                 <button type="button" onClick={() => { setFailed(false); setAsking(true); }}
-                    style={{ ...target, border: '1px solid var(--bp-ink-info)', background: 'transparent', color: 'var(--bp-ink-info)' }}>
+                    style={{ ...target, border: '1px solid var(--bp-ink-accent)', background: 'transparent', color: 'var(--bp-ink-accent)' }}>
                     <span aria-hidden="true">🖨️ </span>{KIT_WEB_LABEL}
                 </button>
             ) : (
@@ -42,7 +43,7 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
                     </div>
                 </div>
             )}
-            {failed && <p role="alert" style={{ color: '#ef4444', fontSize: '0.8rem', lineHeight: 1.5, margin: '0.5rem 0 0' }}>{KIT_WEB_FAILED_LINE}</p>}
+            {failed && <p role="alert" style={{ color: 'var(--bp-ink-danger)', fontSize: '0.8rem', lineHeight: 1.5, margin: '0.5rem 0 0' }}>{KIT_WEB_FAILED_LINE}</p>}
         </div>
     );
 }

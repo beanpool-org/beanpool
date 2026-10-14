@@ -38,7 +38,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { createPairingSession, decryptPairingPayload, photoStepNote, t } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1823,26 +1823,32 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
+                            {/* No picture yet: Next still works (rehearsal 14 Oct S9, never a gate), and this says whether
+                                the node asks for one before a first post (core postRulesFor). */}
+                            {!pendingAvatar && (
+                                <p data-testid="photo-step-note" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {photoStepNote(!beansOff)}
+                                </p>
+                            )}
+
                             <button
                                 onClick={() => {
-                                    if (pendingAvatar) {
-                                        setShowAvatarSetup(false);
-                                        if (byArea) setShowAreaStep(true);
-                                        setError(null);
-                                    }
+                                    setShowAvatarSetup(false);
+                                    if (byArea) setShowAreaStep(true);
+                                    setError(null);
                                 }}
-                                disabled={!pendingAvatar || loading}
+                                disabled={loading}
                                 style={{
                                     width: '100%',
                                     padding: '0.85rem',
                                     borderRadius: '10px',
                                     border: 'none',
-                                    background: !pendingAvatar ? 'var(--border-primary)' : loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                    // White on the blue (and on the grey while it sends); the page's ink on the pale disabled fill.
-                                    color: !pendingAvatar ? 'var(--text-primary)' : 'var(--bp-info-on)',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    // White on the blue (and on the grey while it sends).
+                                    color: 'var(--bp-info-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
-                                    cursor: !pendingAvatar || loading ? 'not-allowed' : 'pointer',
+                                    cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit',
                                     transition: 'background 0.2s',
                                 }}
@@ -1973,7 +1979,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         Your 12 words are your primary key to your account across devices.
                                         {signInRecovery
                                             ? <> Signing in with {providerLabel(signInRecovery)} also brings it back.</>
-                                            : <> Without them, account recovery requires operator-assisted re-enrolment.</>}
+                                            : <> <span>{t('Nobody can reset them: not us, not this community.')}</span></>}
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
@@ -1989,7 +1995,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🚀 Where to Start?</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📍 Explore the <strong>Map</strong> to find offers (blue) and needs (orange) near you.
+                                        📍 Explore the <strong>Map</strong> to find offers (green) and needs (orange) near you.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         💬 Tap <strong>Message</strong> on any post to chat securely (E2E encrypted) with neighbors.

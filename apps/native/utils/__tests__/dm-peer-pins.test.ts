@@ -664,4 +664,24 @@ describe('salvagePinIds and the reset\'s ids for the guard list (#1938 case 14 Q
         expect(reads).toBe(1);
         expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(honest().slice(0, -5));
     });
+
+    // #1938 confirmation 10, finding 3 (mutant P7: the reset ignoring the copy held in memory when storage can't give the
+    // value): the pins were read earlier this run, then storage throws, or returns a corrupt value, at the tap. The guard
+    // list is handed the copy's ids, never null (the throw's residual) or the corrupt value's salvage ([]).
+    for (const how of ['storage throws at the tap', 'storage returns a corrupt value at the tap'] as const) {
+        it(`a copy of the pins held (read earlier this run), then ${how}: the reset hands the list the copy's ids`, async () => {
+            const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: honest() });
+            let bad = false;
+            const storage = { ...s, getItem: async (k: string) => { if (bad && how.includes('throws')) throw new Error('Row too big to fit into CursorWindow'); return s.getItem(k); } };
+            const book = createDmPinBook<string>(storage, (f) => f);
+            const held = await book.read(ME, FA);
+            expect(Object.keys(held)).toEqual([I1.toLowerCase(), I2, I3]);
+            bad = true;
+            if (how.includes('corrupt')) s.data.set(dmPeerPinsStoreKey(ME, FA), '{"pins": {corrupt');
+            const handed: Array<string[] | null> = [];
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            try { await book.reset(ME, FA, async (ids) => { handed.push(ids); }); } finally { warn.mockRestore(); }
+            expect(handed).toEqual([[I1.toLowerCase(), I2, I3]]);
+        });
+    }
 });

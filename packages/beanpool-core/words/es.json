@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "La búsqueda de localidades no funciona en este momento. Usa tu ubicación o, por ahora, omite este paso.",
   "No matches. Try the name of a town or suburb nearby.": "Sin resultados. Prueba con el nombre de una localidad o barrio cercano.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Lugares de OpenStreetMap. Lo que escribas aquí se les envía.",
-  "Choose {place}": "Elegir {place}"
+  "Choose {place}": "Elegir {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Esta comunidad pide una foto de perfil antes de publicar. Puedes agregarla más tarde desde tu perfil.",
+  "A picture is optional here. You can add one later from your profile.": "Aquí la foto es opcional. Puedes agregarla más tarde desde tu perfil."
 }

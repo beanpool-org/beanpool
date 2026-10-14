@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "البحث عن البلدات لا يعمل حاليًا. استخدم موقعك بدلًا من ذلك، أو تخطَّ هذه الخطوة الآن.",
   "No matches. Try the name of a town or suburb nearby.": "لا توجد نتائج. جرّب اسم بلدة أو حي قريب.",
   "Places from OpenStreetMap. What you type here is sent to them.": "الأماكن من OpenStreetMap. ما تكتبه هنا يُرسل إليهم.",
-  "Choose {place}": "اختر {place}"
+  "Choose {place}": "اختر {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "يطلب هذا المجتمع صورة للملف الشخصي قبل النشر. يمكنك إضافتها لاحقًا من ملفك الشخصي.",
+  "A picture is optional here. You can add one later from your profile.": "الصورة اختيارية هنا. يمكنك إضافتها لاحقًا من ملفك الشخصي."
 }

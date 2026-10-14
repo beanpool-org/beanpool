@@ -16,7 +16,8 @@ import {
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
-import { photoStepNote, t } from '@beanpool/core';
+// t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
+import { photoStepNote } from '@beanpool/core';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,

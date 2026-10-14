@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Поиск города сейчас не работает. Используйте своё местоположение или пока пропустите этот шаг.",
   "No matches. Try the name of a town or suburb nearby.": "Ничего не найдено. Попробуйте название ближайшего города или района.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Места из OpenStreetMap. То, что вы вводите здесь, отправляется им.",
-  "Choose {place}": "Выбрать: {place}"
+  "Choose {place}": "Выбрать: {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Это сообщество просит фото профиля перед публикацией. Добавить его можно позже в своём профиле.",
+  "A picture is optional here. You can add one later from your profile.": "Здесь фото необязательно. Добавить его можно позже в своём профиле."
 }

@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "ஊர் தேடல் இப்போது வேலை செய்யவில்லை. அதற்குப் பதிலாக என் இருப்பிடத்தைப் பயன்படுத்துங்கள், அல்லது இப்போதைக்குத் தவிர்த்துவிடுங்கள்.",
   "No matches. Try the name of a town or suburb nearby.": "பொருத்தங்கள் இல்லை. அருகிலுள்ள ஒரு ஊர் அல்லது பகுதியின் பெயரை முயன்று பாருங்கள்.",
   "Places from OpenStreetMap. What you type here is sent to them.": "இடங்கள் OpenStreetMap-இலிருந்து வருகின்றன. இங்கே நீங்கள் உள்ளிடுவது அவர்களுக்கு அனுப்பப்படும்.",
-  "Choose {place}": "{place} என்பதைத் தேர்ந்தெடுங்கள்"
+  "Choose {place}": "{place} என்பதைத் தேர்ந்தெடுங்கள்",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "நீங்கள் இடுகையிடும் முன் இந்தச் சமூகம் ஒரு சுயவிவரப் படத்தைக் கேட்கிறது. அதைப் பிறகு உங்கள் சுயவிவரத்திலிருந்து சேர்க்கலாம்.",
+  "A picture is optional here. You can add one later from your profile.": "இங்கே படம் விருப்பத்திற்குரியது. விரும்பினால் பிறகு உங்கள் சுயவிவரத்திலிருந்து சேர்க்கலாம்."
 }

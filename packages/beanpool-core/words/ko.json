@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "지금은 도시 검색이 되지 않아요. 대신 내 위치 사용을 누르거나 일단 건너뛰세요.",
   "No matches. Try the name of a town or suburb nearby.": "일치하는 곳이 없어요. 가까운 동네나 도시 이름으로 다시 찾아보세요.",
   "Places from OpenStreetMap. What you type here is sent to them.": "장소 정보는 OpenStreetMap에서 가져와요. 여기에 입력한 내용은 OpenStreetMap으로 전송돼요.",
-  "Choose {place}": "{place} 선택"
+  "Choose {place}": "{place} 선택",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "이 커뮤니티는 글을 올리기 전에 프로필 사진을 요청해요. 나중에 프로필에서 추가할 수 있어요.",
+  "A picture is optional here. You can add one later from your profile.": "여기서는 사진이 선택 사항이에요. 원하면 나중에 프로필에서 추가할 수 있어요."
 }

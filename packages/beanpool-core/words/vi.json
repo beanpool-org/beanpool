@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Tính năng tìm thị trấn hiện không hoạt động. Thay vào đó, hãy dùng vị trí của tôi, hoặc bỏ qua lúc này.",
   "No matches. Try the name of a town or suburb nearby.": "Không có kết quả phù hợp. Hãy thử tên một thị trấn hoặc khu phố gần đó.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Địa điểm lấy từ OpenStreetMap. Những gì bạn nhập ở đây sẽ được gửi cho OpenStreetMap.",
-  "Choose {place}": "Chọn {place}"
+  "Choose {place}": "Chọn {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Cộng đồng này yêu cầu ảnh hồ sơ trước khi bạn đăng bài. Bạn có thể thêm ảnh sau từ hồ sơ của mình.",
+  "A picture is optional here. You can add one later from your profile.": "Ở đây ảnh là tùy chọn. Nếu muốn, bạn có thể thêm ảnh sau từ hồ sơ của mình."
 }

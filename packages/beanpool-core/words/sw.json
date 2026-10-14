@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Utafutaji wa mji haufanyi kazi sasa hivi. Tumia mahali nilipo badala yake, au ruka kwa sasa.",
   "No matches. Try the name of a town or suburb nearby.": "Hakuna matokeo. Jaribu jina la mji au mtaa wa karibu.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Maeneo yanatoka OpenStreetMap. Unachoandika hapa kinatumwa kwao.",
-  "Choose {place}": "Chagua {place}"
+  "Choose {place}": "Chagua {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Jumuiya hii inahitaji picha ya wasifu kabla hujachapisha. Unaweza kuiongeza baadaye kutoka kwenye wasifu wako.",
+  "A picture is optional here. You can add one later from your profile.": "Picha ni ya hiari hapa. Ukipenda, unaweza kuiongeza baadaye kutoka kwenye wasifu wako."
 }

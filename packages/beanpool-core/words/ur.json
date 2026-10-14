@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "قصبے کی تلاش ابھی کام نہیں کر رہی۔ اس کے بجائے میری لوکیشن استعمال کریں، یا فی الحال چھوڑیں۔",
   "No matches. Try the name of a town or suburb nearby.": "کوئی نتیجہ نہیں ملا۔ قریبی کسی قصبے یا محلے کا نام آزمائیں۔",
   "Places from OpenStreetMap. What you type here is sent to them.": "مقامات OpenStreetMap سے لیے گئے ہیں۔ آپ یہاں جو لکھتے ہیں وہ OpenStreetMap کو بھیجا جاتا ہے۔",
-  "Choose {place}": "{place} منتخب کریں"
+  "Choose {place}": "{place} منتخب کریں",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "یہ کمیونٹی پوسٹ کرنے سے پہلے پروفائل تصویر مانگتی ہے۔ آپ اسے بعد میں اپنے پروفائل سے شامل کر سکتے ہیں۔",
+  "A picture is optional here. You can add one later from your profile.": "یہاں تصویر اختیاری ہے۔ چاہیں تو بعد میں اپنے پروفائل سے ایک تصویر شامل کر سکتے ہیں۔"
 }

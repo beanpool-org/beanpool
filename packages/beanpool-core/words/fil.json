@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Hindi gumagana ang paghahanap ng bayan ngayon. Gamitin ang location ko sa halip, o laktawan muna.",
   "No matches. Try the name of a town or suburb nearby.": "Walang tugma. Subukan ang pangalan ng malapit na bayan o lugar.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Ang mga lugar ay mula sa OpenStreetMap. Ipinapadala sa OpenStreetMap ang isinusulat mo rito.",
-  "Choose {place}": "Piliin ang {place}"
+  "Choose {place}": "Piliin ang {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Humihingi ang komunidad na ito ng larawan sa profile bago ka mag-post. Puwede mo itong idagdag mamaya mula sa profile mo.",
+  "A picture is optional here. You can add one later from your profile.": "Opsyonal ang larawan dito. Kung gusto mo, puwede kang magdagdag nito mamaya mula sa profile mo."
 }

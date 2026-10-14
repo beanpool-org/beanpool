@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "শহর খোঁজার সুবিধা এখন কাজ করছে না। এর বদলে আপনার লোকেশন ব্যবহার করুন, অথবা আপাতত বাদ দিন।",
   "No matches. Try the name of a town or suburb nearby.": "কিছু পাওয়া যায়নি। কাছের কোনো শহর বা এলাকার নাম লিখে দেখুন।",
   "Places from OpenStreetMap. What you type here is sent to them.": "জায়গাগুলো OpenStreetMap থেকে নেওয়া। আপনি এখানে যা লেখেন তা তাদের কাছে পাঠানো হয়।",
-  "Choose {place}": "{place} বেছে নিন"
+  "Choose {place}": "{place} বেছে নিন",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "পোস্ট করার আগে এই কমিউনিটি একটি প্রোফাইল ছবি চায়। আপনি পরে নিজের প্রোফাইল থেকে ছবিটি যোগ করতে পারবেন।",
+  "A picture is optional here. You can add one later from your profile.": "এখানে ছবি দেওয়া ঐচ্ছিক। আপনি পরে নিজের প্রোফাইল থেকে একটি ছবি যোগ করতে পারবেন।"
 }

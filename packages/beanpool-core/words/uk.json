@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Пошук міста зараз не працює. Скористайтеся своїм місцезнаходженням або поки що пропустіть.",
   "No matches. Try the name of a town or suburb nearby.": "Нічого не знайдено. Спробуйте назву міста або району поблизу.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Місця з OpenStreetMap. Те, що ви вводите тут, надсилається до OpenStreetMap.",
-  "Choose {place}": "Обрати {place}"
+  "Choose {place}": "Обрати {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Ця спільнота просить фото профілю, перш ніж ви щось опублікуєте. Додати його можна пізніше у своєму профілі.",
+  "A picture is optional here. You can add one later from your profile.": "Тут фото необов’язкове. За бажанням додати його можна пізніше у своєму профілі."
 }

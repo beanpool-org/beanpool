@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Kasaba araması şu anda çalışmıyor. Bunun yerine konumumu kullan ya da şimdilik atla.",
   "No matches. Try the name of a town or suburb nearby.": "Eşleşme yok. Yakındaki bir kasaba veya semt adını dene.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Yerler OpenStreetMap'ten gelir. Buraya yazdıkların OpenStreetMap'e gönderilir.",
-  "Choose {place}": "Seç: {place}"
+  "Choose {place}": "Seç: {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Bu topluluk, paylaşım yapmadan önce bir profil fotoğrafı ister. Sonradan profilinden ekleyebilirsin.",
+  "A picture is optional here. You can add one later from your profile.": "Burada fotoğraf eklemek isteğe bağlıdır. İstersen sonradan profilinden ekleyebilirsin."
 }

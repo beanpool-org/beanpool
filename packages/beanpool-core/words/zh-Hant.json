@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "城鎮搜尋目前無法使用。請改用「使用我的位置」,或先跳過。",
   "No matches. Try the name of a town or suburb nearby.": "找不到符合的結果。試試附近城鎮或區域的名稱。",
   "Places from OpenStreetMap. What you type here is sent to them.": "地點資料來自 OpenStreetMap。你在這裡輸入的內容會傳送給它。",
-  "Choose {place}": "選擇 {place}"
+  "Choose {place}": "選擇 {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "本社群要求在發佈前提供大頭貼。你也可以稍後在個人檔案中新增。",
+  "A picture is optional here. You can add one later from your profile.": "這裡的大頭貼是選填的。你可以稍後在個人檔案中新增。"
 }

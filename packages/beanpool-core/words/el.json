@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Η αναζήτηση πόλης δεν λειτουργεί αυτή τη στιγμή. Χρησιμοποίησε αντί για αυτό την τοποθεσία μου ή παράλειψε προς το παρόν.",
   "No matches. Try the name of a town or suburb nearby.": "Δεν βρέθηκε τίποτα. Δοκίμασε το όνομα μιας κοντινής πόλης ή συνοικίας.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Τα μέρη προέρχονται από το OpenStreetMap. Ό,τι γράφεις εδώ αποστέλλεται στο OpenStreetMap.",
-  "Choose {place}": "Επίλεξε {place}"
+  "Choose {place}": "Επίλεξε {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Αυτή η κοινότητα ζητά εικόνα προφίλ πριν δημοσιεύσεις κάτι. Μπορείς να την προσθέσεις αργότερα από το προφίλ σου.",
+  "A picture is optional here. You can add one later from your profile.": "Εδώ η εικόνα είναι προαιρετική. Αν θέλεις, μπορείς να προσθέσεις μία αργότερα από το προφίλ σου."
 }

@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "Pencarian kota sedang tidak berfungsi. Pakai lokasimu saja, atau lewati dulu.",
   "No matches. Try the name of a town or suburb nearby.": "Tidak ada hasil. Coba nama kota atau daerah di sekitarmu.",
   "Places from OpenStreetMap. What you type here is sent to them.": "Tempat dari OpenStreetMap. Apa yang kamu ketik di sini dikirim ke mereka.",
-  "Choose {place}": "Pilih {place}"
+  "Choose {place}": "Pilih {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Komunitas ini meminta foto profil sebelum kamu memposting. Kamu bisa menambahkannya nanti lewat profilmu.",
+  "A picture is optional here. You can add one later from your profile.": "Foto bersifat opsional di sini. Kamu bisa menambahkannya nanti lewat profilmu."
 }

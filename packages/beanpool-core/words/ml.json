@@ -27,5 +27,7 @@
   "Town search isn't working right now. Use my location instead, or skip for now.": "പട്ടണം തിരയുന്നത് ഇപ്പോൾ പ്രവർത്തിക്കുന്നില്ല. പകരം എന്റെ ലൊക്കേഷൻ ഉപയോഗിക്കൂ, അല്ലെങ്കിൽ തൽക്കാലം ഒഴിവാക്കൂ.",
   "No matches. Try the name of a town or suburb nearby.": "ഫലങ്ങളൊന്നുമില്ല. അടുത്തുള്ള ഒരു പട്ടണത്തിന്റെയോ പ്രദേശത്തിന്റെയോ പേര് നൽകി നോക്കൂ.",
   "Places from OpenStreetMap. What you type here is sent to them.": "OpenStreetMap-ൽ നിന്നുള്ള സ്ഥലങ്ങൾ. ഇവിടെ ടൈപ്പ് ചെയ്യുന്നത് അവർക്ക് അയയ്ക്കും.",
-  "Choose {place}": "{place} തിരഞ്ഞെടുക്കുക"
+  "Choose {place}": "{place} തിരഞ്ഞെടുക്കുക",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "നിങ്ങൾ പോസ്റ്റ് ചെയ്യുന്നതിന് മുമ്പ് ഈ കമ്മ്യൂണിറ്റി ഒരു പ്രൊഫൈൽ ചിത്രം ആവശ്യപ്പെടുന്നു. പിന്നീട് നിങ്ങളുടെ പ്രൊഫൈലിൽ നിന്ന് ചേർക്കാം.",
+  "A picture is optional here. You can add one later from your profile.": "ഇവിടെ ചിത്രം ചേർക്കുന്നത് നിർബന്ധമല്ല. താൽപ്പര്യമുണ്ടെങ്കിൽ പിന്നീട് നിങ്ങളുടെ പ്രൊഫൈലിൽ നിന്ന് ചേർക്കാം."
 }

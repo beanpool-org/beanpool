@@ -316,6 +316,11 @@ run_check "setup_backup" node --test scripts/setup-backup.test.mjs
 # against a stand-in node on localhost. Instant.
 run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/bootstrap-community-eggs.test.mjs scripts/grant-operator.test.mjs scripts/credential-redirects.test.mjs scripts/rotate-node-env.test.mjs
 
+# The words layer (translation, DESIGN-translation-fable.md S0): every t()/tn() call is a whole sentence written as a
+# literal, every catalog keeps the English placeholders and its language's plural forms, and the English a member reads
+# outside t() (JSX text, text props, alerts) does not grow past scripts/words/lint-baseline.json. A second or two.
+run_check "words" node --test scripts/words/words.test.mjs
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

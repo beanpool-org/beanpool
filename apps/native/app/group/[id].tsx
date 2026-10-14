@@ -31,6 +31,7 @@ import {
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { hapticSuccess } from '../../utils/haptics';
+import { t } from '@beanpool/core';
 
 export default function GroupInviteLanding() {
     const params = useLocalSearchParams<{
@@ -205,7 +206,7 @@ export default function GroupInviteLanding() {
                     </View>
                 )}
                 {/* No faces (an invitee where the roster is its members', #1939 review N4): the card still names its convenor. */}
-                {active.length === 0 && (membersFailed || members !== null) && !!convenor && <Text style={styles.peopleText}>Convenor: {convenor}</Text>}
+                {active.length === 0 && (membersFailed || members !== null) && !!convenor && <Text style={styles.peopleText}>{t('Convenor: {name}', { name: convenor })}</Text>}
 
                 <View style={styles.notice}>
                     <MaterialCommunityIcons name="eye-outline" size={18} color={colors.text.secondary} />

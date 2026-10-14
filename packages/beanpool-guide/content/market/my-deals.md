@@ -18,8 +18,12 @@ On the global community there are no deals, so **My Deals** shows two example de
 - **My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.
 - **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
 
+In the web app, **In Progress** lists only deals with beans held, so a request waiting for an answer is not there. **My Posts** shows only your live posts, each marked **Active**: paused posts are not listed.
+
 Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days.
 
 ## Reviews
 
 A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars.
+
+In the web app the button says **Leave Review**, and only until you have reviewed that trade. To change a review there, open the post.

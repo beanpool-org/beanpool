@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
+import { useCoversScreen } from '../lib/screen-cover';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 interface Props {
@@ -24,6 +25,7 @@ export function ReportModal({
     targetPulseItemId,
     onReported,
 }: Props) {
+    useCoversScreen(isOpen);
     // Nothing is picked until the member chooses: a pre-picked "Spam or scam" let a hurried tap send the wrong reason
     // (review of #1912). Submit stays off until then, as on the phone's report screens.
     const [selectedReason, setSelectedReason] = useState('');

@@ -8,40 +8,46 @@ related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-t
 
 ## The Market tab
 
-Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order.
+Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted.
 
-Pull the list down to refresh it.
+On the phone, events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order. Pull the list down to refresh it.
 
-On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows. See "Finding things near you".
+In the web app the Market opens as cards. In the list and compact views, events sit under the day they were posted. On a local community the web app does not put the nearest first.
+
+On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere. With a **Distance**, open **Distance** and tap **Reset** to go back to your area, then tap **Show everywhere**. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows. See "Finding things near you".
 
 On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings.
 
-The search and filters slide away as you scroll down, so you see more posts. Scroll up a little and they come back. To jump back to the top, tap **Market** again.
+On the phone, the search and filters slide away as you scroll down, so you see more posts. Scroll up a little and they come back. To jump back to the top, tap **Market** again.
 
 ## Search
 
 Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". It finds words in Chinese, Japanese and Thai too, and leaves out posts by people you have blocked. Without a connection, it searches what is already on your phone.
+
+While there are words in the search, a button **Save this search to Home** appears. It opens Home with a saved search ready to add: your words, **Offers** or **Needs** if you were looking at only one, the category and the distance. There is no button under **Events** or **Polls**. See "Home".
 
 ## Filters
 
 The row of buttons under the search chooses what you see:
 
 - **All**, **Offers** or **Needs**.
-- **For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and your upcoming events you have said you are going to.
+- **For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and your upcoming events, the ones you said you are going to or are interested in.
 - **Events** and **Polls**.
 
-The second row narrows it down:
+The second row narrows it down. On the phone:
 
 - **All Categories:** pick one category, like Food, Tools or Garden.
 - **Distance:** only posts within a distance of a point. See "Finding things near you".
 - **Trust:** only posts by members who have not traded yet (**Founding**), by **Newcomers**, or by members with at least a certain trust badge.
 - **Beans only:** hides posts that also ask for some cash.
 
-If you belong to groups, a row of group buttons appears too. **All Groups & Public** shows everything; a group's button shows only posts for that group.
+In the web app the buttons are **Category**, **Distance**, **🌱 New members** (members who have not traded yet) and **🫘 Beans only**. There is no Trust filter.
 
-If nothing matches, tap **Clear All Filters**.
+If you belong to groups, a row of group buttons appears too. **All Groups & Public** shows everything; a group's button shows only posts for that group. In the web app the groups are in a dropdown instead of a row.
 
-When you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter.
+On the phone, if nothing matches, tap **Clear All Filters**. In the web app an empty list says **No items found**, and there is no such button.
+
+On the phone, when you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter.
 
 The button next to **My Deals** changes how the list looks: a list, a grid, or compact.
 
@@ -61,8 +67,10 @@ Tap a post to open it.
 
 - **Message** and their name: ask a question before you commit.
 - Tap their name to see their profile, reviews and trust.
-- **Report Post** if it is a scam, offensive or misleading.
+- **Report Post** if it is a scam, offensive, misleading, or puts a child at risk (**Child safety**).
 - **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
+
+In the web app the buttons on a post are **💬 Message** and **🚩 Report**. Block someone from their profile.
 
 On the global community a post has no price in Beans: it says what the person would like in return. Where the price would be, it says "🏘️ In a local community this is a price in Beans ›". In place of asking for it, the post shows **Request · Beans held safely 🏘️**: tap it to see how a deal works in a local community. Messaging the person works as anywhere. See "Beans and the global community".
 

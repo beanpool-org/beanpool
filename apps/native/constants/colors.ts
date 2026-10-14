@@ -184,8 +184,10 @@ export const lightColors = {
     text: {
         heading: '#1c1d1a',      // warm charcoal
         body: '#2d2f2a',         // soft dark charcoal
-        secondary: '#6b6d66',    // warm gray
-        muted: '#a0a29a',        // warm light gray
+        // secondary and muted both reach 4.5:1 on every phone ground (card, page, sunken row, pattern, sage tint);
+        // muted stays a step quieter. Was #6b6d66 (4.56 on the sunken row) and #a0a29a (2.25 there).
+        secondary: '#55574f',    // warm gray: 7.34 on the card, 6.38 on the sunken row
+        muted: '#686a63',        // quieter warm gray: 5.48 on the card, 4.77 on the sunken row
         inverse: palette.white,
         link: palette.indigo600,
         onBrand: brandLight.commit.on,   // words on brand.fill
@@ -315,7 +317,7 @@ export const darkColors = {
         heading: palette.white,
         body: palette.gray100,
         secondary: palette.gray400,
-        muted: palette.gray500,
+        muted: '#898f99',        // between gray-400 and gray-500: 5.35 on the card, 4.65 on the sunken row (gray-500 was 3.13)
         inverse: palette.white,
         link: palette.blue400,
         onBrand: brandDark.commit.on,

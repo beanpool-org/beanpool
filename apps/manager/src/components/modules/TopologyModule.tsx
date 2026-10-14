@@ -466,7 +466,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('fleet-backups')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'fleet-backups'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -477,7 +477,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('snapshots')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'snapshots'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -488,7 +488,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('replication')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'replication'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -499,7 +499,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('name-claims')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'name-claims'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -510,7 +510,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('runbook')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'runbook'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -543,7 +543,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={() => handleTriggerSync('all')}
                                 disabled={harvestingNodeId === 'all'}
-                                className="px-3 py-1.5 rounded-lg bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50"
                             >
                                 {harvestingNodeId === 'all' ? 'Syncing...' : 'Sync All Now'}
                             </button>
@@ -732,7 +732,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                         <button
                             onClick={handleCreateSnapshot}
                             disabled={creatingSnapshot}
-                            className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                            className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
                         >
                             <span>{creatingSnapshot ? '⏳' : '📸'}</span>
                             <span>Create Snapshot Now</span>
@@ -760,7 +760,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                 <button
                                     onClick={handleCreateSnapshot}
                                     disabled={creatingSnapshot}
-                                    className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
+                                    className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
                                 >
                                     <span>{creatingSnapshot ? '⏳' : '📸'}</span>
                                     <span>Create First Snapshot</span>
@@ -792,7 +792,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteSnapshot(snap.name)}
-                                                        className="px-3 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-400 font-bold text-[11px] border border-rose-800/60 transition-all"
+                                                        className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink font-bold text-[11px] border border-rose-800/60 transition-all"
                                                     >
                                                         🗑 Delete
                                                     </button>
@@ -863,7 +863,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={handleSaveCadence}
                                 disabled={cadenceSaving}
-                                className="w-full py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                                className="w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
                             >
                                 {cadenceSaving ? 'Saving...' : 'Save Cadence Configuration'}
                             </button>
@@ -883,7 +883,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={handleForceResync}
                                 disabled={resyncing}
-                                className="w-full py-2.5 rounded-xl bg-amber-950/60 hover:bg-amber-900 text-amber-300 font-bold text-xs border border-amber-800/60 shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full py-2.5 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink font-bold text-xs border border-amber-800/60 shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 <span className={resyncing ? 'animate-spin' : ''}>🔄</span>
                                 <span>{resyncing ? 'Requesting Resync...' : 'Force Full Replication Resync'}</span>
@@ -1104,10 +1104,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                                         if (confirmType === 'approve') handleApproveClaim(claim.name);
                                                                         else handleRejectClaim(claim.name);
                                                                     }}
-                                                                    className={`px-3 py-1 rounded-lg font-bold text-xs text-white shadow-md transition-all active:scale-95 ${
+                                                                    className={`px-3 py-1 rounded-lg font-bold text-xs shadow-md transition-all active:scale-95 ${
                                                                         confirmType === 'approve'
-                                                                            ? 'bg-emerald-600 hover:bg-emerald-500'
-                                                                            : 'bg-rose-600 hover:bg-rose-500'
+                                                                            ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on'
+                                                                            : 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'
                                                                     }`}
                                                                 >
                                                                     Yes, {confirmType === 'approve' ? 'Approve' : 'Reject'}
@@ -1123,14 +1123,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                             <div className="flex items-center justify-end gap-2">
                                                                 <button
                                                                     onClick={() => setConfirmAction({ name: claim.name, type: 'approve' })}
-                                                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+                                                                    className="px-3.5 py-1.5 rounded-xl bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink border border-emerald-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
                                                                 >
                                                                     <span>✅</span>
                                                                     <span>Approve</span>
                                                                 </button>
                                                                 <button
                                                                     onClick={() => setConfirmAction({ name: claim.name, type: 'reject' })}
-                                                                    className="px-3.5 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+                                                                    className="px-3.5 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border border-rose-700/80 font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
                                                                 >
                                                                     <span>❌</span>
                                                                     <span>Reject</span>
@@ -1245,7 +1245,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                                 <span className="text-[11px] font-bold text-rose-400">Revoke Allocation?</span>
                                                                 <button
                                                                     onClick={() => handleRevokeAllocation(alloc.name)}
-                                                                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-all"
+                                                                    className="px-3 py-1 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-md transition-all"
                                                                 >
                                                                     Yes, Revoke
                                                                 </button>
@@ -1259,7 +1259,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         ) : (
                                                             <button
                                                                 onClick={() => setConfirmAction({ name: alloc.name, type: 'revoke' })}
-                                                                className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-800/80 font-bold text-xs transition-all active:scale-95 shadow-sm"
+                                                                className="px-3 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border border-rose-800/80 font-bold text-xs transition-all active:scale-95 shadow-sm"
                                                             >
                                                                 🚫 Revoke
                                                             </button>

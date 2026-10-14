@@ -7229,6 +7229,32 @@ export async function removeFriendLocal(ownerPubkey: string, friendPubkey: strin
     _syncFriendToServer('remove', ownerPubkey, friendPubkey).catch(e => console.warn('[Friends] Server sync failed:', e.message));
 }
 
+/**
+ * Take someone you blocked off your friends (Settings → Manage Blocked Users): the node first, through the same route as
+ * any removal, then this phone's copy. A block does not end a friendship (guide settings/blocking.md), and a block made
+ * on the phone never reaches the node, so the node still has them as your friend until this. It THROWS when the node
+ * did not take it, and removes nothing here: the member is told, never left believing they are off while the node still
+ * shows them a contact set to Friends. A node with no such friend (one kept on this phone alone) has none to remove.
+ * The block is left as it is.
+ */
+export async function removeFriendOnNode(ownerPubkey: string, friendPubkey: string): Promise<void> {
+    try {
+        await _syncFriendToServer('remove', ownerPubkey, friendPubkey);
+    } catch (e: any) {
+        const noneThere = e?.nodeAnswered && /relationship not found/i.test(String(e?.message));
+        if (!noneThere) {
+            throw new Error(e?.nodeAnswered
+                ? String(e.message)
+                : 'Couldn’t reach your community, so they are still your friend. Check your connection and try again.');
+        }
+    }
+    const database = await getDb();
+    await database.runAsync(
+        'DELETE FROM friends WHERE owner_pubkey = ? AND friend_pubkey = ?',
+        [ownerPubkey, friendPubkey]
+    );
+}
+
 /** Server sync helper for friend add/remove */
 async function _syncFriendToServer(action: 'add' | 'remove', ownerPubkey: string, friendPubkey: string) {
     const endpoint = action === 'add' ? '/api/friends/add' : '/api/friends/remove';
@@ -7558,7 +7584,7 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
  * answers 503 with Retry-After, or the read failed): callers keep the roster they show and read it again next time,
  * never an empty one in its place.
  */
-export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] | null } | null> {
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] | null; rosterRefused?: boolean } | null> {
     try {
         const [groupRes, membersRes] = await Promise.all([
             signedGet(`/api/groups/${encodeURIComponent(id)}`),
@@ -7567,7 +7593,9 @@ export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem;
         if (groupRes.ok) {
             const group = await groupRes.json();
             const members = membersRes.ok ? await membersRes.json() : null;
-            return { group, members: Array.isArray(members) ? members : null };
+            // Where anyone can join in a minute, the roster is its members': anyone else is told to join (join_to_see).
+            const refusal = !membersRes.ok && membersRes.status === 403 ? await membersRes.json().catch(() => null) : null;
+            return { group, members: Array.isArray(members) ? members : null, rosterRefused: refusal?.code === 'join_to_see' };
         }
     } catch (e) {
         console.warn('[Groups] Failed to fetch group detail:', e);

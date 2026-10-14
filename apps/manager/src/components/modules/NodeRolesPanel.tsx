@@ -43,9 +43,9 @@ const ROLE_LABEL: Record<MemberNodeRole, string> = { owner: 'Owner', admin: 'Adm
 const ROLE_ICON: Record<MemberNodeRole, string> = { owner: '👑', admin: '⚡', moderator: '🛡️' };
 const ROLE_ARTICLE: Record<MemberNodeRole, string> = { owner: 'an owner', admin: 'an admin', moderator: 'a moderator' };
 const ROLE_BADGE: Record<MemberNodeRole, string> = {
-    owner: 'bg-amber-500/15 border-amber-500/40 text-amber-300',
+    owner: 'bg-bp-chip-warn-tint border-amber-500/40 text-bp-chip-warn-ink',
     admin: 'bg-blue-500/15 border-blue-500/40 text-blue-300',
-    moderator: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
+    moderator: 'bg-bp-chip-ok-tint border-emerald-500/40 text-bp-chip-ok-ink',
 };
 
 /** What a role lets someone do, in plain words — shown before anyone is given it. */
@@ -315,8 +315,8 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                     role={notice.kind === 'error' ? 'alert' : 'status'}
                     className={`p-3 rounded-xl border text-sm flex items-start justify-between gap-3 ${
                         notice.kind === 'error'
-                            ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                            ? 'bg-bp-chip-danger-tint border-red-500/30 text-bp-chip-danger-ink'
+                            : 'bg-bp-chip-ok-tint border-emerald-500/30 text-bp-chip-ok-ink'
                     }`}
                 >
                     <span>
@@ -334,7 +334,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                             ? 'You are signed in with your own key, so you can make yourself the owner in one step.'
                             : 'You are signed in with the admin password. Search for your own callsign below and choose Owner.'}
                     </p>
-                    <button type="button" onClick={addYourself} className={`${btn} bg-amber-500 text-black border-amber-400`}>
+                    <button type="button" onClick={addYourself} className={`${btn} bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill`}>
                         {myKey ? 'Make me the owner' : 'Find myself'}
                     </button>
                 </div>
@@ -396,7 +396,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                                             onClick={() => { setRemoving(r); setNotice(null); }}
                                             disabled={busy}
                                             aria-label={`Remove ${name}'s ${ROLE_LABEL[r.role].toLowerCase()} role`}
-                                            className={`${btn} self-start sm:self-auto bg-red-500/10 text-red-300 border-red-500/30`}
+                                            className={`${btn} self-start sm:self-auto bg-bp-chip-danger-tint text-bp-chip-danger-ink border-red-500/30`}
                                         >
                                             Remove
                                         </button>
@@ -411,7 +411,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                                             {isMe && ' This is you — you will be signed out of these Settings.'}
                                         </p>
                                         <div className="flex flex-wrap gap-2">
-                                            <button type="button" onClick={() => void doRevoke()} disabled={busy} className={`${btn} bg-red-600 text-white border-red-500`}>
+                                            <button type="button" onClick={() => void doRevoke()} disabled={busy} className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border-bp-danger-fill`}>
                                                 {busy ? 'Removing…' : `Yes, remove ${ROLE_LABEL[r.role].toLowerCase()}`}
                                             </button>
                                             <button type="button" onClick={() => setRemoving(null)} disabled={busy} className={`${btn} bg-nature-800 text-nature-200 border-nature-700`}>
@@ -557,7 +557,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                             </fieldset>
 
                             {!confirmingAdd ? (
-                                <button type="button" onClick={() => setConfirmingAdd(true)} className={`${btn} bg-terra-500 text-white border-terra-400`}>
+                                <button type="button" onClick={() => setConfirmingAdd(true)} className={`${btn} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-bp-cta-fill`}>
                                     Continue
                                 </button>
                             ) : (
@@ -569,7 +569,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                                         <p className="text-sm text-amber-300 m-0">This replaces their current role ({ROLE_LABEL[target.currentRole].toLowerCase()}).</p>
                                     )}
                                     <div className="flex flex-wrap gap-2">
-                                        <button type="button" onClick={() => void doGrant()} disabled={busy} className={`${btn} bg-terra-500 text-white border-terra-400`}>
+                                        <button type="button" onClick={() => void doGrant()} disabled={busy} className={`${btn} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-bp-cta-fill`}>
                                             {busy ? 'Saving…' : `Yes, make ${target.pubkey === myKey ? 'me' : target.name} ${ROLE_ARTICLE[newRole]}`}
                                         </button>
                                         <button type="button" onClick={() => setConfirmingAdd(false)} disabled={busy} className={`${btn} bg-nature-800 text-nature-200 border-nature-700`}>

@@ -30,10 +30,11 @@ An admin may **confirm** you: they say your account is the person on your entry.
 - If an admin invited you by name, joining with their invite confirmed you against your entry, by that admin. "Confirmed" means only that an admin says this account is the person on that entry.
 - If you replace a lost phone and your account moves to a new key, your confirmation moves with it.
 - If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to.
+- If you are confirmed and you leave, are removed or delete your account while you owe Beans, the Commons covers the debt as always. The admins' list also keeps a note on your entry of what you owed, why and when, for 3 years, and admins see it next to your name on their phones. Nobody can be confirmed against that entry until it is paid back, worked off or forgiven.
 
 ## What the names list doesn't show the admins
 
-The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See "Your privacy" for what members and admins can see otherwise.
+The list holds names and notes, and which account is whose. Apart from the note, above, of a debt you left owing, it doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See "Your privacy" for what members and admins can see otherwise.
 
 ## What you agree to in a known community
 
@@ -79,7 +80,7 @@ Nothing else of your trades.
 
 ## An admin's AI assistant
 
-An owner (and, in a coming update, an admin) may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".
+An owner or an admin may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".
 
 ## Asking about your entry
 

@@ -47,14 +47,14 @@ describe('ReportModal Component', () => {
         // Off looks off, from the theme's roles: no red fill until there is something to send.
         expect(submit.className).toMatch(/(^| )bg-bg-hover( |$)/);
         expect(submit.className).toMatch(/(^| )text-text-muted( |$)/);
-        expect(submit.className).not.toMatch(/bg-red-600/);
+        expect(submit.className).not.toMatch(/bg-bp-danger-fill/);
         fireEvent.click(submit);
         fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'words but no reason' } });
         expect(submit).toBeDisabled();
         expect(reportAbuse).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: /^Spam or scam$/ }));
         expect(submit).toBeEnabled();
-        expect(submit.className).toMatch(/(^| )bg-red-600( |$)/);
+        expect(submit.className).toMatch(/(^| )bg-bp-danger-fill( |$)/);
         fireEvent.click(submit);
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Spam or scam: words but no reason', 'post_9', undefined));
     });

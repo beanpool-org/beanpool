@@ -80,7 +80,8 @@ export interface ProfileSwitches {
     /** Invites (engine/invites.ts): a member makes a code or an offline ticket, an owner or admin a seed invite, and
      *  whoever holds one joins with it. Off: nobody here makes one, members and node roles alike, and none joins
      *  anyone, a code already in the database included (the routes are 404 `feature_off`, and the engine refuses
-     *  underneath). The invites already made, and the invite tree, still read. Off on the global node (Marty,
+     *  underneath). The invites already made, and the invite tree, still read (where `openMembership` is on, a member's
+     *  own branch of the tree). Off on the global node (Marty,
      *  2026-10-01): an invite needs no sign-in, so one sign-in account minting 20 a day grew into hundreds of accounts
      *  that no sign-in stood behind, past the door's one-account-one-member rule (D1) and its per-address limit
      *  (FABLE-sec-global-abuse HIGH-1). There the open door is the only way in. A member of the global node joining a
@@ -160,6 +161,16 @@ export interface ProfileSwitches {
      *  only while on. Off (a local community): a feature its operator turned off is hidden, as before, since they
      *  meant it. On or off, nothing about what the node does changes, and no write carries a sample id (sample-id-guard.ts). */
     showcase: boolean;
+    /** Members here came through an open door, so a member read is not a private one (the privacy review of 2026-10-14,
+     *  scratch/global-node/DESIGN-global-member-privacy-fable.md §1): the directory is searched, never read whole (`GET
+     *  /api/members` with none of its small forms, `GET /api/community/members` and the whole invite tree answer 403
+     *  `members_on_demand` before any row is read; a member's own branch of the tree still reads, and the nearest-people
+     *  form has a day budget, READ_LIMITS.nearestPeoplePerDay); the activity feed leaves out who joined; and an open
+     *  group's roster is its own members' (anyone else is told to join, and the group's card keeps its count and
+     *  convenor). Reported in `features` only while on. On (the global node): a member costs one signed POST. Off (a
+     *  local community): a member is someone the community let in, and everything reads as before. It only ever takes
+     *  reads away, so it has no lock. */
+    openMembership: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -193,6 +204,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         nearbyListings: false,
         membersOnDemand: false,
         showcase: false,
+        openMembership: false,
     },
     global: {
         openJoin: true,
@@ -232,6 +244,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         membersOnDemand: true,
         // Global is where a stranger meets BeanPool (Marty, 2026-10-12): what lives in a local community is shown, not hidden.
         showcase: true,
+        // Anyone can join in a minute (the privacy review, 2026-10-14): no whole directory, no strangers' group rosters.
+        openMembership: true,
     },
 };
 
@@ -294,6 +308,10 @@ export interface NodeFeatures {
     /** Present, and true, only where `showcase` is on: the apps preview a switched-off feature from the sample community
      *  instead of hiding it. Absent (a local community, or a server from before it): hidden, exactly as before. */
     showcase?: true;
+    /** Present, and true, only where `openMembership` is on: the whole member directory, the whole invite tree and an
+     *  open group's roster to anyone outside it are refused, and the activity feed names nobody who joined. Absent (a
+     *  local community, or a server from before it): every read answers as before. */
+    openMembership?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -382,7 +400,17 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
  * money kept on and the open door shut wherever the ledger has moved.
  */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET })));
+    return lockOnDemandToOpenMembership(lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET }))));
+}
+
+/**
+ * Where the whole directory is refused (`openMembership`), both apps must find people on demand: with `membersOnDemand`
+ * off they would keep asking for the whole list and be told no (#1939 review N2). So the one holds the other on,
+ * whatever the overrides say.
+ */
+function lockOnDemandToOpenMembership(s: ProfileSwitches): ProfileSwitches {
+    if (s.openMembership) s.membersOnDemand = true;
+    return s;
 }
 
 /**
@@ -454,6 +482,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.nearbyListings ? { nearbyListings: { ...nearbyListingsLimits() } } : {}),
         ...(s.membersOnDemand ? { membersOnDemand: true as const } : {}),
         ...(s.showcase ? { showcase: true as const } : {}),
+        ...(s.openMembership ? { openMembership: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
     if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };

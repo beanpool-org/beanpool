@@ -63,8 +63,14 @@ const claimed = (url: string) => filters.some(f => filterClaims(f, url));
 const NODE_HOSTS = [
     'mullum.beanpool.org', 'castlemaine.beanpool.org', 'test.beanpool.org', 'bris.beanpool.org',
     'melb.beanpool.org', 'review.beanpool.org', 'gippsland.beanpool.org', 'eastgippy.beanpool.org',
-    'bindarrabi.beanpool.org', 'yarravalley.beanpool.org',
+    'bindarrabi.beanpool.org', 'yarravalley.beanpool.org', 'global.beanpool.org',
 ];
+
+/** The hosts Android checks for an assetlinks.json at install (autoVerify), as written in app.json. */
+const verifiedHosts = (): string[] => filters.filter(f => f.autoVerify).flatMap(f => (f.data as DataEl[]).map(d => d.host!));
+/** Every host any filter names, verified or not. */
+const allHosts = (): string[] => filters.flatMap(f => (f.data as DataEl[]).map(d => d.host!));
+const claimedVerified = (url: string) => filters.some(f => f.autoVerify && filterClaims(f, url));
 
 describe('Android app links: invites still open the app', () => {
     it.each(NODE_HOSTS)('%s/?invite=… (every generator’s format: native share + QR, PWA, manager, trampoline)', host => {
@@ -93,6 +99,33 @@ describe('Android app links: invites still open the app', () => {
         const ios: string[] = appJson.expo.ios.associatedDomains;
         const verified = filters.filter(f => f.autoVerify).flatMap(f => f.data.map((d: DataEl) => d.host));
         for (const h of verified) expect(ios).toContain(`applinks:${h}`);
+    });
+});
+
+// The global node's invite and event links used to reach the app only through the unverified *.beanpool.org filter: a
+// browser or a chooser on Android 12+, never the app straight away. Its node serves /.well-known/assetlinks.json like every
+// other node (apps/server/src/routes/settings.ts, no host or profile check), so it can be verified like them.
+describe('Android app links: the global node is verified', () => {
+    it('global.beanpool.org is in a verified filter, with the same "/" path as every other node', () => {
+        expect(verifiedHosts()).toContain('global.beanpool.org');
+        expect(claimedVerified('https://global.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
+        expect(claimedVerified('https://global.beanpool.org/?post=6f1b0e2c-1111-4a2b-8c3d-000000000001')).toBe(true);
+        expect(claimedVerified('https://global.beanpool.org/settings')).toBe(false);
+    });
+
+    it('…and it is an iOS associated domain too', () => {
+        expect(appJson.expo.ios.associatedDomains).toContain('applinks:global.beanpool.org');
+    });
+
+    // earth.beanpool.org is a Cloudflare 301 to global (utils/global-node-url.ts). Android fetches assetlinks.json with no
+    // redirects, so earth cannot be verified; and on Android 11 and older (this app runs from Android 8) one host that
+    // fails verification turns verification off for EVERY host the app names, so listing earth would send every node's
+    // invites to the browser on old phones. Add it, here and in app.json, only once Cloudflare serves earth's
+    // /.well-known/assetlinks.json itself, without the redirect. Until then earth links reach the app the old way.
+    it('earth.beanpool.org is not named by any filter while it is a redirect (it would break old Android for every host)', () => {
+        expect(allHosts()).not.toContain('earth.beanpool.org');
+        expect(claimedVerified('https://earth.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(false);
+        expect(claimed('https://earth.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
     });
 });
 

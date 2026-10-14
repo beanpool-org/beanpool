@@ -53,7 +53,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
             <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl">
                 <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div className="w-8 h-8 rounded-xl bg-terra-500/20 text-terra-400 flex items-center justify-center text-base font-bold">
+                        <div className="w-8 h-8 rounded-xl bg-bp-chip-need-tint text-bp-chip-need-ink flex items-center justify-center text-base font-bold">
                             ⚙️
                         </div>
                         <h3 className="text-base font-bold text-white m-0">Configure Node Credentials</h3>
@@ -141,7 +141,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                             <button
                                 type="submit"
                                 disabled={!tokenOk}
-                                className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold transition-all shadow-md active:scale-95"
+                                className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold transition-all shadow-md active:scale-95"
                             >
                                 Save Settings
                             </button>

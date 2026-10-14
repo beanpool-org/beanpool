@@ -37,11 +37,11 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
-import { HeaderControls, HeaderTitle, HelpIcon, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey } from '@beanpool/core';
+import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
+import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
-import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, openHelp, useTour } from './lib/tour-store';
+import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
 import { getBundledGuide } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
@@ -50,7 +50,6 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
-import { OneWayBackCard } from './components/OneWayBack';
 import { captureAuthReturn, consumeCapturedAuthReturn } from './lib/web-join';
 import { clearPendingLink, finishLink, isLinkReturn, type LinkResult } from './lib/link-signin';
 import { ModerationPauseCard } from './components/ModerationPauseCard';
@@ -127,7 +126,7 @@ export function App() {
 
     // ── The tour (DESIGN-getting-started-fable.md §2) and the "?" (§4) ──
     // Home starts the tour and owns what it writes (lib/tour-store.ts); the bar is drawn here, over the real tabs.
-    const { run: tour, home: tourHomeNow } = useTour();
+    const { run: tour, home: tourHomeNow, offered: tourOffered } = useTour();
     const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
     const steps = tour ? tourSteps('web', tour.node) : [];
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
@@ -162,6 +161,9 @@ export function App() {
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
     const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
+    // The Market's "Save this search to Home": the search Home opens the saved search's dialog with, taken once.
+    const [saveSearchToHome, setSaveSearchToHome] = useState<HomeSearchSettings | null>(null);
+    const clearSaveSearch = useCallback(() => setSaveSearchToHome(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
@@ -226,6 +228,10 @@ export function App() {
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
+    // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
+    // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
+    const tourStillOffered = !!identity && isGuest === false && (tourOffered?.publicKey !== identity.publicKey || tourOffered.up);
+    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
     useEffect(() => {
@@ -731,12 +737,12 @@ export function App() {
                                     <span>{tab.label}</span>
                                 </div>
                                 {tab.id === 'messages' && totalUnread > 0 && (
-                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {totalUnread > 99 ? '99+' : totalUnread}
                                     </span>
                                 )}
                                 {tab.id === 'marketplace' && pendingDealsCount > 0 && (
-                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {pendingDealsCount}
                                     </span>
                                 )}
@@ -749,29 +755,7 @@ export function App() {
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
                     <div className="flex items-center justify-between px-2 py-1">
                         <SyncStatus isMember={!isGuest} />
-                        <button
-                            onClick={openHelp}
-                            aria-label="Help for this screen"
-                            title="Help for this screen"
-                            data-testid="sidebar-help"
-                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
-                        >
-                            <HelpIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                            onClick={() => setShowSettings(!showSettings)}
-                            aria-label="Settings"
-                            aria-pressed={showSettings}
-                            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
-                            }`}
-                            title="Settings"
-                        >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            </svg>
-                        </button>
+                        <SidebarControls showSettings={showSettings} setShowSettings={setShowSettings} />
                     </div>
 
                     {identity && (
@@ -798,13 +782,13 @@ export function App() {
                     <div
                         role="alert"
                         aria-live="assertive"
-                        className="w-full bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-amber-700 dark:border-amber-800 shrink-0"
+                        className="w-full bg-bp-gold-fill text-bp-gold-on px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-bp-gold-fill shrink-0"
                     >
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
                                 <span className="font-bold">BeanPool has been updated: </span>
-                                <span className="text-amber-100 text-xs sm:text-sm">
+                                <span className="text-xs sm:text-sm">
                                     this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
                                 </span>
                             </div>
@@ -828,7 +812,7 @@ export function App() {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '0.3rem 0.75rem',
-                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid #111',
                     position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
                     top: 0,
                     left: 0,
@@ -931,18 +915,13 @@ export function App() {
                                     />
                                     {/* A member only: a guest has no standing here to read. A pause is never put away. */}
                                     {isGuest === false && <ModerationPauseCard refreshKey={standingKey} />}
-                                    {isGuest === false && !newAccountCardClosed && (
+                                    {/* The new account's limits and One way back show on Home only (rehearsal 14 Oct, S1): above
+                                        every tab they pushed the Market, Commons and Ledger below the first screen at 320 px. */}
+                                    {isGuest === false && activeTab === 'home' && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
                                     )}
-                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. On Home it is
-                                        the `safety` card, in its place among the cards (pages/HomePage.tsx). */}
-                                    {isGuest === false && activeTab !== 'home' && (
-                                        <OneWayBackCard
-                                            identity={identity}
-                                            placement="landing"
-                                            onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
-                                        />
-                                    )}
+                                    {/* Joined with 12 words alone, One way back is Home's `safety` card, in its place among the
+                                        cards (pages/HomePage.tsx), and not repeated above the other tabs. */}
                                 </div>
                             )}
                             {activeTab === 'map' && (
@@ -968,6 +947,8 @@ export function App() {
                             {activeTab === 'home' && (
                                 <HomePage
                                     identity={identity}
+                                    saveSearch={saveSearchToHome}
+                                    onSaveSearchTaken={clearSaveSearch}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                 />
@@ -980,6 +961,7 @@ export function App() {
                                     onPostOpened={() => setOpenMarketPostId(null)}
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
+                                    onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
@@ -1248,7 +1230,7 @@ export function App() {
             )}
 
             {/* PWA Install Banner */}
-            <InstallPrompt />
+            <InstallPrompt hidden={installHeldBack} />
         </div>
     );
 }

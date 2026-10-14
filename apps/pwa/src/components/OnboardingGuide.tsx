@@ -17,7 +17,7 @@ export function OnboardingGuide() {
                     <span aria-hidden="true">🟢 </span><strong>The best place to be is zero (0 Beans).</strong> This means you have given as much value to your community as you have received from it.
                 </div>
                 <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                    <span aria-hidden="true">🫘 </span><strong>Contributions First.</strong> To keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
+                    <span aria-hidden="true">🫘 </span><strong>Contributions First.</strong> In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
                 </div>
             </div>
 
@@ -30,7 +30,7 @@ export function OnboardingGuide() {
                 <div className="flex gap-3 items-start">
                     <span className="text-lg leading-none" aria-hidden="true">🤝</span>
                     <div>
-                        <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Trust-Backed Credit</h5>
+                        <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Trust-Backed Credit</h5>
                         <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                             Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                         </p>
@@ -40,7 +40,7 @@ export function OnboardingGuide() {
                 <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                     <span className="text-lg leading-none" aria-hidden="true">🌾</span>
                     <div>
-                        <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
+                        <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Community Commons Pool</h5>
                         <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                             Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                         </p>
@@ -50,7 +50,7 @@ export function OnboardingGuide() {
                 <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                     <span className="text-lg leading-none" aria-hidden="true">⏱️</span>
                     <div>
-                        <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Reference Rate</h5>
+                        <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Reference Rate</h5>
                         <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                             40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
                         </p>

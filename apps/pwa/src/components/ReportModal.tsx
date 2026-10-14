@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
+import { useCoversScreen } from '../lib/screen-cover';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 interface Props {
@@ -24,6 +25,7 @@ export function ReportModal({
     targetPulseItemId,
     onReported,
 }: Props) {
+    useCoversScreen(isOpen);
     // Nothing is picked until the member chooses: a pre-picked "Spam or scam" let a hurried tap send the wrong reason
     // (review of #1912). Submit stays off until then, as on the phone's report screens.
     const [selectedReason, setSelectedReason] = useState('');
@@ -130,7 +132,7 @@ export function ReportModal({
                                     onClick={() => setSelectedReason(reason)}
                                     className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                                         isSelected
-                                            ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                                            ? 'bg-bp-danger-fill text-bp-danger-on border-bp-danger-fill shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                 >
@@ -178,7 +180,7 @@ export function ReportModal({
                         disabled={submitting || !selectedReason}
                         className={`flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs border-none transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                             selectedReason
-                                ? 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 cursor-pointer shadow-sm'
+                                ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on disabled:opacity-60 cursor-pointer shadow-sm'
                                 : 'bg-bg-hover text-text-muted cursor-not-allowed'
                         }`}
                     >

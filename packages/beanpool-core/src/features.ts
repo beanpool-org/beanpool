@@ -108,3 +108,22 @@ export const LOCAL_COMMUNITY_LINES = Object.freeze({
 
 /** Where Start a community leads when the node names nowhere else (node_config `startCommunityUrl`). */
 export const START_COMMUNITY_URL_DEFAULT = 'https://beanpool.org/#run-a-node';
+
+/**
+ * What a member must have before they post, by whether the node has Beans on (its `features.beans`, server
+ * getProfileSwitches().beans). The Offer-first rule and the profile photo guard a community's credit: where Beans are
+ * off (the global node) there is none, so a newcomer's first post may be a Need, with no profile photo and no listing
+ * photo (rehearsal 2026-10-14 B4; global review M2, S6). The node and both apps read this one rule.
+ */
+export type PostRules = {
+    /** A Need waits until the member has listed an Offer (CONTRIBUTION_REQUIRED). */
+    offerFirst: boolean;
+    /** A post, poll or event waits until the member has a profile photo. */
+    profilePhoto: boolean;
+    /** A Need carries at least one photo (an Offer always does). */
+    needPhoto: boolean;
+};
+
+export function postRulesFor(beansOn: boolean): PostRules {
+    return { offerFirst: beansOn, profilePhoto: beansOn, needPhoto: beansOn };
+}

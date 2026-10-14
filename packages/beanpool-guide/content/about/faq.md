@@ -39,7 +39,7 @@ On a Decision, the app shows only the totals, and your own vote to you. Your vot
 
 ## Can other members see my balance?
 
-No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only.
+No. Only you can see your balance and your trades. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. An admin who removes an account sees its balance while doing it, and that look is logged where the owner and admins can read it.
 
 ## I lost my phone. Is my account gone?
 
@@ -61,7 +61,7 @@ Tap **Start a community** in the app. A community runs on its own small server: 
 
 ## Can I belong to more than one community?
 
-Yes. You can save several communities in the app and switch between them. You use the same identity in each. Each community has its own beans, rules and members.
+Yes. On the phone you can save several communities and switch between them, using the same identity in each. In the web app, each community opens at its own address. Each community has its own beans, rules and members.
 
 ## I am going away. What should I do?
 
@@ -73,4 +73,4 @@ You can delete your account in Settings. First finish or cancel any open trades.
 
 ## Something is wrong or could be better. Who do I tell?
 
-For problems with a person or a trade, talk to the admins of your community. For ideas about the app itself, visit beanpool.org.
+For problems with a person or a trade, talk to the admins of your community. To report a post, an event or a Pulse post, tap its **🚩 Report** flag (on the phone, a post's button says **Report Post**). In the web app a chat with one person has a **Report** button too. Your community's admins are told. Pick **Child safety** if a child may be at risk. See "Reporting a problem". For ideas about the app itself, visit beanpool.org.

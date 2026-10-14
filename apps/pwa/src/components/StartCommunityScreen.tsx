@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { startCommunityUrl, useCommunityInfo } from '../lib/features';
+import { useCoversScreen } from '../lib/screen-cover';
 import {
     START_COMMUNITY_COPY as COPY, START_COMMUNITY_KNOW as KNOW, SETUP_CHAPTER_URL, canCopyDetails, communityDetailsText,
 } from '../lib/start-community';
@@ -17,6 +18,7 @@ const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600
 
 export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => void; onNearYou?: () => void }) {
     const info = useCommunityInfo();
+    useCoversScreen();
     const backRef = useRef<HTMLButtonElement>(null);
     const [name, setName] = useState('');
     const [place, setPlace] = useState('');
@@ -80,7 +82,7 @@ export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => vo
                     <p className="mt-3 text-sm text-nature-700 dark:text-nature-200">{KNOW.steps}</p>
                     <div className="mt-4 flex flex-col gap-2">
                         <a href={startCommunityUrl(info)} target="_blank" rel="noopener noreferrer" data-testid="start-community-run-a-node"
-                            className="w-full rounded-xl bg-terra-600 hover:bg-terra-500 px-4 py-3 text-center font-bold text-white">{COPY.website} ↗</a>
+                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on">{COPY.website} ↗</a>
                         <a href={SETUP_CHAPTER_URL} target="_blank" rel="noopener noreferrer" data-testid="start-community-setup"
                             className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 text-center font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">{KNOW.setupChapter} ↗</a>
                     </div>

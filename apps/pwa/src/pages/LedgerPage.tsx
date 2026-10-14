@@ -571,7 +571,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
                                     <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</div>
                                     <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">beans of value to trade</div>
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 dark:bg-emerald-700 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-bp-commit-fill text-bp-commit-on font-black text-[8px] uppercase tracking-wider">the lever</span>
                                 </div>
                                 <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl">
                                     <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext || '—'}</div>
@@ -659,7 +659,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             disabled={!canSend}
                             className={`w-full p-4 rounded-xl text-sm sm:text-[15px] break-words font-bold border-none cursor-pointer transition-all shadow-md ${
                                 !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
-                                showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
+                                showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover'
                             }`}
                         >
                             {!canSend
@@ -728,7 +728,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         // Peer transfers are fee-free — recipient receives the full amount.
                                         return (
                                             <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
-                                                <div className="flex justify-between items-center text-nature-750 dark:text-nature-300">
+                                                <div className="flex justify-between items-center text-nature-700 dark:text-nature-300">
                                                     <span>Recipient receives:</span>
                                                     <span className="font-mono font-bold text-nature-950 dark:text-white">{parsedAmount.toFixed(2)} B</span>
                                                 </div>
@@ -743,7 +743,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     className={`w-full p-3.5 rounded-xl text-[15px] font-bold border-none transition-all shadow-md ${
                                         sending || !sendTo || !sendAmount
                                             ? 'bg-nature-300 dark:bg-nature-800 text-nature-500 cursor-not-allowed'
-                                            : 'bg-emerald-500 text-white cursor-pointer hover:bg-emerald-600'
+                                            : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer'
                                     }`}
                                 >
                                     {sending ? 'Sending...' : 'Confirm Transfer'}
@@ -849,7 +849,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                     {BLOCKED_BEANS_NOTE}
                                                 </p>
                                             ) : note && (
-                                                <p className="text-[13px] text-nature-550 dark:text-nature-400 mt-1 leading-snug">
+                                                <p className="text-[13px] text-nature-700 dark:text-nature-400 mt-1 leading-snug">
                                                     {renderMemoText(note)}
                                                 </p>
                                             )}

@@ -9,6 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -45,9 +46,9 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { marked, useFeatureMode } from '../lib/features';
+import { marked, useCommunityInfo, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -196,6 +197,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Beans live in a local community here (preview or read-only, lib/features.ts): no price field, the line in its slot,
     // and the listing goes up free with its terms in the description (design §1 row 2). Live and hidden: as before.
     const priceMarked = marked(useFeatureMode('beans', !visitor));
+    // What a post needs first (@beanpool/core postRulesFor), from the node's own Beans switch as the node decides it: where
+    // Beans are off (the global node) a Need needs no Offer first and no photo, and no post waits for a profile photo.
+    // Until the node's info arrives, the local rules stand.
+    const nodeInfo = useCommunityInfo(!visitor);
+    const postRules = postRulesFor((nodeInfo?.features as { beans?: unknown } | undefined)?.beans !== false);
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -305,7 +311,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         return () => { cancelled = true; };
     }, [identity?.publicKey, canLoadBalance]);
 
-    const needBlocked = blockedFromTrading && newPostType === 'need';
+    const needBlocked = postRules.offerFirst && blockedFromTrading && newPostType === 'need';
+    const photoRequired = newPostType !== 'need' || postRules.needPhoto;
 
     // Names for the "Post as" choices, fetched only when a keeper opens the event form.
     useEffect(() => {
@@ -352,8 +359,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const tryOpenComposer = useCallback(async () => {
         // A visitor has no key to post with; the lobby's Join is the way.
         if (!identity) return;
-        const status = await getProfileStatus(identity);
-        if (!status.complete) {
+        // The Beans switch from the page's shared read, not this render's nodeInfo: opened from another tab (openNewPost),
+        // this runs on the first render, before the info has arrived. A read that fails keeps the local rules.
+        const [status, info] = await Promise.all([
+            getProfileStatus(identity),
+            Promise.resolve().then(() => communityInfoOnce()).catch(() => null),
+        ]);
+        if (!postRulesFor((info?.features as { beans?: unknown } | undefined)?.beans !== false).profilePhoto) status.missingAvatar = false;
+        if (status.missingName || status.missingAvatar) {
             setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
             return;
         }
@@ -957,7 +970,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (!priceMarked && (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
-        if (newPostPhotos.length < 1) errors.add('photos');
+        if (photoRequired && newPostPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -1572,7 +1585,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <button
                                 onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
                                 aria-label="Remove photo"
-                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
+                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-bp-danger-fill hover:bg-bp-danger-hover border-none rounded-full text-bp-danger-on text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md transition-colors transform hover:scale-110"
                             >
                                 ✕
                             </button>
@@ -1625,7 +1638,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0);
+            : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).disabled;
 
 
     return (
@@ -1809,7 +1822,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     title="New Post"
                 >
@@ -1945,8 +1958,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                            className={`py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
-                                previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-terra-600 hover:bg-terra-700'
+                            className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
+                                previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                             }`}
                         >
                             View Details
@@ -2017,7 +2030,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
-                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
@@ -2038,7 +2051,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setAudienceScope('public'); setTargetGroupId(''); if (eventHost.startsWith('group:')) setEventHost('me'); }}
                             className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                                 audienceScope === 'public'
-                                    ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
+                                    ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
@@ -2058,7 +2071,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
-                                        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                                        ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-sm'
                                         : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >
@@ -2233,7 +2246,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         Approximate (~100m)
                                     </button>
                                     {postApproximate && (
-                                        <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[11px] font-semibold border border-terra-300 dark:border-terra-700/50">
+                                        <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[11px] font-semibold border border-bp-chip-warn-ink">
                                             ~100m
                                         </span>
                                     )}
@@ -2610,7 +2623,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             }`}
                         />
 
-                        {renderPhotoPicker(true)}
+                        {renderPhotoPicker(photoRequired)}
                     </>
                 )}
 
@@ -2639,10 +2652,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     {posting ? 'Posting...' :
                      newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
-                     needBlocked ? '🔵 List an Offer first to post Needs' :
-                     postLat == null ? '📍 Map location required' :
-                     !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' ? '✏️ Fill required fields' :
-                     `Post ${newPostType === 'offer' ? 'Offer' : 'Need'}`}
+                     offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>
             </div>
         )}

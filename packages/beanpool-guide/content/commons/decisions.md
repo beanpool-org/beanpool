@@ -27,7 +27,7 @@ Each Decision shows:
 
 ## Voting
 
-- Tap **Vote YES** or **Vote NO**. The app says **Vote Recorded**.
+- Tap **Vote YES** or **Vote NO**. On the phone, the app says **Vote Recorded**. In the web app, the card updates.
 - The card then says what you voted, like "You voted Yes".
 - To change your mind before it closes, tap the other button, such as **Change to No**.
 
@@ -45,4 +45,4 @@ Tap **Decisions History**. Choose **All**, **Executed**, **Failed** or **Void**.
 
 ## More
 
-Tap the **ⓘ** next to The Commons for how the Commons' beans and voting work.
+On the phone, tap the **ⓘ** beside the Commons title for how the Commons' beans and voting work. In the web app, tap **Commons Pool ⓘ** on the **Ledger**.

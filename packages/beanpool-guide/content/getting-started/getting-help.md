@@ -10,14 +10,14 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 - **The ? at the top:** on every tab, tap **?** for a short note on the screen you are on. From there, **Read the guide page** opens the page about it, **Search the guide** opens this guide's search, and **Take the tour again** shows you round the tabs once more.
 - **This guide:** search it for a word, like "gift" or "photo".
 - **The ⓘ buttons:** many screens have a small ⓘ. Tap it for a short explanation of that screen. The Ledger has several.
-- **The pricing guide:** in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in beans.
+- **The pricing guide:** on the phone, in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in Beans. In the web app, tap **💡 Pricing Guide** in the Market. On the phone it is there only where your community uses Beans; the web app hides it on the global community.
 
 ## Ask a person
 
 - **About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.
 - **About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.
 - **About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.
-- **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.
+- **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual: running your community** in the side bar.
 - **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds.
 
 ## When something is not right

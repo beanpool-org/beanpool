@@ -180,7 +180,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         aria-current={subTab === 'announcements' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'announcements'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -192,7 +192,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         aria-current={subTab === 'pulse' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pulse'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -253,7 +253,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                     onClick={() => setSeverity('alert')}
                                     className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                         severity === 'alert'
-                                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                                            ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-500/40 shadow-sm'
                                             : 'bg-nature-950 text-nature-400 border-nature-800 hover:text-white'
                                     }`}
                                 >
@@ -264,7 +264,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                     onClick={() => setSeverity('critical')}
                                     className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                         severity === 'critical'
-                                            ? 'bg-red-500/20 text-red-300 border-red-500/40 shadow-sm'
+                                            ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border-red-500/40 shadow-sm'
                                             : 'bg-nature-950 text-nature-400 border-nature-800 hover:text-white'
                                     }`}
                                 >
@@ -295,7 +295,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         <button
                             type="submit"
                             disabled={sendingAnnouncement}
-                            className="px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                            className="px-6 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
                         >
                             {sendingAnnouncement ? (
                                 <>
@@ -322,7 +322,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         </div>
                         <button
                             onClick={() => setShowAddChannelModal(true)}
-                            className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md flex items-center gap-1.5"
                         >
                             <span>+</span>
                             <span>Add Feed Channel</span>
@@ -342,7 +342,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                             </p>
                             <button
                                 onClick={() => setShowAddChannelModal(true)}
-                                className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on"
                             >
                                 + Add First Channel
                             </button>
@@ -426,7 +426,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                 <button
                                     type="submit"
                                     disabled={addingChannel}
-                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50 flex items-center gap-1.5"
+                                    className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50 flex items-center gap-1.5"
                                 >
                                     {addingChannel ? (
                                         <>

@@ -271,7 +271,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             className={`min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center justify-center gap-1 ${
                                 isBlocked
                                     ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
-                                    : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                    : 'border-bp-chip-danger-ink bg-bp-chip-danger-tint text-bp-chip-danger-ink hover:brightness-95'
                             }`}
                         >
                             <span aria-hidden="true">{isBlocked ? '🛡️' : '🚫'}</span>
@@ -346,7 +346,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         ) : (
                             <button 
                                 onClick={() => onMessage(pubkey)}
-                                className="mt-6 bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
+                                className="mt-6 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -365,7 +365,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         key={lvl}
                                         onClick={() => handleVouch(lvl)}
                                         disabled={vouching}
-                                        className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-white border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
+                                        className="flex-1 bg-bp-gold-fill hover:bg-bp-gold-hover disabled:opacity-60 text-bp-gold-on border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
                                     >
                                         <span className="text-[13px]">{label}</span>
                                         <span className="text-[11px] opacity-90 font-mono">{amt}</span>
@@ -428,7 +428,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Collaborate with {profile?.callsign || 'Member'}
                                 </button>
@@ -455,7 +455,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -483,7 +483,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Nudge {profile?.callsign || 'Member'} in Chat
                                 </button>
@@ -510,7 +510,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -540,7 +540,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
-                                <p className="text-xs text-nature-450 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
+                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -629,7 +629,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 setQuizInitialMode('deep');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
                                         >
                                             🧭 More accurate
                                         </button>
@@ -670,7 +670,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     setQuizInitialMode('quick');
                                     setShowQuizModal(true);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                             >
                                 ⚡ Take 60s Quiz
                             </button>
@@ -833,8 +833,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                 <div className="flex justify-between items-start mb-1">
                                                                     <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                                                                         p.type === 'offer' 
-                                                                            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                                                                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                                                            ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                                            : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                                                     }`}>
                                                                         {p.type?.toUpperCase()}
                                                                     </div>
@@ -871,7 +871,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             <div className="text-amber-500 text-xs">{renderStars(r.stars)}</div>
                                                             <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                                                                 r.role === 'provider'
-                                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'
                                                             }`}>
                                                                 {r.role === 'provider' ? 'Provided Service' : 'Paid for Service'}
@@ -911,7 +911,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             {resolveAvatarUrl(r.target_avatar) ? (
                                                                 <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || 'avatar'} className="w-7 h-7 rounded-full object-cover border" />
                                                             ) : (
-                                                                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-105 border">
+                                                                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-100 dark:bg-nature-800 border">
                                                                     {r.target_callsign?.charAt(0).toUpperCase() || '?'}
                                                                 </div>
                                                             )}
@@ -1056,8 +1056,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                             setSubmittingReview(false);
                                         }
                                     }}
-                                    className={`flex-[1.5] py-3 text-white text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] border-none cursor-pointer transition-all ${
-                                        submittingReview ? 'bg-terra-400 opacity-75 cursor-not-allowed' : 'bg-gradient-to-r from-terra-500 to-amber-500 hover:-translate-y-0.5'
+                                    className={`flex-[1.5] py-3 text-bp-gold-on text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] border-none cursor-pointer transition-all ${
+                                        submittingReview ? 'bg-bp-gold-fill opacity-75 cursor-not-allowed' : 'bg-bp-gold-fill hover:bg-bp-gold-hover hover:-translate-y-0.5'
                                     }`}
                                 >
                                     {submittingReview ? 'Updating...' : 'Update Rating'}

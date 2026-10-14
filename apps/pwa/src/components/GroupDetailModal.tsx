@@ -38,6 +38,9 @@ export function GroupDetailModal({
 }: Props) {
     const [groupData, setGroupData] = useState<Group | null>(group);
     const [members, setMembers] = useState<GroupMember[]>([]);
+    // Where anyone can join in a minute (openMembership) the roster is its members': anyone else is told to join
+    // (join_to_see), and sees the count and why, never "Roster (N)" over an empty box (#1939 review N5).
+    const [rosterRefused, setRosterRefused] = useState(false);
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,9 @@ export function GroupDetailModal({
         try {
             const m = await getGroupMembers(group.id);
             setMembers(Array.isArray(m) ? m : []);
+            setRosterRefused(false);
         } catch (err: any) {
+            setRosterRefused(err?.code === 'join_to_see');
             console.warn('[GroupDetail] Failed to load roster:', err);
         } finally {
             setLoading(false);
@@ -266,7 +271,7 @@ export function GroupDetailModal({
                             </span>
                         )}
                         {isConvenor && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                 <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
                             </span>
                         )}
@@ -372,7 +377,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
                                                             aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                                                            className="px-2 py-1 rounded bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-50 disabled:cursor-not-allowed text-bp-commit-on text-[11px] font-bold transition-colors"
                                                         >
                                                             Approve
                                                         </button>
@@ -413,12 +418,15 @@ export function GroupDetailModal({
                     {/* Member Roster */}
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
-                            Roster ({roster.rows.length || groupData.memberCount || 0})
+                            {rosterRefused
+                                ? (typeof groupData.memberCount === 'number' ? `${groupData.memberCount} ${groupData.memberCount === 1 ? 'member' : 'members'}` : 'Members')
+                                : `Roster (${roster.rows.length || groupData.memberCount || 0})`}
                         </h3>
+                        {rosterRefused && <p className="text-sm text-nature-600 dark:text-nature-300">Join the group to see who is here</p>}
 
                         {loading ? (
                             <div className="py-4 text-center text-xs text-nature-500">Loading members...</div>
-                        ) : (
+                        ) : rosterRefused ? null : (
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
                                 {roster.rows.map((row) => {
                                     const m = row.member;
@@ -449,7 +457,7 @@ export function GroupDetailModal({
                                             <div className="flex items-center gap-2">
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                                     highlight
-                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
+                                                        ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-bp-chip-ok-ink'
                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
                                                     {row.isLead ? 'Lead' : m.role}
@@ -516,7 +524,7 @@ export function GroupDetailModal({
                                     onClose();
                                     onPostToGroup(groupData);
                                 }}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <span aria-hidden="true">✏️ </span>Post to {groupData.name}
                             </button>
@@ -548,7 +556,7 @@ export function GroupDetailModal({
                                 type="button"
                                 onClick={handleJoin}
                                 disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                             </button>

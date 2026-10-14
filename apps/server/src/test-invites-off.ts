@@ -259,9 +259,13 @@ async function main(): Promise<void> {
     const checkTicket = await call(null, 'GET', `/api/invite/check?code=${encodeURIComponent(`BP-${ticket}`)}`);
     assert(invitesOff(check) && invitesOff(checkTicket), `the pre-flight check, for a code and for a ticket → 404 (${show(check)} | ${show(checkTicket)})`);
     const mine = await call(nia, 'GET', `/api/invite/mine/${nia.pk}`);
-    const tree = await call(nia, 'GET', '/api/invite/tree');
+    // The tree reads from Nia's own place in it: where anyone can join in a minute (`openMembership`, on here) the whole
+    // tree is every member, and is refused (test-open-membership-reads).
+    const tree = await call(nia, 'GET', `/api/invite/tree?root=${nia.pk}`);
+    const wholeTree = await call(nia, 'GET', '/api/invite/tree');
     assert(mine.status === 200 && mine.body?.invites?.some((i: any) => i.code === 'INV-OLDM-EMBR') && tree.status === 200,
-        `reads still answer: Nia's own invites list the old code, and the tree reads (${mine.status}, ${tree.status})`);
+        `reads still answer: Nia's own invites list the old code, and her branch of the tree reads (${mine.status}, ${tree.status})`);
+    assert(wholeTree.status === 403 && wholeTree.body?.code === 'members_on_demand', `and the whole tree is refused on the global node (${show(wholeTree)})`);
 
     // Knocks are answered with an invite: off with invites, even with their own switch on.
     setOverride('knocks', 'true');

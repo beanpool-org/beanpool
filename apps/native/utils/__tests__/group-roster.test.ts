@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildRosterView, leadPubkeyOf } from '../group-roster';
+import { buildRosterView, leadPubkeyOf, rosterHeading } from '../group-roster';
 import type { GroupItem, GroupMemberItem } from '../db';
 
 const LEAD = 'pk-marty';
@@ -165,5 +165,18 @@ describe('the group roster and its lead convenor', () => {
         const promoted = buildRosterView(group({ viewerRole: 'member' }), roster, CONVENOR);
         expect(promoted.viewerIsConvenor).toBe(true);
         expect(rowFor(promoted, MEMBER).canRemove).toBe(true);
+    });
+});
+
+describe('the roster heading for someone told to join to see who is here (#1939 review N5)', () => {
+    it('refused (join_to_see): the count from the card and why there are no names, never "Roster (N)" over an empty box', () => {
+        expect(rosterHeading({ refused: true, rows: 0, memberCount: 4 })).toEqual({ title: '4 members', note: 'Join the group to see who is here' });
+        expect(rosterHeading({ refused: true, rows: 0, memberCount: 1 })).toEqual({ title: '1 member', note: 'Join the group to see who is here' });
+        expect(rosterHeading({ refused: true, rows: 0, memberCount: undefined })).toEqual({ title: 'Members', note: 'Join the group to see who is here' });
+    });
+    it('read (a member, or anyone on a local community): "Roster (N)" as before', () => {
+        expect(rosterHeading({ refused: false, rows: 3, memberCount: 4 })).toEqual({ title: 'Roster (3)', note: null });
+        expect(rosterHeading({ refused: false, rows: 0, memberCount: 4 })).toEqual({ title: 'Roster (4)', note: null });
+        expect(rosterHeading({ refused: false, rows: 0, memberCount: undefined })).toEqual({ title: 'Roster (0)', note: null });
     });
 });

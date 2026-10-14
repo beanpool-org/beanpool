@@ -307,6 +307,46 @@ function doorOf(info: CommunityInfo | null | undefined): Door {
  */
 const LEAVE_WAIT_MS = 5_000;
 
+/**
+ * How it works where the node has Beans off (`features.beans` false: the worldwide community). Rehearsal 14 Oct 2026,
+ * B3: the step sold a credit line to -2000 Beans, the Commons fee, the Trust Wallet and Ledger sends, none of which exist
+ * there, in a 350 px scroll box about 140 px wide at 320 px with 130 % text. This says what is on, in a few short lines
+ * that fit the step without a box of their own.
+ */
+export const HOW_IT_WORKS_WITHOUT_BEANS = {
+    intro: 'Here is what you can do here.',
+    things: [
+        { icon: '📦', title: 'Offers and needs', line: 'List what you can give, ask for what you need, and find people near you. You agree the details between you.' },
+        { icon: '📅', title: 'Events', line: "See what's on near you, and say you're going." },
+        { icon: '👥', title: 'Groups', line: 'Find people around a place or an interest, and talk together.' },
+        { icon: '💬', title: 'Messages', line: 'Tap Message on any post to talk with the person who posted it.' },
+    ],
+    local: 'A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.',
+    words: 'Your 12 words are always in Settings → Recovery Phrase.',
+} as const;
+
+function HowItWorksWithoutBeans() {
+    const copy = HOW_IT_WORKS_WITHOUT_BEANS;
+    return (
+        <div data-testid="how-it-works-no-beans" className="text-left mb-6 space-y-3">
+            <ul className="m-0 p-0 list-none space-y-3">
+                {copy.things.map((thing) => (
+                    <li key={thing.title} className="flex gap-2 items-start">
+                        <span aria-hidden="true" className="shrink-0 text-lg leading-6">{thing.icon}</span>
+                        <p className="m-0 min-w-0 break-words text-sm leading-relaxed text-nature-900 dark:text-nature-100">
+                            <strong className="text-nature-950 dark:text-oat-50">{thing.title}.</strong> {thing.line}
+                        </p>
+                    </li>
+                ))}
+            </ul>
+            <p className="m-0 pt-3 border-t border-nature-200 dark:border-nature-700 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">
+                {copy.local}
+            </p>
+            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 {copy.words}</p>
+        </div>
+    );
+}
+
 export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
@@ -314,6 +354,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A local community (every node but the global one, an older node that says no profile included): its listings are
     // its members' (2026-09-28), so this page points a stranger to the global community to look around.
     const [localCommunity, setLocalCommunity] = useState(() => !!initialInfo && initialInfo.profile !== 'global');
+    // Beans off here (the worldwide community): How it works says what is on, not the money system (rehearsal 14 Oct, B3).
+    const [beansOff, setBeansOff] = useState(() => initialInfo?.features?.beans === false);
     // The open door also takes 12 words alone, beside the sign-in (two-doors design §2; the node's `features.wordsDoor`).
     const [wordsDoor, setWordsDoor] = useState(() => initialInfo?.features?.wordsDoor === true);
     // A private preview (the node's `features.privatePreview`): an owner's or admin's invite is the only way in, and the
@@ -332,7 +374,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -1395,11 +1437,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
 
     return (
-        <div className="page-surface min-h-screen text-nature-950 dark:text-oat-50" style={{
+        // 2rem around the page and inside the card, 1rem each below 360 px: at 320 px with 130 % text the two 2rem paddings
+        // left the steps about 150 px for their words (rehearsal 14 Oct, B3 and S10).
+        <div data-testid="welcome-page" className="page-surface min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            padding: '2rem',
         }}>
             <div style={{
                 maxWidth: '480px',
@@ -1415,9 +1458,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     backed by cryptography — no passwords, no central accounts.
                 </p>
 
-                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm" style={{
+                <div data-testid="welcome-card" className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm p-8 max-[359px]:px-4" style={{
                     borderRadius: '16px',
-                    padding: '2rem',
                 }}>
                     {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && !finishJoining && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
@@ -1796,7 +1838,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     borderRadius: '10px',
                                     border: 'none',
                                     background: !pendingAvatar ? 'var(--border-primary, #334155)' : loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)',
+                                    // White on the blue (and on the grey while it sends); the page's ink on the pale disabled fill.
+                                    color: !pendingAvatar ? 'var(--text-primary)' : 'var(--bp-commit-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
                                     cursor: !pendingAvatar || loading ? 'not-allowed' : 'pointer',
@@ -1850,10 +1893,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         <>
                             <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                                Let's look at how this community economy works.
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: beansOff ? '1rem' : '1.5rem', lineHeight: 1.5 }}>
+                                {beansOff ? HOW_IT_WORKS_WITHOUT_BEANS.intro : "Let's look at how this community economy works."}
                             </p>
 
+                            {beansOff ? <HowItWorksWithoutBeans /> : (
                             <div className="text-left space-y-4 mb-6" style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '0.5rem', textAlign: 'left' }}>
                                 {/* Card 1: Energy Exchange */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50">
@@ -1865,7 +1909,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         🟢 <strong>The best place to be is zero (0 Beans).</strong> This means you have given as much value to your community as you have received from it.
                                     </div>
                                     <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                                        🫘 <strong>Contributions First.</strong> To keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
+                                        🫘 <strong>Contributions First.</strong> In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
                                     </div>
                                 </div>
 
@@ -1876,7 +1920,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start">
                                         <span className="text-lg leading-none">🤝</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Trust-Backed Credit</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Trust-Backed Credit</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                                             </p>
@@ -1886,7 +1930,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">🌾</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Community Commons Pool</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                             </p>
@@ -1896,7 +1940,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">⏱️</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Reference Rate</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Reference Rate</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
                                             </p>
@@ -1958,6 +2002,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </p>
                                 </div>
                             </div>
+                            )}
 
                             {error && (
                                 <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
@@ -1972,7 +2017,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
                                     background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)', fontSize: '1rem',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2135,7 +2180,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
                                     background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--text-primary)', fontSize: '1rem',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2296,7 +2341,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         width: '100%', padding: '0.85rem', borderRadius: '10px',
                                         border: 'none',
                                         background: loading ? '#555' : '#2563eb',
-                                        color: 'var(--text-primary)', fontSize: '1rem',
+                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
                                         fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                         fontFamily: 'inherit', transition: 'background 0.2s',
                                     }}
@@ -2858,7 +2903,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">📲</span> Link with Mobile App (Scan QR)
-                                        <span className="text-[10px] font-extrabold bg-emerald-600 dark:bg-emerald-700 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
+                                        <span className="text-[10px] font-extrabold bg-bp-commit-fill text-bp-commit-on px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
                                             FASTEST
                                         </span>
                                     </button>

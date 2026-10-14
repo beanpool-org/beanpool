@@ -52,6 +52,7 @@ export * from './poll-vote-origins.js';
 export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
+export * from './home-save-search.js';
 export * from './sample-community.js';
 export * from './features.js';
 export * from './sky.js';
@@ -60,6 +61,7 @@ export * from './group-words.js';
 export * from './tour.js';
 export * from './help-map.js';
 export * from './brand-colours.js';
+export * from './words.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's
 // commitment. A new export from group-crypto.ts is added here on purpose or not at all.

@@ -326,13 +326,16 @@ export default function PeopleScreen() {
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
             if (view === 'community') {
-                loadMembers(searchQuery, sortOption);
+                // On a community that says `membersOnDemand` the list is a read of the node, not of the synced copy: a
+                // sync (each listing pushed, each card refreshed) never asks it again, or the app alone would spend the
+                // member's day of nearest reads and then tell an online member to connect (#1939 review N1).
+                if (!membersOnDemand) loadMembers(searchQuery, sortOption);
             } else if (view === 'friends') {
                 loadFriends(true); // background refresh — silent, no spinner toggle
             }
         });
         return () => sub.remove();
-    }, [view, searchQuery]);
+    }, [view, searchQuery, membersOnDemand]);
 
     // `background` refreshes (triggered by sync_data_updated) must NOT toggle the loading
     // spinner — syncs fire on every WebSocket broadcast, so flipping friendsLoading on each

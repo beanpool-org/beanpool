@@ -303,6 +303,9 @@ async function main(): Promise<void> {
     initStateEngine();
     const port = await https.startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+    // This suite reads the whole directory as a member, to compare what a member and a guest get of the people. Where `openMembership` is on (the global node's default) those reads are refused, which
+    // test-open-membership-reads proves; here the operator's override keeps them, and nothing this suite measures depends on it.
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
 
     // ── the community ──────────────────────────────────────────────────────────────────────────
     const member = (callsign: string, status = 'active'): Id => {

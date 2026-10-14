@@ -228,7 +228,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         <span>Lat: {lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         <span>Lng: {lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         {isApproximate && (
-                            <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[10px] font-sans font-semibold border border-terra-300 dark:border-terra-700/50">
+                            <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[10px] font-sans font-semibold border border-bp-chip-warn-ink">
                                 ~100m
                             </span>
                         )}
@@ -320,7 +320,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         type="button"
                         onClick={handleSave}
                         disabled={saving || clearing || lat == null || lng == null}
-                        className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-white shadow transition-all"
+                        className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-bp-cta-on shadow transition-all"
                     >
                         {saving ? 'Saving...' : 'Save Location'}
                     </button>

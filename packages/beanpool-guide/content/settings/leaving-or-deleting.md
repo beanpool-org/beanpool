@@ -20,6 +20,8 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 - Type **WIPE** and tap **Confirm Sign Out**.
 - Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
+In the web app, tap **Sign Out (Device Only)**, then **Confirm Sign Out**. There is no **WIPE** to type and no lock screen step.
+
 Your account and every community you saved are removed from this phone. So are the links to Instagram or TikTok you made for your channels, and the categories you starred under **For You**. In the phone app, your community keeps those categories with your account, so they come back when you do. Your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first.
 
 A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see "Your 12 words").
@@ -31,11 +33,14 @@ A phone restored with a sign-in account may have no 12 words. Settings says so. 
 - Type **DELETE** or your name and tap **Permanently Purge Account**.
 - Pass your phone's lock screen check, then tap **Permanently Purge** to confirm.
 
+In the web app, type **DELETE** or your name and tap **Purge Account**. There is no lock screen step.
+
 This cannot be undone, even with your 12 words.
 
 - You cannot delete while you have a deal under way. Finish or cancel it first.
 - If you hold beans, they go to the Commons.
 - If you are below zero, the Commons covers the debt.
+- If an admin had confirmed you and you owe Beans, the admins' names list keeps a note of what you owed for 3 years, and nobody can be confirmed against that entry until it is settled. See "What the admins can see".
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
 - Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
@@ -66,10 +71,12 @@ Your community's server deletes all of the above at once. It also takes your nam
 - **If you are a member of another community on this phone,** your key and 12 words stay. The community you deleted goes from the phone's list, with its data on the phone, and the app opens one of your other communities. The app names them before you confirm.
 - A community the app can't reach counts as one you are still in, so a bad connection never takes your key.
 - **If this is the last community on this phone where you are a member,** your key and 12 words go from the phone too, as when you sign out. Write your 12 words down first: they get you back into any community this phone does not list.
+- **If BeanPool's key vault keeps a copy of your key,** from a sign-in account you linked, the app removes it first, while your key is still on the phone. Only your key can remove it, so afterwards nobody could. The vault deletes it at once, and from its backups within 30 days.
+- If the vault does not confirm it, the app says so, and your key stays on the phone for now. Tap **Try Again**, or **Delete Anyway**: your key leaves the phone and the vault copy stays, locked to your sign-in account. To remove it later, you need your key back, with your 12 words or that sign-in account, and a community that has you, to tap **Disconnect** in **Account Protection**.
 - To take BeanPool off the phone altogether, use **Sign Out (Device Only)**.
 - If the community refuses the delete, or does not answer within 20 seconds, nothing on the phone changes. The app says so, and you can try again.
 
-The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community.
+The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community. If the phone app put a copy of your key in BeanPool's key vault, deleting in the web app does not remove it: remove it in the phone app first, with **Disconnect** in **Account Protection**.
 
 ### If a community does not recognise you
 

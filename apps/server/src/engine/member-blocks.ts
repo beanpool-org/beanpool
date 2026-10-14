@@ -17,7 +17,7 @@
  *   owner; and, as the guide says, "Your friends no longer see you as a connection in common on their profile", nor
  *   does anyone the owner blocked count for the owner (getTrustProfileForViewer). No friend row is touched: "It does
  *   not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To
- *   end that too, take them off your Friends tab on the phone; on the web … They can notice a removal." A shared room (a
+ *   end that too, open Manage Blocked Users … Also remove from friends … They can notice a removal." A shared room (a
  *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author

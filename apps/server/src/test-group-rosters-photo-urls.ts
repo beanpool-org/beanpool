@@ -15,9 +15,9 @@
  *      global profile (faces keyed), held to a 256 MB heap: the convenor's roster, a member's roster, the group's card and
  *      the list of groups answer, with URLs and no photo, and the heap's peak stays under a bound. On origin/main the
  *      convenor's roster ends the process.
- *   2. Who gets what, on the global profile: the convenor sees requests and invitations, a member the active roster, an
- *      outsider an open group's roster and nothing of an invite-only one, a stranger, a visitor and a signed non-member
- *      nothing; no answer carries a photo, each URL is the member list's for that member, opens their face and only
+ *   2. Who gets what, on the global profile: the convenor sees requests and invitations, a member the active roster (an
+ *      open group's too), an outsider is told to join to see an open group's roster (`openMembership`) and gets nothing of
+ *      an invite-only one, a stranger, a visitor and a signed non-member nothing; no answer carries a photo, each URL is the member list's for that member, opens their face and only
  *      with its key; a shipped picture stays its name; a removed photo leaves no URL and its old URL opens nothing.
  *   3. The local profile's lists: the enterprises' list and map pins, an enterprise's open deals as its keeper sees them,
  *      the crowdfund list and the escrow disputes carry each photo's URL and no photo; the one enterprise's own page
@@ -213,11 +213,16 @@ async function rulesOnGlobal(): Promise<void> {
     const pendingByMember = await rosterOf(M, ask.id, '?status=pending_approval');
     assert(pendingByMember.status === 403 && !pendingByMember.text.includes('/api/avatar/'), `a member is refused who asked to join (${pendingByMember.status})`);
 
+    // Where anyone can join in a minute (`openMembership`, on here), an open group's roster is its own members': a member of
+    // the node outside it is told to join (test-open-membership-reads has the rest of the rule).
     const openByOutsider = await rosterOf(O, open.id);
-    const bRow = openByOutsider.rows.find(r => r.memberPubkey === B.pk);
-    const zRow = openByOutsider.rows.find(r => r.memberPubkey === Z.pk);
-    assert(openByOutsider.status === 200 && openByOutsider.rows.length === 4 && rowsRight(openByOutsider.rows) && !carriesPhoto(openByOutsider.text),
-        `any member of the node reads an open group's roster, with URLs (${openByOutsider.status}, ${openByOutsider.rows.length} rows)`);
+    assert(openByOutsider.status === 403 && JSON.parse(openByOutsider.text).code === 'join_to_see' && !openByOutsider.text.includes('/api/avatar/'),
+        `a member of the node outside an open group is told to join to see its roster, and gets no face (${openByOutsider.status})`);
+    const openByMember = await rosterOf(M, open.id);
+    const bRow = openByMember.rows.find(r => r.memberPubkey === B.pk);
+    const zRow = openByMember.rows.find(r => r.memberPubkey === Z.pk);
+    assert(openByMember.status === 200 && openByMember.rows.length === 4 && rowsRight(openByMember.rows) && !carriesPhoto(openByMember.text),
+        `a member of an open group reads its roster, with URLs (${openByMember.status}, ${openByMember.rows.length} rows)`);
     assert(bRow?.avatarUrl === 'bundled://leaf', `a shipped picture is its name, as in the member list (${bRow?.avatarUrl})`);
     assert(zRow !== undefined && !('avatarUrl' in zRow), 'a member with no photo has no avatarUrl, as before');
     const quietByOutsider = await rosterOf(O, quiet.id);

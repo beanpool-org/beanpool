@@ -12,7 +12,8 @@ import { namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/accoun
 import { NAMES_COPY, namesSignOutWords } from '../../utils/names-list';
 import {
     DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, deleteFailedLine, deletePlanFailedLine,
-    deletedButLine, keepsKeyLine, lastCommunityLine, listNames, planDelete, type DeletePlan,
+    deletedButLine, finishLastDelete, keepsKeyLine, lastCommunityLine, listNames, planDelete, vaultCopyStaysLine,
+    type DeleteOutcome, type DeletePlan, type VaultCopyChoice,
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
@@ -60,7 +61,7 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, t, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -72,6 +73,7 @@ import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -1511,6 +1513,59 @@ export default function SettingsScreen() {
 
         const words = hasMnemonic(identity);
         const cannotUndo = words ? 'This CANNOT be undone, even with your 12-word phrase.' : 'This CANNOT be undone.';
+        const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
+
+        function showPurgeOutcome(outcome: DeleteOutcome) {
+            if (!identity || !plan) return;
+            switch (outcome.kind) {
+                case 'not-deleted':
+                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
+                    return;
+                case 'left-unfinished':
+                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
+                    return;
+                case 'left':
+                    Alert.alert(
+                        "Account Deleted Here",
+                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
+                    );
+                    // Through Welcome for the next community, as switching community does.
+                    router.replace('/welcome');
+                    return;
+                case 'vault-copy-stays':
+                    // The account here is deleted and the key is still on the phone: the member chooses, and the
+                    // phone is wiped only by their answer (utils/delete-here.ts finishLastDelete).
+                    Alert.alert(
+                        t("Vault Copy Not Removed"),
+                        vaultCopyStaysLine(plan.hereName, outcome),
+                        [
+                            { text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } },
+                            { text: "Delete Anyway", style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } },
+                        ],
+                        { cancelable: false },
+                    );
+                    return;
+                case 'wipe-unfinished':
+                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
+                    return;
+                case 'wiped':
+                    setIdentity(null);
+                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
+                    return;
+            }
+        }
+
+        async function finishPurgeAtLast(choice: VaultCopyChoice) {
+            if (!identity) return;
+            setAdvancedLoading(true);
+            try {
+                const outcome = await finishLastDelete(identity, choice);
+                showPurgeOutcome(outcome);
+            } finally {
+                setAdvancedLoading(false);
+            }
+        }
+
         Alert.alert(
             "Permanent Node Purge",
             plan.kind === 'this-one'
@@ -1527,30 +1582,7 @@ export default function SettingsScreen() {
                             // The node deletes the account here; only once it has, the phone leaves this community
                             // (other communities keep the key) or is wiped as Sign Out wipes it (the last one).
                             const outcome = await deleteAccountHere(identity, plan);
-                            const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
-                            switch (outcome.kind) {
-                                case 'not-deleted':
-                                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
-                                    return;
-                                case 'left-unfinished':
-                                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
-                                    return;
-                                case 'left':
-                                    Alert.alert(
-                                        "Account Deleted Here",
-                                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
-                                    );
-                                    // Through Welcome for the next community, as switching community does.
-                                    router.replace('/welcome');
-                                    return;
-                                case 'wipe-unfinished':
-                                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
-                                    return;
-                                case 'wiped':
-                                    setIdentity(null);
-                                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
-                                    return;
-                            }
+                            showPurgeOutcome(outcome);
                         } finally {
                             setAdvancedLoading(false);
                         }
@@ -3096,25 +3128,30 @@ export default function SettingsScreen() {
                             <>
                                 <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
                                     {blockedUsersList.map(item => (
-                                        <View key={item.pubkey} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
-                                            <View style={{ flex: 1, marginRight: 12 }}>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
-                                                    {item.callsign}
-                                                </Text>
-                                                <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
-                                                    {item.pubkey.slice(0, 16)}...
-                                                </Text>
+                                        <View key={item.pubkey} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <View style={{ flex: 1, marginRight: 12 }}>
+                                                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
+                                                        {item.callsign}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
+                                                        {item.pubkey.slice(0, 16)}...
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                                                    onPress={async () => {
+                                                        await unblockUser(item.pubkey);
+                                                        setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
+                                                    }}
+                                                >
+                                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                                </Pressable>
                                             </View>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
-                                                onPress={async () => {
-                                                    await unblockUser(item.pubkey);
-                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
-                                            </Pressable>
+                                            {identity?.publicKey && (
+                                                <BlockedFriendRemove myKey={identity.publicKey} pubkey={item.pubkey} callsign={item.callsign || item.pubkey.slice(0, 8)} />
+                                            )}
                                         </View>
                                     ))}
                                 </ScrollView>

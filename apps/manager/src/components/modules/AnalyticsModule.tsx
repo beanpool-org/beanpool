@@ -140,12 +140,12 @@ export function AnalyticsModule({
                                 <span>CRITICAL PEAK DETECTED</span>
                             </span>
                         ) : warningThresholdBreached ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1">
+                            <span className="px-2.5 py-0.5 rounded-full bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1">
                                 <span>⚠️</span>
                                 <span>PEAK WARNING</span>
                             </span>
                         ) : (
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold flex items-center gap-1">
+                            <span className="px-2.5 py-0.5 rounded-full bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30 text-xs font-mono font-bold flex items-center gap-1">
                                 <span>✅</span>
                                 <span>THRESHOLDS NORMAL</span>
                             </span>
@@ -270,7 +270,7 @@ export function AnalyticsModule({
                             onClick={() => setMetricType('cpu')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                 metricType === 'cpu'
-                                    ? 'bg-terra-500 text-white shadow'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow'
                                     : 'text-nature-400 hover:text-white'
                             }`}
                         >
@@ -280,7 +280,7 @@ export function AnalyticsModule({
                             onClick={() => setMetricType('memory')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                 metricType === 'memory'
-                                    ? 'bg-terra-500 text-white shadow'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow'
                                     : 'text-nature-400 hover:text-white'
                             }`}
                         >
@@ -290,7 +290,7 @@ export function AnalyticsModule({
                             onClick={() => setMetricType('streams')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                 metricType === 'streams'
-                                    ? 'bg-terra-500 text-white shadow'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow'
                                     : 'text-nature-400 hover:text-white'
                             }`}
                         >
@@ -300,7 +300,7 @@ export function AnalyticsModule({
                             onClick={() => setMetricType('wal')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                 metricType === 'wal'
-                                    ? 'bg-terra-500 text-white shadow'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow'
                                     : 'text-nature-400 hover:text-white'
                             }`}
                         >
@@ -551,15 +551,15 @@ export function AnalyticsModule({
                                     </div>
 
                                     {stat.breached ? (
-                                        <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[9px] font-mono font-bold animate-pulse shrink-0">
+                                        <span className="px-2 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on text-[9px] font-mono font-bold animate-pulse shrink-0">
                                             🚨 EXCEEDED
                                         </span>
                                     ) : stat.warning ? (
-                                        <span className="px-2 py-0.5 rounded bg-amber-500 text-black text-[9px] font-mono font-bold shrink-0">
+                                        <span className="px-2 py-0.5 rounded bg-bp-gold-fill text-bp-gold-on text-[9px] font-mono font-bold shrink-0">
                                             ⚠️ WARNING
                                         </span>
                                     ) : (
-                                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold border border-emerald-500/30 shrink-0">
+                                        <span className="px-2 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink text-[9px] font-mono font-bold border border-emerald-500/30 shrink-0">
                                             HEALTHY
                                         </span>
                                     )}

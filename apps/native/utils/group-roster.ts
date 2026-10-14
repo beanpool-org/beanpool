@@ -50,6 +50,19 @@ export interface RosterView {
  * leadPubkey nor convenorPubkey, and then no row is marked — the rules still hold, because the server enforces
  * them, and nothing is claimed on screen that the app does not know.
  */
+/**
+ * The roster's heading, and the line under it. Where anyone can join in a minute (openMembership) the node keeps an open
+ * group's roster for its members and tells anyone else to join (`join_to_see`): they get the count from the group's card
+ * and why there are no names, never "Roster (N)" over an empty box (#1939 review N5). Everyone else, as before.
+ */
+export function rosterHeading(p: { refused: boolean; rows: number; memberCount?: number | null }): { title: string; note: string | null } {
+    if (p.refused) {
+        const n = typeof p.memberCount === 'number' && p.memberCount >= 0 ? p.memberCount : null;
+        return { title: n === null ? 'Members' : `${n} ${n === 1 ? 'member' : 'members'}`, note: 'Join the group to see who is here' };
+    }
+    return { title: `Roster (${p.rows || p.memberCount || 0})`, note: null };
+}
+
 export function leadPubkeyOf(group: Pick<GroupItem, 'leadPubkey' | 'convenorPubkey'> | null | undefined): string | null {
     return group?.leadPubkey ?? group?.convenorPubkey ?? null;
 }

@@ -35,7 +35,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanon
 
 import { fetchGroupDetails, getGroupForLanding, getGroupActiveMembers, getTreasuries } from '../db';
 import { avatarUri } from '../image-processing';
-import { inviteLandingFacts } from '../your-groups';
+import { inviteLandingConvenor, inviteLandingFacts } from '../your-groups';
 
 const NODE = 'https://faces.example';
 const KEY = 'AbCdEfGhIjKlMnOpQrSt_-';
@@ -123,6 +123,36 @@ describe("a group's faces come from the node's photo URLs", () => {
         expect(drawn(landing!.viewerInvitedBy!.avatarUrl, LEAD)).toBe(`${NODE}${leadUrl}&_v=${LEAD.slice(0, 8)}`);
         // The landing's own sum: with no faces read (members null), the count is the card's.
         expect(inviteLandingFacts({ category: landing!.category, memberCount: landing!.memberCount, joinPolicy: landing!.joinPolicy })).toContain('4 members');
+        // And "Convenor: Lena" from the card, with no faces read (#1939 review N4).
+        expect(inviteLandingConvenor([], landing)).toBe('Lena');
+    });
+
+    it('the landing names the convenor from the faces when they were read, and from the card when not (#1939 review N4)', () => {
+        expect(inviteLandingConvenor(roster, card)).toBe('Lena');
+        expect(inviteLandingConvenor(roster, { convenorCallsign: 'Someone else' })).toBe('Lena');
+        expect(inviteLandingConvenor([], card)).toBe('Lena');
+        expect(inviteLandingConvenor([{ role: 'convenor', callsign: '', memberPubkey: LEAD }], null)).toBe(LEAD.slice(0, 6));
+        expect(inviteLandingConvenor([], { convenorCallsign: '' })).toBeNull();
+        expect(inviteLandingConvenor([], null)).toBeNull();
+    });
+
+    it("the group sheet is told when the roster was refused for being outside the group (join_to_see), and only then (#1939 review N5)", async () => {
+        const answer = (status: number, body: unknown) => ({ ok: status === 200, status, json: async () => body });
+        const route = (members: ReturnType<typeof answer>) => fetchMock.mockImplementation(async (url: string) => {
+            const path = url.replace(NODE, '');
+            if (path === '/api/groups/g1') return answer(200, { ...card, joinPolicy: 'open', viewerStatus: 'none' });
+            if (path === '/api/groups/g1/members') return members;
+            return answer(404, { error: 'Not found' });
+        });
+        route(answer(403, { error: 'Join the group to see who is here', code: 'join_to_see' }));
+        expect(await fetchGroupDetails('g1')).toMatchObject({ members: null, rosterRefused: true });
+        // An invite-only group's own refusal, a busy node, and a roster read: as before.
+        route(answer(403, { error: 'Only members of this group can see who is in it' }));
+        expect(await fetchGroupDetails('g1')).toMatchObject({ members: null, rosterRefused: false });
+        route(answer(503, { error: 'busy' }));
+        expect(await fetchGroupDetails('g1')).toMatchObject({ members: null, rosterRefused: false });
+        route(answer(200, roster));
+        expect((await fetchGroupDetails('g1'))?.rosterRefused).toBe(false);
     });
 
     it("still draws a photo an older node sends inline", () => {

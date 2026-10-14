@@ -173,7 +173,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // Hard-limited: this is the closest thing to an unauthenticated write in the system, since
         // anybody can mint a keypair. This bounds the sessions in their sign-in window, which nothing evicts; the cap
         // in pruneCollectionsFor bounds the idle ones.
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
@@ -309,7 +309,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso-nonce', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
         ctx.status = 200;
         ctx.body = {
             nonce: issueNonce(collection.requesterEphemeralPubkey),
@@ -323,7 +323,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const body = (ctx as any).requestBody || {};
         if (!isSsoProvider(body.provider)) {

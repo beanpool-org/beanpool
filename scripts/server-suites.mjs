@@ -57,6 +57,7 @@ export const SUITES = [
     'test-daily-pulse',
     'test-pairing-relay',
     'test-pairing-routes',
+    'test-auth-limit-buckets',
     'test-pricing-guide',
     'test-pricing-guide-admin',
     'test-pricing-aggregator-lifecycle',

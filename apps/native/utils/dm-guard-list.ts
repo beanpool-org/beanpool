@@ -129,7 +129,8 @@ export async function readDmSeen(storage: Pick<SeenStorage, 'getItem'>, myPubkey
  */
 export function salvageSeenIds(raw: string): string[] {
     const out: string[] = [];
-    for (const m of raw.matchAll(/[[,]\s*("(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*")(?=\s*(?:[,\]]|$))/g)) {
+    // Any literal, its escapes included; JSON.parse then refuses one with a damaged byte (a raw control character, a bad escape).
+    for (const m of raw.matchAll(/[[,]\s*("(?:[^"\\]|\\.)*")(?=\s*(?:[,\]]|$))/g)) {
         try {
             const id = JSON.parse(m[1]);
             if (isRememberableId(id)) out.push(id);

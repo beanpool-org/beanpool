@@ -2,17 +2,21 @@
  * Reviews and the trades behind them (Marty, 2026-10-14, decision A): a review is public opinion about the RATED member;
  * the trade behind it stays the two parties'.
  *
- * Through the real server and its middleware. Ana sells to Ben twice and each rates the other each time; Cat trades with
- * nobody; Dee signs with a key that has no row; Vic is a visitor and Sue a suspended member.
- *   T1 Cat reads Ana's and Ben's reviews: stars, words, side, day, and no rater key, name, picture URL or deal id; the
+ * Through the real server and its middleware. Ana sells to Ben twice and each rates the other each time; Ana sells to Eve
+ * once and Eve rates her; Cat trades with nobody; Dee signs with a key that has no row; Vic is a visitor and Sue a
+ * suspended member. Ana's three reviews are dated in two months, newest Ben's 3★, so time order is not the order served.
+ *   T1 Cat reads Ana's and Ben's reviews: stars, words, side, month, and no rater key, name, picture URL or deal id; the
  *      union of Cat's reads over every member names no pair.
  *   T2 Given is the reader's own: Cat → Ana's 403 own_only (a `?requester=` changes nothing); Ana → 200, Ben and the deals.
- *   T3 Ana reads her received reviews in full; Ben reads his own rows on Ana's list in full, marked mine; Cat sees no
- *      mine, a `?requester=` and a callsign shared with Ben change nothing.
- *   T4 Unsigned 401; Dee, Vic, Sue 403 members_only (in both boots).
+ *   T3 Ana reads her received reviews in full; Ben reads his own rows on Ana's list in full, marked mine, and Eve's row
+ *      stripped, and Eve reads hers in full and Ben's stripped (#1914 review finding 1); Cat sees no mine, a
+ *      `?requester=` and a callsign shared with Ben change nothing.
+ *   T4 Unsigned 401; Dee, Vic, Sue 403 members_only (in both boots). Suspended, Ben still reads his own received and
+ *      given lists, and not Ana's (finding 6).
  *   T5 The feed: Cat's has no rating_given, Ana's and Ben's do; Cat's If-None-Match with Ana's ETag is never a 304.
- *   T6 The header: count 2, raters 1, the average as before.
- *   T7 Cat's createdAt is the day at 12:00Z; Ana's is the exact second.
+ *   T6 The header: count 3, raters 2, the average as before.
+ *   T7 Cat's createdAt is the month, as the 1st at 12:00Z, in the order (month, stars, words), not the time's; Ana's is
+ *      the exact second (findings 3 and 4).
  *   T8 /api/marketplace/transactions?publicKey=Ana as Cat is refused (in both boots).
  *
  * Run (read auth on, the default; the opt-out is a second registered run), through the suite runner:
@@ -77,7 +81,7 @@ async function main() {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const ana = keypair(), ben = keypair(), cat = keypair(), dee = keypair(), vic = keypair(), sue = keypair();
+    const ana = keypair(), ben = keypair(), cat = keypair(), dee = keypair(), vic = keypair(), sue = keypair(), eve = keypair();
     seedGenesisMember(ana.pub, 'ana_r');
     const row = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor)
                             VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', ?)`);
@@ -85,32 +89,42 @@ async function main() {
     row.run(cat.pub, 'cat_r', 'active', 0);
     row.run(vic.pub, 'vic_r', 'active', 1);
     row.run(sue.pub, 'sue_r', 'suspended', 0);
-    // Ben has a picture: its URL carries his key (M2).
-    db.prepare("UPDATE members SET avatar_ref = 'v1' WHERE public_key = ?").run(ben.pub);
+    row.run(eve.pub, 'eve_r', 'active', 0);
+    // Ben and Eve have pictures: a picture's URL carries its member's key (M2).
+    db.prepare("UPDATE members SET avatar_ref = 'v1' WHERE public_key IN (?, ?)").run(ben.pub, eve.pub);
 
-    // Two finished deals: Ana sells to Ben twice.
+    // Three finished deals: Ana sells to Ben twice, then to Eve.
     const deals: string[] = [];
-    for (let i = 1; i <= 2; i++) {
+    for (let i = 1; i <= 3; i++) {
         const postId = `post-rp-${i}`, dealId = `deal-rp-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, author_pubkey, title, description, type, category, created_at) VALUES (?, ?, ?, ?, 'offer', 'goods', ?)`)
             .run(postId, ana.pub, `Eggs ${i}`, 'A dozen', new Date().toISOString());
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 10, 'completed', ?)`)
-            .run(dealId, postId, ben.pub, ana.pub, new Date().toISOString());
+            .run(dealId, postId, i <= 2 ? ben.pub : eve.pub, ana.pub, new Date().toISOString());
         deals.push(dealId);
     }
+    const bensDeals = deals.slice(0, 2), evesDeal = deals[2];
     const stars = [5, 3];
     for (let i = 0; i < 2; i++) {
         const byBen = await send('POST', '/api/ratings', { targetPubkey: ana.pub, stars: stars[i], comment: `Lovely eggs ${i + 1}`, transactionId: deals[i] }, ben);
         const byAna = await send('POST', '/api/ratings', { targetPubkey: ben.pub, stars: 4, comment: `Paid promptly ${i + 1}`, transactionId: deals[i] }, ana);
         assert(byBen.status === 200 && byAna.status === 200, `setup: Ben and Ana rate deal ${i + 1} (${byBen.status}/${byAna.status})`);
     }
+    const byEve = await send('POST', '/api/ratings', { targetPubkey: ana.pub, stars: 5, comment: 'Speedy and kind', transactionId: evesDeal }, eve);
+    assert(byEve.status === 200, `setup: Eve rates deal 3 (${byEve.status})`);
+    // Dated in two months, not on the 1st, so the time's order (Ben's 3★, Eve's, Ben's 5★) is not the order served (Eve's,
+    // Ben's 3★, Ben's 5★), and a day served in place of the month shows.
+    const dated = db.prepare('UPDATE ratings SET created_at = ? WHERE transaction_id = ? AND rater_pubkey = ?');
+    dated.run('2026-08-17T08:15:42.123Z', deals[0], ben.pub);
+    dated.run('2026-09-20T09:30:11.456Z', deals[1], ben.pub);
+    dated.run('2026-09-05T07:02:03.789Z', evesDeal, eve.pub);
 
-    const memberKeys = [ana.pub, ben.pub, cat.pub, vic.pub, sue.pub];
+    const memberKeys = [ana.pub, ben.pub, cat.pub, vic.pub, sue.pub, eve.pub];
     const leaks = (text: string, keys: string[]): string[] => {
         const found: string[] = [];
         for (const k of keys) if (text.includes(k)) found.push(`key ${k.slice(0, 8)}…`);
         for (const d of deals) if (text.includes(d)) found.push(`deal ${d}`);
-        for (const c of ['ana_r', 'ben_r']) if (text.includes(c)) found.push(`callsign ${c}`);
+        for (const c of ['ana_r', 'ben_r', 'eve_r']) if (text.includes(c)) found.push(`callsign ${c}`);
         if (text.includes('/api/avatar/')) found.push('an /api/avatar/ URL');
         if (/"(raterPubkey|rater_callsign|rater_avatar|transactionId|targetPubkey|id)"/.test(text)) found.push('a party/deal field');
         return found;
@@ -119,10 +133,10 @@ async function main() {
     // ── T1: a third member reads a review and nobody behind it ──
     const catOnAna = await send('GET', `/api/ratings/${ana.pub}`, undefined, cat);
     const catOnBen = await send('GET', `/api/ratings/${ben.pub}`, undefined, cat);
-    assert(catOnAna.status === 200 && Array.isArray(catOnAna.body?.ratings) && catOnAna.body.ratings.length === 2,
-        `T1a. Cat reads Ana's two reviews (${show(catOnAna)})`);
+    assert(catOnAna.status === 200 && Array.isArray(catOnAna.body?.ratings) && catOnAna.body.ratings.length === 3,
+        `T1a. Cat reads Ana's three reviews (${show(catOnAna)})`);
     const first = catOnAna.body?.ratings?.[0] ?? {};
-    assert(first.stars === 3 && first.comment === 'Lovely eggs 2' && first.role === 'provider' && typeof first.createdAt === 'string',
+    assert(first.stars === 5 && first.comment === 'Speedy and kind' && first.role === 'provider' && typeof first.createdAt === 'string',
         `T1b. each carries stars, words, side and a date (${JSON.stringify(first)})`);
     assert(leaks(catOnAna.text, memberKeys).length === 0, `T1c. Ana's reviews as Cat name no key, name, picture or deal (${leaks(catOnAna.text, memberKeys).join(', ') || 'none'})`);
     assert(catOnBen.status === 200 && leaks(catOnBen.text, memberKeys).length === 0,
@@ -141,17 +155,32 @@ async function main() {
     const catGivenSpoof = await send('GET', `/api/ratings/${ana.pub}?direction=given&requester=${ana.pub}`, undefined, cat);
     assert(catGivenSpoof.status === 403 && catGivenSpoof.body?.code === 'own_only', `T2b. a ?requester= naming Ana changes nothing (${show(catGivenSpoof)})`);
     const anaGiven = await send('GET', `/api/ratings/${ana.pub}?direction=given`, undefined, ana);
-    assert(anaGiven.status === 200 && anaGiven.body?.ratings?.length === 2 && anaGiven.text.includes(ben.pub) && deals.every(d => anaGiven.text.includes(d)),
+    assert(anaGiven.status === 200 && anaGiven.body?.ratings?.length === 2 && anaGiven.text.includes(ben.pub) && bensDeals.every(d => anaGiven.text.includes(d)),
         `T2c. Ana → her own given: 200, Ben and both deals (${anaGiven.status}, ${anaGiven.body?.ratings?.length} rows)`);
 
     // ── T3: the two parties read in full ──
     const anaOwn = await send('GET', `/api/ratings/${ana.pub}`, undefined, ana);
-    assert(anaOwn.status === 200 && anaOwn.body.ratings.every((r: any) => r.raterPubkey === ben.pub && deals.includes(r.transactionId) && r.rater_callsign === 'ben_r'),
-        `T3a. Ana reads her received reviews in full: Ben, his name and the deals (${anaOwn.status})`);
+    const fullBy = (rows: any[], who: Identity, name: string, theirDeals: string[]) => rows.length === theirDeals.length
+        && rows.every((r: any) => r.raterPubkey === who.pub && theirDeals.includes(r.transactionId) && r.rater_callsign === name);
+    assert(anaOwn.status === 200 && anaOwn.body.ratings.length === 3
+        && fullBy(anaOwn.body.ratings.filter((r: any) => r.raterPubkey === ben.pub), ben, 'ben_r', bensDeals)
+        && fullBy(anaOwn.body.ratings.filter((r: any) => r.raterPubkey === eve.pub), eve, 'eve_r', [evesDeal]),
+        `T3a. Ana reads her received reviews in full: Ben, Eve, their names and the deals (${anaOwn.status})`);
+    // A rater on a list reads their own rows in full and every other rater's stripped (finding 1: Eve on Ana's list).
+    const stripped = (r: any) => Object.keys(r).sort().join(',') === 'comment,createdAt,role,stars';
+    const onlyOthersStripped = (a: Answer, me: Identity, myName: string, myDeals: string[], other: Identity, otherName: string, otherDeals: string[]) => {
+        const rows: any[] = a.body?.ratings ?? [];
+        const mine = rows.filter((r: any) => r.mine === true), rest = rows.filter((r: any) => !('mine' in r));
+        return a.status === 200 && rows.length === 3 && fullBy(mine, me, myName, myDeals) && mine.every((r: any) => r.mine === true)
+            && rest.length === 3 - myDeals.length && rest.every(stripped)
+            && !a.text.includes(other.pub) && !a.text.includes(otherName) && otherDeals.every(d => !a.text.includes(d));
+    };
     const benOnAna = await send('GET', `/api/ratings/${ana.pub}`, undefined, ben);
-    assert(benOnAna.status === 200 && benOnAna.body.ratings.length === 2
-        && benOnAna.body.ratings.every((r: any) => r.mine === true && r.raterPubkey === ben.pub && deals.includes(r.transactionId)),
-        `T3b. Ben reads his own rows on Ana's list in full, marked mine (${benOnAna.text.slice(0, 160)})`);
+    assert(onlyOthersStripped(benOnAna, ben, 'ben_r', bensDeals, eve, 'eve_r', [evesDeal]),
+        `T3b. Ben reads his own rows on Ana's list in full, marked mine, and Eve's stripped: no key, name, deal or mine (${benOnAna.text.slice(0, 300)})`);
+    const eveOnAna = await send('GET', `/api/ratings/${ana.pub}`, undefined, eve);
+    assert(onlyOthersStripped(eveOnAna, eve, 'eve_r', [evesDeal], ben, 'ben_r', bensDeals),
+        `T3g. Eve reads her own row on Ana's list in full, marked mine, and Ben's two stripped (${eveOnAna.text.slice(0, 300)})`);
     assert(catOnAna.body.ratings.every((r: any) => !('mine' in r)), 'T3c. Cat\'s view has no mine');
     const catSpoof = await send('GET', `/api/ratings/${ana.pub}?requester=${ana.pub}`, undefined, cat);
     assert(catSpoof.status === 200 && leaks(catSpoof.text, memberKeys).length === 0 && catSpoof.body.ratings.every((r: any) => !('mine' in r)),
@@ -159,13 +188,14 @@ async function main() {
     // A review is its writer's by key, never by a name. Ben renames: his rows are still his.
     db.prepare("UPDATE members SET callsign = 'ben_renamed' WHERE public_key = ?").run(ben.pub);
     const benRenamed = await send('GET', `/api/ratings/${ana.pub}`, undefined, ben);
-    assert(benRenamed.body?.ratings?.every((r: any) => r.mine === true && r.raterPubkey === ben.pub),
+    const benRenamedMine = (benRenamed.body?.ratings ?? []).filter((r: any) => r.mine === true);
+    assert(benRenamedMine.length === 2 && benRenamedMine.every((r: any) => r.raterPubkey === ben.pub),
         `T3e. renamed, Ben's rows are still his (${benRenamed.text.slice(0, 120)})`);
     // Ben, back to his name, leaves (a pruned account frees its name: idx_members_callsign_unique), and Cat takes it.
     db.prepare("UPDATE members SET callsign = 'ben_r', status = 'pruned' WHERE public_key = ?").run(ben.pub);
     db.prepare("UPDATE members SET callsign = 'ben_r' WHERE public_key = ?").run(cat.pub);
     const catAsBenR = await send('GET', `/api/ratings/${ana.pub}`, undefined, cat);
-    assert(catAsBenR.status === 200 && catAsBenR.body.ratings.length === 2
+    assert(catAsBenR.status === 200 && catAsBenR.body.ratings.length === 3
         && catAsBenR.body.ratings.every((r: any) => !('mine' in r) && !('raterPubkey' in r)) && !catAsBenR.text.includes(ben.pub),
         `T3f. Cat, now called what Ben was, gets nothing of his (${catAsBenR.text.slice(0, 120)})`);
     db.prepare("UPDATE members SET callsign = 'cat_r' WHERE public_key = ?").run(cat.pub);
@@ -184,12 +214,28 @@ async function main() {
             `T4b. ${who}: 403 ${READ_AUTH && gated ? 'by the read gate' : 'members_only'} (${show(r)})`);
     }
 
+    // A member's own lists are theirs whatever their standing, as their ledger is (finding 6): suspended, Ben reads the
+    // reviews he got and gave, and still not Ana's.
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(ben.pub);
+    const benOwnSuspended = await send('GET', `/api/ratings/${ben.pub}`, undefined, ben);
+    assert(benOwnSuspended.status === 200 && benOwnSuspended.body?.ratings?.length === 2
+        && benOwnSuspended.body.ratings.every((r: any) => r.raterPubkey === ana.pub && bensDeals.includes(r.transactionId)),
+        `T4c. suspended, Ben reads his received reviews in full (${show(benOwnSuspended)})`);
+    const benGivenSuspended = await send('GET', `/api/ratings/${ben.pub}?direction=given`, undefined, ben);
+    assert(benGivenSuspended.status === 200 && benGivenSuspended.body?.ratings?.length === 2
+        && benGivenSuspended.body.ratings.every((r: any) => r.targetPubkey === ana.pub && bensDeals.includes(r.transactionId)),
+        `T4d. suspended, Ben reads the reviews he gave (${show(benGivenSuspended)})`);
+    const benOnAnaSuspended = await send('GET', `/api/ratings/${ana.pub}`, undefined, ben);
+    assert(benOnAnaSuspended.status === 403 && benOnAnaSuspended.body?.code === 'members_only' && !benOnAnaSuspended.text.includes('Speedy'),
+        `T4e. suspended, Ben is refused Ana's reviews (${show(benOnAnaSuspended)})`);
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(ben.pub);
+
     // ── T5: the feed line reaches the two parties only ──
     const feedOf = (reader: Identity, extra: Record<string, string> = {}) => send('GET', '/api/activity/feed?limit=50', undefined, reader, extra);
-    const anaFeed = await feedOf(ana), benFeed = await feedOf(ben), catFeed = await feedOf(cat);
+    const anaFeed = await feedOf(ana), benFeed = await feedOf(ben), eveFeed = await feedOf(eve), catFeed = await feedOf(cat);
     const rated = (a: Answer) => (a.body?.feed ?? []).filter((e: any) => e.eventType === 'rating_given').length;
-    assert(anaFeed.status === 200 && rated(anaFeed) === 4 && benFeed.status === 200 && rated(benFeed) === 4,
-        `T5a. Ana's and Ben's feeds carry the reviews (${rated(anaFeed)}/${rated(benFeed)})`);
+    assert(anaFeed.status === 200 && rated(anaFeed) === 5 && benFeed.status === 200 && rated(benFeed) === 4 && eveFeed.status === 200 && rated(eveFeed) === 1,
+        `T5a. Ana's, Ben's and Eve's feeds carry their own reviews (${rated(anaFeed)}/${rated(benFeed)}/${rated(eveFeed)})`);
     assert(catFeed.status === 200 && rated(catFeed) === 0 && !catFeed.text.includes('Lovely eggs'),
         `T5b. Cat's feed has no rating_given (${rated(catFeed)})`);
     const anaEtag = anaFeed.headers.get('etag') || '';
@@ -198,14 +244,21 @@ async function main() {
         `T5c. Cat's If-None-Match with Ana's ETag is answered with Cat's own body, never a 304 (${catWithAnasEtag.status})`);
 
     // ── T6: the header ──
-    assert(catOnAna.body.count === 2 && catOnAna.body.raters === 1 && catOnAna.body.average === 4
-        && catOnAna.body.asProvider?.count === 2 && catOnAna.body.asProvider?.average === 4,
-        `T6. Ana's header: count 2, raters 1, average 4 (${JSON.stringify({ count: catOnAna.body.count, raters: catOnAna.body.raters, average: catOnAna.body.average, asProvider: catOnAna.body.asProvider })})`);
+    assert(catOnAna.body.count === 3 && catOnAna.body.raters === 2 && catOnAna.body.average === 4.3
+        && catOnAna.body.asProvider?.count === 3 && catOnAna.body.asProvider?.average === 4.3,
+        `T6. Ana's header: count 3, raters 2, average 4.3 (${JSON.stringify({ count: catOnAna.body.count, raters: catOnAna.body.raters, average: catOnAna.body.average, asProvider: catOnAna.body.asProvider })})`);
 
-    // ── T7: the day, not the second ──
+    // ── T7: the month, not the day or the second, in an order that is not the time's ──
     const stored = (db.prepare('SELECT created_at FROM ratings WHERE target_pubkey = ? ORDER BY created_at DESC, rowid DESC').all(ana.pub) as { created_at: string }[]).map(r => r.created_at);
-    assert(catOnAna.body.ratings.every((r: any, i: number) => /^\d{4}-\d{2}-\d{2}T12:00:00(\.000)?Z$/.test(r.createdAt) && r.createdAt.slice(0, 10) === stored[i].slice(0, 10)),
-        `T7a. Cat reads the day at 12:00Z (${catOnAna.body.ratings.map((r: any) => r.createdAt).join(', ')})`);
+    const catSees = (a: Answer) => (a.body?.ratings ?? []).map((r: any) => `${r.createdAt} ${r.stars} ${r.comment}`).join(' | ');
+    const monthOrder = '2026-09-01T12:00:00Z 5 Speedy and kind | 2026-09-01T12:00:00Z 3 Lovely eggs 2 | 2026-08-01T12:00:00Z 5 Lovely eggs 1';
+    assert(catSees(catOnAna) === monthOrder,
+        `T7a. Cat reads the month as the 1st at 12:00Z, by month, stars and words (${catSees(catOnAna)})`);
+    // Ben's own rows keep their exact time and sit where the same order puts them; Eve's row, in Ben's month, still reads
+    // as the month and doesn't follow the time (it is older than Ben's 3★ and comes first).
+    assert(benOnAna.body.ratings.map((r: any) => r.mine ? `${r.createdAt} mine` : r.createdAt).join(' | ')
+            === '2026-09-01T12:00:00Z | 2026-09-20T09:30:11.456Z mine | 2026-08-17T08:15:42.123Z mine',
+        `T7c. Ben reads Eve's row as the month, his own at the second, in the same order (${benOnAna.body.ratings.map((r: any) => r.createdAt).join(', ')})`);
     assert(anaOwn.body.ratings.map((r: any) => r.createdAt).join(',') === stored.join(','),
         `T7b. Ana reads the exact time (${anaOwn.body.ratings.map((r: any) => r.createdAt).join(', ')})`);
 

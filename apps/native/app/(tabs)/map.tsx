@@ -38,7 +38,7 @@ import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import {
-    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel,
+    marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules,
     NO_BEANS_EDIT_NOTE,
 } from '../../utils/market-global';
 
@@ -851,7 +851,8 @@ export default function MapScreen() {
         // A name AND a photo are required before you can post — checked up front
         // (not after a whole draft) and routed to the setup wizard to fix.
         const nameOk = (identity?.callsign?.trim().length ?? 0) >= 2;
-        const avatarOk = await hasUsableAvatar();
+        // Where Beans are off (the global node) no photo is asked for (postFormRules).
+        const avatarOk = !postFormRules(nodeFeatures, 'offer', false).profilePhoto || await hasUsableAvatar();
         if (!nameOk || !avatarOk) {
             const need = (!nameOk && !avatarOk) ? 'a name and a photo' : !nameOk ? 'a name' : 'a photo';
             Alert.alert(
@@ -1038,7 +1039,7 @@ export default function MapScreen() {
         if (!postDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (!postCategory) errors.add('category');
-        if (postPhotos.length < 1) errors.add('photos');
+        if (photoRequired && postPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) {
             setValidationToast('⚠️ Please complete all required fields');
@@ -1086,14 +1087,14 @@ export default function MapScreen() {
 
     const fieldBorder = (field: string) => validationErrors.has(field) ? { borderColor: colors.feedback.danger.fg, borderWidth: 2, shadowColor: colors.feedback.danger.fg, shadowOpacity: 0.3, shadowRadius: 6 } : {};
 
-    const needBlocked = blockedFromTrading && postType === 'need';
+    const { needBlocked, photoRequired } = postFormRules(nodeFeatures, postType, blockedFromTrading);
 
     // Smart button label
     const submitLabel = postFormSubmitLabel({
-        posting, needBlocked, postType, category: postCategory, hasLocation: postLat != null, photoCount: postPhotos.length,
+        posting, needBlocked, postType, category: postCategory, hasLocation: postLat != null, photoCount: postPhotos.length, photoRequired,
         credits: postCredits, title: postTitle, description: postDescription,
     }, nodeFeatures);
-    const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || postPhotos.length < 1;
+    const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || (photoRequired && postPhotos.length < 1);
 
     const renderCluster = (cluster: any) => {
         return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={cluster} clustersReady={clustersReady} />;
@@ -1578,7 +1579,7 @@ export default function MapScreen() {
                                     </Pressable>
                                 )}
                             </View>
-                            <Text style={styles.photoCount}>{postPhotos.length}/5 photos</Text>
+                            <Text style={styles.photoCount}>{postPhotos.length}/5 photos{photoRequired ? '' : ' (optional)'}</Text>
 
                             {/* Location */}
                             <Text style={styles.sectionLabel}>Location <Text style={styles.requiredStar}>*</Text></Text>

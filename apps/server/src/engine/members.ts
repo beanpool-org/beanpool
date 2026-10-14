@@ -178,8 +178,9 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
     // nothing, which reads as "your account is gone" rather than "try harder". That was the case for
     // a prefix and avatars, while callsigns were public; they are members' now on every community
     // (2026-10-01), and a prefix listed every member with a sign-in copy, face and join date to
-    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
-    // leading wildcard would not, and is not offered.
+    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' reads the whole index
+    // rather than a range of it (EXPLAIN: SCAN … USING INDEX; review of #1956, N5), which no route pays now; a leading
+    // wildcard is not offered.
     //
     // Never a visitor's row (a member of another community, or a key someone sent to): no restore here brings one back,
     // and /api/recovery/collect's resolveCallsign leaves them out too, so the key the lookup lists is one it accepts.
@@ -372,10 +373,9 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     // (isCallsignAvailable), as federation-listings' safeVisitorCallsign did for its path alone: one held by anyone else
     // (a member, another visitor) is not written, and the row keeps or gets its "Visitor-" name. Written unchecked, it
     // read as that member's to anything that resolves a name (review of #1956, N3).
-    if (callsign !== undefined) {
-        const given = String(callsign).trim();
-        callsign = given && isCallsignAvailable(given, publicKey) ? given : undefined;
-    }
+    // Only a string: a peer's null or number is no name (a null written as one read "null").
+    const given = typeof callsign === 'string' ? callsign.trim() : '';
+    callsign = given && isCallsignAvailable(given, publicKey) ? given : undefined;
     if (existing) {
         let changed = false;
         // A visitor's own placeholder only: a member who named themselves "Visitor-…" is never renamed by a peer.

@@ -170,6 +170,8 @@ async function main(): Promise<void> {
     assert(!e1 && nameOf(v1) === `Visitor-${v1.slice(0, 8)}`, `a peer naming its member "даша" beside the member "Даша" leaves the visitor "Visitor-…" (got "${nameOf(v1)}"${e1 ? `, ${e1}` : ''})`);
     const e3 = visit(v3, 'MARISOL');
     assert(!e3 && nameOf(v3) === `Visitor-${v3.slice(0, 8)}`, `a peer naming its member "MARISOL" beside "Marisol" leaves the visitor "Visitor-…", no database error (got "${nameOf(v3)}"${e3 ? `, ${e3}` : ''})`);
+    registerVisitor(v2, null as unknown as string, 'https://peer.example');
+    assert(nameOf(v2) === `Visitor-${v2.slice(0, 8)}`, `a peer sending no name (null) leaves the visitor "Visitor-…", never "null" (got "${nameOf(v2)}")`);
     visit(v2, ' Wanderer ');
     assert(nameOf(v2) === 'Wanderer', `a free name from a peer is kept, trimmed (got "${nameOf(v2)}")`);
     const e4 = visit(v1, 'wanderer');

@@ -232,7 +232,7 @@ export const SIGN_OUT_FROM_SETTINGS_LINE =
     'To take BeanPool off this phone altogether, switch, then use Settings → Account Deletion & Sign Out → Sign Out (Device Only).';
 
 /** In a build with BeanPool's key vault, under {@link lastCommunityLine}: the key's copies there go first. */
-export const VAULT_COPY_GOES_LINE = "A locked copy of your key at BeanPool's key vault, from a sign-in you linked, is removed first.";
+export const VAULT_COPY_GOES_LINE = "If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first.";
 
 /** The last community on the phone: the key goes too. */
 export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, hasWords: boolean): string {

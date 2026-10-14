@@ -171,7 +171,7 @@ describe('what the web app says', () => {
     it('at the last community: a copy the phone app put in the key vault stays, and the line says where to remove it', () => {
         expect(WEB_VAULT_COPY_LINE).toBe(
             "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here " +
-            "doesn't remove it. Remove it in the phone app: Settings → Account Protection → Disconnect.");
+            "doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect.");
     });
 
     it('a delete the node refused says the key is still here', () => {

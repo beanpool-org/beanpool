@@ -207,7 +207,7 @@ export function webLastCommunityLine(hasWords: boolean): string {
 /** Under {@link webLastCommunityLine}: a copy at BeanPool's key vault, which only the phone app makes, stays. */
 export const WEB_VAULT_COPY_LINE =
     "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here " +
-    "doesn't remove it. Remove it in the phone app: Settings → Account Protection → Disconnect.";
+    "doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect.";
 
 /** The node did not delete the account: nothing in this browser changed. */
 export function webDeleteFailedLine(reason: string): string {

@@ -86,6 +86,9 @@ function network(bellingen: 'member' | 'stranger'): Net {
                 : { isMember: false, callsign: null, isRecovering: false, recoveryStatus: null }), { status: 200 });
         }
         if (u.origin === MULLUM && req.method === 'POST' && u.pathname === '/api/member/purge') {
+            if (purgeMode === "refuse") return new Response(JSON.stringify({ error: "Active escrow trades" }), { status: 409 });
+            if (purgeMode === "ok-false") return new Response(JSON.stringify({ ok: false, error: "x" }), { status: 200 });
+            if (purgeMode === "hang") return new Promise<Response>((_, rej) => { init?.signal?.addEventListener("abort", () => rej(new Error("aborted"))); });
             return new Response(JSON.stringify({ ok: true, message: 'Account purged' }), { status: 200 });
         }
         throw new Error(`No request expected: ${req.method} ${url}`);
@@ -97,6 +100,7 @@ const disconnects = (net: Net) => net.sent.filter((s) => s.origin === VAULT && s
 const fetchOrder = (net: Net, req: SentRequest) => vi.mocked(fetch).mock.invocationCallOrder[net.sent.indexOf(req)];
 
 let kim: BeanPoolIdentity;
+let purgeMode: "ok" | "refuse" | "ok-false" | "hang" = "ok";
 const quietError = console.error;
 
 beforeEach(async () => {
@@ -250,7 +254,7 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
 
     it('the confirmation says the vault copy goes first', () => {
         expect(lastCommunityLine({ kind: 'last', here: MULLUM, hereName: 'Mullum' }, true)).toMatch(
-            / A locked copy of your key at BeanPool's key vault, from a sign-in you linked, is removed first\.$/);
+            / If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first\.$/);
     });
 });
 
@@ -278,4 +282,24 @@ describe('a delete that leaves the key on the phone, or a build without a vault,
         expect(net.sent.filter((s) => s.origin === VAULT)).toEqual([]);
         expect(lastCommunityLine({ kind: 'last', here: MULLUM, hereName: 'Mullum' }, true)).not.toContain('key vault');
     });
+});
+
+describe("a purge the community refuses (refused, ok:false, no answer) sends no Disconnect and keeps the key and the copies", () => {
+    for (const mode of ["refuse", "ok-false", "hang"] as const) {
+        it(mode + ": no vault request, key and copies stay", async () => {
+            purgeMode = mode;
+            try {
+                const net = network("stranger");
+                await kimsPhone(net);
+                const plan = await planDelete(kim.publicKey);
+                expect(plan.kind).toBe("last");
+                const out = await deleteAccountHere(kim, plan, 200);
+                expect(out.kind).toBe("not-deleted");
+                expect(net.sent.filter((x) => x.origin === VAULT)).toEqual([]);
+                expect(net.vault.copiesOf(kim.publicKey)).toHaveLength(2);
+                expect((await loadIdentity())?.publicKey).toBe(kim.publicKey);
+                expect(clearDB).not.toHaveBeenCalled();
+            } finally { purgeMode = "ok"; }
+        });
+    }
 });

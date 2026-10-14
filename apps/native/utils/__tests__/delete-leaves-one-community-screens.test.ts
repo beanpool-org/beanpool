@@ -48,6 +48,21 @@ describe('Settings: Permanently Delete Account follows the plan', () => {
         expect(failed).toContain('deleteFailedLine(');
     });
 
+    it('a vault copy not removed: the member is told and chooses, and only their answer wipes the phone', () => {
+        const body = purge();
+        const stays = slice(body, "case 'vault-copy-stays':", 'return;');
+        expect(stays).toContain('vaultCopyStaysLine(plan.hereName, outcome)');
+        expect(stays).toContain(`{ text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } }`);
+        expect(stays).toContain(`{ text: "Delete Anyway", style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } }`);
+        // No third way out: closing it without an answer would leave a deleted account's key on the phone unexplained.
+        expect(stays).toContain('{ cancelable: false }');
+        expect(stays).not.toContain('setIdentity(null)');
+        // The answer goes through delete-here.ts, and its outcome is shown as the purge's is (a second failure asks again).
+        const finish = slice(body, 'async function finishPurgeAtLast(choice: VaultCopyChoice) {', '\n        }\n');
+        expect(finish).toContain('const outcome = await finishLastDelete(identity, choice);\n                showPurgeOutcome(outcome);');
+        expect(body).toContain('const outcome = await deleteAccountHere(identity, plan);\n                            showPurgeOutcome(outcome);');
+    });
+
     it('the confirmation says what stays, and the button waits for the other communities\' answers', () => {
         const s = settings();
         expect(purge()).toContain('keepsKeyLine(plan, words)');

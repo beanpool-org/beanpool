@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=2.7">
+    <link rel="stylesheet" href="style.css?v=2.8">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -462,8 +462,9 @@
             </div>
             <div class="map-wrapper">
                 <div id="nodes-map"></div>
-                <div id="map-empty-state" class="map-empty-state" style="display: none;">
-                    No community near you yet — <a href="#run-a-node">start one</a>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">No community near you yet.</span>
+                    <a id="map-empty-start" href="#run-a-node">Start a community</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -633,6 +634,6 @@ docker compose exec beanpool-node beanpool claim</code>
         </div>
     </footer>
 
-    <script src="main.js?v=1.9"></script>
+    <script src="main.js?v=1.10"></script>
 </body>
 </html>

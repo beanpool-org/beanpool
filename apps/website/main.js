@@ -38,6 +38,11 @@ const nodeIcon = L.divIcon({
 
 let totalMembers = 0;
 let totalNodes = 0;
+// Whether the directory has answered once: until it has, an empty map is unknown, never "none".
+let directoryLoaded = false;
+// The apps' words (@beanpool/core find-community.ts FIND_COMMUNITY_WORDS; test-website-directory-map.ts keeps them equal).
+const NONE_NEAR = 'No community near you yet.';
+const NOT_LOADED = "The list of communities isn't available right now. Try again soon.";
 const bounds = [];
 const markersLayer = L.layerGroup().addTo(nodesMap);
 
@@ -167,6 +172,7 @@ async function pollNodes() {
 
         if (error) throw error;
 
+        directoryLoaded = true;
         totalNodes = 0;
         totalMembers = 0;
         markersLayer.clearLayers();
@@ -202,10 +208,18 @@ async function pollNodes() {
     document.getElementById('stat-nodes').textContent = totalNodes || '—';
     document.getElementById('stat-members').textContent = totalMembers || '—';
 
+    // Nothing on the map: "none" with Start a community once the directory answered with no rows; before it ever has
+    // (a failed first read), the truth, and no Start.
     const emptyState = document.getElementById('map-empty-state');
     if (totalNodes === 0) {
         document.getElementById('nodes-map').style.opacity = '0.5';
-        if (emptyState) emptyState.style.display = 'block';
+        if (emptyState) {
+            emptyState.style.display = 'block';
+            const text = document.getElementById('map-empty-text');
+            const start = document.getElementById('map-empty-start');
+            if (text) text.textContent = directoryLoaded ? NONE_NEAR : NOT_LOADED;
+            if (start) start.style.display = directoryLoaded ? '' : 'none';
+        }
     } else {
         document.getElementById('nodes-map').style.opacity = '1';
         if (emptyState) emptyState.style.display = 'none';

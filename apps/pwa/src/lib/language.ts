@@ -125,7 +125,14 @@ let shown: UiLang = 'en';
 /** Set by the member (Settings, the switch) or a stored or linked choice: the node's default never overrides it. */
 let chosen = false;
 let latest = 0;
+/**
+ * The language the member last chose whose words could not be fetched (a release changed the chunk names under an open
+ * tab, or the connection dropped), until their next choice: the switch and Settings say so (#1947 review N3), rather
+ * than snapping back to the old language with nothing said. A later choice overtaking this one is not a failure.
+ */
+let failedChoice: Lang | null = null;
 const listeners = new Set<() => void>();
+const notify = () => { for (const l of listeners) l(); };
 
 export function subscribeLanguage(listener: () => void): () => void {
     listeners.add(listener);
@@ -167,15 +174,30 @@ export async function showLanguage(lang: UiLang): Promise<boolean> {
     }
     shown = currentLanguage();
     applyToDocument(shown);
-    for (const l of listeners) l();
+    notify();
     return true;
 }
 
-/** The member's own choice (Settings → Language, the first screen's switch): stored, and shown at once. */
-export function chooseAndShowLanguage(lang: Lang): Promise<boolean> {
+/** The language the member chose that could not be loaded, or null (see failedChoice). */
+export function failedLanguageChoice(): Lang | null {
+    return failedChoice;
+}
+
+/**
+ * The member's own choice (Settings → Language, the first screen's switch): stored, and shown at once. Stored even when
+ * its words can't be fetched now, so the next visit tries again; failedLanguageChoice() says this one didn't load.
+ */
+export async function chooseAndShowLanguage(lang: Lang): Promise<boolean> {
     chosen = true;
     writeStored(lang);
-    return showLanguage(lang);
+    if (failedChoice !== null) { failedChoice = null; notify(); }
+    const mine = latest + 1; // showLanguage takes the next number at once
+    const ok = await showLanguage(lang);
+    if (!ok && mine === latest) {
+        failedChoice = lang;
+        notify();
+    }
+    return ok;
 }
 
 /**
@@ -218,6 +240,7 @@ export function languageHeaders(nodeApiUrl: string): Record<string, string> {
 export function resetLanguageForTests(): void {
     latest++;
     chosen = false;
+    failedChoice = null;
     shown = 'en';
     setLanguage('en');
     listeners.clear();

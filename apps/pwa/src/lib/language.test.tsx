@@ -10,7 +10,7 @@ import { LANGUAGE_HEADER, currentLanguage, formatDate, t, type Lang } from '@bea
 import frWords from '../../words/fr.json';
 import ruWords from '../../words/ru.json';
 import {
-    LANGUAGE_STORAGE_KEY, WORDS_FEEDBACK_URL, chooseAndShowLanguage, chooseLanguage, languageFromBrowser, languageFromQuery,
+    LANGUAGE_STORAGE_KEY, WORDS_FEEDBACK_URL, chooseAndShowLanguage, chooseLanguage, failedLanguageChoice, languageFromBrowser, languageFromQuery,
     languageHeaders, nodeDefaultLanguage, resetLanguageForTests, showLanguage, startLanguage,
 } from './language';
 import { communityInfoOnce, resetCommunityInfoOnce } from './visitor-lobby-gate';
@@ -19,6 +19,11 @@ import { memoryIndexedDB } from './memory-indexeddb';
 import { resetCapturedAuthReturn } from './web-join';
 import { WelcomePage } from '../pages/WelcomePage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { LanguageSwitch } from '../components/LanguageSwitch';
+
+// Kiswahili's words never arrive, as when a tab stays open across a release that renamed its chunk (#1947 review N3):
+// the loader's import rejects. No other case here uses Kiswahili.
+vi.mock('../../words/sw.json', () => { throw new Error('Failed to fetch dynamically imported module: words-sw'); });
 
 vi.mock('./api', async () => {
     const actual = await vi.importActual('./api');
@@ -237,5 +242,54 @@ describe('choosing a language, live', () => {
         expect(draft.textContent).toContain(RU['These translations are new.'] as string);
         expect(draft.querySelector('a')?.getAttribute('href')).toBe(WORDS_FEEDBACK_URL);
         expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('ru');
+    });
+});
+
+describe('a language whose words cannot be fetched (#1947 review N3)', () => {
+    const NOTE = "Couldn't load that language. Check your connection, then try again.";
+
+    it('the first screen\'s switch says so under it, in the language still showing, until the next choice', async () => {
+        render(<LanguageSwitch />);
+        const note = screen.getByTestId('language-load-note');
+        expect(note).toHaveAttribute('role', 'status');
+        expect(note.textContent).toBe('');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'sw' } });
+        await waitFor(() => expect(note.textContent).toBe(NOTE));
+        expect(failedLanguageChoice()).toBe('sw');
+        expect(currentLanguage()).toBe('en');
+        expect(screen.getByTestId('language-switch').textContent).toContain('English');
+        // Kept as the choice, so the next visit tries again.
+        expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('sw');
+        warn.mockRestore();
+        // The next choice clears it, and the line reads in the language now showing when it fails again.
+        fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'fr' } });
+        await waitFor(() => expect(currentLanguage()).toBe('fr'));
+        expect(note.textContent).toBe('');
+        expect(failedLanguageChoice()).toBeNull();
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        fireEvent.change(screen.getByRole('combobox', { name: FR.Language as string }), { target: { value: 'sw' } });
+        await waitFor(() => expect(note.textContent).toBe(FR[NOTE]));
+        expect(FR[NOTE]).not.toBe(NOTE);
+    });
+
+    it('Settings → Language says so in its row', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const identity = { publicKey: 'a1'.repeat(32), privateKey: 'priv', callsign: 'Me' } as never;
+        render(<SettingsPage identity={identity} onIdentityUpdated={() => {}} onBack={() => {}} themePreference="system" onThemePreferenceChange={() => {}} />);
+        const row = await screen.findByTestId('settings-language');
+        fireEvent.change(row.querySelector('select')!, { target: { value: 'sw' } });
+        await waitFor(() => expect(row.querySelector('[data-testid="language-load-note"]')?.textContent).toBe(NOTE));
+        expect(currentLanguage()).toBe('en');
+        warn.mockRestore();
+    });
+
+    it('a later choice overtaking a slower one is not a failure', async () => {
+        const first = chooseAndShowLanguage('ru');
+        const second = chooseAndShowLanguage('fr');
+        expect(await first).toBe(false);
+        expect(await second).toBe(true);
+        expect(currentLanguage()).toBe('fr');
+        expect(failedLanguageChoice()).toBeNull();
     });
 });

@@ -32,6 +32,7 @@ import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
 import { LANGUAGE_NAMES, WORDS_FEEDBACK_URL } from '../lib/language';
 import { useLanguage } from '../lib/useLanguage';
+import { LanguageLoadNote } from '../components/LanguageSwitch';
 import { loadPatternPreference, setPatternPreference } from '../lib/usePatternBackground';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
@@ -133,6 +134,7 @@ function LanguageRow() {
             >
                 {LANGS.map((l) => <option key={l} value={l} lang={l}>{LANGUAGE_NAMES[l]}</option>)}
             </select>
+            <LanguageLoadNote className="mt-2 empty:mt-0" />
             {value !== 'en' && (
                 <p data-testid="settings-language-draft" className="mt-2 flex flex-wrap gap-x-1 text-xs leading-relaxed text-nature-600 dark:text-nature-300">
                     <span>{t('These translations are new.')}</span>

@@ -51,6 +51,7 @@
   "Community Commons Pool": "コミュニティ・コモンズ基金",
   "Connection issue with node relay": "サーバーの中継との接続に問題があります",
   "Contributions First.": "まず貢献から。",
+  "Couldn't load that language. Check your connection, then try again.": "その言語を読み込めませんでした。接続を確認してから、もう一度お試しください。",
   "Couldn't reach your community. Your other tabs still work.": "コミュニティに接続できませんでした。ほかのタブは使えます。",
   "Couldn't reach your community; showing what we had.": "コミュニティに接続できませんでした。保存してあった内容を表示しています。",
   "Create Identity & Join →": "IDを作成して参加 →",

@@ -42,7 +42,7 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, t } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -189,6 +189,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
+    // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
+    const [loadedDmId, setLoadedDmId] = useState<string | null>(null);
     const [groupChat, setGroupChat] = useState<GroupChatView | null>(null);
     // In-thread search (design §10): over the loaded thread only, in this browser.
     const [chatSearch, setChatSearch] = useState<string | null>(null);
@@ -656,6 +658,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return true;
             });
             setMessages(uniqueMessages);
+            setLoadedDmId(convId);
             if (identity?.publicKey) {
                 markConversationReadApi(identity.publicKey, convId).catch(() => {});
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
@@ -1655,6 +1658,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             ) : (
                                 <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>⏳ Pending</span>
                             )}
+                        </div>
+                    );
+                })()}
+
+                {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
+                    isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
+                {(() => {
+                    if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
+                    const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
+                    if (!unrated) return null;
+                    const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
+                        try { return tradeOfReleaseLine([unrated], JSON.parse(m.metadata!)) === unrated; } catch { return false; }
+                    })());
+                    if (lineShown) return null;
+                    return (
+                        <div data-testid="chat-rate-banner" style={{
+                            borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+                        }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('Your trade is finished. How did it go?')}</span>
+                            <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
+                                background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
+                                padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                            }}>
+                                <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
+                            </button>
                         </div>
                     );
                 })()}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
@@ -180,5 +180,30 @@ describe('Messages: the review prompt is about this DM\'s own trades', () => {
         await screen.findByText('Bob');
         await new Promise(r => setTimeout(r, 50));
         expect(screen.queryByText(/Action Needed/)).toBeNull();
+    });
+    it('the unrated trade\'s release line is not among the lines loaded: the chat still offers Rate your partner, for that trade', async () => {
+        mockTxs = [tx('tx-a', 'post-1', true, '2026-10-13T00:00:00Z'), tx('tx-b', 'post-1', false, '2026-10-14T00:00:00Z')];
+        mockConversations = [dm];
+        mockMessagesByConv = { 'conv-1': [] };
+        const onNavigate = vi.fn();
+        render(<MessagesPage identity={me} onNavigate={onNavigate} />);
+        await screen.findByText(/Action Needed/);
+        fireEvent.click(screen.getByText('Bob'));
+        const banner = await screen.findByTestId('chat-rate-banner');
+        fireEvent.click(within(banner).getByRole('button', { name: /Rate your partner/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace-review', 'tx-b');
+    });
+
+    it('the release line is shown: one Rate your partner, on the line, no pinned copy', async () => {
+        const unrated = tx('tx-b', 'post-1', false, '2026-10-14T00:00:00Z');
+        mockTxs = [unrated];
+        mockConversations = [dm];
+        mockMessagesByConv = { 'conv-1': [released('m2', unrated, '2026-10-14T00:00:00Z')] };
+        render(<MessagesPage identity={me} />);
+        await screen.findByText(/Action Needed/);
+        fireEvent.click(screen.getByText('Bob'));
+        await screen.findByRole('button', { name: /Rate your partner/ });
+        expect(screen.queryByTestId('chat-rate-banner')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /Rate your partner/ })).toHaveLength(1);
     });
 });

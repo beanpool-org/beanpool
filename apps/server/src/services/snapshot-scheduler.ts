@@ -95,11 +95,16 @@ export const DEFAULT_AUTOSNAPSHOT_CONFIG: AutoSnapshotConfig = {
  * brought back by a restore or a kept community settings record) is read as this.
  */
 export const MAX_SNAPSHOTS_KEPT = 14;
+/**
+ * The fewest snapshots a server keeps (design case 18, A4): a `keep` of 1 and one scheduled run would leave a single
+ * recovery point, so nobody may set fewer than this. The one number for it: Marty's card owner-delete-details may raise it.
+ */
+export const MIN_SNAPSHOTS_KEPT = 3;
 export function isAutoSnapshotKeep(v: unknown): v is number {
-    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_SNAPSHOTS_KEPT;
+    return Number.isInteger(v) && (v as number) >= MIN_SNAPSHOTS_KEPT && (v as number) <= MAX_SNAPSHOTS_KEPT;
 }
-/** A number of snapshots to keep, 1 to {@link MAX_SNAPSHOTS_KEPT}. */
-const keptCount = (n: number): number => Math.min(MAX_SNAPSHOTS_KEPT, Math.max(1, Math.round(n)));
+/** A number of snapshots to keep, {@link MIN_SNAPSHOTS_KEPT} to {@link MAX_SNAPSHOTS_KEPT}. */
+const keptCount = (n: number): number => Math.min(MAX_SNAPSHOTS_KEPT, Math.max(MIN_SNAPSHOTS_KEPT, Math.round(n)));
 
 /** No snapshot is kept past this age, whatever `keep` says. */
 export const SNAPSHOT_MAX_AGE_DAYS = 14;
@@ -173,7 +178,7 @@ export function updateAutoSnapshotConfig(update: Partial<AutoSnapshotConfig>): A
     const current = getAutoSnapshotConfig();
     const next: AutoSnapshotConfig = {
         enabled: update.enabled !== undefined ? !!update.enabled : current.enabled,
-        // Clamp to sane bounds: 1 hour to what the timer can hold, 1 to MAX_SNAPSHOTS_KEPT kept snapshots (the route
+        // Clamp to sane bounds: 1 hour to what the timer can hold, MIN_SNAPSHOTS_KEPT to MAX_SNAPSHOTS_KEPT kept snapshots (the route
         // refuses more; this is for any other caller).
         intervalHours: update.intervalHours !== undefined
             ? timerHours(Number(update.intervalHours) || current.intervalHours)

@@ -31,7 +31,7 @@ import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
-    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT,
+    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT, MIN_SNAPSHOTS_KEPT,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
@@ -583,7 +583,8 @@ const RESTORE_OWNER_ONLY = 'Only an owner of this node can restore a backup';
 const DOWNLOAD_OWNER_ONLY = 'Only an owner of this node can download a backup';
 const TOKEN_OWNER_ONLY = 'Only an owner of this node can make, change or remove its replication token';
 const COPY_FROM_OWNER_ONLY = 'Only an owner of this node can change the server it copies from';
-const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can delete a snapshot or change when snapshots are taken and kept';
+const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can change when snapshots are taken and kept';
+const RESYNC_OWNER_ONLY = 'Only an owner of this node can make its standby copy everything again';
 const COPY_OWNER_ONLY = 'Only an owner of this node can copy its whole ledger';
 
 export function createBackupRoutes(deps: RouteDeps): Router {
@@ -942,8 +943,10 @@ router.post('/api/local/admin/replication-access', async (ctx) => {
 });
 
 // ---------- Force resync (backup side) ----------
+// It clears the standby's copied tables and rebuilds them: an owner's (design case 18, A9), or an admin repeating it keeps
+// the standby empty.
 router.post('/api/local/admin/replication-resync', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, RESYNC_OWNER_ONLY))) return;
     const result = await requestResync();
     if (!result.ok) {
         ctx.status = 400;
@@ -973,27 +976,8 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
     }
 });
 
-// A snapshot is a recovery point, and removing one is an owner's, like restoring one.
-router.post('/api/local/admin/snapshots/delete', async (ctx) => {
-    if (!(await ownerOnly(ctx, SNAPSHOTS_OWNER_ONLY))) return;
-    const { name } = (ctx as any).requestBody || {};
-    const target = resolveSnapshotPath(name);
-    if (!target) {
-        ctx.status = 400;
-        ctx.body = { error: 'Invalid snapshot name' };
-        return;
-    }
-    try {
-        // The captured objects go with it, as they do when pruning: a snapshot's images are part of the
-        // snapshot, and a directory left behind belongs to nothing and is swept by nothing.
-        fs.rmSync(snapshotImagesDir(target), { recursive: true, force: true });
-        if (fs.existsSync(target)) fs.unlinkSync(target);
-        ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 500;
-        ctx.body = { error: e?.message || 'Delete failed' };
-    }
-});
+// No route deletes a snapshot (design case 18, A3): it is a recovery point, and a session that could delete them and then
+// restore a hostile file would leave the owner no way back. Pruning is the scheduler's alone (keep, and the age limit).
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
 // header (the name is in the query string, never the password). Locked like /backup when there is a code, and an
@@ -1040,7 +1024,7 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     // (services/snapshot-scheduler.ts, data-at-rest report F3).
     if (body.keep !== undefined && !isAutoSnapshotKeep(body.keep)) {
         ctx.status = 400;
-        ctx.body = { error: `keep must be a whole number of snapshots from 1 to ${MAX_SNAPSHOTS_KEPT}` };
+        ctx.body = { error: `keep must be a whole number of snapshots from ${MIN_SNAPSHOTS_KEPT} to ${MAX_SNAPSHOTS_KEPT}` };
         return;
     }
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;
@@ -1614,8 +1598,10 @@ router.post('/api/local/admin/restore', async (ctx) => {
                     backup,
                 });
             }
-            // A well-formed code is a guess at a secret: through the password brake, like the check-code route.
-            const brakeKey = clientLimiterKey(ctx as any);
+            // A well-formed code is a guess at a secret: through the password brake, under its own count for this source
+            // ('restore:', as the take-over's 'takeover:'), so the owner's password on each request, which clears the
+            // source's password record, never clears the count of wrong codes (design case 18 §3.2, standby review note 4).
+            const brakeKey = 'restore:' + clientLimiterKey(ctx as any);
             const admission = await acquirePasswordAttempt(brakeKey);
             if (!admission.admitted) {
                 cleanupAll();

@@ -1038,7 +1038,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     ? <img src={listPhotoUrl(photo)} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
                     : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">{cat?.emoji ?? '🌱'}</span>}
                 <span className="min-w-0 flex-1">
-                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}</span>{item.title}</span>
+                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}</span><span dir="auto">{item.title}</span></span>
                     {(price || km) && <span className="block text-xs text-nature-600 dark:text-nature-300">{[price, km].filter(Boolean).join(' · ')}</span>}
                 </span>
             </HomeLine>
@@ -1077,7 +1077,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
                             return cm.url
-                                ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
+                                ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                 : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
                         })}
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
@@ -1258,7 +1258,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-event"
                                     label={[dayLabel(item.startsAt), item.title, where, km, rsvp].filter(Boolean).join(', ')}>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block break-words font-semibold">{text}</span>
+                                        <span dir="auto" className="block break-words font-semibold">{text}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>
                                     {rsvp && <span className="shrink-0 text-xs font-bold text-emerald-800 dark:text-emerald-300">{rsvp}</span>}
@@ -1354,7 +1354,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         ? <img src={thumb} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
                                         : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">📡</span>}
                                     <span className="min-w-0 flex-1">
-                                        <span className="block break-words line-clamp-2">{postTitle}</span>
+                                        <span dir="auto" className="block break-words line-clamp-2">{postTitle}</span>
                                         <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{t('by {name}', { name: p.callsign })}</span>
                                     </span>
                                 </HomeLine>

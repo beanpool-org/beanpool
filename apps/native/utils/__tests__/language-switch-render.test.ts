@@ -235,7 +235,7 @@ const FONT_SCALE = 1.3;
  * and SF average nearer 0.55), 1.25 em for an emoji, a whole em for a CJK character; joiners, selectors and combining marks
  * (\p{M}: Indic vowel signs and viramas, which sit on the letter before them) take none.
  */
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
 const glyphEm = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
 const widthOf = (text: string, fontSize: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * fontSize * FONT_SCALE, 0);
 /** The widest piece a line can't break inside: a word, or one character in CJK text (the pseudo-locale's ~ padding is not a word). */
@@ -334,8 +334,8 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];");
         expect(source).toMatch(/stepperStyles\.labelActive\]\} numberOfLines=\{3\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{label\}/);
         expect(source).toMatch(/stepItem: \{\s*alignItems: 'center',\s*flex: 1,/);
-        expect(source).toMatch(/    label: \{[^}]*textAlign: 'center'/);
-        expect(source).toMatch(/    line: \{\s*width: 12,/);
+        expect(source).toMatch(/ {4}label: \{[^}]*textAlign: 'center'/);
+        expect(source).toMatch(/ {4}line: \{\s*width: 12,/);
         expect(STEP_WIDTH).toBe(52);
         // English needs it too: on one line the four labels are 273dp at 0.7 by this model (237dp with real shaping) in
         // a 184dp row, so one line cut them off before any translation.

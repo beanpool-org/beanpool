@@ -6671,7 +6671,7 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
  * answers 503 with Retry-After, or the read failed): callers keep the roster they show and read it again next time,
  * never an empty one in its place.
  */
-export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] | null } | null> {
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] | null; rosterRefused?: boolean } | null> {
     try {
         const [groupRes, membersRes] = await Promise.all([
             signedGet(`/api/groups/${encodeURIComponent(id)}`),
@@ -6680,7 +6680,9 @@ export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem;
         if (groupRes.ok) {
             const group = await groupRes.json();
             const members = membersRes.ok ? await membersRes.json() : null;
-            return { group, members: Array.isArray(members) ? members : null };
+            // Where anyone can join in a minute, the roster is its members': anyone else is told to join (join_to_see).
+            const refusal = !membersRes.ok && membersRes.status === 403 ? await membersRes.json().catch(() => null) : null;
+            return { group, members: Array.isArray(members) ? members : null, rosterRefused: refusal?.code === 'join_to_see' };
         }
     } catch (e) {
         console.warn('[Groups] Failed to fetch group detail:', e);

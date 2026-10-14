@@ -58,7 +58,7 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings } from '../db';
+import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings, syncMessages } from '../db';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const DB = 'beanpool_a.beanpool.org.db';
@@ -71,6 +71,9 @@ interface Card { publicKey: string; callsign: string; avatarUrl: string | null; 
 const node = {
     cards: new Map<string, Card>(),
     keysReads: 'ok' as 'ok' | 'busy',
+    // A node where anyone can join in a minute (features.openMembership, the global node): every whole form of the
+    // directory is refused, as the server refuses it (routes/community.ts refusedWholeDirectory).
+    openMembership: false,
     requests: [] as string[],
 };
 function answer(status: number, body: string) {
@@ -103,8 +106,12 @@ const fetchMock = vi.fn(async (url: string) => {
             const rows = asked.map(k => node.cards.get(k)).filter((c): c is Card => !!c && (after === null || c.profileUpdatedAt > after));
             return answer(200, JSON.stringify(rows));
         }
+        if (node.openMembership && u.searchParams.get('q') === null && u.searchParams.get('limit') === null) {
+            return answer(403, JSON.stringify({ error: 'On this community people are found by name or by key, not listed whole', code: 'members_on_demand' }));
+        }
         return answer(200, JSON.stringify([...node.cards.values()]));
     }
+    if (u.pathname.startsWith('/api/messages/conversations/')) return answer(200, JSON.stringify({ conversations: [] }));
     return answer(404, '');
 });
 
@@ -135,6 +142,7 @@ beforeEach(async () => {
     for (const t of ['posts', 'marketplace_transactions', 'conversations', 'conversation_participants', 'members', 'ratings', 'friends']) sql.exec(`DELETE FROM ${t}`);
     node.cards.clear();
     node.keysReads = 'ok';
+    node.openMembership = false;
     node.requests = [];
     node.cards.set(OWN, { publicKey: OWN, callsign: 'Me', avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z' });
     for (let i = 1; i <= 2000; i++) {
@@ -434,5 +442,40 @@ describe('a community that does not say membersOnDemand', () => {
         expect(members[0]).toBe(`${A_URL}/api/members`);
         expect(members.some(r => r.includes('keys='))).toBe(false);
         expect(held().length).toBe(2001);
+    });
+});
+
+// The global node with `openMembership` (DESIGN-global-member-privacy-fable.md §3, §7 slice 1b): the whole directory, a
+// delta of everyone and a point without a limit answer 403 members_on_demand. A phone that knows the profile never asks
+// for one; a phone that doesn't yet (its first sync, before the node's info is cached) is refused and loses nothing.
+describe('a node that refuses the whole directory (openMembership)', () => {
+    const wholeReads = () => membersRequests().filter(r => keysOf(r).length === 0);
+
+    it('knowing the profile, neither sync (performSync, syncMessages) asks for a whole form, over several cycles', async () => {
+        node.openMembership = true;
+        onDemandProfile(true);
+        partners(5);
+        for (let i = 0; i < 3; i++) {
+            expect((await performSync()).success).toBe(true);
+            await syncMessages(OWN);
+        }
+        expect(membersRequests().length).toBeGreaterThan(0);
+        expect(wholeReads()).toEqual([]);
+        expect(held().sort()).toEqual([OWN, ...[1, 2, 3, 4, 5].map(hexKey)].sort());
+    });
+
+    it('not knowing it yet: the refused whole read leaves every held card, and the sync goes on', async () => {
+        node.openMembership = true;
+        partners(3);
+        // Cards this phone already holds (a restore, or a node it used before the switch).
+        await applyDelta({ members: [OWN, hexKey(1), hexKey(2), hexKey(3)].map(pk => node.cards.get(pk)!) }, DB);
+        const before = held().sort();
+        expect(before.length).toBe(4);
+        expect((await performSync()).success).toBe(true);
+        await syncMessages(OWN);
+        // Each asked for the whole directory and was refused; nothing was taken as the complete list.
+        expect(wholeReads().length).toBeGreaterThan(0);
+        expect(held().sort()).toEqual(before);
+        expect(node.requests.some(r => r.includes('/api/messages/conversations/'))).toBe(true);
     });
 });

@@ -648,8 +648,10 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
 
 /**
  * A saved search (type `search`, the card frame's design §4): the first few listings matching the words, kind,
- * category and distance stored in the member's layout, read as the Market's own search reads them (`query`), nearest
- * the member's point within `km` when there is one. Always a body, even with no rows: a search that finds nothing is a
+ * category and distance stored in the member's layout, read as the Market's own search reads them (`query`), within
+ * `km` of the member's point when there is one, and in the Market's own order for this node: the newest first, nearest
+ * first only where the Market's listings come that way (the global profile's `distanceSortDefault`, as the posts route
+ * orders a read with a point and no `sort`). Always a body, even with no rows: a search that finds nothing is a
  * fact the member asked for. The words are expanded with core's synonyms before the read, as the Market expands them
  * before it asks (`searchTermsFor`), so "eggs" finds what the Market's search finds; `q` in the answer is the words
  * the member typed.
@@ -664,7 +666,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     if (s.q.trim() && !query) return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items: [], more: false };
     const pool = postsFor(c, {
         types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: query || undefined, limit: SEARCH_ITEMS + 1,
-        near, sortByDistance: !!near, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
+        near, sortByDistance: !!near && c.switches.distanceSortDefault, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
     }).filter(p => p.status === 'active' && p.active !== false && !!bounded(p.id, ID_CHARS));
     const items = pool.slice(0, SEARCH_ITEMS).map((p): MarketItem => ({
         id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),

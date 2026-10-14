@@ -87,7 +87,7 @@ import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, postRulesFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
@@ -95,6 +95,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
+import { chargeNearestPeopleRead } from '../nearest-people-budget.js';
 import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
@@ -917,6 +918,22 @@ router.post('/api/community/me/area', async (ctx) => {
 });
 
 /**
+ * Where anyone can join in a minute (`openMembership`, the global node), the whole directory is never read: a stranger
+ * finds people by name, by key or nearest a point, as both apps already do there (DESIGN-global-member-privacy-fable.md
+ * §3). True, and 403 `members_on_demand` answered, when that is so: before any row is read or any room is asked for
+ * under the heavy-read cap. Off (a local community), false, and the read goes on exactly as before.
+ */
+const MEMBERS_ON_DEMAND_CODE = 'members_on_demand';
+const MEMBERS_ON_DEMAND_ERROR = 'On this community people are found by name or by key, not listed whole';
+function refusedWholeDirectory(ctx: any, error = MEMBERS_ON_DEMAND_ERROR): boolean {
+    if (!getProfileSwitches().openMembership) return false;
+    ctx.status = 403;
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { error, code: MEMBERS_ON_DEMAND_CODE };
+    return true;
+}
+
+/**
  * A point on a People list (G4): parsed, and allowed only to a signed member, whatever ENFORCE_READ_AUTH says, because
  * the distances are worked out from members' areas. Answers the request itself and returns undefined when it may not go
  * on. Before the ETag, so garbage is a 400 and never a 304.
@@ -1021,6 +1038,8 @@ router.get('/api/community/members', async (ctx) => {
     // The point is in the querystring, which the viewer signature below already hashes.
     const point = peoplePoint(ctx);
     if (point === undefined) return;
+    // Every member's whole card, bio and all, in one answer: never where anyone can join in a minute.
+    if (refusedWholeDirectory(ctx)) return;
     // Contact details follow each member's choice (contactVisibleTo), so two members asking for this URL get
     // different bodies. The viewer is the verified signer only, and it goes into the ETag together with whether
     // they are a member, who has added them as a friend and who they have a trade with: being added, joining or
@@ -1306,6 +1325,10 @@ router.get('/api/invite/check', async (ctx) => {
 
 router.get('/api/invite/tree', async (ctx) => {
     const root = ctx.query.root as string | undefined;
+    // The whole tree is every member, with the door each came in by. Where anyone can join in a minute, a member reads
+    // their own branch only: the people they brought in are theirs to know, as /api/invite/mine says.
+    if ((typeof root !== 'string' || root !== ctx.state.actor)
+        && refusedWholeDirectory(ctx, 'On this community you see the people you invited, not everyone: ask with root set to your own key')) return;
     ctx.body = getInviteTree(root);
 });
 
@@ -1552,6 +1575,8 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
     }
     const trust = getMemberTrustProfile(publicKey);
     const listedOffer = hasListedOffer(publicKey);
+    // Gate 1 holds only where Beans are on (engine/posts.ts createPost): a node without them blocks no Need.
+    const { offerFirst } = postRulesFor(getProfileSwitches().beans);
     ctx.body = {
         ...getBalance(publicKey),
         callsign: member.callsign,
@@ -1563,7 +1588,7 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
         elderVouchedBy: member.elderVouchedBy || null,
         hasListedOffer: listedOffer,
         // Gate 1: blocked from posting Needs / accepting Offers until an Offer is listed.
-        isBlockedFromTrading: !listedOffer,
+        isBlockedFromTrading: offerFirst && !listedOffer,
         // Gate 2 (offer covenant): must keep a LIVE Offer to spend into a negative balance.
         hasLiveOffer: hasLiveOffer(publicKey),
     };
@@ -2410,6 +2435,17 @@ function answerMembersOnDemand(ctx: any, point: Point | null): void {
     } else {
         const n = wholeUpTo(limit, MEMBERS_NEAREST_MAX);
         if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_NEAREST_MAX}`);
+        // Where anyone can join in a minute, a day's budget of these per member, so the nearest 50 from point after point
+        // never walks the whole community (READ_LIMITS.nearestPeoplePerDay). Elsewhere none.
+        if (getProfileSwitches().openMembership) {
+            const spent = chargeNearestPeopleRead(ctx.state.actor as string);
+            if (spent) {
+                ctx.status = 429;
+                ctx.set('Retry-After', String(spent.retryAfterSec));
+                ctx.body = spent.body;
+                return;
+            }
+        }
         const nearest = nearestPeople(point!.lat, point!.lng, n);
         const km = new Map(nearest.map(p => [p.publicKey, p.distanceKm]));
         body = directoryMembers(getMemberDirectoryRowsByKeys(nearest.map(p => p.publicKey)))
@@ -2430,6 +2466,9 @@ router.get('/api/members', async (ctx) => {
         answerMembersOnDemand(ctx, point);
         return;
     }
+    // Every other form is everyone (the whole directory, a delta of everyone who changed, everyone nearest first):
+    // never where anyone can join in a minute, and refused before any row is read or any room asked for under the cap.
+    if (refusedWholeDirectory(ctx)) return;
     const cursor = ctx.query.updatedAfter;
     // A delta from a phone with no sync since the face URLs changed shape (keys switched on or off, a new secret:
     // engine/avatar-keys.ts) is answered with the whole directory: every member's face at its URL as it is now. The phone

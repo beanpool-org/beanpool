@@ -52,6 +52,7 @@ import { db } from '../db/db.js';
 import { getAvatarService } from '../engine/avatar.js';
 import { avatarKeysRequired, groupPictureKeyMatches } from '../engine/avatar-keys.js';
 import { membersOnlyHere } from './viewer.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { heavyRead, heavyReadKey, LIGHT_BYTES } from '../heavy-reads.js';
@@ -165,6 +166,16 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const limit = clampLimit(ctx.query.limit);
         const offset = clampOffset(ctx.query.offset);
         const viewerPubkey = ctx.state?.actor as string | undefined;
+        // Where anyone can join in a minute (`openMembership`), which groups someone is in is theirs: `?member=` answers
+        // only for the signer's own key. Anyone else's would rebuild an open group's roster one key at a time, the list
+        // GET /api/groups/:id/members refuses an outsider (DESIGN-global-member-privacy-fable.md §5; #1939 review B1).
+        // Before the ETag, so a refusal is never a 304.
+        if (member !== undefined && getProfileSwitches().openMembership && member !== viewerPubkey) {
+            ctx.status = 403;
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = { error: 'Join the group to see who is here', code: 'join_to_see' };
+            return;
+        }
 
         const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}`;
         const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
@@ -322,6 +333,17 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (group.joinPolicy === 'invite_only' && group.relation !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only members of this group can see who is in it' };
+            return;
+        }
+        // Where anyone can join in a minute (`openMembership`, the global node), every group's roster is its own members'
+        // and convenors': "who is in this group" is not for a stranger to pull. Anyone else is told to join, and the group's
+        // card (GET /api/groups/:id) keeps its count, its convenor, and for an invitee who invited them
+        // (DESIGN-global-member-privacy-fable.md §5). The outside view is then never built there.
+        if (getProfileSwitches().openMembership && group.relation !== 'active'
+            && !(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey))) {
+            ctx.status = 403;
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = { error: 'Join the group to see who is here', code: 'join_to_see' };
             return;
         }
         // Who asked to join and who is invited is for a convenor whose powers are not resting: a suspended convenor sees

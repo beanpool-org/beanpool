@@ -42,6 +42,7 @@
 import Router from '@koa/router';
 
 import { db } from '../db/db.js';
+import { foldName } from '@beanpool/engine';
 import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice } from '@beanpool/core';
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
@@ -75,12 +76,12 @@ import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recov
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
-/** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
+/** Callsign resolution by the one name rule (`foldName`, the engine's names.ts), with the status predicate of idx_members_callsign_unique. */
 function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')
-    `).all(callsign) as { public_key: string }[];
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')
+    `).all(foldName(callsign)) as { public_key: string }[];
     if (rows.length > 1) return { ambiguous: true };
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
@@ -174,7 +175,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // in pruneCollectionsFor bounds the idle ones.
         if (!rateLimit(ctx)) return;
 
-        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim().toLowerCase();
+        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
 
         const { pubkey, ambiguous } = resolveCallsign(callsign);

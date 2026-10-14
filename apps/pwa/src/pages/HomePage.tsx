@@ -185,7 +185,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // The layout drawn: this browser's copy, or the newcomer's list drawn for an unknown (empty version-1) account list.
     const [layout, setLayout] = useState<HomeLayoutV2 | null>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
-    const [failure, setFailure] = useState<string | null>(null);
+    // Which failure, not its words: the words are written at render, so a language switch translates them (#1947 review
+    // N2). A refusal the node wrote (401/403) is kept as the node wrote it.
+    const [failure, setFailure] = useState<'notOnNode' | 'failed' | { message: string } | null>(null);
     const [live, setLive] = useState('');
     // The interests the page holds after a tap (saved in the background); null: the answer's.
     const [interests, setInterests] = useState<string[] | null>(null);
@@ -477,8 +479,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 setStatus('failed');
                 const code = (e as { status?: number } | null)?.status;
                 // 404: a server from before Home (lib/api.ts isRouteMissing).
-                setFailure(code === 404 ? t(HOME_WORDS.notOnNode)
-                    : code === 401 || code === 403 ? ((e as Error).message || t(HOME_WORDS.failed)) : t(HOME_WORDS.failed));
+                const said = (e as Error | null)?.message;
+                setFailure(code === 404 ? 'notOnNode' : (code === 401 || code === 403) && said ? { message: said } : 'failed');
             }
         } finally {
             inFlight.current = false;
@@ -889,7 +891,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </div>
                 ) : status === 'failed' ? (
                     <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{failure}</p>
+                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
+                            {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
+                        </p>
                         <button type="button" onClick={() => void fetchHome('retry')}
                             className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                             {t('Try again')}

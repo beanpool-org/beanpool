@@ -9,7 +9,7 @@
 // no PostGIS. That is why the listing keeps its distance SQL to a function call, BETWEEN, OR and NULLS LAST.
 
 import type Database from 'better-sqlite3';
-import { roundToArea, roundToNeighbourhood } from '@beanpool/core';
+import { roundToArea, neighbourhoodOf, neighbourhoodLngStep, NEIGHBOURHOOD_LAT_STEP } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -41,13 +41,11 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
  * through its own `round()`, which rounds halves away from zero where this rounds them up, and would measure a post from
  * another area than the one it is shown in.
  */
-export { roundToArea, roundToNeighbourhood };
+export { roundToArea, neighbourhoodOf, neighbourhoodLngStep };
 
 /** How far a place can be from its area's centre on each axis, in degrees: half a step. */
 export const AREA_HALF_STEP_DEG = 0.05;
 
-/** How far a place can be from its neighbourhood's centre (roundToNeighbourhood) on each axis, in degrees. */
-export const NEIGHBOURHOOD_HALF_STEP_DEG = 0.005;
 
 /**
  * Registers `haversine_km` and `area_km` on a connection. NULL for any NULL or non-numeric argument: a post with no
@@ -67,12 +65,17 @@ export function registerGeoFunctions(db: Db): void {
         const d = haversineKm(lat1, lng1, roundToArea(lat2), roundToArea(lng2));
         return Number.isFinite(d) ? d : null;
     });
-    // From a point to a place, or to its NEIGHBOURHOOD (roundToNeighbourhood) where `exact` is false: a member's read where
+    // From a point to a place, or to its NEIGHBOURHOOD (neighbourhoodOf) where `exact` is false: a member's read where
     // anyone can join (posts.ts `neighbourhood`) measures each post from its neighbourhood, but the reader's own and the
     // events they may read in full from the place itself, in one call per post.
     db.function('neighbourhood_km', { deterministic: true }, (lat1: unknown, lng1: unknown, lat2: unknown, lng2: unknown, exact: unknown) => {
         if (typeof lat1 !== 'number' || typeof lng1 !== 'number' || typeof lat2 !== 'number' || typeof lng2 !== 'number') return null;
-        const d = exact ? haversineKm(lat1, lng1, lat2, lng2) : haversineKm(lat1, lng1, roundToNeighbourhood(lat2), roundToNeighbourhood(lng2));
+        if (exact) {
+            const d = haversineKm(lat1, lng1, lat2, lng2);
+            return Number.isFinite(d) ? d : null;
+        }
+        const cell = neighbourhoodOf(lat2, lng2);
+        const d = haversineKm(lat1, lng1, cell.lat, cell.lng);
         return Number.isFinite(d) ? d : null;
     });
 }
@@ -149,22 +152,35 @@ export function areaBox(box: GeoBox): GeoBox {
 }
 
 /**
- * `box` grown by `deg` on every side, on the true columns: it holds every place within `deg` of a place in the box on
- * each axis, so every place whose neighbourhood centre is in the box (`deg` = NEIGHBOURHOOD_HALF_STEP_DEG) as well as the
- * places in the box themselves. A neighbourhood read (posts.ts) measures some posts from the place and the rest from the
- * neighbourhood, so its box must hold both. Across the antimeridian a range that runs past it carries on from the other
- * side, so a place at -179.996 (whose neighbourhood is 180) is in a box that ends at 180.
+ * `box` grown by `latDeg` north and south and `lngDeg` east and west, on the true columns: it holds every place within
+ * that of a place in the box on each axis. Across the antimeridian a range that runs past it carries on from the other
+ * side, so a place at -179.996 (whose neighbourhood may be 180) is in a box that ends at 180.
  */
-export function widenBox(box: GeoBox, deg: number): GeoBox {
+export function widenBox(box: GeoBox, latDeg: number, lngDeg: number): GeoBox {
     if (box.latMin > box.latMax) return box;
-    const edge = deg + BOX_MARGIN_DEG;
+    const latEdge = latDeg + BOX_MARGIN_DEG;
+    const edge = lngDeg + BOX_MARGIN_DEG;
     const lngRanges: Array<[number, number]> = [];
     for (const [lo, hi] of box.lngRanges) {
         if (lo > hi) continue;
+        if (hi - lo + 2 * edge >= 360) { lngRanges.push([-180, 180]); continue; }
         lngRanges.push([Math.max(-180, lo - edge), Math.min(180, hi + edge)]);
         if (hi + edge > 180) lngRanges.push([-180, -180 + (hi + edge - 180)]);
         if (lo - edge < -180) lngRanges.push([180 - (-180 - (lo - edge)), 180]);
     }
     if (lngRanges.length === 0) return box;
-    return { latMin: Math.max(-90, box.latMin - edge), latMax: Math.min(90, box.latMax + edge), lngRanges };
+    return { latMin: Math.max(-90, box.latMin - latEdge), latMax: Math.min(90, box.latMax + latEdge), lngRanges };
+}
+
+/**
+ * The box, on the true columns, that holds every place in `box` and every place whose NEIGHBOURHOOD (neighbourhoodOf) is
+ * in it: a neighbourhood read (posts.ts) measures some posts from the place and the rest from the neighbourhood, so its
+ * box must hold both. A place is at most half a row from its centre north–south, and half its row's step east–west; the
+ * step widens towards the poles, so the box grows east–west by half the widest step of any row it reaches.
+ */
+export function neighbourhoodBox(box: GeoBox): GeoBox {
+    if (box.latMin > box.latMax) return box;
+    const halfRow = NEIGHBOURHOOD_LAT_STEP / 2;
+    const farthest = Math.min(90, Math.max(Math.abs(box.latMin), Math.abs(box.latMax)) + NEIGHBOURHOOD_LAT_STEP);
+    return widenBox(box, halfRow, neighbourhoodLngStep(farthest) / 2);
 }

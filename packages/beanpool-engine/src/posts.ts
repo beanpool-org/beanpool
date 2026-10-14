@@ -14,7 +14,7 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlOf, tierForCredit } from '@beanpool/core';
-import { areaBox, boundingBox, roundToArea, roundToNeighbourhood, widenBox, NEIGHBOURHOOD_HALF_STEP_DEG } from './geo.js';
+import { areaBox, boundingBox, roundToArea, neighbourhoodOf, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
 
@@ -229,7 +229,7 @@ export interface PostFilter {
      */
     coarse?: boolean;
     /**
-     * Every place read as its neighbourhood (geo.ts roundToNeighbourhood, 0.01°, about 1 km) but the ones the reader
+     * Every place read as its neighbourhood (geo.ts neighbourhoodOf, about 1.1 km across both ways) but the ones the reader
      * (`viewerPubkey`) may have exactly (exactPlacesFor): a member's read where anyone can join in a minute (the node's
      * `openMembership`, scratch/global-node/DESIGN-global-member-privacy-fable.md §4). Inside the query as `coarse` is:
      * the distance, the order, the radius and the paging of each other post are worked out from its neighbourhood, so no
@@ -1111,9 +1111,9 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         ? [near.lat, near.lng, JSON.stringify(places.authors), JSON.stringify(places.posts)]
         : [near.lat, near.lng];
     // The box on the true columns: for a coarse read every post whose area is in the circle's box (geo.ts areaBox), for a
-    // neighbourhood read every post in it or whose neighbourhood is (widenBox).
+    // neighbourhood read every post in it or whose neighbourhood is (neighbourhoodBox).
     const boxFor = (exact: ReturnType<typeof boundingBox>) => filter.coarse ? areaBox(exact)
-        : neighbourhood ? widenBox(exact, NEIGHBOURHOOD_HALF_STEP_DEG) : exact;
+        : neighbourhood ? neighbourhoodBox(exact) : exact;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
@@ -1407,7 +1407,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             return [];
         }
         const exactBox = boundingBox(near.lat, near.lng, q.radiusKm);
-        const box = places ? widenBox(exactBox, NEIGHBOURHOOD_HALF_STEP_DEG) : exactBox;
+        const box = places ? neighbourhoodBox(exactBox) : exactBox;
         const km = places
             ? 'neighbourhood_km(?, ?, q.lat, q.lng, q.author_pubkey IN (SELECT value FROM json_each(?)) OR q.id IN (SELECT value FROM json_each(?)))'
             : 'haversine_km(?, ?, q.lat, q.lng)';
@@ -1882,8 +1882,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.lng = typeof r.lng === 'number' ? roundToArea(r.lng) : r.lng;
         } else if (toNeighbourhood) {
             // The neighbourhood, never the place: the rounding the query measured from (geo.ts neighbourhood_km).
-            post.lat = typeof r.lat === 'number' ? roundToNeighbourhood(r.lat) : r.lat;
-            post.lng = typeof r.lng === 'number' ? roundToNeighbourhood(r.lng) : r.lng;
+            if (typeof r.lat === 'number' && typeof r.lng === 'number') {
+                const cell = neighbourhoodOf(r.lat, r.lng);
+                post.lat = cell.lat;
+                post.lng = cell.lng;
+            }
         }
         if (near) {
             post.distanceKm = typeof r.distance_km !== 'number' ? null

@@ -134,8 +134,23 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
     const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
     return R_KM * 2 * Math.atan2(Math.sqrt(Math.min(1, a)), Math.sqrt(Math.max(0, 1 - a)));
 }
-/** The neighbourhood, as the node rounds it: 0.01° to the nearest step, halves up, never -0. */
-const nbhd = (deg: number) => Math.round(deg * 100) / 100 + 0;
+/**
+ * The neighbourhood, restated from its rule (@beanpool/core neighbourhoodOf; Marty, 15 Oct: "Widen by latitude"): rows of
+ * 0.01° of latitude; each 1° band of latitude has ROUND(36000 · cos(its middle)) cells round the Earth, at most 36,000,
+ * its middle at most 89.5° from the equator; the centre to six decimals, halves up, never -0.
+ */
+function lngStepOf(cellLat: number): number {
+    const band = Math.min(89, Math.max(-90, Math.floor(cellLat)));
+    return 360 / Math.max(1, Math.min(36000, Math.round(36000 * Math.cos(rad(band + 0.5)))));
+}
+function cellOf(lat: number, lng: number): { lat: number; lng: number } {
+    const cellLat = Math.round(lat * 100) / 100 + 0;
+    const cells = Math.round(360 / lngStepOf(cellLat));
+    let k = Math.round(lng / (360 / cells));
+    if (k > cells / 2) k -= cells;
+    if (k < -cells / 2) k += cells;
+    return { lat: cellLat, lng: Math.max(-180, Math.min(180, Math.round(k * 360 / cells * 1e6) / 1e6 + 0)) };
+}
 
 const T0 = Date.parse('2026-09-01T00:00:00.000Z');
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -224,7 +239,7 @@ async function main() {
         return out;
     };
     const exactOf = (p: any) => { const t = place.get(p.id)!; return p.lat === t.lat && p.lng === t.lng; };
-    const neighbourhoodOf = (p: any) => { const t = place.get(p.id)!; return p.lat === nbhd(t.lat) && p.lng === nbhd(t.lng); };
+    const neighbourhoodOf = (p: any) => { const t = place.get(p.id)!; const c = cellOf(t.lat, t.lng); return p.lat === c.lat && p.lng === c.lng; };
 
     /** The bytes of a run that change from run to run: the node's own key and the times this run wrote, named, not printed. */
     const runOwn = (db.prepare("SELECT public_key FROM members WHERE public_key != 'SYSTEM'").all() as { public_key: string }[]).map(r => r.public_key)
@@ -287,7 +302,7 @@ async function main() {
     // Nearest-first from five points: whole km from each neighbourhood, in the neighbourhoods' order; the author's to 0.1 km.
     for (const q of POINTS) {
         const rows = ours(await pageAll(`/api/marketplace/posts?${ALL_TYPES}&lat=${q.lat}&lng=${q.lng}&sort=distance`, bob)).filter(p => RANDOM.includes(p.id));
-        const km = (p: any) => { const t = place.get(p.id)!; return haversine(q.lat, q.lng, nbhd(t.lat), nbhd(t.lng)); };
+        const km = (p: any) => { const t = place.get(p.id)!; return haversine(q.lat, q.lng, cellOf(t.lat, t.lng).lat, cellOf(t.lat, t.lng).lng); };
         const badKm = rows.filter(p => !Number.isInteger(p.distanceKm) || p.distanceKm !== Math.round(km(p)));
         let ordered = true;
         for (let i = 1; i < rows.length; i++) if (km(rows[i]) + 1e-9 < km(rows[i - 1])) ordered = false;
@@ -301,7 +316,7 @@ async function main() {
     // A radius keeps the listings whose neighbourhood is inside it.
     for (const radiusKm of [5, 20, 40]) {
         const rows = ours(await pageAll(`/api/marketplace/posts?${ALL_TYPES}&lat=${q0.lat}&lng=${q0.lng}&radiusKm=${radiusKm}&sort=distance`, bob)).filter(p => RANDOM.includes(p.id));
-        const want = RANDOM.filter(id => { const t = place.get(id)!; return haversine(q0.lat, q0.lng, nbhd(t.lat), nbhd(t.lng)) <= radiusKm; });
+        const want = RANDOM.filter(id => { const t = place.get(id)!; return haversine(q0.lat, q0.lng, cellOf(t.lat, t.lng).lat, cellOf(t.lat, t.lng).lng) <= radiusKm; });
         assert(JSON.stringify(rows.map(p => p.id).sort()) === JSON.stringify(want.sort()),
             `global: a ${radiusKm} km radius keeps exactly the ${want.length} listings whose neighbourhood is inside it (got ${rows.length})`);
     }
@@ -367,7 +382,7 @@ async function main() {
     const home =await get(`/api/home?cards=market,events&lat=${q0.lat}&lng=${q0.lng}`, bob);
     const market = (home.body?.cards?.market?.items ?? home.body?.cards?.market ?? []) as any[];
     const marketRows = Array.isArray(market) ? market.filter(m => RANDOM.includes(m.id)) : [];
-    const homeKmOk = marketRows.every(m => { const t = place.get(m.id)!; return m.distanceKm === Math.round(haversine(q0.lat, q0.lng, nbhd(t.lat), nbhd(t.lng))); });
+    const homeKmOk = marketRows.every(m => { const t = place.get(m.id)!; return m.distanceKm === Math.round(haversine(q0.lat, q0.lng, cellOf(t.lat, t.lng).lat, cellOf(t.lat, t.lng).lng)); });
     assert(home.status === 200 && marketRows.length > 0 && homeKmOk,
         `global: Home's market card measures each listing from its neighbourhood, whole km (${marketRows.length} rows, ${homeKmOk ? 'all' : 'not all'} as the neighbourhood's)`);
 
@@ -378,13 +393,13 @@ async function main() {
     await sleep(300);
     const t = place.get('pin-011')!;
     // As an RSVP's or a vote's copy is: read for someone else, its place already the neighbourhood.
-    se.broadcast({ type: 'post_updated', post: { id: 'pin-011', type: 'offer', authorPublicKey: alice.pubKeyHex, title: 'Listing pin-011', lat: nbhd(t.lat), lng: nbhd(t.lng), audienceScope: 'public' } });
+    se.broadcast({ type: 'post_updated', post: { id: 'pin-011', type: 'offer', authorPublicKey: alice.pubKeyHex, title: 'Listing pin-011', ...cellOf(t.lat, t.lng), audienceScope: 'public' } });
     await sleep(500);
     const aliceCopy = listingCopies(aliceSock).find(e => e.post.id === 'pin-011');
     const bobCopy = listingCopies(bobSock).find(e => e.post.id === 'pin-011');
     assert(!!aliceCopy && aliceCopy.post.lat === t.lat && aliceCopy.post.lng === t.lng,
         `global: a listing's socket copy reaches its author with the place, even sent from someone else's read (got ${JSON.stringify(aliceCopy?.post && [aliceCopy.post.lat, aliceCopy.post.lng])})`);
-    assert(!!bobCopy && bobCopy.post.lat === nbhd(t.lat) && bobCopy.post.lng === nbhd(t.lng),
+    assert(!!bobCopy && bobCopy.post.lat === cellOf(t.lat, t.lng).lat && bobCopy.post.lng === cellOf(t.lat, t.lng).lng,
         `global: and another member's socket with the neighbourhood (got ${JSON.stringify(bobCopy?.post && [bobCopy.post.lat, bobCopy.post.lng])})`);
     aliceSock.ws.close();
     bobSock.ws.close();
@@ -407,7 +422,7 @@ async function main() {
     let tellsApart = 0;
     for (let k = 0; k < 3; k++) {
         const P = { lat: six(-33.9 + (reachRand() - 0.5) * 0.4), lng: six(151.1 + (reachRand() - 0.5) * 0.4) };
-        const c = { lat: nbhd(P.lat), lng: nbhd(P.lng) };
+        const c = cellOf(P.lat, P.lng);
         const watchers: Array<{ A: { lat: number; lng: number }; s: Sock }> = [];
         for (const [i, A] of ring(c, 0.8).entries()) {
             const id = member(`Ring ${k}-${i}`, null);
@@ -437,45 +452,127 @@ async function main() {
     }
     assert(tellsApart >= 1, `global: for ${tellsApart} of 3 listings who is within ${REACH_KM} km of the neighbourhood differs from who is within it of the place, so the check can tell`);
 
-    // A member who has the place exactly is measured from the place, and visited as a party whatever the index finds.
+    // Which sockets get an event's copy, at Sydney, the equator, 45°, 60° and 70° and on both sides of a band edge (where
+    // the longitude step changes): the members on the ring around its neighbourhood are reached as their sets hold it,
+    // from the neighbourhood; a member who has the place exactly (let in by its host) is reached from the place, and
+    // visited as a party whatever the index finds; a member at her spot who isn't let in, not at all. Index on and off.
+    const REACH_SPOTS: Array<{ name: string; lat: number; lng: number; spread: number }> = [
+        { name: 'Sydney', lat: -33.9, lng: 151.1, spread: 0.4 },
+        { name: 'the equator', lat: 0.3, lng: 32.6, spread: 0.4 },
+        { name: '45°N', lat: 45.3, lng: 9.2, spread: 0.4 },
+        { name: '60°N', lat: 60.3, lng: 30.3, spread: 0.4 },
+        { name: '70°N', lat: 70.3, lng: 25.5, spread: 0.4 },
+        { name: 'the last row of the 60° band', lat: 60.99, lng: 40.1, spread: 0.008 },
+        { name: 'the first row of the 61° band', lat: 61.0, lng: 50.1, spread: 0.008 },
+    ];
     const exactRand = prng(91);
-    let target: { P: { lat: number; lng: number }; A: { lat: number; lng: number } } | null = null;
-    for (let tries = 0; tries < 40 && !target; tries++) {
-        const P = { lat: six(-33.9 + (exactRand() - 0.5) * 0.4), lng: six(151.1 + (exactRand() - 0.5) * 0.4) };
-        const c = { lat: nbhd(P.lat), lng: nbhd(P.lng) };
-        const A = ring(c, 0.8).find(a => haversine(a.lat, a.lng, P.lat, P.lng) <= REACH_KM && haversine(a.lat, a.lng, c.lat, c.lng) > REACH_KM);
-        if (A) target = { P, A };
+    let firstEvent: { id: string; lin: Id; wes: Id } | null = null;
+    for (const [k, spot] of REACH_SPOTS.entries()) {
+        let target: { P: { lat: number; lng: number }; A: { lat: number; lng: number } } | null = null;
+        for (let tries = 0; tries < 80 && !target; tries++) {
+            const P = { lat: six(spot.lat + (exactRand() - 0.5) * spot.spread), lng: six(spot.lng + (exactRand() - 0.5) * 0.4) };
+            if (Math.round(P.lat * 100) / 100 !== Math.round(spot.lat * 100) / 100 && spot.spread < 0.01) continue;
+            const c = cellOf(P.lat, P.lng);
+            const A = ring(c, 0.8).find(a => haversine(a.lat, a.lng, P.lat, P.lng) <= REACH_KM && haversine(a.lat, a.lng, c.lat, c.lng) > REACH_KM);
+            if (A) target = { P, A };
+        }
+        if (!target) throw new Error(`no ring point within reach of a place but not of its neighbourhood at ${spot.name}`);
+        const { P, A } = target;
+        const c = cellOf(P.lat, P.lng);
+        const evId = `ev-reach-${k}`;
+        listing(evId, alice, P.lat, P.lng, 400 + k, { note: 'Side gate', letsIn: 1 });
+        const lin = member(`Lin ${k}`, null), wes = member(`Wes ${k}`, null);
+        for (const who of [lin, wes]) {
+            const r = await post('/api/community/me/area', { lat: A.lat, lng: A.lng }, who);
+            if (r.status !== 200) throw new Error(`area ${r.status} ${r.text.slice(0, 120)}`);
+        }
+        insRsvp.run(evId, lin.pubKeyHex, iso(T0 + 7_200_000), alice.pubKeyHex, iso(T0 + 7_200_000));
+        firstEvent ??= { id: evId, lin, wes };
+        const watchers: Array<{ A: { lat: number; lng: number }; s: Sock }> = [];
+        for (const [i, W] of ring(c, 0.8).entries()) {
+            const id = member(`Ring ${evId}-${i}`, null);
+            const r = await post('/api/community/me/area', { lat: W.lat, lng: W.lng }, id);
+            if (r.status !== 200) throw new Error(`area ${r.status} ${r.text.slice(0, 120)}`);
+            watchers.push({ A: { lat: r.body.area.lat, lng: r.body.area.lng }, s: await openSocket(`${wsBase}?${signedWsQuery(id)}`) });
+        }
+        const linSock = await openSocket(`${wsBase}?${signedWsQuery(lin)}`);
+        const wesSock = await openSocket(`${wsBase}?${signedWsQuery(wes)}`);
+        await sleep(300);
+        const copiesOf = (sock: Sock) => sock.raw.map(x => { try { return JSON.parse(x); } catch { return null; } }).filter(e => e?.post?.id === evId);
+        const byCell = watchers.map(w => haversine(w.A.lat, w.A.lng, c.lat, c.lng) <= REACH_KM);
+        const byPlace = watchers.map(w => haversine(w.A.lat, w.A.lng, P.lat, P.lng) <= REACH_KM);
+        for (const [indexOn, status] of [[true, 'going'], [false, 'interested']] as const) {
+            se.setListingPushIndex(indexOn);
+            for (const sock of [linSock, wesSock, ...watchers.map(w => w.s)]) sock.raw.length = 0;
+            const tapped = await post(`/api/marketplace/posts/${evId}/rsvp`, { status }, dan);
+            await sleep(800);
+            const received = watchers.map(w => copiesOf(w.s).length > 0);
+            const linGot = copiesOf(linSock), wesGot = copiesOf(wesSock);
+            const index = indexOn ? 'on' : 'off';
+            assert(tapped.status === 200 && received.every((g, i) => g === byCell[i]) && received.some(Boolean) && received.some(g => !g)
+                && watchers.every(w => copiesOf(w.s).every(e => e.post.lat === c.lat && e.post.lng === c.lng)),
+                `global, ${spot.name} (index ${index}): the event's copy reaches exactly the ${byCell.filter(Boolean).length} of ${watchers.length} ring members within ${REACH_KM} km of its neighbourhood, each with the neighbourhood (got ${received.filter(Boolean).length}; from the place: ${byPlace.filter(Boolean).length}; RSVP ${tapped.status})`);
+            assert(linGot.length > 0 && linGot.every(e => e.post.lat === P.lat && e.post.lng === P.lng),
+                `global, ${spot.name} (index ${index}): a member let in, ${haversine(A.lat, A.lng, P.lat, P.lng).toFixed(2)} km from the place and ${haversine(A.lat, A.lng, c.lat, c.lng).toFixed(2)} km from its neighbourhood, gets it with the place (got ${linGot.length})`);
+            assert(wesGot.length === 0, `global, ${spot.name} (index ${index}): a member at her spot who isn't let in gets nothing (got ${wesGot.length})`);
+        }
+        se.setListingPushIndex(true);
+        for (const sock of [linSock, wesSock, ...watchers.map(w => w.s)]) sock.ws.close();
     }
-    if (!target) throw new Error('no ring point within reach of the place but not of its neighbourhood');
-    listing('ev-ring', alice, target.P.lat, target.P.lng, 304, { note: 'Side gate', letsIn: 1 });
-    const lin = member('Lin', null), wes = member('Wes', null);
-    for (const who of [lin, wes]) {
-        const r = await post('/api/community/me/area', { lat: target.A.lat, lng: target.A.lng }, who);
-        if (r.status !== 200) throw new Error(`area ${r.status} ${r.text.slice(0, 120)}`);
-    }
-    insRsvp.run('ev-ring', lin.pubKeyHex, iso(T0 + 7_200_000), alice.pubKeyHex, iso(T0 + 7_200_000));
-    const linSock = await openSocket(`${wsBase}?${signedWsQuery(lin)}`);
-    const wesSock = await openSocket(`${wsBase}?${signedWsQuery(wes)}`);
-    await sleep(300);
-    const ringCopies = (s: Sock) => s.raw.map(x => { try { return JSON.parse(x); } catch { return null; } }).filter(e => e?.post?.id === 'ev-ring');
-    for (const [indexOn, status] of [[true, 'going'], [false, 'interested']] as const) {
-        se.setListingPushIndex(indexOn);
-        linSock.raw.length = 0; wesSock.raw.length = 0;
-        const tapped = await post('/api/marketplace/posts/ev-ring/rsvp', { status }, dan);
-        await sleep(800);
-        const linGot = ringCopies(linSock), wesGot = ringCopies(wesSock);
-        assert(tapped.status === 200 && linGot.length > 0 && linGot.every(e => e.post.lat === target!.P.lat && e.post.lng === target!.P.lng),
-            `global (index ${indexOn ? 'on' : 'off'}): a member let in, ${haversine(target.A.lat, target.A.lng, target.P.lat, target.P.lng).toFixed(2)} km from the place and ${haversine(target.A.lat, target.A.lng, nbhd(target.P.lat), nbhd(target.P.lng)).toFixed(2)} km from its neighbourhood, gets the event's copy when someone taps Going, with the place (got ${linGot.length}; RSVP ${tapped.status})`);
-        assert(wesGot.length === 0, `global (index ${indexOn ? 'on' : 'off'}): a member at the same spot who isn't let in gets nothing, as her set holds the neighbourhood (got ${wesGot.length})`);
-    }
-    se.setListingPushIndex(true);
-    linSock.ws.close();
-    wesSock.ws.close();
     // The sockets' index looks a degree past the radius, so through sockets a let-in member is visited either way; the
     // rule that she is visited as a party, wherever the index looks, is held here.
-    const parties = se.listingReachParties({ type: 'post_updated', post: { id: 'ev-ring' } }) ?? [];
-    assert(parties.includes(lin.pubKeyHex) && parties.includes(alice.pubKeyHex) && !parties.includes(wes.pubKeyHex),
+    const parties = se.listingReachParties({ type: 'post_updated', post: { id: firstEvent!.id } }) ?? [];
+    assert(parties.includes(firstEvent!.lin.pubKeyHex) && parties.includes(alice.pubKeyHex) && !parties.includes(firstEvent!.wes.pubKeyHex),
         `global: the event's copy visits the host and the member let in as parties, wherever the index looks, and not the member who isn't (${parties.length} parties)`);
+
+    // East–west, a neighbourhood is about a kilometre at 60° too (Marty, 15 Oct: "Widen by latitude"): walking east along
+    // 60.2°N in 40 steps of 0.002°, another member reads each listing at its neighbourhood's centre, and the centres are
+    // at least 0.9 km apart (a fixed 0.01° put them 0.56 km apart).
+    const WIDTH_IDS: string[] = [];
+    for (let i = 0; i < 40; i++) {
+        const id = `wide-${String(i).padStart(2, '0')}`;
+        listing(id, alice, 60.2, six(24.9 + i * 0.002), 500 + i);
+        WIDTH_IDS.push(id);
+    }
+    const wide = await get(`/api/marketplace/posts?ids=${WIDTH_IDS.join(',')}&sync=true`, bob);
+    const centres = [...new Set(ours(wide.body).map((p: any) => p.lng as number))].sort((x, y) => x - y);
+    const gaps = centres.slice(1).map((lng, i) => haversine(60.2, centres[i], 60.2, lng));
+    assert(wide.status === 200 && ours(wide.body).length === 40 && gaps.length >= 2 && gaps.every(g => g >= 0.9 && g <= 1.3),
+        `global: at 60°N the neighbourhoods are at least 0.9 km apart east–west (${gaps.map(g => g.toFixed(3)).join(', ')} km between ${centres.length} centres)`);
+    const wideOwn = await get(`/api/marketplace/posts?ids=${WIDTH_IDS.join(',')}&sync=true`, alice);
+    assert(ours(wideOwn.body).length === 40 && ours(wideOwn.body).every(exactOf), 'global: and their author reads each one where she put it');
+
+    // A listing at one corner of its neighbourhood, then at the opposite corner, reads the same to another member, by id and
+    // from three points with distances; to its author it moves. At 0°, 45°, 60° and 70°, and in the last row of a band and
+    // the first row of the next.
+    const CORNER_SPOTS: Array<[string, { lat: number; lng: number }]> = [
+        ['the equator', { lat: 0.3, lng: 36.7 }], ['45°N', { lat: 45.3, lng: 13.4 }], ['60°N', { lat: 60.3, lng: 35.6 }],
+        ['70°N', { lat: 70.3, lng: 29.9 }], ['the last row of the 60° band', { lat: 60.99, lng: 44.4 }], ['the first row of the 61° band', { lat: 61.0, lng: 54.4 }],
+    ];
+    for (const [k, [name, spot]] of CORNER_SPOTS.entries()) {
+        const c = cellOf(spot.lat, spot.lng);
+        const halfLng = lngStepOf(c.lat) / 2 - 1e-4, halfLat = 0.005 - 1e-4;
+        const corners = [{ lat: six(c.lat - halfLat), lng: six(c.lng - halfLng) }, { lat: six(c.lat + halfLat), lng: six(c.lng + halfLng) }];
+        const id = `corner-${k}`;
+        listing(id, alice, corners[0].lat, corners[0].lng, 600 + k);
+        const from = [{ lat: c.lat + 0.05, lng: c.lng - 0.07 }, { lat: c.lat - 0.11, lng: c.lng + 0.03 }, { lat: c.lat + 0.002, lng: c.lng + 0.2 }];
+        const reads = (who: Id) => Promise.all([
+            get(`/api/marketplace/posts?id=${id}`, who),
+            ...from.map(q => get(`/api/marketplace/posts?${ALL_TYPES}&lat=${q.lat}&lng=${q.lng}&radiusKm=30&sort=distance&limit=50`, who)),
+        ]).then(rs => rs.map(r => r.text));
+        const otherAt0 = await reads(bob), ownAt0 = await reads(alice);
+        // Moved as nothing else changed: the row's time stays (posts_touch_updated_at stamps a write that leaves it, so the
+        // move writes another first and then the same one back).
+        const { updated_at: was } = db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(id) as { updated_at: string };
+        db.prepare('UPDATE posts SET lat = ?, lng = ?, updated_at = ? WHERE id = ?').run(corners[1].lat, corners[1].lng, '1970-01-01T00:00:00.000Z', id);
+        db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(was, id);
+        place.set(id, corners[1]);
+        const otherAt1 = await reads(bob), ownAt1 = await reads(alice);
+        const apartKm = haversine(corners[0].lat, corners[0].lng, corners[1].lat, corners[1].lng);
+        assert(otherAt0.every((t, i) => t === otherAt1[i]) && otherAt0[0].includes(id),
+            `global, ${name}: another member's 4 reads are the same bytes whether the listing is at one corner of its neighbourhood or the opposite one, ${apartKm.toFixed(2)} km apart`);
+        assert(ownAt0.filter((t, i) => t !== ownAt1[i]).length === 4, `global, ${name}: and its author's 4 reads all show it move`);
+    }
 
     // ── 3. The operator's override on the global node: every place exact again ──
     console.log('\n── 3. nodeProfile.openMembership = false on the global node ──');

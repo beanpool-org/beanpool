@@ -465,7 +465,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
     // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
-    // each listing's place reaches them to its neighbourhood (0.01°, about 1 km) inside the query, distance and order
+    // each listing's place reaches them to its neighbourhood (about 1.1 km across both ways) inside the query, distance and order
     // too, all but their own and the events they may read in full (engine PostFilter.neighbourhood, exactPlacesFor;
     // DESIGN-global-member-privacy-fable.md §4). Which places are exact for them is in the ETag: a host letting them in,
     // or a keeper's binding, changes it without changing any listing. Elsewhere every member's read is as before.

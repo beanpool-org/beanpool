@@ -49,7 +49,7 @@ if (process.env.DISTANCE_PERF_OUT) {
 }
 
 import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
-import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, getNearbySet, exactPlacesFor, ONE_PASS_MAX_MEASURED, type PostFilter, type RowsNear } from '@beanpool/engine';
+import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, getNearbySet, exactPlacesFor, neighbourhoodOf, ONE_PASS_MAX_MEASURED, type PostFilter, type RowsNear } from '@beanpool/engine';
 import { db } from './db/db.js';
 import fs from 'node:fs';
 
@@ -494,9 +494,11 @@ async function main(): Promise<void> {
     }
     assert(guestSame, `a visitor's pages at offsets 0, 50, 1,000 and near the end are the brute-force pages by distance from each post's area, on both paths (${guestResults.join('; ')})`);
     // ── 8b. the neighbourhood read's pages ───────────────────────────────────────────────────────
-    // 0.01° to the nearest step, halves up, as the node rounds them; the reader's own (and their club's events, which they
+    // Each other post from its neighbourhood, as the node rounds them; the reader's own (and their club's events, which they
     // host as its convenor) from the place itself.
-    const nbhdOf = (deg: number) => Math.round(deg * 100) / 100 + 0;
+    // Each place's neighbourhood as the node works it out (@beanpool/core neighbourhoodOf: 0.01° rows, the longitude step
+    // widened by latitude band; its own tests hold the rule).
+    const nbhdOf = (lat: number, lng: number) => neighbourhoodOf(lat, lng);
     const places = exactPlacesFor(db, VIEWER());
     const ownAuthors = new Set(places.authors), ownPosts = new Set(places.posts);
     const authorOf = new Map((db.prepare(`SELECT id, author_pubkey FROM posts WHERE id LIKE 'perf-%'`).all() as Array<{ id: string; author_pubkey: string }>).map(r => [r.id, r.author_pubkey]));
@@ -506,7 +508,7 @@ async function main(): Promise<void> {
         const ref = all.filter(keep).map(p => {
             const exact = ownAuthors.has(authorOf.get(p.id)!) || ownPosts.has(p.id);
             return { id: p.id, u: p.updated_at, c: p.created_at, d: p.lat === null || p.lng === null ? null
-                : exact ? haversine(HUB.lat, HUB.lng, p.lat, p.lng) : haversine(HUB.lat, HUB.lng, nbhdOf(p.lat), nbhdOf(p.lng)) };
+                : exact ? haversine(HUB.lat, HUB.lng, p.lat, p.lng) : (() => { const c = nbhdOf(p.lat, p.lng); return haversine(HUB.lat, HUB.lng, c.lat, c.lng); })() };
         }).sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
         const wrong: number[] = [];
         for (const offset of [0, 50, 1000, ref.length - 20]) {

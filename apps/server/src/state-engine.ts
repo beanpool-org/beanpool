@@ -336,7 +336,7 @@ import {
     type UpdateGroupParams,
     type ListGroupsFilter,
     exactPlaceReaders,
-    roundToNeighbourhood,
+    neighbourhoodOf,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -1565,7 +1565,7 @@ function keepersOf(treasuries: string[]): Set<string> {
  * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
  * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
  * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it: where
- * anyone can join, `openMembership`, from its neighbourhood, 0.01°, for everyone but the members who have the place
+ * anyone can join, `openMembership`, from its neighbourhood, about 1.1 km across, for everyone but the members who have the place
  * exactly, engine exactPlaceReaders, who are measured from the place and visited as parties; whether a socket gets a copy
  * is a yes or no about the place, so measured from the place it located a listing to ~100 m from ~25 areas, #1965
  * deciding review B1), and the listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
@@ -1609,7 +1609,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
     // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
     // sockets get a copy would place it to ~100 m from ~25 areas (#1965 deciding review C).
-    const nb = placed && getProfileSwitches().openMembership ? { lat: roundToNeighbourhood(row.lat!), lng: roundToNeighbourhood(row.lng!) } : null;
+    const nb = placed && getProfileSwitches().openMembership ? neighbourhoodOf(row.lat!, row.lng!) : null;
     const exactReaders = nb ? exactPlaceReaders(db, row) : null;
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
@@ -1646,7 +1646,7 @@ export function inspectWsClients(): ReturnType<WsClients['inspect']> {
 /**
  * A listing's own event where anyone can join in a minute (`openMembership`, the global node): its place as stored, and
  * who has it exactly (engine exactPlaceReaders: the author, an enterprise's keepers, an event's hosts and the people let
- * in). Every other socket's copy carries its neighbourhood (0.01°), as their reads do (engine PostFilter.neighbourhood;
+ * in). Every other socket's copy carries its neighbourhood (neighbourhoodOf, about 1.1 km across), as their reads do (engine PostFilter.neighbourhood;
  * DESIGN-global-member-privacy-fable.md §4). The place is read from the row, so a copy read for one member (an RSVP's,
  * already rounded for them) still reaches the author exact, and their app never keeps a rounded pin to edit. Null
  * elsewhere, or for an event with no listing in it.
@@ -1666,8 +1666,11 @@ function placeOfListingEvent(event: any): { event: any; exact: Set<string> } | n
 /** A copy of a listing's event (a JSON string) with its place to the neighbourhood (placeOfListingEvent). */
 function withNeighbourhood(json: string): string {
     const e = JSON.parse(json);
-    if (e?.post && typeof e.post.lat === 'number') e.post.lat = roundToNeighbourhood(e.post.lat);
-    if (e?.post && typeof e.post.lng === 'number') e.post.lng = roundToNeighbourhood(e.post.lng);
+    if (e?.post && typeof e.post.lat === 'number' && typeof e.post.lng === 'number') {
+        const cell = neighbourhoodOf(e.post.lat, e.post.lng);
+        e.post.lat = cell.lat;
+        e.post.lng = cell.lng;
+    }
     return JSON.stringify(e);
 }
 

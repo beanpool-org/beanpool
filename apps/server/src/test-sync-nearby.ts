@@ -62,7 +62,7 @@ delete process.env.NEARBY_LISTINGS_MAX;
 process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
-import { haversineKm, boundingBox, getNearbySet, exactPlacesFor, roundToNeighbourhood, widenBox, NEIGHBOURHOOD_HALF_STEP_DEG } from '@beanpool/engine';
+import { haversineKm, boundingBox, getNearbySet, exactPlacesFor, neighbourhoodOf, neighbourhoodBox } from '@beanpool/engine';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -271,13 +271,13 @@ async function main() {
         } else {
             // The global node is one where anyone can join (`openMembership`): each listing but the member's exact ones (her
             // own, her enterprises', the events she may read in full: engine exactPlacesFor) is measured from its
-            // neighbourhood, 0.01° (DESIGN-global-member-privacy-fable.md §4), and the bounded pass reads the box grown by
-            // half a neighbourhood so it holds both.
+            // neighbourhood, about 1.1 km across both ways (DESIGN-global-member-privacy-fable.md §4), and the bounded pass
+            // reads the box grown by half a neighbourhood so it holds both.
             const places = exactPlacesFor(db, m.pubKeyHex);
             const exact = (p: any) => places.authors.includes(p.author_pubkey) || places.posts.includes(p.id);
             const kmTo = (p: any) => exact(p) ? haversineKm(me.area_lat!, me.area_lng!, p.lat, p.lng)
-                : haversineKm(me.area_lat!, me.area_lng!, roundToNeighbourhood(p.lat), roundToNeighbourhood(p.lng));
-            const box = widenBox(boundingBox(me.area_lat!, me.area_lng!, 250), NEIGHBOURHOOD_HALF_STEP_DEG);
+                : (() => { const c = neighbourhoodOf(p.lat, p.lng); return haversineKm(me.area_lat!, me.area_lng!, c.lat, c.lng); })();
+            const box = neighbourhoodBox(boundingBox(me.area_lat!, me.area_lng!, 250));
             const placed = listed.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number');
             const inBox = bound === undefined ? placed : placed
                 .filter(p => p.lat >= box.latMin && p.lat <= box.latMax && box.lngRanges.some(([a, b]) => p.lng >= a && p.lng <= b))

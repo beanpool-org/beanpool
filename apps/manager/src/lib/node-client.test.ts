@@ -28,6 +28,8 @@ import {
     normalizeNodeData,
     normalizeKeepers,
     normalizeKeeperPubkey,
+    freezeNodeUser,
+    pruneNodeUser,
     pruneInviteBranch,
     deleteNodePost,
     fetchReports,
@@ -481,6 +483,13 @@ describe('2FA session token transmission in node client admin actions', () => {
 
         await freezeNodeUser('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        expect(lastCall()[1].credentials).toBe('same-origin');
+
+        fetchMock.mockClear();
+
+        await pruneNodeUser('https://node.example.com', 'pub123', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        expect(lastCall()[1].credentials).toBe('same-origin');
 
         fetchMock.mockClear();
 
@@ -1043,6 +1052,7 @@ describe('pruneInviteBranch', () => {
         expect(init.method).toBe('POST');
         expect(init.headers['X-Admin-Password']).toBe('pwd1');
         expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+        expect(init.credentials).toBe('same-origin');
     });
 });
 

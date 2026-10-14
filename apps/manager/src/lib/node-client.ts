@@ -1007,6 +1007,7 @@ export async function freezeNodeUser(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ freeze, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
@@ -1025,6 +1026,7 @@ export async function pruneNodeUser(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
@@ -1046,6 +1048,7 @@ export async function pruneInviteBranch(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {

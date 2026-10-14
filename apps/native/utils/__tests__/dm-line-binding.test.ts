@@ -3781,7 +3781,9 @@ describe('the DM guard list: one bounded list per community file, never read as 
             const stored = h.store.get(seenKey());
             const setItem = vi.mocked(AsyncStorage.setItem);
             const writesBefore = setItem.mock.calls.length;
-            node.convs = [relistedAsGroup(), group];
+            // A new DM listed in the same pass: the pass would remember it, and writes nothing over a list it couldn't read.
+            const newDm: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, person('Cat').publicKey] };
+            node.convs = [relistedAsGroup(), group, newDm];
             await syncMessages(ana.publicKey);
             const toGroup = await sent(group.id, 'Hello group');
             const postsBefore = groupPosts.length;
@@ -3795,20 +3797,21 @@ describe('the DM guard list: one bounded list per community file, never read as 
             const r = {
                 listWrites: setItem.mock.calls.slice(writesBefore).filter(([k]) => k === seenKey() || k === OLD_KEY).length,
                 storedKept: h.store.get(seenKey()) === stored,
-                dmRow: typeOf(dm.id), groupRow: typeOf(group.id),
+                dmRow: typeOf(dm.id), groupRow: typeOf(group.id), newDmRow: typeOf(newDm.id),
                 toGroup, viaGroupScreen, groupScreenPosts: groupPosts.length - postsBefore, toDm,
             };
             getItem.mockImplementation(real);
             if (how === 'a corrupt value') h.store.delete(seenKey());   // a fresh list: seeded again from this file's dm rows
             await syncMessages(ana.publicKey);
-            const readable = { groupRow: typeOf(group.id), listHasDm: ((seenIn() as string[]) ?? []).includes(dm.id), toGroup: await sent(group.id, 'Hello again, group') };
+            const listNow = (seenIn() as string[]) ?? [];
+            const readable = { groupRow: typeOf(group.id), listHas: { dm: listNow.includes(dm.id), newDm: listNow.includes(newDm.id) }, toGroup: await sent(group.id, 'Hello again, group') };
             console.log(`GD2 (${how}) ${JSON.stringify({ r, readable })}`);
             expect(r).toEqual({
-                listWrites: 0, storedKept: true, dmRow: 'dm', groupRow: null,
+                listWrites: 0, storedKept: true, dmRow: 'dm', groupRow: null, newDmRow: 'dm',
                 toGroup: { err: 'DmGuardUnreadError', notice: GUARD_UNREAD, posts: 0, plaintext: [], readBy: [] },
                 viaGroupScreen: GUARD_UNREAD, groupScreenPosts: 0, toDm: sealedToBen,
             });
-            expect(readable).toEqual({ groupRow: 'group_thread', listHasDm: true, toGroup: { err: null, notice: null, posts: 1, plaintext: ['Hello again, group'], readBy: [] } });
+            expect(readable).toEqual({ groupRow: 'group_thread', listHas: { dm: true, newDm: true }, toGroup: { err: null, notice: null, posts: 1, plaintext: ['Hello again, group'], readBy: [] } });
         }, 120_000);
     }
 

@@ -479,3 +479,50 @@ describe('a held group\'s membership changes are routed under the group\'s own i
         expect(membership(from)).toEqual([`DELETE /api/groups/${removed}/members/${OTHER}`]);
     });
 });
+
+describe('a held group sends sealed while the DM list can\'t be read (§3.4 amendment 7 §3 iii, GD2)', () => {
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GD2h the DM list unreadable (${how}): the held group's DM-screen send, group-screen send and edit go sealed under its key; nothing is written to the list`, async () => {
+            fresh();
+            const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+            const getItem = vi.mocked(AsyncStorage.getItem);
+            const real = getItem.getMockImplementation()!;
+            const g = randomUUID();
+            const e1 = epochWithKey(g, 1, [ME.publicKey, OTHER]);
+            views.set(g, { keys: { current: 1, roster: [ME.publicKey, OTHER], epochs: [e1.header], myWraps: [e1.wrap] } });
+            store.keyState.set(`${ME.publicKey}/${g}`, { highest: 1, after: 1 });
+            store.epochs.set(`${ME.publicKey}/${g}`, [e1.stored]);
+            if (how === 'a corrupt value') store.asyncStore.set(DM_SEEN, '{unreadable');
+            else getItem.mockImplementation(async (k: string) => { if (k === DM_SEEN) throw new Error('storage unavailable'); return real(k); });
+            const stored = store.asyncStore.get(DM_SEEN);
+            try {
+                let from = received.length;
+                const dmScreen = await tryIt(() => insertMessage(g, ME.publicKey, 'GD2h DM-screen send'));
+                await waitFor(() => !!sentLine(from, (r) => r.path === '/api/messages/send'));
+                const s = sentLine(from, (r) => r.path === '/api/messages/send');
+                from = received.length;
+                const cid = randomUUID();
+                const groupScreen = await tryIt(() => postGroupChatMessage(g, 'GD2h group-screen send', cid, null, { after: null }));
+                const c = sentLine(from, (r) => r.path.endsWith('/chat/message'));
+                from = received.length;
+                const mid = randomUUID();
+                const edit = await tryIt(() => editThreadMessage(mid, 'GD2h edit', { groupId: g, metadata: { epoch: 1 }, locked: true }));
+                const e = sentLine(from, (r) => r.path === '/api/messages/edit');
+                const r = {
+                    dmScreen, dmScreenOpens: opensUnder(s!, e1.groupKey, [g])?.text ?? null,
+                    groupScreen, groupScreenOpens: opensUnder({ ...c!, messageId: cid }, e1.groupKey, [g])?.text ?? null,
+                    edit, editOpens: opensUnder({ ...e!, messageId: mid, part: 'edit' }, e1.groupKey, [g])?.text ?? null,
+                    listKept: store.asyncStore.get(DM_SEEN) === stored,
+                };
+                console.log(`GD2h (${how}) ${JSON.stringify(r)}`);
+                expect(r).toEqual({
+                    dmScreen: 'went', dmScreenOpens: 'GD2h DM-screen send', groupScreen: 'went', groupScreenOpens: 'GD2h group-screen send',
+                    edit: 'went', editOpens: 'GD2h edit', listKept: true,
+                });
+            } finally {
+                getItem.mockImplementation(real);
+                store.asyncStore.delete(DM_SEEN);
+            }
+        });
+    }
+});

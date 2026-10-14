@@ -55,8 +55,8 @@ import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import {
-    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, vaultKeepsNoCopyFor,
-    waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
+    checkSsoRestore, finishSsoRestore, lookupRestorable, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
+    vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { landNextOn } from '../utils/member-landing';
@@ -176,7 +176,7 @@ export default function WelcomeScreen() {
      */
     const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
-    const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
+    const [ssoCandidates, setSsoCandidates] = useState<RestorableAccount[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
     /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
     const skipNextSsoLookupRef = useRef(false);
@@ -202,16 +202,11 @@ export default function WelcomeScreen() {
         const t = setTimeout(async () => {
             setSsoLookupBusy(true);
             try {
-                const res = await fetch(`${anchor}/api/recovery/lookup/${encodeURIComponent(typed)}`);
-                if (!res.ok) throw new Error(String(res.status));
-                const all = await res.json();
-                if (!cancelled) {
-                    setSsoCandidates(Array.isArray(all) ? all.filter((c: any) => c.canRecoverBySso) : []);
-                }
-            } catch {
-                // Offline or an old node without the field: fall back to whatever they typed, which
-                // is exactly the behaviour before this existed.
-                if (!cancelled) setSsoCandidates([]);
+                // The same lookup the restore checks its key against (utils/sso-recovery.ts `lookupRestorable`).
+                // Offline or an old node without the field: no picker, and whatever they typed goes to the restore,
+                // which asks again and says plainly if it can't.
+                const all = await lookupRestorable(anchor, typed);
+                if (!cancelled) setSsoCandidates((all ?? []).filter(c => c.canRecoverBySso));
             } finally {
                 if (!cancelled) setSsoLookupBusy(false);
             }
@@ -3065,7 +3060,7 @@ export default function WelcomeScreen() {
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
                                         {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
                                     </Text>
-                                    {ssoCandidates.map((c: any) => (
+                                    {ssoCandidates.map((c) => (
                                         <Pressable
                                             key={c.publicKey}
                                             onPress={() => {

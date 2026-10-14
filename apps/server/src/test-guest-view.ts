@@ -588,6 +588,7 @@ async function main(): Promise<void> {
             [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
             [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
+            [path.join('routes', 'events.ts')]: 2, // the event form's pin → its zone (/api/events/zone): members only, answers a zone and no listing
         };
         assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
             `the code reads a point from a query in the modules this suite knows, and no others (${JSON.stringify(found)}); a new one needs its reads in POINT_READS and measured`);
@@ -1274,6 +1275,8 @@ async function main(): Promise<void> {
             'DELETE /api/enterprises/:treasury/thread/message/:messageId', 'POST /api/enterprises/:treasury/thread/remove', 'GET /api/enterprises/map',
             'GET /api/enterprises/statuses',
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
+            // The event form's zone of a pin and its picker list (routes/events.ts): members' signed reads, a zone and no listing.
+            'GET /api/events/zone', 'GET /api/events/zones',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',

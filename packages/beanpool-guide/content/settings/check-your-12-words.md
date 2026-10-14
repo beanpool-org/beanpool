@@ -44,7 +44,7 @@ Can't find them? If this phone still has them, **Settings**, then **View Recover
 
 If your community's server is lost, whoever runs its standby server (or a new server restoring a backup) can ask an owner to open the locked keys. Any one owner is enough. You need the newest version of the BeanPool app. The web app works too if it still opens, but it lives at your community's own address, which may be down with the server: the phone app is the one to count on.
 
-- On the server's Settings, they choose **Take over with an owner's phone**, or **Open with an owner's phone** when restoring a backup. A code appears on their screen.
+- On the server's Settings, they choose **Take over as the main server**, then **I understand: use an owner's phone**, or **Open with an owner's phone** when restoring a backup. A code appears on their screen.
 - In the app: **Settings**, under **Community keys**, tap **Take over or restore with this phone**, and point the camera at the code. If the server's page is open on your own phone, tapping its link does the same. In the web app, copy the link from their screen and paste it under **Take over or restore with this browser** in **Settings**.
 - The app shows which community, which server, and what will happen. If your main server still answers, it says so in red: a take-over is only for a server that is really gone.
 - Tap **Unlock for the take-over** (or **Unlock the backup**). Your phone asks for its own unlock first: fingerprint, face or PIN. The web app has no such step, which is why the phone app is the safer place for an owner's key.

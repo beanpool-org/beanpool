@@ -134,8 +134,8 @@ function LanguageRow() {
                 {LANGS.map((l) => <option key={l} value={l} lang={l}>{LANGUAGE_NAMES[l]}</option>)}
             </select>
             {value !== 'en' && (
-                <p data-testid="settings-language-draft" className="mt-2 text-xs leading-relaxed text-nature-600 dark:text-nature-300">
-                    {t('These translations are new.')}{' '}
+                <p data-testid="settings-language-draft" className="mt-2 flex flex-wrap gap-x-1 text-xs leading-relaxed text-nature-600 dark:text-nature-300">
+                    <span>{t('These translations are new.')}</span>
                     <a href={WORDS_FEEDBACK_URL} target="_blank" rel="noopener noreferrer" className="underline font-semibold text-nature-800 dark:text-nature-100">
                         {t('Tell us what reads wrong')}
                     </a>

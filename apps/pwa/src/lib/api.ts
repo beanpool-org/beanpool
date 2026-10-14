@@ -843,6 +843,7 @@ export interface SystemMessageMetadata {
     txHash?: string;        // The ledger transaction ID for verification
     buyerPubkey?: string;
     sellerPubkey?: string;
+    transactionId?: string; // ESCROW_RELEASED: the trade itself (engine escrow.ts)
 }
 
 export interface ApiMessage {

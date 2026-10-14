@@ -775,7 +775,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             marginBottom: 14,
         },
         addChannelButton: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             paddingVertical: 10,
             paddingHorizontal: 20,
             borderRadius: 10,
@@ -808,7 +808,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
         },
         successIcon: {
             fontSize: 16,
-            color: '#16a34a',
+            color: colors.feedback.success.fg,
             fontWeight: 'bold',
         },
         successText: {
@@ -822,7 +822,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             width: '100%',
         },
         submitButton: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             paddingVertical: 14,
             alignItems: 'center',

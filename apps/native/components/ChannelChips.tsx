@@ -137,7 +137,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             width: 16,
             height: 16,
             borderRadius: 8,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             alignItems: 'center',
             justifyContent: 'center',
         },

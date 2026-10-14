@@ -21,7 +21,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, AppState, type AppStateStatus } from 'react-native';
-import { palette } from '../constants/colors';
+import { palette, lightColors } from '../constants/colors';
 import { signedRequest } from '../utils/db';
 import { withJitter } from '../utils/jitter';
 import { useIdentity } from '../app/IdentityContext';
@@ -432,11 +432,11 @@ const styles = StyleSheet.create({
     },
     detail: {
         fontSize: 11,
-        color: palette.red500,
+        color: lightColors.feedback.danger.fg,
         marginBottom: 12,
     },
     stopButton: {
-        backgroundColor: palette.red600,
+        backgroundColor: lightColors.feedback.danger.solid,
         borderRadius: 12,
         paddingVertical: 12,
         paddingHorizontal: 20,

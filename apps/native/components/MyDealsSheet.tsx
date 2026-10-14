@@ -257,7 +257,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         pausedBadgeText: {
             fontSize: 10,
             fontWeight: '800',
-            color: theme === 'dark' ? colors.feedback.warning.fg : '#b45309', // amber700 is 3.47:1 on the dark card
+            color: colors.feedback.warning.fg, // ink.warning (amber-700 was 3.47:1 on the dark card)
             letterSpacing: 0.3,
         },
         typeBadgeText: {
@@ -312,13 +312,13 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             marginBottom: 20,
         },
         ctaBtn: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 12,
         },
         ctaBtnText: {
-            color: colors.text.inverse,
+            color: colors.text.onAccent,
             fontWeight: '800',
             fontSize: 14,
         },
@@ -470,7 +470,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </Text>
                             {showsBeans && (
                             <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
-                                <Text style={[styles.creditAmount, { color: isBuyer ? palette.red600 : colors.brand.dark }]} numberOfLines={1}>
+                                <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.primary }]} numberOfLines={1}>
                                     {isBuyer ? '- ' : '+ '}{item.credits}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
@@ -543,7 +543,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
                 highlightStyle = actionTone;
-                statusInk = isDark ? colors.feedback.warning.fg : palette.amber600;
+                statusInk = colors.feedback.warning.fg;
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };

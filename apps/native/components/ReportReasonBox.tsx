@@ -38,7 +38,7 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
 
     return (
         <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.solid, marginBottom: 8, letterSpacing: 0.5 }}>WHY ARE YOU REPORTING IT?</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.fg, marginBottom: 8, letterSpacing: 0.5 }}>WHY ARE YOU REPORTING IT?</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                 {REPORT_REASONS.map((r) => {
                     const isSelected = reason === r;

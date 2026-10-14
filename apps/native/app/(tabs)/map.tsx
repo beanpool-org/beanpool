@@ -378,7 +378,7 @@ export default function MapScreen() {
 
         // Section labels
         sectionLabel: { color: colors.text.secondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2, marginTop: 2 },
-        requiredStar: { color: colors.feedback.danger.solid, fontSize: 12 },
+        requiredStar: { color: colors.feedback.danger.fg, fontSize: 12 },
         sectionLabelHint: { color: colors.text.muted, fontSize: 11, fontWeight: '500', textTransform: 'none', letterSpacing: 0 },
 
         // Type toggle — colours match map pins (green offer / orange need)
@@ -485,7 +485,7 @@ export default function MapScreen() {
             alignItems: 'center', justifyContent: 'center', minHeight: 44,
         },
         reachButtonActive: {
-            backgroundColor: colors.brand.dark,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.primary,
         },
         reachButtonText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
@@ -496,7 +496,7 @@ export default function MapScreen() {
             borderColor: colors.border.default, backgroundColor: colors.surface.app, minHeight: 44,
         },
         reachPeerChipActive: {
-            backgroundColor: colors.brand.dark,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.primary,
         },
         reachPeerChipText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
@@ -1084,7 +1084,7 @@ export default function MapScreen() {
         }
     };
 
-    const fieldBorder = (field: string) => validationErrors.has(field) ? { borderColor: colors.feedback.danger.solid, borderWidth: 2, shadowColor: colors.feedback.danger.solid, shadowOpacity: 0.3, shadowRadius: 6 } : {};
+    const fieldBorder = (field: string) => validationErrors.has(field) ? { borderColor: colors.feedback.danger.fg, borderWidth: 2, shadowColor: colors.feedback.danger.fg, shadowOpacity: 0.3, shadowRadius: 6 } : {};
 
     const needBlocked = blockedFromTrading && postType === 'need';
 
@@ -1250,7 +1250,7 @@ export default function MapScreen() {
                             open={categoryPanel.open}
                             onToggle={() => dispatchCategoryPanel({ kind: 'toggle' })}
                             onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
-                            activeColor={mapTypeFilter === 'offers' ? '#10b981' : mapTypeFilter === 'needs' ? '#ea580c' : colors.brand.dark}
+                            activeColor={mapTypeFilter === 'offers' ? colors.brand.fill : mapTypeFilter === 'needs' ? colors.action.fab : colors.brand.fill}
                             style={styles.filterCategoryPicker}
                             panelMaxHeight={mapAreaH && filterBottom ? Math.max(120, mapAreaH - filterBottom - 6 - 12) : undefined}
                             accessibilityLabel="Filter by category"

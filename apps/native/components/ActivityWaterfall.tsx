@@ -164,7 +164,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                         accessibilityRole="button"
                         accessibilityLabel="Create First Post"
                         accessibilityHint="Opens form to create a new offer or need post"
-                        style={[styles.primaryButton, { backgroundColor: colors.brand.primary }]}
+                        style={[styles.primaryButton, { backgroundColor: colors.brand.fill }]}
                         onPress={onCreatePostPress}
                     >
                         <Text style={[styles.primaryButtonText, { color: colors.text.inverse }]}>+ Create First Post</Text>
@@ -178,8 +178,8 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <View style={[styles.pulseBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? '#065f46' : '#a7f3d0' }]}>
-                    <View style={styles.pulseDot} />
-                    <Text style={[styles.pulseBadgeText, { color: isDark ? '#34d399' : '#047857' }]}>
+                    <View style={[styles.pulseDot, { backgroundColor: colors.brand.fill }]} />
+                    <Text style={[styles.pulseBadgeText, { color: colors.feedback.success.fg }]}>
                         Community Pulse
                     </Text>
                 </View>
@@ -214,7 +214,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                                     <Text style={styles.bold}>{actorName}</Text> traded with{' '}
                                     <Text style={styles.bold}>{targetName}</Text>
                                     {item.metadata?.credits ? (
-                                        <Text style={{ fontWeight: 'bold', color: '#10b981' }}> (🫘 {item.metadata.credits})</Text>
+                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {item.metadata.credits})</Text>
                                     ) : null}
                                 </Text>
                             );
@@ -228,7 +228,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                                     <Text style={styles.bold}>{actorName}</Text> rated{' '}
                                     <Text style={styles.bold}>{targetName}</Text>{' '}
                                     <Text
-                                        style={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                        style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}
                                         accessibilityLabel={`${starCount} out of 5 stars`}
                                     >
                                         {'★'.repeat(starCount)}
@@ -313,7 +313,6 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: '#10b981',
     },
     pulseBadgeText: {
         fontSize: 11,

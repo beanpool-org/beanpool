@@ -160,7 +160,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
                     </View>
 
                     <View style={styles.infoBox}>
-                        <MaterialCommunityIcons name="lightbulb-on" size={24} color={colors.feedback.warning.solid} style={styles.infoBoxIcon} />
+                        <MaterialCommunityIcons name="lightbulb-on" size={24} color={colors.feedback.warning.fg} style={styles.infoBoxIcon} />
                         <Text style={styles.infoBoxText}>
                             Credits in BeanPool are backed by real community trust and exchange, not fiat currency.
                         </Text>
@@ -192,7 +192,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
                     </View>
 
                     <View style={styles.warningBox}>
-                        <MaterialCommunityIcons name="alert" size={24} color={colors.feedback.warning.solid} style={styles.warningIcon} />
+                        <MaterialCommunityIcons name="alert" size={24} color={colors.feedback.warning.fg} style={styles.warningIcon} />
                         <Text style={styles.warningText}>
                             When you reach your credit floor, <Text style={styles.boldWhiteText}>further spending is paused</Text> until you earn credits back by trading on the Marketplace.
                         </Text>

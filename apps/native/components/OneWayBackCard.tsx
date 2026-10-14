@@ -279,7 +279,7 @@ function make(colors: AppColors) {
         title: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.heading, lineHeight: 21 },
         close: { fontSize: 16, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 },
         body: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 4 },
-        primary: { minHeight: 44, marginTop: 10, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+        primary: { minHeight: 44, marginTop: 10, backgroundColor: colors.brand.fill, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
         primaryText: { color: colors.text.inverse, fontSize: 14, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 44, marginTop: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
         secondaryText: { color: colors.text.body, fontSize: 14, fontWeight: '700', textAlign: 'center' },

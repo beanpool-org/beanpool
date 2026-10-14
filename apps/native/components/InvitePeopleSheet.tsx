@@ -118,7 +118,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         footer: { paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
         inviteBtn: {
             minHeight: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-            backgroundColor: colors.brand.primary, paddingHorizontal: 16,
+            backgroundColor: colors.brand.fill, paddingHorizontal: 16,
         },
         inviteBtnDisabled: { opacity: 0.5 },
         inviteText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },

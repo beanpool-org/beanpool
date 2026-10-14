@@ -34,7 +34,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
         meta: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
         message: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 10 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-        invite: { minHeight: 44, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        invite: { minHeight: 44, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         inviteText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
         notNow: { minHeight: 44, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         notNowText: { color: colors.text.body, fontSize: 15, fontWeight: '700' },

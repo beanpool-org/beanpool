@@ -269,7 +269,7 @@ export function ProposeDecisionModal({
             lineHeight: 16,
         },
         submitBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             paddingVertical: 14,
             alignItems: 'center',

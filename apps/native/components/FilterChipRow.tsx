@@ -100,6 +100,8 @@ interface FilterChipRowProps<Id extends string> {
     onSelect: (id: Id) => void;
     /** Fill for the selected chip. Its text turns white, so pick a colour that carries white text. */
     activeColor: string;
+    /** The selected chip's words when its fill does not carry white (the sage accent in dark: text.onAccent). */
+    activeTextColor?: string;
     /** Placement and width cap from the screen (e.g. `{ marginTop: 6, maxWidth: '92%' }`). */
     style?: StyleProp<ViewStyle>;
     /** Stretch the chips to fill the row when they fit (the Market feed's type row). */
@@ -121,7 +123,7 @@ interface FilterChipRowProps<Id extends string> {
  * When it scrolls, on mount it brings the selected chip into view, so a choice remembered across a switch
  * (say Next 7 days, far to the right) is on screen when the row comes back.
  */
-export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, style, fill, wrap, moreHint, chipStyle, accessibilityLabel }: FilterChipRowProps<Id>) {
+export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, activeTextColor, style, fill, wrap, moreHint, chipStyle, accessibilityLabel }: FilterChipRowProps<Id>) {
     const scrollRef = useRef<ScrollView>(null);
     const scrolledOnce = useRef(false);
 
@@ -138,6 +140,7 @@ export function FilterChipRow<Id extends string>({ chips, selected, onSelect, ac
                         active={on}
                         selected={on}
                         activeColor={activeColor}
+                        activeTextColor={activeTextColor}
                         style={[fill && { flexGrow: 1 }, chipStyle]}
                         onPress={() => onSelect(c.id)}
                         onLayout={on && !wrap ? (e) => {

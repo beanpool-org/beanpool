@@ -455,7 +455,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             width: 15,
             height: 15,
             borderRadius: 7.5,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             alignItems: 'center',
             justifyContent: 'center',
             marginLeft: 2,

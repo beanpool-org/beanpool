@@ -398,6 +398,29 @@ async function main() {
             "Carol's socket gets the listing, without who took it");
         bobSock.ws.close();
         carolSock2.ws.close();
+
+        // An admin is neither of its two people: the manager's data (/admin/data) lists it spoken for, and not by whom or
+        // in which deal. An admin's look at a trade is the logged one (/admin/disputes, queue item 29, Marty 4 Oct).
+        const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+        const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
+        resetAdminAuthTarpit();
+        const twoFa = turnOn2faForTests(ADMIN_PW);
+        beforeCall();
+        const dataRes = await fetch(`${BASE}/api/local/admin/data`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...twoFa.headers() }, body: JSON.stringify({}),
+        });
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+        resetAdminAuthTarpit();
+        const dataText = await dataRes.text();
+        const adminPost = (JSON.parse(dataText)?.posts ?? []).find((p: any) => p.id === takenId);
+        const adminPostText = JSON.stringify(adminPost ?? null);
+        assert(dataRes.status === 200 && !!adminPost && adminPost.status === 'pending',
+            `the admin's data lists it, spoken for (got ${dataRes.status} ${adminPost ? adminPost.status : dataText.slice(0, 120)})`);
+        assert(!!adminPost && !('acceptedBy' in adminPost) && !('acceptedByCallsign' in adminPost) && !('pendingTransactionId' in adminPost)
+            && !adminPostText.includes(bob.pk) && !adminPostText.includes('PrivBob') && !dataText.includes('mtx-priv'),
+            `and not by whom or in which deal (got ${JSON.stringify(adminPost && { by: adminPost.acceptedBy, name: adminPost.acceptedByCallsign, deal: adminPost.pendingTransactionId })})`);
     }
 
     console.log("\n── 6. a local community's listings are its members' ──");

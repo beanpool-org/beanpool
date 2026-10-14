@@ -622,7 +622,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             alignItems: 'center',
         },
         categoryChipActive: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.primary,
         },
         categoryChipText: {
@@ -727,7 +727,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             paddingVertical: 12,
             paddingHorizontal: 20,
             borderRadius: 8,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
         },
         emptyPrimaryBtnText: {
             fontSize: 15,

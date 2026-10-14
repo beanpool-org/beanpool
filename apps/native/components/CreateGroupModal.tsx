@@ -178,7 +178,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
         bridgeText: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         bridgeLink: { fontWeight: '800', color: colors.brand.primary },
         createBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             minHeight: 56,
             paddingVertical: 10,

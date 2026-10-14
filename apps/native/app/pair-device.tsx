@@ -205,7 +205,7 @@ export default function PairDeviceScreen() {
                 marginBottom: 24,
             },
             permissionBtn: {
-                backgroundColor: palette.emerald600,
+                backgroundColor: colors.brand.fill,
                 paddingHorizontal: 24,
                 paddingVertical: 14,
                 borderRadius: 14,
@@ -263,7 +263,7 @@ export default function PairDeviceScreen() {
                 fontWeight: '700',
             },
             confirmBtn: {
-                backgroundColor: palette.emerald600,
+                backgroundColor: colors.brand.fill,
                 borderRadius: 14,
                 paddingVertical: 15,
                 alignItems: 'center',
@@ -431,7 +431,7 @@ export default function PairDeviceScreen() {
     if (!permission) {
         return (
             <SafeAreaView style={styles.permissionCard}>
-                <ActivityIndicator size="large" color={palette.emerald500} />
+                <ActivityIndicator size="large" color={colors.brand.primary} />
             </SafeAreaView>
         );
     }
@@ -547,7 +547,7 @@ export default function PairDeviceScreen() {
 
                                 {errorMessage && (
                                     <Text
-                                        style={{ color: palette.red500, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
+                                        style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
                                         accessibilityRole="alert"
                                     >
                                         {errorMessage}

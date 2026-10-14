@@ -123,13 +123,15 @@ export async function readDmSeen(storage: Pick<SeenStorage, 'getItem'>, myPubkey
 
 /**
  * Each JSON string literal in `raw` that parses, in order, that the list may remember: what the reset salvages of a value
- * it can't read as a list (the phone's own earlier writes; it can only add DM-ness, never take it away).
+ * it can't read as a list (the phone's own earlier writes; it can only add DM-ness, never take it away). Only a literal
+ * that stands as an array element (after `[` or `,`, before `,`, `]` or the end) counts, so one damaged literal costs
+ * itself, never the quotes after it paired the wrong way round.
  */
 export function salvageSeenIds(raw: string): string[] {
     const out: string[] = [];
-    for (const m of raw.matchAll(/"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/g)) {
+    for (const m of raw.matchAll(/[[,]\s*("(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*")(?=\s*(?:[,\]]|$))/g)) {
         try {
-            const id = JSON.parse(m[0]);
+            const id = JSON.parse(m[1]);
             if (isRememberableId(id)) out.push(id);
         } catch {}
     }

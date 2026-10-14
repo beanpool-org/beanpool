@@ -1669,7 +1669,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
                     if (!unrated) return null;
                     const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
-                        try { return tradeOfReleaseLine([unrated], JSON.parse(m.metadata!)) === unrated; } catch { return false; }
+                        try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
                     })());
                     if (lineShown) return null;
                     return (
@@ -1677,7 +1677,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
                         }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('Your trade is finished. How did it go?')}</span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
                             <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
                                 background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
@@ -1826,22 +1826,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     
                                     {msg.systemType === 'ESCROW_RELEASED' && metaObj?.postId && (() => {
                                         // This line's own trade (lib/trade-review), never the first completed row on its post.
-                                        const relatedTx = tradeOfReleaseLine(userTransactions, metaObj);
+                                        const relatedTx = tradeOfReleaseLine(userTransactions, metaObj, msg.timestamp);
                                         const hasRated = relatedTx ? iRated(relatedTx, identity.publicKey) : false;
+                                        // A trade this page doesn't hold (older than the node's page of trades) can't be rated from
+                                        // here: the line opens its post, as the funded line's View Post does (review #1980 N2).
+                                        const canRate = !!relatedTx && !hasRated;
                                         return (
                                             <button
-                                                onClick={() => relatedTx && !hasRated
-                                                    ? onNavigate?.('marketplace-review', relatedTx.id)
+                                                onClick={() => canRate
+                                                    ? onNavigate?.('marketplace-review', relatedTx!.id)
                                                     : onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
                                                     marginTop: '0.5rem', background: '#fff',
-                                                    color: hasRated ? '#10b981' : '#f59e0b',
-                                                    border: `1px solid ${hasRated ? '#10b981' : '#f59e0b'}`,
+                                                    color: canRate ? '#f59e0b' : '#10b981',
+                                                    border: `1px solid ${canRate ? '#f59e0b' : '#10b981'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                             >
-                                                {hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
+                                                {!relatedTx
+                                                    ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
+                                                    : hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
                                             </button>
                                         );
                                     })()}

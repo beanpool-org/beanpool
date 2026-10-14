@@ -87,6 +87,19 @@ describe('Market: a chat\'s View Post opens the post, even a finished one', () =
         await screen.findByText('That listing can no longer be opened. It may have been taken down.');
         expect(onPostOpened).toHaveBeenCalled();
     });
+
+    // Review #1980 N1: a dropped connection is not an answer; it never says the listing was taken down.
+    it('a read that fails says to check the connection, never "taken down"', async () => {
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (filter?: any) => {
+            if (filter?.id) throw new TypeError('Failed to fetch');
+            return [...feed] as any;
+        });
+        const onPostOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openPostId="post-done" onPostOpened={onPostOpened} />);
+        await screen.findByText("That listing couldn't be loaded. Check your connection and try again.");
+        expect(screen.queryByText(/taken down/)).toBeNull();
+        expect(onPostOpened).toHaveBeenCalled();
+    });
 });
 
 describe('Market: a chat\'s Rate your partner opens the rating form for that trade', () => {
@@ -103,6 +116,15 @@ describe('Market: a chat\'s Rate your partner opens the rating form for that tra
         render(<MarketplacePage identity={identity} transactions={[]} openReviewTxId="tx-b" />);
         await screen.findByRole('dialog', { name: 'Deal Complete!' });
         expect(api.getMyMarketplaceTransactions).toHaveBeenCalledWith('my-pubkey');
+    });
+
+    it('the trades can\'t be read (a dropped connection): it says so, never "could not be found"', async () => {
+        vi.mocked(api.getMyMarketplaceTransactions).mockRejectedValue(new TypeError('Failed to fetch'));
+        const onReviewOpened = vi.fn();
+        render(<MarketplacePage identity={identity} transactions={[]} openReviewTxId="tx-b" onReviewOpened={onReviewOpened} />);
+        await screen.findByText("Your trades couldn't be loaded. Check your connection and try again.");
+        expect(screen.queryByText('That trade could not be found.')).toBeNull();
+        expect(onReviewOpened).toHaveBeenCalled();
     });
 
     it('a trade already rated says so, and opens no form', async () => {

@@ -1,3 +1,4 @@
+import { nearestFinishedTrade } from '@beanpool/core';
 import type { MarketplaceTransaction } from './api';
 
 // One answer for the Messages list's "Action Needed" line and the chat's rate button: a finished trade, keyed by the
@@ -28,21 +29,26 @@ export function unratedTradeWith(txs: MarketplaceTransaction[], me: string, peer
 }
 
 /**
- * The trade an ESCROW_RELEASED line is about: the `transactionId` the node writes into it, else (an older line) the
- * completed trade on its post between the two people it names. Undefined when this member's trades don't hold it.
+ * The trade an ESCROW_RELEASED line is about: the `transactionId` the node writes into it (since #1604), else (an older
+ * line) the completed trade on its post between the two people it names that finished nearest the line's own time `at`:
+ * the node writes the line as the trade completes, and one pair can buy a repeatable offer twice, so "the first one on
+ * the post" would answer for the other deal. Undefined when this member's trades don't hold it.
  */
 export function tradeOfReleaseLine(
     txs: MarketplaceTransaction[],
     meta: { transactionId?: unknown; postId?: unknown; buyerPubkey?: unknown; sellerPubkey?: unknown } | null | undefined,
+    at?: string,
 ): MarketplaceTransaction | undefined {
     if (!meta) return undefined;
     if (typeof meta.transactionId === 'string' && meta.transactionId) {
         return txs.find(tx => tx.id === meta.transactionId);
     }
     if (typeof meta.postId !== 'string' || !meta.postId) return undefined;
-    return txs.find(tx => tx.status === 'completed' && tx.postId === meta.postId
+    const candidates = txs.filter(tx => tx.status === 'completed' && tx.postId === meta.postId
         && (typeof meta.buyerPubkey !== 'string' || tx.buyerPublicKey === meta.buyerPubkey)
         && (typeof meta.sellerPubkey !== 'string' || tx.sellerPublicKey === meta.sellerPubkey));
+    // The same rule the phone reads an old line by (core release-line-trade).
+    return nearestFinishedTrade(candidates, at, tx => tx.completedAt ?? tx.createdAt);
 }
 
 /** What the rating form needs for this trade, from `me`'s side. */

@@ -439,7 +439,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const notReadable = () => { setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.')); onPostOpened?.(); };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
                     .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); onPostOpened?.(); } else notReadable(); })
-                    .catch(notReadable);
+                    // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
+                    .catch(() => {
+                        deepLinkFetched.current = null;
+                        setPostLinkNotice(t("That listing couldn't be loaded. Check your connection and try again."));
+                        onPostOpened?.();
+                    });
             }
         }
     }, [openPostId, posts, loading, onPostOpened]);
@@ -550,7 +555,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         };
         const held = myTransactions.find(x => x.id === openReviewTxId);
         if (held) open(myTransactions);
-        else getMyMarketplaceTransactions(me).then(open).catch(() => open([]));
+        else getMyMarketplaceTransactions(me).then(open).catch(() => {
+            // Not "could not be found": the read failed, the trade may well be there (review #1980 N1).
+            if (!live) return;
+            setPostLinkNotice(t("Your trades couldn't be loaded. Check your connection and try again."));
+            onReviewOpened?.();
+        });
         return () => { live = false; };
         // Taken once per link: myTransactions is read at the moment the link arrives.
         // eslint-disable-next-line react-hooks/exhaustive-deps

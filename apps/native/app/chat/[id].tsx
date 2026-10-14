@@ -28,6 +28,7 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { refusedSendNotice, restoredDraft } from '../../utils/dm-lock';
@@ -149,6 +150,8 @@ function ChatScreen({ id }: { id: string }) {
     // The trades I rated, by id: a release line names its own trade (metadata.transactionId), and one pair can trade the
     // same repeatable offer twice, so "a rating on this post" can be the other deal's (Marty 15 Oct, web; same here).
     const [ratedTxIds, setRatedTxIds] = useState<Set<string>>(new Set());
+    // My finished trades: an old release line (no transactionId) is read against them (utils/release-line-trade).
+    const [myCompletedTrades, setMyCompletedTrades] = useState<PhoneTradeRow[]>([]);
     const [replyToMessage, setReplyToMessage] = useState<any | null>(null);
     const [editingMessage, setEditingMessage] = useState<any | null>(null);
     const [deals, setDeals] = useState<any[]>([]);
@@ -284,6 +287,10 @@ function ChatScreen({ id }: { id: string }) {
             const ids = new Set<string>(ratedRows.map(r => r.post_id).filter(Boolean));
             setRatedPostIds(ids);
             setRatedTxIds(new Set<string>(ratedRows.map(r => r.tx_id).filter(Boolean)));
+            setMyCompletedTrades(await db.getAllAsync<PhoneTradeRow>(
+                "SELECT id, post_id, buyer_pubkey, seller_pubkey, completed_at, created_at FROM marketplace_transactions WHERE status='completed' AND (buyer_pubkey = ? OR seller_pubkey = ?) ORDER BY completed_at DESC",
+                [identity.publicKey, identity.publicKey]
+            ));
         } catch (e) {
             console.error("[Chat] Failed to load rated transaction list:", e);
         }
@@ -935,7 +942,9 @@ function ChatScreen({ id }: { id: string }) {
                 )}
 
                 {item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
-                    const lineTxId: string | null = typeof item.metadata.transactionId === 'string' && item.metadata.transactionId ? item.metadata.transactionId : null;
+                    // This line's own trade: its transactionId, or for an older line the one that finished with it — the
+                    // same rule the web reads it by (review #1980 B1).
+                    const lineTxId = releaseLineTradeId(myCompletedTrades, item.metadata, item.rawTimestamp, identity?.publicKey, peerPubkey);
                     const hasRated = lineTxId ? ratedTxIds.has(lineTxId) : ratedPostIds.has(item.metadata.postId);
                     return (
                         <Pressable
@@ -944,8 +953,8 @@ function ChatScreen({ id }: { id: string }) {
                             onPress={async () => {
                                 try {
                                     const db = await getDb();
-                                    // This line's own trade; an older line without its id: the completed one on its post
-                                    // between me and this peer, never another buyer's.
+                                    // This line's own trade; one the phone couldn't place: the newest completed one on its
+                                    // post between me and this peer, never another buyer's.
                                     const txRow = lineTxId
                                         ? await db.getFirstAsync<any>(
                                             "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE id=? AND status='completed'",

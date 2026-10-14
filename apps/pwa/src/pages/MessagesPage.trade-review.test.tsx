@@ -142,6 +142,16 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
+function oldLine(id: string, t: MarketplaceTransaction, at: string): ApiMessage {
+    // A release line from before #1604 (2026-10-04): no transactionId in its metadata, as on mullum and castlemaine.
+    return {
+        id, conversationId: 'conv-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment of 5 Beans released to the provider.', nonce: '',
+        type: 'system', systemType: 'ESCROW_RELEASED' as any, timestamp: at,
+        metadata: JSON.stringify({ amount: 5, postId: t.postId, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
+    };
+}
+const lineButtons = () => screen.queryAllByRole('button', { name: /Rate your partner|Rating Submitted|View Post/ }).map(b => b.textContent?.trim());
+
 describe('Messages: the review prompt is about this DM\'s own trades', () => {
     it('two finished trades with Bob, both rated: no Action Needed', async () => {
         // A repeatable offer bought twice: both rows on one post.
@@ -205,5 +215,56 @@ describe('Messages: the review prompt is about this DM\'s own trades', () => {
         await screen.findByRole('button', { name: /Rate your partner/ });
         expect(screen.queryByTestId('chat-rate-banner')).toBeNull();
         expect(screen.getAllByRole('button', { name: /Rate your partner/ })).toHaveLength(1);
+    });
+
+    // Review #1980 B1 (M1): Marty's screen word for word on lines written before #1604. Each old line is the trade on its
+    // post between the two people that finished nearest the line's own time, never "the first one on the post".
+    it('old lines, one offer bought twice from Bob, the older unrated: its line offers Rate for THAT trade, the newer says rated', async () => {
+        const t2 = tx('t2', 'post-1', true, '2026-09-20T00:00:00Z');   // newer, rated
+        const t1 = tx('t1', 'post-1', false, '2026-09-10T00:00:00Z');  // older, unrated
+        mockTxs = [t2, t1]; // the node's order: newest first
+        mockConversations = [dm];
+        mockMessagesByConv = { 'conv-1': [oldLine('m1', t1, '2026-09-10T00:00:00.120Z'), oldLine('m2', t2, '2026-09-20T00:00:00.080Z')] };
+        const onNavigate = vi.fn();
+        render(<MessagesPage identity={me} onNavigate={onNavigate} />);
+        await screen.findByText(/Action Needed/);
+        fireEvent.click(screen.getByText('Bob'));
+        await screen.findByRole('button', { name: /Rate your partner/ });
+        expect(lineButtons()).toEqual(['⭐ Rate your partner', '✓ Rating Submitted']);
+        expect(screen.queryByTestId('chat-rate-banner')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Rate your partner/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace-review', 't1');
+    });
+
+    it('old lines, the older rated and the newer not: one Rate, on the newer line, for the newer trade (M2)', async () => {
+        const t2 = tx('t2', 'post-1', false, '2026-09-20T00:00:00Z');
+        const t1 = tx('t1', 'post-1', true, '2026-09-10T00:00:00Z');
+        mockTxs = [t2, t1];
+        mockConversations = [dm];
+        mockMessagesByConv = { 'conv-1': [oldLine('m1', t1, '2026-09-10T00:00:00Z'), oldLine('m2', t2, '2026-09-20T00:00:00Z')] };
+        const onNavigate = vi.fn();
+        render(<MessagesPage identity={me} onNavigate={onNavigate} />);
+        await screen.findByText(/Action Needed/);
+        fireEvent.click(screen.getByText('Bob'));
+        await screen.findByRole('button', { name: /Rate your partner/ });
+        expect(lineButtons()).toEqual(['✓ Rating Submitted', '⭐ Rate your partner']);
+        fireEvent.click(screen.getByRole('button', { name: /Rate your partner/ }));
+        expect(onNavigate.mock.calls).toEqual([['marketplace-review', 't2']]);
+    });
+
+    // Review #1980 N2: a line whose trade this page doesn't hold (older than the node's page of trades) offers what it can
+    // do — open the post — and never a Rate it can't give.
+    it('a release line whose trade is not among the loaded trades says View Post, and opens the post', async () => {
+        mockTxs = [];
+        mockConversations = [dm];
+        const gone = tx('t-old', 'post-old', true, '2026-08-01T00:00:00Z');
+        mockMessagesByConv = { 'conv-1': [released('m1', gone, '2026-08-01T00:00:00Z')] };
+        const onNavigate = vi.fn();
+        render(<MessagesPage identity={me} onNavigate={onNavigate} />);
+        fireEvent.click(await screen.findByText('Bob'));
+        const view = await screen.findByRole('button', { name: /View Post/ });
+        expect(lineButtons()).toEqual(['🏷️ View Post']);
+        fireEvent.click(view);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-old');
     });
 });

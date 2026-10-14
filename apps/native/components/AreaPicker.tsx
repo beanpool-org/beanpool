@@ -17,6 +17,7 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import * as Location from 'expo-location';
 import { AREA_TOWN_SEARCH_WORDS, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
+import { useWords } from './LanguageProvider';
 import { AREA_READING_TIMEOUT_MS, AREA_WORDS, areaWhyLine, withTimeLimit, writeMemberArea, type MemberArea } from '../utils/member-area';
 import type { NodeFeatures } from '../utils/node-profile';
 import { palette, type AppColors } from '../constants/colors';
@@ -34,8 +35,10 @@ interface AreaPickerProps {
     skipLabel?: string;
 }
 
-export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel = AREA_WORDS.skip }: AreaPickerProps) {
+export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel: givenSkipLabel }: AreaPickerProps) {
     const { colors, dark } = useOnboardingColors();
+    const { t } = useWords();
+    const skipLabel = givenSkipLabel ?? t(AREA_WORDS.skip);
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
@@ -52,7 +55,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
     useEffect(() => drop, []);
 
     const save = async (point: { lat: number; lng: number }, placeName: string | null, kind: 'location' | 'town', gen: number) => {
-        if (!url || !identity) { setBusy(null); setError("Couldn't reach the community. Skip for now and set it later in Settings."); return; }
+        if (!url || !identity) { setBusy(null); setError(t("Couldn't reach the community. Skip for now and set it later in Settings.")); return; }
         setBusy(kind);
         setError(null);
         const stop = new AbortController();
@@ -73,7 +76,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
             if (status !== 'granted') status = (await Location.requestForegroundPermissionsAsync()).status;
             if (gen !== generation.current) return;
             if (status !== 'granted') {
-                setError('Location is off for BeanPool. Type a town instead, or skip for now.');
+                setError(t('Location is off for BeanPool. Type a town instead, or skip for now.'));
                 return;
             }
             setBusy('location');
@@ -84,7 +87,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
         } catch {
             if (gen !== generation.current) return;
             setBusy(null);
-            setError("Couldn't read your location. Type a town instead, or skip for now.");
+            setError(t("Couldn't read your location. Type a town instead, or skip for now."));
         }
     };
 
@@ -103,22 +106,22 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
 
     return (
         <View>
-            <Text style={styles.title} accessibilityRole="header">{AREA_WORDS.title}</Text>
+            <Text style={styles.title} accessibilityRole="header">{t(AREA_WORDS.title)}</Text>
             <Text style={styles.body}>{areaWhyLine(features)}</Text>
-            <Text style={styles.body}>{AREA_WORDS.privacy}</Text>
+            <Text style={styles.body}>{t(AREA_WORDS.privacy)}</Text>
 
             <Pressable
                 style={[styles.primaryBtn, busy !== null && styles.disabledBtn]}
                 disabled={busy !== null}
                 onPress={useMyLocation}
                 accessibilityRole="button"
-                accessibilityLabel={AREA_WORDS.useLocation}
+                accessibilityLabel={t(AREA_WORDS.useLocation)}
                 accessibilityState={{ disabled: busy !== null, busy: busy === 'location' }}
                 testID="area-use-location"
             >
                 {busy === 'location'
                     ? <ActivityIndicator color={colors.text.inverse} />
-                    : <Text style={styles.primaryBtnText}>📍 {AREA_WORDS.useLocation}</Text>}
+                    : <Text style={styles.primaryBtnText}>📍 <Text>{t(AREA_WORDS.useLocation)}</Text></Text>}
             </Pressable>
 
             <Pressable
@@ -126,16 +129,16 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
                 disabled={busy !== null}
                 onPress={() => { setError(null); setShowTown((v) => !v); }}
                 accessibilityRole="button"
-                accessibilityLabel={AREA_WORDS.typeTown}
+                accessibilityLabel={t(AREA_WORDS.typeTown)}
                 accessibilityState={{ disabled: busy !== null, expanded: showTown }}
                 testID="area-type-town"
             >
-                <Text style={styles.secondaryBtnText}>🔎 {AREA_WORDS.typeTown}</Text>
+                <Text style={styles.secondaryBtnText}>🔎 <Text>{t(AREA_WORDS.typeTown)}</Text></Text>
             </Pressable>
             {showTown && (
                 <View style={styles.townBox} testID="area-town-search">
                     <AddressSearch onPick={pickTown} accent={palette.blue600} words={AREA_TOWN_SEARCH_WORDS} />
-                    {busy === 'town' && <ActivityIndicator style={styles.townSpinner} color={palette.blue600} accessibilityLabel="Saving your area" />}
+                    {busy === 'town' && <ActivityIndicator style={styles.townSpinner} color={palette.blue600} accessibilityLabel={t('Saving your area')} />}
                 </View>
             )}
 
@@ -151,7 +154,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
                 <Text style={styles.skipText}>{skipLabel}</Text>
             </Pressable>
 
-            <Text style={styles.footnote}>{AREA_WORDS.later}</Text>
+            <Text style={styles.footnote}>{t(AREA_WORDS.later)}</Text>
         </View>
     );
 }

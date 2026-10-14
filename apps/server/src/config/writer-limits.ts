@@ -106,6 +106,19 @@ export const WRITER_LIMITS = {
 };
 
 /**
+ * How much one member may READ of something in a day, where reading it often is how a stranger would walk the community
+ * (the privacy review of 2026-10-14, scratch/global-node/DESIGN-global-member-privacy-fable.md §3). Counted in memory by
+ * nearest-people-budget.ts, as the gateway counts the day budget: a restart starts every count again. Only where
+ * `openMembership` is on (the global node); a local community has no read budget.
+ */
+export const READ_LIMITS = {
+    /** Reads of the people nearest a point (`GET /api/members?lat&lng&limit=`, 50 at most each) per member in any 24
+     *  hours. Heavy real user: opening People a few times a day, and moving the map a few times each. Without it, the 50
+     *  nearest from 400 points walked 20,000 strangers in about four minutes, under the minute bucket. */
+    nearestPeoplePerDay: 100,
+};
+
+/**
  * What one account may do with Beans in any 24 hours (W-money: design scratch/global-node/DESIGN-replica-flood-bounds-opus.md
  * §7 row 5; Marty's numbers, board card w-money-numbers, 2026-09-29, and 10x those for an enterprise or project, the
  * director's). So that one account, or a stolen phone, can't spray Beans or flood the ledger. Enforced by

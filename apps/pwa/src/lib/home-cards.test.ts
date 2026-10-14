@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -171,9 +171,36 @@ describe('the words (§3.1, §9)', () => {
         expect(communityFacts({ distanceKm: 4.62, memberCount: 1 })).toBe('4.6 km away · 1 member');
         expect(communityFacts({ distanceKm: 0.4, memberCount: null })).toBe('Less than 1 km away');
         expect(findBody({ ...find, communities: [], point: null, communityCount: 1 })).toBe('1 community is listed. Share your area, or type your town, to see the nearest.');
-        expect(findBody({ ...find, communities: [], point: null, communityCount: 0 })).toBe('No community near you yet — start one');
-        expect(findBody({ ...find, communities: [], communityCount: 0 })).toBe('No community near you yet — start one');
-        expect(findBody({ ...find, communities: [] })).toBe('No community is listed near you yet. Start one, or ask to be told when one starts here.');
+        // "None" only once the directory has loaded (privacy review M3): before the node's first fetch an empty answer
+        // (communities [], count 0, directoryFetchedAt null, as measured) is unknown, and no "none" is said.
+        const NOT_LOADED = "The list of communities isn't available right now. Try again soon.";
+        expect(findBody({ ...find, communities: [], communityCount: 0 })).toBe(NOT_LOADED);
+        expect(findBody({ ...find, communities: [], point: null, communityCount: 0 })).toBe(NOT_LOADED);
+        expect(findBody({ ...find, communities: [] })).toBe(NOT_LOADED);
+        const loaded = { ...find, directoryFetchedAt: '2026-10-14T08:00:00.000Z' };
+        // One "none" sentence, and nothing the web can't do ("ask to be told" is the phone's).
+        expect(findBody({ ...loaded, communities: [], communityCount: 0 })).toBe('No community near you yet.');
+        expect(findBody({ ...loaded, communities: [], point: null, communityCount: 0 })).toBe('No community near you yet.');
+        expect(findBody({ ...loaded, communities: [] })).toBe('No community near you yet.');
+        // A count the node didn't send is unknown, never 0.
+        expect(findBody({ ...loaded, communities: [], point: null, communityCount: null })).toBe('Share your area, or type your town, to see the nearest.');
+    });
+
+    it('far is not near: Lismore at 12,489 km is listed with its distance, under "No community near you yet" (rehearsal B2)', () => {
+        const loaded = { ...find, directoryFetchedAt: '2026-10-14T08:00:00.000Z' };
+        const lismore = { key: 'l', name: 'Lismore', url: 'https://lismore.example', memberCount: 12, distanceKm: 12_489 };
+        expect(findBody({ ...loaded, communities: [lismore] })).toBe('No community near you yet. The nearest listed is far from here:');
+        expect(findBody({ ...loaded, communities: [lismore, { ...lismore, key: 'm', distanceKm: 12_530 }] })).toBe('No community near you yet. The nearest listed are far from here:');
+        expect(communityFacts(lismore)).toBe('12,489 km away · 12 members');
+        // Start a community beside "none" and "far" only: not while near, not before the list has loaded.
+        expect(findOffersStart({ ...loaded, communities: [lismore] })).toBe(true);
+        expect(findOffersStart({ ...loaded, communities: [], communityCount: 0 })).toBe(true);
+        expect(findOffersStart(loaded)).toBe(false);
+        expect(findOffersStart({ ...find, communities: [], communityCount: 0 })).toBe(false);
+        expect(findOffersStart({ ...loaded, communities: [], point: null, communityCount: 38 })).toBe(false);
+        // 250 km is near; just past it is not.
+        expect(findBody({ ...loaded, communities: [{ ...lismore, distanceKm: 250 }] })).toBe('The community nearest you. Ask to join, and trade with your neighbours there.');
+        expect(findOffersStart({ ...loaded, communities: [{ ...lismore, distanceKm: 251 }] })).toBe(true);
     });
 
     it('the new-account limits from the node\'s own numbers: 3 days by sign-in, 7 by 12 words', () => {

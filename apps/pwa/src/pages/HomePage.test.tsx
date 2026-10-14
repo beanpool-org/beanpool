@@ -751,6 +751,58 @@ describe('interests changed while the node is out of reach (PR #1479 review)', (
     });
 });
 
+describe('Find your community on the web: far is not near, none only once loaded, and a real Start (B2, M3, S5)', () => {
+    const LOADED = '2026-10-14T08:00:00.000Z';
+    const lobby = (find: NonNullable<HomeAnswer['cards']['find']>): HomeAnswer => ({
+        generatedAt: NOW, profile: 'global', welcome: true, me: null, layout: null,
+        features: { beans: false, guestListingsOnly: true, exampleListings: true, invites: false },
+        cards: { find, community: { name: null, members: 2310, communities: 10 } },
+    });
+    const lismore = { key: 'l', name: 'Lismore', url: 'https://lismore.example.org', memberCount: 12, distanceKm: 12_489 };
+    const visit = () => render(<HomePage identity={null} visitor={{ joinCard: <section>Join</section>, beans: false }} onNavigate={vi.fn()} />);
+
+    it('a visitor in Nairobi: "No community near you yet", Lismore with its distance, and Start opens the Start a community screen', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(lobby({ point: 'request', communities: [lismore], communityCount: 10, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: LOADED })));
+        visit();
+        const card = await screen.findByTestId('home-card-find');
+        expect(within(card).getByTestId('home-find-body')).toHaveTextContent('No community near you yet. The nearest listed is far from here:');
+        expect(card).toHaveTextContent('Lismore · 12,489 km away · 12 members');
+        expect(card.textContent).not.toMatch(/nearest you|ask to be told/i);
+        const start = within(card).getByTestId('home-find-start');
+        expect(start).toHaveTextContent('Start a community');
+        expect(start.tagName).toBe('BUTTON');
+        // The fill role, never a raw shade.
+        expect(start.className).toContain('bg-bp-cta-fill');
+        fireEvent.click(start);
+        expect(await screen.findByTestId('start-community-screen')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(screen.queryByTestId('start-community-screen')).toBeNull();
+    });
+
+    it('before the node has fetched the directory: no "none", no Start, the truth', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(lobby({ point: 'request', communities: [], communityCount: 0, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null })));
+        visit();
+        const card = await screen.findByTestId('home-card-find');
+        expect(within(card).getByTestId('home-find-body')).toHaveTextContent("The list of communities isn't available right now. Try again soon.");
+        expect(card.textContent).not.toMatch(/No community/);
+        expect(within(card).queryByTestId('home-find-start')).toBeNull();
+    });
+
+    it('a member, the directory loaded and nothing listed: the one "none" sentence and Start; near: no Start', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global' }, { find: { point: 'area', communities: [], communityCount: 0, nearbyPosts: null, watches: [], knock: null, directoryFetchedAt: LOADED } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        let card = await screen.findByTestId('home-card-find');
+        expect(within(card).getByTestId('home-find-body').textContent).toBe('No community near you yet.');
+        expect(within(card).getByTestId('home-find-start')).toBeInTheDocument();
+        cleanup();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global' }, { find: { point: 'area', communities: [{ ...lismore, distanceKm: 12 }], communityCount: 10, nearbyPosts: null, watches: [], knock: null, directoryFetchedAt: LOADED } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        card = await screen.findByTestId('home-card-find');
+        expect(within(card).getByTestId('home-find-body')).toHaveTextContent('The community nearest you.');
+        expect(within(card).queryByTestId('home-find-start')).toBeNull();
+    });
+});
+
 describe('First steps on the global node, on the web (PR #1479 review)', () => {
     const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>) => answer({
         profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true },

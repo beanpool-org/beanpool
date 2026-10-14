@@ -19,6 +19,7 @@
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, findCommunityState, knownCommunityCount, type FindCommunityState } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
@@ -98,10 +99,12 @@ export interface HomeCommunity { key: string; name: string | null; url: string |
 export interface HomeFind {
     point: 'request' | 'area' | null;
     communities: HomeCommunity[];
-    communityCount: number;
+    /** Every community listed (the node always sends it; an odd value reads as unknown, never 0: knownCommunityCount). */
+    communityCount: number | null;
     nearbyPosts: { radiusKm: number; count: number; more: boolean } | null;
     watches: unknown[] | null;
     knock: null;
+    /** When the node last fetched the directory; null: never, so nothing may be said to be missing (@beanpool/core find-community.ts). */
     directoryFetchedAt: string | null;
 }
 
@@ -447,21 +450,35 @@ export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCoun
 /**
  * The find card's headline, from what the node said (the phone's findCommunityCardCopy, but for the web's card, which
  * lists the communities themselves right under it, each a link to its own page, so the sentence doesn't name one).
+ * Which one is @beanpool/core's findCommunityState: "none" only once the directory has loaded, and "near" only within
+ * 250 km. Beside `none` and `far` the card offers Start a community (findOffersStart); it never offers "ask to be told",
+ * which the web can't do.
  */
 export function findBody(f: HomeFind): string {
-    if (f.communities.length > 0) {
-        return f.communities.length === 1
-            ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
-            : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
+    const state = findCommunityState(f);
+    switch (state) {
+        case 'near':
+            return f.communities.length === 1
+                ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
+                : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
+        case 'far':
+            return `${FIND_COMMUNITY_WORDS.noneNear} ${FIND_COMMUNITY_WORDS.farLead(f.communities.length)}`;
+        case 'none':
+            return FIND_COMMUNITY_WORDS.noneNear;
+        case 'not_loaded':
+            return FIND_COMMUNITY_WORDS.notLoaded;
+        case 'no_point': {
+            const n = knownCommunityCount(f.communityCount);
+            const see = 'Share your area, or type your town, to see the nearest.';
+            return n === null ? see : `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. ${see}`;
+        }
     }
-    if (f.communityCount === 0) {
-        return 'No community near you yet — start one';
-    }
-    if (f.point === null) {
-        const n = f.communityCount;
-        return `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. Share your area, or type your town, to see the nearest.`;
-    }
-    return 'No community is listed near you yet. Start one, or ask to be told when one starts here.';
+}
+
+/** Whether the find card offers Start a community: when nothing listed is near (and the list has loaded). */
+export function findOffersStart(f: HomeFind): boolean {
+    const state: FindCommunityState = findCommunityState(f);
+    return state === 'none' || state === 'far';
 }
 
 /** "9 listings within 25 km" (the find card's count, §3.1). */

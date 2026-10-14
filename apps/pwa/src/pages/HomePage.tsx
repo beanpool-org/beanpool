@@ -35,7 +35,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
-    decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
+    decideLine, distanceText, findBody, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
@@ -69,7 +69,8 @@ import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { StartCommunityScreen } from '../components/StartCommunityScreen';
+import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
@@ -187,6 +188,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
     const [townOpen, setTownOpen] = useState(false);
     const [townName, setTownName] = useState<string | null>(null);
+    // Start a community, from the find card when nothing listed is near (the screen the 🏘️ sheet opens).
+    const [startOpen, setStartOpen] = useState(false);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
     /** The tour ended in this browser (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
@@ -1030,22 +1033,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
-                        {f.communityCount === 0 ? (
-                            <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">
-                                No community near you yet —{' '}
-                                <a
-                                    href="https://beanpool.org/#run-a-node"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    data-testid="home-find-start-link"
-                                    className="font-semibold underline text-nature-900 dark:text-white"
-                                >
-                                    start one
-                                </a>
-                            </p>
-                        ) : (
-                            <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">{findBody(f)}</p>
-                        )}
+                        <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? 'A community'}${facts ? ` · ${facts}` : ''}`;
@@ -1053,6 +1041,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 ? <HomeLine key={cm.key} href={cm.url} external label={`${text}. Opens its page.`}><span className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                 : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
                         })}
+                        {findOffersStart(f) && (
+                            <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start"
+                                className="mt-2 mb-1 w-full min-h-[44px] px-4 rounded-xl border-0 bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                {FIND_COMMUNITY_WORDS.start}
+                            </button>
+                        )}
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
@@ -1479,6 +1473,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     )}
                 </div>
             ))}
+            {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
             {editOpen && !isVisitor && (
                 <EditHomeDialog
                     rows={editRows}

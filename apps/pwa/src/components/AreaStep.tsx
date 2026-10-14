@@ -100,7 +100,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
                 onClick={useMyLocation}
                 disabled={busy !== null}
                 aria-busy={busy === 'location'}
-                style={{ ...fullButton, border: 'none', background: busy ? '#555' : 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', cursor: busy ? 'not-allowed' : 'pointer' }}
+                style={{ ...fullButton, border: 'none', background: busy ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)', color: 'var(--bp-info-on)', cursor: busy ? 'not-allowed' : 'pointer' }}
             >
                 {busy === 'location' ? 'Reading your location…' : `📍 ${AREA_STEP_WORDS.useLocation}`}
             </button>

@@ -73,6 +73,11 @@ const RED_300 = '#fca5a5';
 const RED_700 = '#b91c1c';
 const RED_800 = '#991b1b';
 const RED_950 = '#450a0a';
+const GREY_555 = '#555555';
+const GREY_333 = '#333333';
+const BLUE_300 = '#93c5fd';
+const BLUE_600 = '#2563eb';
+const BLUE_700 = '#1d4ed8';
 // The web's sage scale (tailwind `nature`). sage-650 sits halfway between nature-600 and 700.
 const NATURE_100 = '#eef1ee';
 const NATURE_200 = '#dce3dc';
@@ -110,6 +115,13 @@ export const BRAND_COLOURS = {
     action: { fill: same(ORANGE_700), hover: same(ORANGE_800), on: same(WHITE) },
     /** Destructive: Submit report, Remove, Delete; alert badges. */
     danger: { fill: same(RED_700), hover: same(RED_800), on: same(WHITE) },
+    /**
+     * The web's onboarding blue: Next, Join, Open, Install, Save my area. #2563eb in both themes (white words 5.17), as
+     * the web app has always drawn it in light (Marty/Damo 13 Oct: light unchanged unless contrast needs it).
+     */
+    info: { fill: same(BLUE_600), hover: same(BLUE_700), on: same(WHITE) },
+    /** Grey under white words: a web button while it sends (fill), the install banner's How? while its steps show (hover). */
+    neutral: { fill: same(GREY_555), hover: same(GREY_333), on: same(WHITE) },
     /** Gold: Vouch, Approve, rating. Charcoal words, never white. */
     gold: { fill: same(AMBER_500), hover: same(AMBER_400), on: same(CHARCOAL) },
     /**
@@ -139,6 +151,10 @@ export const BRAND_COLOURS = {
         accent: themed(SAGE_650, NATURE_300),
         /** Terracotta as words and icons: the manager's links, section labels and hovered titles. */
         terra: themed(TERRA_700, TERRA_400),
+        /**
+         * The onboarding blue as words, outlines, rings and progress (the web's --link pair). Web only: see WEB_ONLY_INKS.
+         */
+        info: themed(BLUE_600, BLUE_300),
     },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };
@@ -178,6 +194,19 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
         '#2b422c', // manager raised row and input (nature-800)
     ],
 };
+
+/** The web app's own grounds, a subset of INK_GROUNDS: page, card and sunken background in each theme. */
+export const WEB_INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
+    light: ['#ffffff', '#f6f4f0', '#fbfaf8'],
+    dark: ['#1d231d', '#2a322a', '#384038'],
+};
+
+/**
+ * Inks only the web app draws, judged on WEB_INK_GROUNDS (still 4.5). The phone's colors.ts never reads them
+ * (__tests__/brand-colours.test.ts checks). `info`: #2563eb is 4.71-5.17 on the web's grounds but 4.498 on the phone's
+ * sunken row (#f1efea), where it is never drawn; deepening it would change the web's light mode, which needs no change.
+ */
+export const WEB_ONLY_INKS: readonly string[] = ['info'];
 
 /** Roles allowed 3.0 instead of 4.5 because their words are always 24 px or larger (WCAG "large text"). None today. */
 export const LARGE_TEXT_ROLES: readonly string[] = [];
@@ -259,7 +288,8 @@ export function brandContrastPairs(): BrandContrastPair[] {
                 }
             } else if (role === 'ink') {
                 for (const [name, ink] of Object.entries(node as BrandColours['ink'])) {
-                    for (const ground of INK_GROUNDS[theme]) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
+                    const grounds = WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS[theme] : INK_GROUNDS[theme];
+                    for (const ground of grounds) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
                 }
             } else {
                 const fill = node as FillRole;

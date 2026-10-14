@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import {
     BRAND_COLOURS,
     INK_GROUNDS,
+    WEB_INK_GROUNDS,
+    WEB_ONLY_INKS,
     LARGE_TEXT_ROLES,
     brandColourLeaves,
     brandColours,
@@ -49,15 +51,15 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info']) {
             expect(roles, role).toContain(role);
         }
-        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme.
-        const inks = Object.keys(BRAND_COLOURS.ink).length;
+        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
+        const inkNames = Object.keys(BRAND_COLOURS.ink);
         const chips = Object.keys(BRAND_COLOURS.chip).length;
         const fills = Object.keys(BRAND_COLOURS).length - 2;
         for (const theme of ['light', 'dark'] as const) {
-            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + inks * INK_GROUNDS[theme].length);
+            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + inkNames.reduce((n, name) => n + (WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS : INK_GROUNDS)[theme].length, 0));
         }
     });
 
@@ -71,6 +73,20 @@ describe('brand colours are readable in both themes', () => {
             expect(values.length, `--bg-${name} declarations in index.css`).toBe(2);
             expect(INK_GROUNDS.light, `light --bg-${name}`).toContain(values[0]);
             expect(INK_GROUNDS.dark, `dark --bg-${name}`).toContain(values[1]);
+        }
+    });
+
+    it("judges a web-only ink on exactly the web app's page, card and sunken grounds, and the phone never reads one", () => {
+        const css = readFileSync(WEB_CSS, 'utf8');
+        const declared = (i: number) => ['primary', 'secondary', 'card']
+            .map((name) => [...css.matchAll(new RegExp(`--bg-${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))][i][1].toLowerCase()).sort();
+        expect([...WEB_INK_GROUNDS.light].sort()).toEqual(declared(0));
+        expect([...WEB_INK_GROUNDS.dark].sort()).toEqual(declared(1));
+        for (const theme of ['light', 'dark'] as const) for (const g of WEB_INK_GROUNDS[theme]) expect(INK_GROUNDS[theme]).toContain(g);
+        const phone = readFileSync(resolve(ROOT, 'apps/native/constants/colors.ts'), 'utf8');
+        for (const name of WEB_ONLY_INKS) {
+            expect(Object.keys(BRAND_COLOURS.ink), name).toContain(name);
+            expect(phone, `the phone reads ink.${name}`).not.toMatch(new RegExp(`\\bink\\.${name}\\b`));
         }
     });
 

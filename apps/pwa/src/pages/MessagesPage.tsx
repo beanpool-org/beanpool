@@ -1592,7 +1592,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {/* Sticky Marketplace Header */}
                 {activeConv.postId && (
                     <div style={{
-                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem', borderBottom: '1px solid var(--bp-chip-ok-tint)',
+                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
                     }} onClick={() => {}}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1800,7 +1800,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <button
                                             onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                             style={{
-                                                marginTop: '0.5rem', background: 'var(--bp-chip-ok-tint)', color: 'var(--bp-chip-ok-ink)', border: '1px solid var(--bp-chip-ok-ink)',
+                                                marginTop: '0.5rem', background: 'var(--bg-card)', color: 'var(--bp-ink-success)', border: '1px solid var(--bp-ink-success)',
                                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -1816,9 +1816,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             <button
                                                 onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
-                                                    marginTop: '0.5rem', background: hasRated ? 'var(--bp-chip-ok-tint)' : 'var(--bp-chip-warn-tint)',
-                                                    color: hasRated ? 'var(--bp-chip-ok-ink)' : 'var(--bp-chip-warn-ink)',
-                                                    border: `1px solid ${hasRated ? 'var(--bp-chip-ok-ink)' : 'var(--bp-chip-warn-ink)'}`,
+                                                    marginTop: '0.5rem', background: 'var(--bg-card)',
+                                                    color: hasRated ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)',
+                                                    border: `1px solid ${hasRated ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}

@@ -229,7 +229,7 @@ async function accountHeldElsewhere(p: PendingJoin | null): Promise<BeanPoolIden
 
 export const primaryButton: React.CSSProperties = {
     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-    background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', fontSize: '1rem', fontWeight: 700,
+    background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
 };
 
@@ -286,7 +286,7 @@ export function WorkBar({ done, of = DOOR_WORK_PARTS }: { done: number; of?: num
             {Array.from({ length: of }, (_, i) => (
                 <span key={i} style={{
                     flex: 1, minWidth: 0, height: '0.5rem', borderRadius: '0.25rem',
-                    background: i < done ? 'var(--bp-commit-fill)' : 'var(--border-primary, #334155)',
+                    background: i < done ? 'var(--bp-ink-info)' : 'var(--border-primary)',
                 }} />
             ))}
         </div>

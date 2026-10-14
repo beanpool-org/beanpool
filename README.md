@@ -162,6 +162,8 @@ Docker Desktop-style update detection built into each node:
 - **Notification-only** — admin runs `docker compose pull && docker compose up -d` manually
 
 ### 🔗 Independent Connectors + Federation
+Built, with its screens in the web app, and tried only between two of our own test communities, never between live ones. It is off unless both operators switch it on. Beans never cross the border: each pair of linked nodes keeps a bridge ledger of what one community owes the other, and each side sets its own limit (`apps/server/src/federation-bridge.ts`). A node connects only to the nodes its operator adds as connectors; there is no automatic discovery (`apps/server/src/p2p.ts`).
+
 Node-to-node trust relationships with 3 levels:
 - **`peer`** — cross-community federation: browse remote marketplace, trade across nodes
 - **`mirror`** — complete data replication (backup/disaster recovery)
@@ -174,12 +176,12 @@ Nodes connected as **peers** enable:
 - **Session cache** — 5-minute cache for instant toggling between communities
 - **Node badges** — 🌐 badges on remote posts to show their origin
 
-### 🔄 Mirror State Sync
-Automatic state synchronisation between `mirror`-trusted nodes:
-- **Push-on-Write Real-Time Replication** — State updates instantly trigger delta event broadcasts over secure WebSockets `/beanpool/sync/delta/2.0.0`
-- **Cryptographic Signatures** — payloaddeltas are signed using the node's private libp2p Ed25519 key and validated by the receiver before DB writes
+### 🔄 Mirror State Sync (live backup)
+One way only: a backup node (`NODE_ROLE=backup`) copies its primary; the primary imports state from nobody (`apps/server/src/services/backup-puller.ts`):
+- **Pull over HTTPS** — the backup pulls a signed snapshot from the primary (`GET /api/local/admin/sync-snapshot`) every 60 seconds by default (`BACKUP_PULL_INTERVAL_MS`)
+- **Cryptographic Signatures** — each snapshot is signed with the primary's node key (Ed25519, kept in `data/libp2p_key`; `signSyncBody` in `apps/server/src/engine/sync.ts`); the backup checks the signature, that the signer is its trusted `mirror` connector, and that the snapshot creates no Beans, before it writes anything
 - **Merkle hash comparison** — only syncs full payloads when state differs
-- **15-minute Safety Reconcile** — periodic safety net re-compares the full Merkle tree, catch-up-syncing past dropped delta frames
+- **15-minute Safety Reconcile** — every 15 minutes the backup re-compares the whole state, catching anything a quick pull missed
 - **24-hour Tombstone GC** — automatic garbage collection prunes deletion tombstones older than 30 days relative to downstream peer cursors
 - **Origin tracking** — posts carry their source node ID
 
@@ -283,7 +285,7 @@ docker compose up -d
 - **PWA:** `https://localhost:8443/` — community map, marketplace, messaging, ledger
 - **Landing Page:** `http://localhost:8080/` — community welcome hub (3 paths: join, transfer, recover)
 - **Fleet Manager:** `http://localhost:5173/` — multi-node control plane & operator dashboard (`pnpm manager`)
-- **P2P Mesh:** TCP `:4001` / WS `:4002`
+- **Node-to-node links (libp2p, federation peers only):** TCP `:4001` / WS `:4002`
 
 > 📖 For detailed setup instructions (including Let's Encrypt, no-domain options, and High-Availability mirrors), see [apps/server/README.md](apps/server/README.md).
 
@@ -385,8 +387,8 @@ All endpoints are served on port 8443 (HTTPS):
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| **4001** | TCP | libp2p P2P mesh |
-| **4002** | WS | libp2p WebSocket transport |
+| **4001** | TCP | libp2p link to connected nodes (federation peers); no automatic discovery |
+| **4002** | WS | libp2p WebSocket transport for the same links |
 | **8080** | HTTP | HTTP → HTTPS redirect (LAN: QR trust bootstrap) |
 | **8443** | HTTPS | Landing page (`/`), PWA (`/app`), Settings, REST API, WebSocket |
 
@@ -397,18 +399,18 @@ All endpoints are served on port 8443 (HTTPS):
 > 📖 Full specification: **[Protocol Rules](docs/protocol-rules.md)** — the complete rule book for the BeanPool Social Capital Ledger.
 
 - **Mutual Credit** — participants can go negative, backed by community trust. No money supply — the network sum is always zero.
-- **Dynamic Credit Floor** — borrowing limit grows with trade history: `floor = -80 - min(1920, trades×8 + partners×40 + age×2)`. New members start at −80 Beans, veterans cap at −2000 Beans.
+- **Earned Credit Line** — your floor opens after your first real trade and grows with completed marketplace trades (never gifts), from 0 down to −2000 Beans on most communities; trade with any one partner counts up to 500 Beans (`PER_COUNTERPARTY_VOLUME_CAP` in `packages/beanpool-core/src/protocol.ts`). The old count-based formula (trades×8 + partners×40 + age×2) is no longer used at runtime. See [The Rules §3](https://beanpool.org/rules.html).
 
 - **Reference Rate** — 40 Beans = 1 hour of community time. Hour equivalents shown throughout the app for value intuition.
-- **Identity Tiers** — Ghost 👻 → Resident 🏠 → Steward 🏛️ → Elder ⛰️. Ghosts can only trade via marketplace escrow; no direct transfers, no invitations.
-- **Anti-Sybil (KYH)** — Know Your History, not KYC. Three layers: Ghosts can't gift (friction), Ghosts can't invite (chain-break), diverse partner requirement (no wash-trading).
-- **Community Circulation (Progressive Brackets)** — positive balances decay progressively based on abundance (0.5% up to 2.5% per month), returning to the Commons Pool
-- **Gossip Mesh** — nodes connect via libp2p over TCP/WebSockets
-- **Federation Protocol** — peer nodes share protocol constants; cross-community trading via CORS + API
-- **Mirror Sync** — Merkle hash comparison + delta exchange every 15 minutes (backup nodes only)
+- **Trust Badges** — Newcomer 🌱 → Resident → Steward → Elder (`TIER_LEVELS` in `packages/beanpool-core/src/protocol.ts`). Badges are recognition and gate nothing: a deeper credit line comes from real trading.
+- **Anti-Sybil (KYH)** — Know Your History, not KYC: credit line comes only from completed marketplace trades, never gifts, with a cap per partner, and automated health flags catch self-dealing and circular trading.
+- **Community Circulation (Progressive Brackets)** — monthly, only on the part of a positive balance above 200 Beans: 1% on 200–500, 1.5% on 500–1000, 2% on 1000–2000, 2.5% above 2000 (`applyDecay` in `packages/beanpool-core/src/ledger.ts`). It goes to the Commons Pool; negative balances are never charged.
+- **No gossip mesh** — a node talks over libp2p (TCP/WebSockets) only to the nodes its operator adds as connectors
+- **Federation Protocol** — linked communities clear trades over a libp2p stream between the two nodes (`/beanpool/federation/1.0.0`); Beans never leave home, each side caps what the other may owe; off unless both operators switch it on, tried only between two test communities
+- **Mirror Sync** — a backup node pulls a signed snapshot from its primary over HTTPS every 60 seconds, with a full re-compare every 15 minutes (backup nodes only)
 - **Self-Managed Identity** — Ed25519 keypairs from 12-word BIP-39 mnemonic (deterministic, recoverable)
 - **Invite Tree** — hierarchical membership: node genesis → seed codes → admin identity → organic invites
-- **Handshake Protocol** — mutual trust verification + latency measurement via yamux streams
+- **Handshake Protocol** — mutual trust verification + latency measurement between connected nodes via yamux streams (`/beanpool/handshake/1.0.0`)
 - **Bean Reputation** — 5-tier community trust score with comments
 - **Abuse Reporting** — flagging system with admin review panel
 

@@ -315,7 +315,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     onClick={() => handleSelectCategory('all')}
                     className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                         selectedCategory === 'all'
-                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                            ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-sm'
                             : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-800'
                     }`}
                     aria-pressed={selectedCategory === 'all'}
@@ -333,7 +333,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             onClick={() => handleSelectCategory(c.id)}
                             className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                 active
-                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                                    ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-sm'
                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-800'
                             }`}
                             aria-pressed={active}
@@ -405,7 +405,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                         <button
                             type="button"
                             onClick={() => setView('channels')}
-                            className="px-5 py-2.5 rounded-xl font-bold text-sm bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-transform active:scale-95"
+                            className="px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
                         >
                             + Connect your channels
                         </button>

@@ -21,9 +21,10 @@ export function LobbyJoin({ onClick, disabled, className }: { onClick: () => voi
 }
 
 /**
- * The lobby's mobile header, as a member's: the bean, the page's name, and the "?" with Join where the pill sits. The
- * name is centred in the room between the bean and that group, not on the screen: centred on the screen at 320 px with
- * 130% text it ran under the "?" ("Mark?", review of #1857 B3). A name too long for the room ends in "…".
+ * The lobby's mobile header, as a member's: the bean, the page's name, and the "?" with Join where the pill sits (the "?"
+ * gold on a 38 px charcoal disc in its 44 px target, as the member's pill draws it). The name is centred in the room
+ * between the bean and that group, not on the screen: centred on the screen at 320 px with 130% text it ran under the
+ * "?" ("Mark?", review of #1857 B3). A name too long for the room ends in "…".
  */
 export function LobbyHeader({ tab, title, onHelp, onJoin, joinDisabled }: { tab: string; title: string; onHelp: () => void; onJoin: () => void; joinDisabled: boolean }) {
     return (
@@ -50,7 +51,7 @@ export function LobbyHeader({ tab, title, onHelp, onJoin, joinDisabled }: { tab:
                 {title}
             </h1>
             <div className="relative z-10 shrink-0 flex items-center gap-1" data-testid="lobby-header-right">
-                <LobbyHelpButton onClick={onHelp} className="min-w-[44px] min-h-[44px] rounded-full text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+                <LobbyHelpButton onClick={onHelp} className="min-w-[44px] min-h-[44px] p-[3px] bg-clip-content rounded-full bg-bp-gold-on text-bp-gold-fill hover:text-bp-gold-hover" />
                 <LobbyJoin onClick={onJoin} disabled={joinDisabled} className="min-h-[36px] px-4 rounded-full text-sm shadow-md" />
             </div>
         </header>

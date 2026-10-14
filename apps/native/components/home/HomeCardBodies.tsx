@@ -157,7 +157,7 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                         key={e.id}
                         colors={colors}
                         text={eventLine(e)}
-                        a11y={`${eventHomeWhen(e)}: ${sentence(`${e.title}${e.online ? ', online' : e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
+                        a11y={`${eventHomeWhen(e)}: ${sentence(`${e.title}${e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: e.id } })}
                         right={trailing ? <Text style={s.trailing}>{trailing}</Text> : undefined}
                         testID={`home-event-${e.id}`}

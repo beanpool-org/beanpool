@@ -42,7 +42,7 @@ import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    EVENT_LINK_HINT, EVENT_LINK_MAX, deviceTimeZone, eventTimeAdjustedText, eventZoneLine, filterZones, sameZone, zonePickerEntry,
+    EVENT_TIME_WORDS, EVENT_LINK_MAX, deviceTimeZone, eventTimeAdjustedText, eventZoneLine, filterZones, sameZone, zonePickerEntry,
     type EventCopy, type EventEditValues, type EventZone, type EventZoneSource,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
@@ -50,7 +50,9 @@ import { EVENT_ACCENT } from './EventCard';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
-import type { AddressResult } from '@beanpool/core';
+import { t, tn, zoneLabelFor, type AddressResult } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { onlineEventsOn } from '../utils/node-profile';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -130,6 +132,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [zoneList, setZoneList] = useState<EventZone[] | null>(null);
     // Each pin lookup takes a ticket; an answer for an older pin (or after a pick) is dropped.
     const zoneTicket = useRef(0);
+    // The pin's zone as the node last answered it, and the lookup still on its way (Create waits for it).
+    const pinZone = useRef<string | null>(null);
+    const pendingZone = useRef<Promise<EventZone | null> | null>(null);
+    // "Online" only where the node carries an online event (features.onlineEvents; absent = off: a node before event times
+    // refuses one, and the worldwide one would hold it in its host's set alone, #1946 review finding 1). An event that is
+    // already online keeps the choice, so its host can move it back to a place.
+    const nodeProfile = useNodeProfile();
+    const onlineOffered = onlineEventsOn(nodeProfile?.features) || online || !!prefill?.online || !!editOf?.values.online;
     const deviceZone = (): FormZone => (deviceTz
         ? { tz: deviceTz, offsetMinutes: -new Date().getTimezoneOffset(), source: 'device', moved: false }
         : NO_ZONE);
@@ -137,11 +147,19 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     // the node reads the clock at the pin itself.
     const lookupPinZone = (lat: number, lng: number) => {
         const ticket = ++zoneTicket.current;
-        fetchEventZone(lat, lng).then(z => {
+        const asked = fetchEventZone(lat, lng);
+        pendingZone.current = asked;
+        asked.then(z => {
             if (ticket !== zoneTicket.current) return;
-            setZone(prev => (z
-                ? { tz: z.tz, offsetMinutes: Number.isFinite(z.offsetMinutes) ? z.offsetMinutes : null, source: 'pin', moved: !!prev.tz && !sameZone(prev.tz, z.tz) }
-                : NO_ZONE));
+            const samePinZone = !!z && sameZone(pinZone.current, z.tz);
+            pinZone.current = z?.tz ?? null;
+            setZone(prev => {
+                // A zone the host picked stays while the pin stays in the same zone (a nudge), as the node keeps it.
+                if (prev.source === 'picked' && samePinZone) return prev;
+                return z
+                    ? { tz: z.tz, offsetMinutes: Number.isFinite(z.offsetMinutes) ? z.offsetMinutes : null, source: 'pin', moved: !!prev.tz && !sameZone(prev.tz, z.tz) }
+                    : NO_ZONE;
+            });
         });
     };
 
@@ -324,7 +342,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     };
 
     const chooseOnline = (next: boolean) => {
-        if (next === online) return;
+        if (next === online || (next && !onlineOffered)) return;
         Keyboard.dismiss();
         setOnline(next);
         zoneTicket.current++;
@@ -343,8 +361,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             .catch(e => setZonePicker(p => ({
                 ...p,
                 error: isRouteMissing(e)
-                    ? "This community's node does not offer time zones yet."
-                    : 'The list of time zones could not be loaded. Try again when you have signal.',
+                    ? t("This community's node does not offer time zones yet.")
+                    : t('The list of time zones could not be loaded. Try again when you have signal.'),
             })));
     };
 
@@ -438,10 +456,12 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             const out: { eventTimeAdjusted?: any } = {};
             const saved = await updateEvent(editOf.id, editCheck.patch, out);
             const dst = eventTimeAdjustedText(out.eventTimeAdjusted, zone.tz);
+            // The node's word on UPDATED: a new zone with the same offset (Lagos → Kinshasa) moves no instant, so it marks
+            // nothing and tells nobody (#1946 review, finding 6).
+            const told = editCheck.notifies && saved?.eventState !== 'scheduled';
+            const done = told ? t('It now shows UPDATED, and everyone going has been told.') : t('Your changes are saved.');
             reset();
-            Alert.alert('Event saved', [editCheck.notifies
-                ? 'It now shows UPDATED, and everyone going has been told.'
-                : 'Your changes are saved.', ...dst].join('\n\n'));
+            Alert.alert(t('Event saved'), [done, ...dst].join('\n\n'));
             onSaved?.(saved);
             onClose();
         } catch (err: any) {
@@ -457,11 +477,25 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             Alert.alert('Error', 'No member identity found. Please set up your profile.');
             return;
         }
+        let tz = zone.tz;
+        let tzOffsetMinutes = zoneOffset;
+        if (!online && pin && !tz && pendingZone.current) {
+            // The pin's zone is still on its way (or never came): wait for it rather than save a clock the host has not
+            // seen labelled. A zone that is not this phone's is shown first; Create again saves (#1946 review, finding 5).
+            setSubmitting(true);
+            const z = await pendingZone.current.catch(() => null);
+            setSubmitting(false);
+            if (z && !sameZone(z.tz, deviceTz)) {
+                Alert.alert(t('Check the times'), t('The times are {zone}, where the pin is. Check them, then tap Create again.', { zone: zoneLabelFor(z.tz, z.offsetMinutes) }));
+                return;
+            }
+            if (z) { tz = z.tz; tzOffsetMinutes = null; }
+        }
         const built = buildEventDraft({
             title, description, start, end, placeName,
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
-            online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
+            online, link, tz, tzOffsetMinutes,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -475,9 +509,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 photos: photo ? JSON.stringify([photo]) : null,
                 created_at: new Date().toISOString(),
             });
-            const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, zone.tz);
+            const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
+            const done = t('Your event is in the Market feed.');
             reset();
-            Alert.alert('Event created', ['Your event is in the Market feed.', ...dst].join('\n\n'));
+            Alert.alert(t('Event created'), [done, ...dst].join('\n\n'));
             onSuccess?.();
             onClose();
         } catch (err: any) {
@@ -597,7 +632,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <View style={styles.zoneLine} accessibilityLiveRegion="polite">
                                 <Text style={styles.zoneText}>
                                     {'prompt' in zoneLine ? zoneLine.prompt : (
-                                        <>Times are {zoneLine.moved ? 'now ' : ''}<Text style={styles.zoneStrong}>{zoneLine.zone}</Text>{zoneLine.why}</>
+                                        <>{zoneLine.before}<Text style={styles.zoneStrong}>{zoneLine.zone}</Text>{zoneLine.after}</>
                                     )}
                                 </Text>
                                 <Pressable
@@ -605,9 +640,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                     style={styles.zoneChange}
                                     accessibilityRole="button"
                                     accessibilityState={{ expanded: zonePicker.open }}
-                                    accessibilityLabel={'prompt' in zoneLine ? 'Pick a time zone' : `Change the time zone, now ${zoneLine.zone}`}
+                                    accessibilityLabel={'prompt' in zoneLine ? t('Pick a time zone') : t('Change the time zone, now {zone}', { zone: zoneLine.zone })}
                                 >
-                                    <Text style={styles.zoneChangeText} numberOfLines={1}>{zonePicker.open ? 'Close' : 'prompt' in zoneLine ? 'Pick' : 'Change'}</Text>
+                                    <Text style={styles.zoneChangeText} numberOfLines={1}>{zonePicker.open ? t('Close') : 'prompt' in zoneLine ? t('Pick') : t('Change')}</Text>
                                 </Pressable>
                             </View>
                         )}
@@ -615,13 +650,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <View style={styles.zonePanel}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Search a city or zone"
+                                    placeholder={t('Search a city or zone')}
                                     placeholderTextColor={colors.text.muted}
                                     value={zonePicker.query}
                                     onChangeText={q => setZonePicker(p => ({ ...p, query: q }))}
                                     autoCorrect={false}
                                     autoCapitalize="none"
-                                    accessibilityLabel="Search time zones"
+                                    accessibilityLabel={t('Search time zones')}
                                 />
                                 {zonePicker.error ? (
                                     <Text style={styles.helper}>{zonePicker.error}</Text>
@@ -647,27 +682,29 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                                 </Pressable>
                                             );
                                         })}
-                                        {found.length === 0 && <Text style={styles.helper}>No time zone matches that.</Text>}
-                                        {found.length > ZONE_ROWS && <Text style={styles.helper}>{found.length - ZONE_ROWS} more. Type a city to narrow the list.</Text>}
+                                        {found.length === 0 && <Text style={styles.helper}>{t('No time zone matches that.')}</Text>}
+                                        {found.length > ZONE_ROWS && <Text style={styles.helper}>{tn(found.length - ZONE_ROWS, '{n} more. Type a city to narrow the list.', '{n} more. Type a city to narrow the list.')}</Text>}
                                     </>);
                                 })()}
                             </View>
                         )}
 
-                        <View style={styles.field}>
-                            <Text style={styles.label}>WHERE</Text>
-                            <View style={styles.chipWrap}>
-                                {chip('place', 'At a place', !online, () => chooseOnline(false))}
-                                {chip('online', 'Online', online, () => chooseOnline(true))}
+                        {onlineOffered && (
+                            <View style={styles.field}>
+                                <Text style={styles.label}>{t('WHERE')}</Text>
+                                <View style={styles.chipWrap}>
+                                    {chip('place', t('At a place'), !online, () => chooseOnline(false))}
+                                    {chip('online', t('Online'), online, () => chooseOnline(true))}
+                                </View>
                             </View>
-                        </View>
+                        )}
 
                         {online ? (
                             <View style={styles.field}>
-                                <Text style={styles.label}>LINK TO JOIN</Text>
+                                <Text style={styles.label}>{t('LINK TO JOIN')}</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="https://"
+                                    placeholder={t('https://')}
                                     placeholderTextColor={colors.text.muted}
                                     value={link}
                                     onChangeText={setLink}
@@ -675,9 +712,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                     autoCorrect={false}
                                     keyboardType="url"
                                     maxLength={EVENT_LINK_MAX}
-                                    accessibilityLabel="Link to join"
+                                    accessibilityLabel={t('Link to join')}
                                 />
-                                <Text style={styles.helper}>{EVENT_LINK_HINT}</Text>
+                                <Text style={styles.helper}>{t(EVENT_TIME_WORDS.linkHint)}</Text>
                             </View>
                         ) : (<>
                         <View style={styles.field}>

@@ -29,8 +29,9 @@ import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { ReportReasonBox } from './ReportReasonBox';
+import { t } from '@beanpool/core';
 import {
-    formatEventWhenFor, eventWhen, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
@@ -85,6 +86,8 @@ export function EventDetail({ post }: EventDetailProps) {
     // The place's clock, then the reader's own when it differs; online, the reader's, and the host's clock once (§4).
     const when = formatEventWhenFor(p);
     const whenParts = eventWhen(p);
+    // Not for a zone that names no place: an online event saved without one is kept as UTC (#1946 review, finding 4).
+    const hostLine = eventHostLine(p);
     const online = isOnlineEvent(p);
     // Served like the private note: to the host and to Going only (DESIGN-event-times §9).
     const joinLink: string | undefined = view?.eventLink;
@@ -238,7 +241,7 @@ export function EventDetail({ post }: EventDetailProps) {
                 )}
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
                 {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
-                {!!whenParts?.hostLine && <Text style={styles.timeNote}>{whenParts.hostLine}</Text>}
+                {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
                 <Text style={styles.title}>{p.title}</Text>
                 {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
@@ -274,23 +277,24 @@ export function EventDetail({ post }: EventDetailProps) {
 
                 {online && (
                     <View style={styles.placeRow}>
-                        <Text style={styles.place} numberOfLines={2}>💻 Online</Text>
+                        <Text style={styles.place} numberOfLines={2}>{`💻 ${eventPlaceLine(p, null)}`}</Text>
                         {!!joinLink && !closed && (
                             <Pressable
-                                onPress={() => Linking.openURL(joinLink).catch(() => Alert.alert('Could not open the link', joinLink))}
+                                onPress={() => Linking.openURL(joinLink).catch(() => Alert.alert(t('Could not open the link'), joinLink))}
                                 style={styles.linkBtn}
                                 accessibilityRole="link"
-                                accessibilityLabel={`Join ${p.title || 'the event'} online`}
+                                accessibilityLabel={p.title ? t('Join {title} online', { title: p.title }) : t('Join the event online')}
                             >
-                                <Text style={styles.link} numberOfLines={1}>Join</Text>
+                                <Text style={styles.link} numberOfLines={1}>{t('Join')}</Text>
                             </Pressable>
                         )}
                     </View>
                 )}
                 {online && !!joinLink && !closed && <Text style={styles.joinLink} selectable numberOfLines={2}>{joinLink}</Text>}
-                {online && !joinLink && !isHost && !closed && (
-                    <Text style={styles.timeNote}>Tap Going to see the link to join.</Text>
-                )}
+                {online && !joinLink && !isHost && !closed && (() => {
+                    const words = eventLinkWaitWords(counts.mine, !!view);
+                    return words ? <Text style={styles.timeNote}>{words}</Text> : null;
+                })()}
 
                 {!online && !!placeName && (
                     <View style={styles.placeRow}>

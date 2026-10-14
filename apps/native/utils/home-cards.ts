@@ -25,7 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, readTourRecord, starterCards, tourEnded, type TourRecord,
+    type SkyToday, featureModeFor, readTourRecord, starterCards, t, tourEnded, type TourRecord,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { eventHomeWhen } from './events';
@@ -1103,7 +1103,7 @@ export function eventDay(iso: string): string {
  * ("Sat 17 Oct, 20:50 Lagos time"); an online event reads in the phone's own time and says Online (§4).
  */
 export function eventLine(e: HomeEventItem): string {
-    const place = e.online ? 'Online' : e.place;
+    const place = e.online ? t('Online') : e.place;
     return `${eventHomeWhen(e)} · ${e.title}${place ? `, ${place}` : ''}`;
 }
 

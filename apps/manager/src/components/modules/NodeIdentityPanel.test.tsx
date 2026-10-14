@@ -1198,6 +1198,37 @@ describe('NodeIdentityPanel Component', () => {
             expect('acceptKnocks' in nodeConfigBody()).toBe(false);
         });
     });
+
+    describe('Directory publishing held-back hint', () => {
+        it('shows hint when community name is default or empty, and hides it when named', async () => {
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => {
+                expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+            });
+
+            const nameInput = screen.getByLabelText(/community name/i);
+            await act(async () => {
+                fireEvent.change(nameInput, { target: { value: 'BeanPool Community' } });
+            });
+            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(
+                'Give your community a name to appear on the map'
+            );
+
+            await act(async () => {
+                fireEvent.change(nameInput, { target: { value: '   ' } });
+            });
+            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(
+                'Give your community a name to appear on the map'
+            );
+
+            await act(async () => {
+                fireEvent.change(nameInput, { target: { value: 'Nimbin Commons' } });
+            });
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+        });
+    });
 });
 
 

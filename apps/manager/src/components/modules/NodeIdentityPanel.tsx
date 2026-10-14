@@ -702,6 +702,12 @@ export function NodeIdentityPanel({
                         </div>
                     </div>
 
+                    {(!communityName.trim() || communityName.trim() === 'BeanPool Community') && (
+                        <p data-testid="directory-held-back-hint" className="text-xs text-amber-300 font-medium m-0">
+                            Give your community a name to appear on the map
+                        </p>
+                    )}
+
                     {/* Checkbox Toggles */}
                     <div className="space-y-3 pt-2">
                         <div>

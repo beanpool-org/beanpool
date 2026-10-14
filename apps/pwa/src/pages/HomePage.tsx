@@ -1030,7 +1030,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
-                        <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">{findBody(f)}</p>
+                        {f.communityCount === 0 ? (
+                            <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">
+                                No community near you yet —{' '}
+                                <a
+                                    href="https://beanpool.org/#run-a-node"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    data-testid="home-find-start-link"
+                                    className="font-semibold underline text-nature-900 dark:text-white"
+                                >
+                                    start one
+                                </a>
+                            </p>
+                        ) : (
+                            <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">{findBody(f)}</p>
+                        )}
                         {more.map(cm => {
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? 'A community'}${facts ? ` · ${facts}` : ''}`;

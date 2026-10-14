@@ -99,7 +99,8 @@ async function main() {
     virtualConsole.on('jsdomError', (e: Error) => errors.push(e.message));
     virtualConsole.on('error', (...a: unknown[]) => errors.push(a.map(String).join(' ')));
     const dom = new JSDOM(
-        `<!doctype html><html><body><nav id="navbar"></nav><div id="nodes-map"></div>
+        `<!doctype html><html><body><nav id="navbar"></nav><div class="map-wrapper"><div id="nodes-map"></div>
+         <div id="map-empty-state" class="map-empty-state" style="display: none;">No community near you yet — <a href="#run-a-node">start one</a></div></div>
          <span id="stat-nodes">—</span><span id="stat-members">—</span></body></html>`,
         { runScripts: 'dangerously', url: 'https://beanpool.org/', virtualConsole },
     );
@@ -131,12 +132,13 @@ async function main() {
         },
     };
     let reads = 0;
+    let currentRows: unknown[] = ROWS;
     w.supabase = {
         createClient: () => ({
             from: (table: string) => ({
                 select: async () => {
                     reads++;
-                    return table === 'directory_nodes' ? { data: ROWS, error: null } : { data: [], error: null };
+                    return table === 'directory_nodes' ? { data: currentRows, error: null } : { data: [], error: null };
                 },
             }),
             auth: { signUp: async () => ({ data: null, error: null }) },
@@ -222,6 +224,19 @@ async function main() {
     const statMembers = w.document.getElementById('stat-members').textContent;
     assert(statNodes === String(ROWS.length), `every community in the directory is counted (${statNodes})`);
     assert(statMembers === String(3 + 4 + 2 + 5 + 6 + 1 + 42),`members are summed from whole-number counts only (${statMembers})`);
+
+    const emptyState = w.document.getElementById('map-empty-state');
+    assert(emptyState?.style.display === 'none', 'map empty state is hidden when communities exist');
+
+    console.log('\n── 5. map empty state ──');
+    currentRows = [];
+    await w.pollNodes();
+    assert(emptyState?.style.display === 'block', 'map empty state is displayed when 0 communities are listed');
+    assert(emptyState?.textContent?.includes('No community near you yet — start one'), 'map empty state says "No community near you yet — start one"');
+    const startLink = emptyState?.querySelector('a[href="#run-a-node"]');
+    assert(startLink !== null && startLink?.textContent === 'start one', 'map empty state includes start one link to #run-a-node');
+    const emptyStatNodes = w.document.getElementById('stat-nodes').textContent;
+    assert(emptyStatNodes === '—', `stat-nodes is — rather than bare 0 (${emptyStatNodes})`);
 
     dom.window.close();
     console.log(`\n${passed}/${run} checks passed.`);

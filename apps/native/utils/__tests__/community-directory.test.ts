@@ -149,6 +149,13 @@ describe('the "Find your community" card, in each state', () => {
             .toBe('No community is listed near you yet. Start one, or ask to be told when one starts here.');
     });
 
+    it('empty directory: no community near you yet — start one', () => {
+        expect(findCommunityCardCopy(home({ communityCount: 0 }), true).body)
+            .toBe('No community near you yet — start one');
+        expect(findCommunityCardCopy(home({ point: null, communityCount: 0 }), false).body)
+            .toBe('No community near you yet — start one');
+    });
+
     it('says nothing of Beans in any state (there are none on the global node)', () => {
         const states = [
             findCommunityCardCopy(null, true),

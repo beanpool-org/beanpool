@@ -202,10 +202,13 @@ async function pollNodes() {
     document.getElementById('stat-nodes').textContent = totalNodes || '—';
     document.getElementById('stat-members').textContent = totalMembers || '—';
 
+    const emptyState = document.getElementById('map-empty-state');
     if (totalNodes === 0) {
         document.getElementById('nodes-map').style.opacity = '0.5';
+        if (emptyState) emptyState.style.display = 'block';
     } else {
         document.getElementById('nodes-map').style.opacity = '1';
+        if (emptyState) emptyState.style.display = 'none';
     }
 }
 

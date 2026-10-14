@@ -920,6 +920,31 @@ a.logo { min-height: 44px; }
     height: 540px;
     width: 100%;
 }
+.map-empty-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.5rem;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    z-index: 1000;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.map-empty-state a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+}
+.map-empty-state a:hover {
+    text-decoration: none;
+}
 
 /* Beautiful Dusk / Slate-Blue Map Filter */
 .leaflet-container .leaflet-tile-pane {

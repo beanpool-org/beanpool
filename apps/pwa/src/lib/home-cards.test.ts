@@ -171,6 +171,8 @@ describe('the words (§3.1, §9)', () => {
         expect(communityFacts({ distanceKm: 4.62, memberCount: 1 })).toBe('4.6 km away · 1 member');
         expect(communityFacts({ distanceKm: 0.4, memberCount: null })).toBe('Less than 1 km away');
         expect(findBody({ ...find, communities: [], point: null, communityCount: 1 })).toBe('1 community is listed. Share your area, or type your town, to see the nearest.');
+        expect(findBody({ ...find, communities: [], point: null, communityCount: 0 })).toBe('No community near you yet — start one');
+        expect(findBody({ ...find, communities: [], communityCount: 0 })).toBe('No community near you yet — start one');
         expect(findBody({ ...find, communities: [] })).toBe('No community is listed near you yet. Start one, or ask to be told when one starts here.');
     });
 

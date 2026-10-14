@@ -63,7 +63,7 @@ const { initStateEngine, setNodeRole, getNodeConfig, updateNodeConfig, getDirect
 const { getVersion } = await import('./version.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
 const { startP2P } = await import('./p2p.js');
-const { initDirectoryPublisher, pushDirectoryNow } = await import('./services/directory-publisher.js');
+const { initDirectoryPublisher, pushDirectoryNow, HELD_BACK_NAME_MESSAGE, HELD_BACK_TEST_NODE_MESSAGE } = await import('./services/directory-publisher.js');
 const { db } = await import('./db/db.js');
 
 let run = 0;
@@ -102,10 +102,39 @@ async function main() {
     assert(uninitRes.success === false, 'pushDirectoryNow fails when P2P node is not ready');
     assert(uninitRes.error === 'P2P node not ready', 'pushDirectoryNow reports P2P node not ready');
 
-    // ── 3. Successful Directory Push with Mock Server ───────────────────────
     // Initialize P2P node (ephemeral ports)
     const p2pNode = await startP2P(0, 0);
 
+    // ── 2b. Held Back: Default name, empty name, and test node guard checks ──
+    const requestsBefore = receivedRequests.length;
+    updateLocalConfig({ communityName: 'BeanPool Community' });
+    const defaultRes = await pushDirectoryNow();
+    assert(defaultRes.success === false && defaultRes.error === HELD_BACK_NAME_MESSAGE,
+        'pushDirectoryNow fails with HELD_BACK_NAME_MESSAGE when community name is default ("BeanPool Community")');
+    assert(initDirectoryPublisher() === false,
+        'initDirectoryPublisher returns false when community name is default');
+
+    updateLocalConfig({ communityName: '   ' });
+    const emptyRes = await pushDirectoryNow();
+    assert(emptyRes.success === false && emptyRes.error === HELD_BACK_NAME_MESSAGE,
+        'pushDirectoryNow fails with HELD_BACK_NAME_MESSAGE when community name is empty');
+    assert(initDirectoryPublisher() === false,
+        'initDirectoryPublisher returns false when community name is empty');
+
+    // Test/review node guard check
+    updateLocalConfig({ communityName: 'Valid Community' });
+    process.env.CF_RECORD_NAME = 'test.beanpool.org';
+    const testNodeRes = await pushDirectoryNow();
+    assert(testNodeRes.success === false && testNodeRes.error === HELD_BACK_TEST_NODE_MESSAGE,
+        'pushDirectoryNow fails with HELD_BACK_TEST_NODE_MESSAGE when node is test node');
+    assert(initDirectoryPublisher() === false,
+        'initDirectoryPublisher returns false when node is test node');
+    delete process.env.CF_RECORD_NAME;
+
+    assert(receivedRequests.length === requestsBefore,
+        'no request was sent to directory registry when node was held back');
+
+    // ── 3. Successful Directory Push with Mock Server ───────────────────────
     // Set community name in local config
     updateLocalConfig({ communityName: 'Mullum Creek' });
 

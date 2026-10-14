@@ -11,6 +11,59 @@ function directoryRegistryUrl(): string {
 
 /** Why a node whose profile switch `publishToDirectory` is off sends nothing (the global profile's default). */
 export const NOT_LISTED_MESSAGE = 'This node is not listed in the directory: its publishToDirectory switch is off (the global profile\'s default: the lobby is not a place on the map).';
+export const HELD_BACK_NAME_MESSAGE = 'Give your community a name to appear on the map';
+export const HELD_BACK_TEST_NODE_MESSAGE = 'Test and review nodes do not publish to the directory';
+
+export function isDefaultOrEmptyCommunityName(name: string | null | undefined): boolean {
+    if (!name) return true;
+    const clean = name.trim();
+    return !clean || clean === 'BeanPool Community';
+}
+
+export function isReviewOrTestNode(): boolean {
+    const envFlag = (process.env.BEANPOOL_TEST_NODE || process.env.TEST_NODE || '').trim().toLowerCase();
+    if (envFlag === '1' || envFlag === 'true' || envFlag === 'yes' || envFlag === 'on') return true;
+
+    const cfRecord = (process.env.CF_RECORD_NAME || '').trim().toLowerCase();
+    if (cfRecord === 'test' || cfRecord === 'review' || cfRecord === 'test.beanpool.org' || cfRecord === 'review.beanpool.org' || cfRecord.startsWith('test.') || cfRecord.startsWith('review.')) {
+        return true;
+    }
+
+    const publicAddrName = (process.env.PUBLIC_ADDRESS_NAME || '').trim().toLowerCase();
+    if (publicAddrName === 'test' || publicAddrName === 'review') return true;
+
+    const nodeName = (process.env.BEANPOOL_NODE_NAME || '').trim().toLowerCase();
+    if (nodeName === 'test' || nodeName === 'review') return true;
+
+    try {
+        const config = getNodeConfig();
+        if ((config as any)?.isTestNode || (config as any)?.testNode || (config as any)?.isReviewNode || (config as any)?.reviewNode) {
+            return true;
+        }
+        const pa = config?.publicAddress;
+        if (pa) {
+            const paName = (pa.name || '').trim().toLowerCase();
+            if (paName === 'test' || paName === 'review') return true;
+            const paHost = (pa.hostname || '').trim().toLowerCase();
+            if (paHost === 'test.beanpool.org' || paHost === 'review.beanpool.org' || paHost.startsWith('test.') || paHost.startsWith('review.')) {
+                return true;
+            }
+        }
+    } catch {}
+
+    try {
+        const local = getLocalConfig();
+        if ((local as any)?.isTestNode || (local as any)?.testNode || (local as any)?.isReviewNode || (local as any)?.reviewNode) {
+            return true;
+        }
+        const callsign = (local.callsign || '').trim().toLowerCase();
+        if (callsign === 'test' || callsign === 'review' || callsign === 'test node' || callsign === 'review node') {
+            return true;
+        }
+    } catch {}
+
+    return false;
+}
 
 let pushTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -19,6 +72,8 @@ let pushTimer: ReturnType<typeof setInterval> | null = null;
 // never advertise itself in the public directory regardless of caller. Nor must a node
 // whose profile switch `publishToDirectory` is off (config/node-profile.ts): the global
 // node is the lobby, not a community with a place, so it is never a pin on the map.
+// A node also does NOT publish while its name is still default ("BeanPool Community", or
+// empty), or while it is marked as a review/test node.
 // Returns whether the timer is set.
 export function initDirectoryPublisher(): boolean {
     if (getNodeRole() !== 'primary') {
@@ -31,6 +86,15 @@ export function initDirectoryPublisher(): boolean {
     }
     if (!getProfileSwitches().publishToDirectory) {
         console.log(`[Directory] 📴 ${NOT_LISTED_MESSAGE}`);
+        return false;
+    }
+    if (isReviewOrTestNode()) {
+        console.log('[Directory] 🧪 Skipping — test and review nodes do not publish to the directory.');
+        return false;
+    }
+    const localConfig = getLocalConfig();
+    if (isDefaultOrEmptyCommunityName(localConfig.communityName)) {
+        console.log(`[Directory] ⏸️ Skipping — community name is default or empty (${HELD_BACK_NAME_MESSAGE}).`);
         return false;
     }
     const config = getNodeConfig();
@@ -68,8 +132,6 @@ export async function pushDirectoryNow() {
         return { success: false, error: NOT_LISTED_MESSAGE };
     }
     try {
-        const directoryInfo = getDirectoryInfo();
-        const localConfig = getLocalConfig();
         const p2pNode = getP2PNode();
         const privateKey = getPrivateKey();
 
@@ -77,6 +139,16 @@ export async function pushDirectoryNow() {
             console.warn(`[Directory] ⚠️ P2P node not fully initialized. Skipping push.`);
             return { success: false, error: 'P2P node not ready' };
         }
+
+        if (isReviewOrTestNode()) {
+            return { success: false, error: HELD_BACK_TEST_NODE_MESSAGE };
+        }
+        const localConfig = getLocalConfig();
+        if (isDefaultOrEmptyCommunityName(localConfig.communityName)) {
+            return { success: false, error: HELD_BACK_NAME_MESSAGE };
+        }
+
+        const directoryInfo = getDirectoryInfo();
         
         // Provide a stable node ID based on the node's true cryptographic PeerId
         const nodeId = p2pNode.peerId.toString();

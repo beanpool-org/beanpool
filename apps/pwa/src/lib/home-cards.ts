@@ -454,6 +454,9 @@ export function findBody(f: HomeFind): string {
             ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
             : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
     }
+    if (f.communityCount === 0) {
+        return 'No community near you yet — start one';
+    }
     if (f.point === null) {
         const n = f.communityCount;
         return `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. Share your area, or type your town, to see the nearest.`;

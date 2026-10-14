@@ -206,6 +206,15 @@ export function noRestorableAccount(callsign: string): string {
     return t("No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.", { name: callsign });
 }
 
+/**
+ * Why a restore stopped before it began: two accounts here have this name in different cases (a pair from before names
+ * were folded, kept, never renamed), each with a sign-in copy, and this screen has no list to pick one from. The
+ * community's own answer (409) is English and says "callsign" and "node", so it is never shown.
+ */
+export function twoAccountsOneName(): string {
+    return t("Two accounts here have this name. Use your 12 words, or ask your community's admin.");
+}
+
 /** Why a restore stopped with the copy open: it made another key than the account the community lists. Nothing was saved. */
 export function notThatAccount(callsign: string): string {
     return t("The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.", { name: callsign });
@@ -290,6 +299,7 @@ export async function recoverAccountWithSso(options: {
     }, ephIdentity);
 
     if (!openRes.ok) {
+        if (openRes.status === 409) throw new Error(twoAccountsOneName());
         const err = await openRes.json().catch(() => ({}));
         throw new Error(err.error || `Could not open recovery session (${openRes.status})`);
     }

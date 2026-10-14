@@ -563,8 +563,10 @@ async function main(): Promise<void> {
         const saveSearch = (who: Id, settings: Record<string, unknown>) => postJson('/api/members/preferences', who, { publicKey: who.pk, preferences: {
             'home.layout': { v: 2, cards: [{ id: 'search-eggs', type: 'search', settings }], dismissed: {}, updatedAt: new Date(Date.now() - 5_000).toISOString() },
         } });
+        // The Market's own search: a point and a radius, and no `sort`, so the node orders it as its Market does (newest
+        // first; nearest first on the global profile, distanceSortDefault).
         const market = async (who: Id, q: string, point?: { lat: number; lng: number }, km?: number) => {
-            const where = point ? `&lat=${point.lat}&lng=${point.lng}&radiusKm=${km}&sort=distance` : '';
+            const where = point ? `&lat=${point.lat}&lng=${point.lng}&radiusKm=${km}` : '';
             const res = await get(`/api/marketplace/posts?q=${encodeURIComponent(searchTermsFor(q).join(' '))}${where}&limit=50`, who);
             return { status: res.status, rows: (Array.isArray(res.body) ? res.body : []).filter((p: { type: string; status: string }) => (p.type === 'offer' || p.type === 'need') && p.status === 'active') };
         };
@@ -576,9 +578,12 @@ async function main(): Promise<void> {
         assert(savedFay.status === 200 && fayMarket.status === 200 && fayMarket.rows.length === 6,
             `setup: the Market's search for eggs within 5 km of Fay finds six (${fayMarket.status}, ${fayMarket.rows.length})`);
         assert(JSON.stringify(ids(fayCard?.items ?? [])) === JSON.stringify(ids(fayMarket.rows).slice(0, 4)) && fayCard?.more === true,
-            `the card's four rows are the Market's first four for q=eggs within 5 km, nearest first, and more (${JSON.stringify(fayCard?.items?.map((i: { title: string }) => i.title))}, more ${fayCard?.more})`);
-        assert(fayCard?.items?.[0]?.id === coop.id,
-            `synonyms: "eggs" finds the chicken coop wanted, as the Market's search does (${fayCard?.items?.[0]?.title})`);
+            `the card's four rows are the Market's first four for q=eggs within 5 km, in the Market's order, and more (${JSON.stringify(fayCard?.items?.map((i: { title: string }) => i.title))}, more ${fayCard?.more})`);
+        // The order is the Market's on a local community: the newest matches first (Marty's "shows its newest matches").
+        // The coop is the nearest and the oldest. (Nearest first where the Market sorts so, the global run's case.)
+        assert(!switches.distanceSortDefault && JSON.stringify(ids(fayCard?.items ?? [])) === JSON.stringify([...near].reverse().slice(0, 4).map(p => p.id))
+            && !fayCard.items.some((i: { id: string }) => i.id === coop.id),
+            `newest first within 5 km: eggs 5, 4, 3, 2, never the nearest-but-oldest coop ahead of them (${JSON.stringify(fayCard?.items?.map((i: { title: string }) => i.title))})`);
         assert(fayCard?.q === 'eggs' && fayCard?.km === 5 && !fayCard.items.some((i: { id: string }) => i.id === far.id)
             && fayCard.items.every((i: { distanceKm: number | null }) => typeof i.distanceKm === 'number' && i.distanceKm <= 5),
             `the answer keeps the words as typed and the 5 km bound: nothing from out of town (${fayCard?.q}, ${fayCard?.km})`);
@@ -595,7 +600,7 @@ async function main(): Promise<void> {
         await saveSearch(fay, { q: 'eggs', kind: 'need', km: 5 });
         const needs = (await get('/api/home?cards=needs,search-eggs', fay)).body?.cards?.['search-eggs'];
         assert(JSON.stringify(ids(needs?.items ?? [])) === JSON.stringify([coop.id]) && needs?.more === false,
-            `kind 'need' is the one need (${JSON.stringify(needs?.items?.map((i: { title: string }) => i.title))})`);
+            `kind 'need' is the one need, and synonyms: "eggs" finds the chicken coop wanted, as the Market's search does (${JSON.stringify(needs?.items?.map((i: { title: string }) => i.title))})`);
 
         // 41 characters: the node stores a layout by shape and bounds only (F1), and the card reads the words cut to the
         // sheet's 40, so nothing longer is ever searched or answered.
@@ -646,6 +651,28 @@ async function main(): Promise<void> {
         const mixed = await answer('jardín 蛋');
         assert(JSON.stringify(ids(mixed?.items ?? []).sort()) === JSON.stringify([garden.id, duck.id].sort()),
             `"jardín 蛋" finds both words' listings (${titles(mixed)})`);
+
+        // What a member may see in the Market and nothing more: a listing posted to a group Fay is not in, or to one other
+        // member, is never in her saved search, though it is the newest and nearest match; the group's own member's saved
+        // search finds the group's listing, as their Market does.
+        const hal = member('HomeHarrierHal'); // his own layout, so no other section's Home changes under it
+        const hens = se.createGroup({ name: 'HomeHarrier hens', createdBy: hal.pk });
+        const groupOnly = se.createPost('offer', 'food', 'HomeHarrier eggs for the hens group', 'for the group', 0, 'fixed', hal.pk, FAR.lat + 0.0005, FAR.lng,
+            [TINY_PNG], false, undefined, false, { audienceScope: 'group', targetGroupId: hens.id } as any)!;
+        const toCarol = se.createPost('offer', 'food', 'HomeHarrier eggs for Carol only', 'for one', 0, 'fixed', hal.pk, FAR.lat + 0.0005, FAR.lng,
+            [TINY_PNG], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pk } as any)!;
+        const open = at(hal, 'offer', 'HomeHarrier eggs for anyone', 0.0005);
+        assert(!!groupOnly && !!toCarol && !!open, 'setup: a group-only, a one-member and an open listing, each "HomeHarrier", newest, within 1 km of Fay');
+        await saveSearch(fay, { q: 'HomeHarrier', kind: 'any', km: 5 });
+        const fayHarrier = (await get('/api/home?cards=needs,search-eggs', fay)).body?.cards?.['search-eggs'];
+        const fayHarrierMarket = await market(fay, 'HomeHarrier', FAR, 5);
+        assert(JSON.stringify(ids(fayHarrier?.items ?? [])) === JSON.stringify([open.id]) && fayHarrier?.more === false
+            && JSON.stringify(ids(fayHarrierMarket.rows)) === JSON.stringify([open.id]),
+            `members-only as the Market: Fay's saved search shows the open listing alone, never the group's or Carol's (${titles(fayHarrier)}, Market ${titles({ items: fayHarrierMarket.rows })})`);
+        await saveSearch(hal, { q: 'HomeHarrier', kind: 'any' });
+        const halHarrier = (await get('/api/home?cards=needs,search-eggs', hal)).body?.cards?.['search-eggs'];
+        assert(ids(halHarrier?.items ?? []).includes(groupOnly.id) && ids(halHarrier?.items ?? []).includes(open.id),
+            `the group's own member finds the group's listing in their saved search, as in their Market (${titles(halHarrier)})`);
     }
 
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -841,6 +868,24 @@ async function main(): Promise<void> {
             && visitorGlobal.status === 200 && !('place' in (visitorGlobal.body?.cards?.community ?? {})),
             `no community.place on the global node, for a member or a visitor, though its config has a location (${JSON.stringify(placedGlobal.body?.cards?.community)})`);
         updateLocalConfig({ location: null });
+        // A saved search on the global node: the Market's own order there, nearest first (distanceSortDefault), within km.
+        {
+            const OWL = { lat: -30.5, lng: 151.0 };
+            const gwen = member('HomeOwlGwen', { area: OWL });
+            const owl = (title: string, dLat: number) => se.createPost('offer', 'food', title, `${title} description`, 0, 'fixed', bob.pk, OWL.lat + dLat, OWL.lng,
+                [TINY_PNG], false, undefined, false, {} as any)!;
+            const nearOld = owl('HomeOwl eggs near', 0.001);
+            const farNew = owl('HomeOwl eggs further', 0.02);
+            const saved = await postJson('/api/members/preferences', gwen, { publicKey: gwen.pk, preferences: {
+                'home.layout': { v: 2, cards: [{ id: 'search-owls', type: 'search', settings: { q: 'HomeOwl', kind: 'any', km: 5 } }], dismissed: {}, updatedAt: new Date(Date.now() - 5_000).toISOString() },
+            } });
+            const card = (await get('/api/home?cards=needs,search-owls', gwen)).body?.cards?.['search-owls'];
+            const mkt = await get(`/api/marketplace/posts?q=HomeOwl&lat=${OWL.lat}&lng=${OWL.lng}&radiusKm=5&limit=50`, gwen);
+            const mktIds = (Array.isArray(mkt.body) ? mkt.body : []).map((p: { id: string }) => p.id);
+            assert(saved.status === 200 && JSON.stringify(card?.items?.map((i: { id: string }) => i.id)) === JSON.stringify([nearOld.id, farNew.id])
+                && JSON.stringify(mktIds) === JSON.stringify([nearOld.id, farNew.id]),
+                `global: a saved search is nearest first, as the Market's search is here (${JSON.stringify(card?.items?.map((i: { title: string }) => i.title))}, Market ${mktIds.length})`);
+        }
         const words = await get('/api/home?cards=safety', alice);
         assert(words.body?.cards?.safety === undefined, 'no safety card for a member with no 12-words row');
         db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(alice.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());

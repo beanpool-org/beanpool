@@ -14,6 +14,9 @@ const line = (over: Partial<ChatMessage> = {}): ChatMessage => {
 };
 const removed = () => line({ type: 'removed', text: '', metadata: { removed: true, removedBy: 'ana' } });
 const deleted = () => line({ type: 'removed', text: '', metadata: { removed: true, removedBy: 'ben' } });
+/** A line the node removed when the chat was locked (server wipeReadableGroupLines). */
+const lockedAway = () => line({ type: 'removed', text: '', metadata: { removed: true, removedBy: 'SYSTEM', lockedAway: true } });
+const notice = () => line({ type: 'system', senderId: 'SYSTEM', text: 'This chat is now end-to-end encrypted. Earlier messages, which this node could read, were removed.' });
 /** The list as drawn, oldest first, without the day pill. */
 const drawn = (msgs: ChatMessage[], kind: 'group' | 'event' = 'group') =>
     buildChatListItems(msgs, NOW, kind).reverse().filter((i) => (i as any).type !== 'day-separator');
@@ -40,6 +43,23 @@ describe('removed lines in a row on the phone', () => {
         expect(words(msgs)).toEqual([
             '2 messages removed by a convenor', 'Bring gloves', '3 messages removed by a convenor', 'See you',
             REMOVED_BY_CONVENOR_TEXT, '2 messages were deleted', REMOVED_BY_CONVENOR_TEXT,
+        ]);
+    });
+
+    it('lines removed when the chat was locked say so, never "Removed by a convenor"; a run of them is one line', () => {
+        expect(words([...Array.from({ length: 11 }, lockedAway), notice()])).toEqual([
+            '11 earlier messages removed when this chat was locked',
+            'This chat is now end-to-end encrypted. Earlier messages, which this node could read, were removed.',
+        ]);
+        expect(words([lockedAway(), notice(), removed(), removed()])).toEqual([
+            'An earlier message was removed when this chat was locked',
+            'This chat is now end-to-end encrypted. Earlier messages, which this node could read, were removed.',
+            '2 messages removed by a convenor',
+        ]);
+        // They never join a convenor's run, and a member's own lockedAway does not make a convenor's removal one of them.
+        const forged = line({ type: 'removed', text: '', metadata: { removed: true, removedBy: 'ana', lockedAway: true } });
+        expect(words([lockedAway(), lockedAway(), removed(), forged])).toEqual([
+            '2 earlier messages removed when this chat was locked', '2 messages removed by a convenor',
         ]);
     });
 

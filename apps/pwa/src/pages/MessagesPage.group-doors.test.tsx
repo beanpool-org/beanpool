@@ -613,9 +613,13 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
 
 describe('removed lines in a row are one line (Marty, 15 Oct: "Yes, one line")', () => {
     /** A line removed by a convenor (Ana), or deleted by its author (Ben): the node's tombstone row. */
-    const tombstone = (by: 'convenor' | 'author') => {
+    const tombstone = (by: 'convenor' | 'author' | 'locked') => {
         const id = crypto.randomUUID();
-        node.lines.push({ id, author: ben.publicKey, ciphertext: 'eA==', nonce: 'plaintext-v1', metadata: { removed: true, removedBy: by === 'convenor' ? ana.publicKey : ben.publicKey } });
+        const metadata = by === 'locked'
+            // What the node's day-zero wipe leaves (server group-thread.ts wipeReadableGroupLines).
+            ? { removed: true, removedBy: 'SYSTEM', lockedAway: true }
+            : { removed: true, removedBy: by === 'convenor' ? ana.publicKey : ben.publicKey };
+        node.lines.push({ id, author: ben.publicKey, ciphertext: 'eA==', nonce: 'plaintext-v1', metadata });
         return id;
     };
     const sealedLine = async (text: string) => {
@@ -652,6 +656,20 @@ describe('removed lines in a row are one line (Marty, 15 Oct: "Yes, one line")',
             '2 messages were deleted', 'Removed by a convenor',
         ]), { timeout: 3000 });
         expect(screen.getByText('Bring gloves')).toBeTruthy();
+    });
+
+    it('lines removed when the chat was locked say so, never "Removed by a convenor": eleven are one line', async () => {
+        for (let i = 0; i < 11; i++) tombstone('locked');
+        await sealedLine('Bring gloves');
+        tombstone('locked');
+        await sealedLine('See you there');
+        tombstone('convenor'); tombstone('locked');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual([
+            '11 earlier messages removed when this chat was locked', 'An earlier message was removed when this chat was locked',
+            'Removed by a convenor', 'An earlier message was removed when this chat was locked',
+        ]), { timeout: 3000 });
+        expect(screen.queryByText('11 messages removed by a convenor')).toBeNull();
     });
 
     it('a search draws each hit as itself: hits in a row need not be in a row in the chat', async () => {

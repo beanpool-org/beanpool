@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { isCollapsedRun, removedLineRuns, removedRunText, type RemovedLineKind } from '../removed-line-runs.js';
+import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, type RemovedLineKind } from '../removed-line-runs.js';
 import { pluralKey, setLanguage } from '../words.js';
 
 const kinds = (s: string) => [...s].map((c, i) => ({ id: `l${i}`, kind: (c === 'c' ? 'convenor' : c === 'a' ? 'author' : null) as RemovedLineKind | null }));
@@ -16,6 +16,17 @@ describe('removed lines in a row are one line', () => {
         const runs = removedLineRuns(kinds('.c.cc'), (l) => l.kind);
         expect(runs.map(isCollapsedRun)).toEqual([false, false, false, true]);
         expect(runs[3].lines.map((l) => l.id)).toEqual(['l3', 'l4']);
+    });
+
+    it('a line removed when the chat was locked is told by the node\'s marker, both halves of it', () => {
+        expect(isLockedAwayLine({ removed: true, removedBy: 'SYSTEM', lockedAway: true })).toBe(true);
+        // A member's own metadata may carry lockedAway into a convenor's removal: removedBy is the node's alone.
+        expect(isLockedAwayLine({ removed: true, removedBy: 'ab'.repeat(32), lockedAway: true })).toBe(false);
+        expect(isLockedAwayLine({ removed: true, removedBy: 'SYSTEM' })).toBe(false);
+        expect(isLockedAwayLine(null)).toBe(false);
+        expect(isLockedAwayLine('{"removedBy":"SYSTEM","lockedAway":true}')).toBe(false);
+        expect(lockedAwayLineText()).toBe('An earlier message was removed when this chat was locked');
+        expect(removedRunText('locked', 11)).toBe('11 earlier messages removed when this chat was locked');
     });
 
     it('the count sentence in English', () => {

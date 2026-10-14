@@ -8,7 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
-import { isCollapsedRun, removedLineRuns, removedRunText, type RemovedLineKind } from '@beanpool/core';
+import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, type RemovedLineKind } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
@@ -157,7 +157,8 @@ export function isTombstone(m: { type?: string; metadata?: any } | null | undefi
  *  - an enterprise thread is the same shape: the node refuses an author delete there (#1048) and the app
  *    offers a keeper no Remove of their own, so its only tombstone is a keeper's removal, made from the PWA —
  *    including of the keeper's own line, which must not read as that keeper deleting it;
- *  - a group chat has both, told apart by `removedBy`;
+ *  - a group chat has both, told apart by `removedBy`, and a third: the lines the node removed when the chat was
+ *    locked (core isLockedAwayLine), which say so; no convenor removed them;
  *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
  *
  * Every chat has one more: the author deleted their account, and the node blanked every line they wrote
@@ -172,6 +173,7 @@ export function tombstoneText(
     if (kind === 'event') return REMOVED_BY_HOST_TEXT;
     if (kind === 'enterprise') return REMOVED_BY_KEEPER_TEXT;
     if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;
+    if (isLockedAwayLine(m?.metadata)) return lockedAwayLineText();
     const by = m?.metadata?.removedBy;
     if (by && m?.senderId && by === m.senderId) return DELETED_BY_AUTHOR_TEXT;
     if (by) return REMOVED_BY_CONVENOR_TEXT;
@@ -309,6 +311,7 @@ export function removedRunLineText(run: ChatRemovedRun): string {
  */
 export function removedLineKind(m: ChatMessage, kind: ChatKind | undefined): RemovedLineKind | null {
     if (kind !== 'group' || !isTombstone(m)) return null;
+    if (m.metadata?.accountDeleted !== true && isLockedAwayLine(m.metadata)) return 'locked';
     return tombstoneText(m, kind) === REMOVED_BY_CONVENOR_TEXT ? 'convenor' : 'author';
 }
 

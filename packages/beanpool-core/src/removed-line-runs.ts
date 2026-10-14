@@ -7,10 +7,29 @@
  * a convenor's removal. A run of one is not collapsed at all: the caller draws it with today's words, so the singular
  * count sentence below is never shown (it is there for languages whose `one` form also holds 21, 31, …).
  */
-import { tn } from './words.js';
+import { t, tn } from './words.js';
 
-/** Who removed a line: a convenor, or its own author (their delete, or their account deleted). */
-export type RemovedLineKind = 'convenor' | 'author';
+/**
+ * Who removed a line: a convenor; its own author (their delete, or their account deleted); or nobody, the node itself,
+ * when the chat was locked end-to-end and every line it could read went (the day-zero wipe, server group-thread.ts
+ * wipeReadableGroupLines). Telling a member a convenor removed those would be false.
+ */
+export type RemovedLineKind = 'convenor' | 'author' | 'locked';
+
+/**
+ * A line the node removed when the chat was locked: its tombstone says `removedBy: 'SYSTEM'` and `lockedAway: true`.
+ * Both, because only `removedBy` is the node's alone (it strips a client's and writes the remover's key over it at
+ * every removal); a member's own metadata could carry `lockedAway` into a later removal.
+ */
+export function isLockedAwayLine(metadata: unknown): boolean {
+    const m = metadata as { removedBy?: unknown; lockedAway?: unknown } | null | undefined;
+    return !!m && typeof m === 'object' && m.removedBy === 'SYSTEM' && m.lockedAway === true;
+}
+
+/** One such line on its own, in the device's language. */
+export function lockedAwayLineText(): string {
+    return t('An earlier message was removed when this chat was locked');
+}
 
 /** A stretch of the conversation: a removed run (`kind` set, one line or more) or one ordinary line (`kind` null). */
 export interface RemovedLineRun<T> {
@@ -37,6 +56,7 @@ export function isCollapsedRun<T>(run: RemovedLineRun<T>): run is RemovedLineRun
 
 /** The words of a collapsed run, in the device's language. */
 export function removedRunText(kind: RemovedLineKind, n: number): string {
+    if (kind === 'locked') return tn(n, '{n} earlier message removed when this chat was locked', '{n} earlier messages removed when this chat was locked');
     return kind === 'convenor'
         ? tn(n, '{n} message removed by a convenor', '{n} messages removed by a convenor')
         : tn(n, '{n} message was deleted', '{n} messages were deleted');

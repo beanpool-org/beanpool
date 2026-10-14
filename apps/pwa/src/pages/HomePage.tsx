@@ -71,7 +71,7 @@ import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, t, word, type AddressResult } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
@@ -79,10 +79,12 @@ export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
 /** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
 /** The find card's buttons, as its Share my area. */
 const FIND_ACTION = 'w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
-/** "Tell me when one starts here", in the phone's words where it has them (FindCommunityBody). */
-export const WATCH_DONE = "Done. You'll be told when a community starts near here.";
-export const WATCH_JOIN_FIRST = 'Join first: being told is kept for a member. Join is at the top of this page.';
-export const WATCH_NEEDS_PLACE = 'Share your area or type your town first, so we know where "here" is.';
+/** "Tell me when one starts here", in the phone's words where it has them (FindCommunityBody); t(WATCH_WORDS.…) where shown. */
+export const WATCH_WORDS = {
+    done: word("Done. You'll be told when a community starts near here."),
+    joinFirst: word('Join first: being told is kept for a member. Join is at the top of this page.'),
+    needsPlace: word('Share your area or type your town first, so we know where "here" is.'),
+} as const;
 const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
@@ -867,15 +869,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     /** "Tell me when one starts here": a member's, at the point Home was read from; a visitor is told to join first. */
     async function tellMe() {
         setWatchNote(null);
-        if (!publicKey) { setWatchNote(WATCH_JOIN_FIRST); return; }
+        if (!publicKey) { setWatchNote(t(WATCH_WORDS.joinFirst)); return; }
         const p = pointRef.current;
-        if (!p) { setWatchNote(WATCH_NEEDS_PLACE); setTownOpen(true); return; }
+        if (!p) { setWatchNote(t(WATCH_WORDS.needsPlace)); setTownOpen(true); return; }
         try {
             await watchPlace(p.lat, p.lng);
             setWatched(true);
-            setWatchNote(WATCH_DONE);
+            setWatchNote(t(WATCH_WORDS.done));
         } catch (e: any) {
-            setWatchNote(e?.message || "That didn't go through. Try again.");
+            setWatchNote(e?.message || t("That didn't go through. Try again."));
         }
     }
 
@@ -1133,12 +1135,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {f.communities.length === 0 && f.point !== null && (
                             <div className="mt-2 flex flex-col gap-2" data-testid="home-find-actions">
                                 <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start" className={FIND_ACTION}>
-                                    Start a community
+                                    {t('Start a community')}
                                 </button>
                                 {!(watched || (f.watches?.length ?? 0) > 0) && (
                                     <button type="button" onClick={() => void tellMe()} data-testid="home-find-watch" className={FIND_ACTION}
-                                        aria-label="Tell me when a community starts near here">
-                                        Tell me when one starts here
+                                        aria-label={t('Tell me when a community starts near here')}>
+                                        {t('Tell me when one starts here')}
                                     </button>
                                 )}
                                 {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}

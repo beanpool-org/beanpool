@@ -11,7 +11,9 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { ReportModal } from './ReportModal';
 import { VisitorPostDetail } from './VisitorListing';
 import { reportAbuse } from '../lib/api';
-import { REPORT_SENT, VISITOR_REPORT_URL } from '../lib/reportReasons';
+import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
+
+const REPORT_SENT = REPORT_WORDS.sent;
 import type { MarketplacePost } from '../lib/api';
 
 vi.mock('../lib/api', async (orig) => ({ ...(await orig<typeof import('../lib/api')>()), reportAbuse: vi.fn() }));
@@ -75,7 +77,7 @@ describe("the Market's inline report form", () => {
         const block = src.slice(src.indexOf('🚩 Report'), src.indexOf("{submittingReport ? 'Sending...' : 'Submit Report'}"));
         expect(block).toContain('reportAbuse(');
         expect(block).not.toMatch(/\balert\(/);
-        expect(block).toContain('setReportNote({ sent: true, text: REPORT_SENT })');
+        expect(block).toContain('setReportNote({ sent: true, text: t(REPORT_WORDS.sent) })');
         expect(src).toContain('data-testid="report-note"');
     });
 });
@@ -86,7 +88,7 @@ describe('a signed-out visitor', () => {
         render(<VisitorPostDetail post={post} beans={false} distanceKm={null} onBack={vi.fn()} onJoin={vi.fn()} />);
         const line = screen.getByTestId('visitor-report');
         expect(line).toHaveTextContent(/Members report it from the listing/);
-        expect(within(line).getByRole('link', { name: 'our safety page' })).toHaveAttribute('href', VISITOR_REPORT_URL);
+        expect(within(line).getByRole('link', { name: 'Without an account, tell us on our safety page.' })).toHaveAttribute('href', VISITOR_REPORT_URL);
         expect(screen.queryByRole('button', { name: /report/i })).toBeNull();
     });
 });

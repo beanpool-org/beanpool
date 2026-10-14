@@ -16,7 +16,7 @@ import {
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
-import { photoStepNote } from '@beanpool/core';
+import { photoStepNote, t } from '@beanpool/core';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
@@ -2328,7 +2328,7 @@ export default function WelcomeScreen() {
                             {hasMnemonic(pendingIdentity) ? (
                                 <>
                                     <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                        Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.
+                                        {t('Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.')}
                                     </Text>
                                     <Text style={guideStyles.bulletItem}>
                                         📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.

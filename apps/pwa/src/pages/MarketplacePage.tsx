@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
 import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -68,7 +68,7 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
-import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS, REPORT_SENT } from '../lib/reportReasons';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -2021,12 +2021,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setReportNote(null);
                                         try {
                                             await reportAbuse(identity.publicKey, selectedPost.authorPublicKey, reportReason, selectedPost.id);
-                                            setReportNote({ sent: true, text: REPORT_SENT });
+                                            setReportNote({ sent: true, text: t(REPORT_WORDS.sent) });
                                             setShowReportForm(false);
                                             setReportReason('');
                                         } catch (e: any) {
                                             // The reason stays picked, so a second tap sends it again.
-                                            setReportNote({ sent: false, text: e?.message || 'Failed to submit report. Please try again.' });
+                                            setReportNote({ sent: false, text: e?.message || t('Failed to submit report. Please try again.') });
                                         } finally {
                                             setSubmittingReport(false);
                                         }

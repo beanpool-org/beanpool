@@ -36,7 +36,9 @@ vi.mock('../components/StartCommunityScreen', () => ({
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketOpen: vi.fn(() => () => {}), onSystemAnnouncement: vi.fn(() => () => {}) }));
 
 import * as api from '../lib/api';
-import { HomePage, WATCH_DONE, WATCH_JOIN_FIRST, WATCH_NEEDS_PLACE } from './HomePage';
+import { HomePage, WATCH_WORDS } from './HomePage';
+
+const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
 import { resetHomeCacheForTest } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
 

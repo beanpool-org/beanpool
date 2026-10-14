@@ -38,7 +38,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload, photoStepNote } from '@beanpool/core';
+import { createPairingSession, decryptPairingPayload, photoStepNote, t } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1979,7 +1979,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         Your 12 words are your primary key to your account across devices.
                                         {signInRecovery
                                             ? <> Signing in with {providerLabel(signInRecovery)} also brings it back.</>
-                                            : <> Nobody can reset them: not us, not this community.</>}
+                                            : <> <span>{t('Nobody can reset them: not us, not this community.')}</span></>}
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after

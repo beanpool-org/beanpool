@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
 import { useCoversScreen } from '../lib/screen-cover';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_SENT } from '../lib/reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_WORDS } from '../lib/reportReasons';
+import { t } from '@beanpool/core';
 
 interface Props {
     isOpen: boolean;
@@ -121,14 +122,14 @@ export function ReportModal({
                 {sent ? (
                     <>
                         <p role="status" data-testid="report-sent" className="m-0 text-sm font-semibold text-bp-ink-success">
-                            {REPORT_SENT}
+                            {t(REPORT_WORDS.sent)}
                         </p>
                         <button
                             type="button"
                             onClick={close}
                             className="w-full min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                         >
-                            Done
+                            {t('Done')}
                         </button>
                     </>
                 ) : (<>

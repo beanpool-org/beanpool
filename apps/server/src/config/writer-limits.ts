@@ -116,6 +116,12 @@ export const READ_LIMITS = {
      *  hours. Heavy real user: opening People a few times a day, and moving the map a few times each. Without it, the 50
      *  nearest from 400 points walked 20,000 strangers in about four minutes, under the minute bucket. */
     nearestPeoplePerDay: 100,
+    /** Searches of people by name (`GET /api/members?q=`, 20 at most each, two letters at least) per member in any 24
+     *  hours (Marty's call 3, 15 Oct 2026). Heavy real user: looking up a few people a day, a few searches each as the
+     *  name is typed (the apps ask once the typing pauses, never in the background). Without it, the 100 nearest reads
+     *  alone left the whole list to two-letter searches: 676 of them, then three letters where twenty answered. A search
+     *  by a member's key is one member, not a walk, and isn't counted. */
+    peopleSearchesPerDay: 100,
 };
 
 /**

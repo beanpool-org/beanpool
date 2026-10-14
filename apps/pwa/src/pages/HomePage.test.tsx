@@ -1535,6 +1535,9 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             add('pulse');
             await readAnswered(node.log, before);
             expect(node.log).not.toContain('answered');
+            // The second save reaches the node at least 250 ms after its edit (a slower machine only makes it later): a node
+            // 200 ms behind takes its date as sent, one 5 s behind still holds it to its now.
+            await pause(250);
             await node.answerSaves();
             await waitFor(() => expect(posts(node.log)).toBe(2));
             await node.answerSaves();

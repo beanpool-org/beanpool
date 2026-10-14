@@ -7,6 +7,8 @@
  * at an account. Every value on it is escaped for HTML.
  */
 
+import { formatDate } from './words.js';
+
 export interface RecoveryKit {
     /** Exactly the member's 12 words, as the words screen shows them. */
     words: readonly string[];
@@ -53,8 +55,6 @@ export const KIT_WEB_RESTORE_STEPS = [
     'Click “Recover Identity”. Your name and picture come back once you’re in.',
 ] as const;
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, '&amp;')
@@ -66,7 +66,7 @@ function escapeHtml(value: string): string {
 
 /** "3 October 2026", on the device's own calendar day; no Intl (older Hermes builds lack parts of it). */
 function kitDate(date: Date): string {
-    return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+    return formatDate(date, 'day-month-year', { width: 'long' });
 }
 
 function stepList(steps: readonly string[]): string {

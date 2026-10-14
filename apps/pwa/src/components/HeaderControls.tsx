@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
+import { t } from '@beanpool/core';
 import { openHelp } from '../lib/tour-store';
 
 /**
@@ -171,8 +172,8 @@ export function SidebarControls({ showSettings, setShowSettings }: { showSetting
         <>
             <button
                 onClick={openHelp}
-                aria-label="Help for this screen"
-                title="Help for this screen"
+                aria-label={t('Help for this screen')}
+                title={t('Help for this screen')}
                 data-testid="sidebar-help"
                 className="ml-auto min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-colors cursor-pointer text-bp-ink-warning hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
             >
@@ -180,9 +181,9 @@ export function SidebarControls({ showSettings, setShowSettings }: { showSetting
             </button>
             <button
                 onClick={() => setShowSettings(!showSettings)}
-                aria-label="Settings"
+                aria-label={t('Settings')}
                 aria-pressed={showSettings}
-                title="Settings"
+                title={t('Settings')}
                 data-testid="sidebar-settings"
                 className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
                     showSettings ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on' : 'text-bp-ink-warning hover:bg-nature-200/60 dark:hover:bg-nature-800/60'

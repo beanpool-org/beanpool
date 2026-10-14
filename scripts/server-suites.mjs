@@ -412,6 +412,7 @@ export const SUITES = [
     'test-project-deadline-http',
     'test-enterprise-text',
     'test-event-chat',
+    'test-event-host-lets-in',
     'test-event-notify',
     'test-event-reminders',
     'test-event-reminders-http',

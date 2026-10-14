@@ -608,6 +608,8 @@ export const SERIAL = {
     'test-password-brake-fairness': 'relative timings, 5x slack',
     // Waits a fixed 100-150 ms for each pong (or its absence) on a live socket; a loaded machine answers later.
     'test-ws-pong-watchdog': 'fixed 100-150 ms waits for a reply',
+    // Measures door work check time (< 10 ms median) and event loop hold under load.
+    'test-door-work': 'solution check timing (< 10 ms median) and event loop holds',
     // Asserts no page of a copy blocks M's event loop for 1 s (1.5 s for the reclaim routes), measured with
     // monitorEventLoopDelay, and that a copy closes within 1-4 s of a 2 s timer. Failed in the pool on a slow CI
     // runner (CI run 36634378823: worst 1475 ms), passing alone.

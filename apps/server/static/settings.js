@@ -4357,7 +4357,7 @@
                     let unclaimed = false;
                     try { unclaimed = (await (await fetch(`${API}/claim`)).json()).unclaimed === true; } catch { /* asked again on reload */ }
                     showStatus('login-status', unclaimed
-                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, or use Claim a community in the BeanPool app.'
+                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, then scan its QR code with your phone, or in the BeanPool app open Find a community, type this server's address in the search box and tap Claim ‹name›.'
                         : 'This server has no admin password. Owners and admins sign in with the BeanPool app.', 'warning');
                 }
             } catch (err) {

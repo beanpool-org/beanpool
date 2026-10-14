@@ -270,7 +270,8 @@ docker compose exec beanpool-node beanpool claim
 ```
 
 `beanpool claim` asks for a `.beanpool.org` name (or `--address https://your.domain`, or `--no-name` with
-`--direct http://IP:PORT`), then shows the claim code and a QR code: open BeanPool on your phone → **Claim a community**. The
+`--direct http://IP:PORT`), then shows the claim code and a QR code: scan it with your phone, or open BeanPool → **Find a community**, type the
+server's address in the search box and tap **Claim ‹name›**. The
 operator manual's [First-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest.
 
 #### Updating an Existing Node

@@ -9,8 +9,8 @@
 
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import type { ChatMessage, ChatKind } from '../../utils/chat-actions';
-import { isTombstone, tombstoneText, reactionSummary } from '../../utils/chat-actions';
+import type { ChatMessage, ChatKind, ChatRemovedRun } from '../../utils/chat-actions';
+import { isTombstone, tombstoneText, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
 import { splitTextWithLinks } from '../../utils/chat-links';
 import type { ChatStyles } from './styles';
 
@@ -130,6 +130,22 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                 </View>
             )}
         </Pressable>
+    );
+}
+
+/**
+ * Two or more removed lines in a row, as one line ("11 messages removed by a convenor"): a removed line's own look, in
+ * the middle, because the run may hold anyone's lines and names nobody. Nothing to tap, like a single removed line.
+ */
+export function ChatRemovedRunLine({ run, styles }: { run: ChatRemovedRun; styles: ChatStyles }) {
+    return (
+        <View accessibilityRole="text" style={[styles.messageBubble, styles.messageOther, { alignSelf: 'center' }]}>
+            <Text style={[styles.messageText, styles.messageTextOther, styles.messageRemoved]}>
+                {removedRunLineText(run)}
+                {'  '}
+                <Text style={[styles.messageTime, styles.messageTimeOther, { fontSize: 10 }]}>{run.timestamp}</Text>
+            </Text>
+        </View>
     );
 }
 

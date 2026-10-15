@@ -2,11 +2,15 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "maharagwe",
+      "BeanPool": "BeanPool"
+    }
   },
   "just now": "sasa hivi",
   "{n} day ago|{n} days ago": {
@@ -20,5 +24,23 @@
   "{n} minute ago|{n} minutes ago": {
     "one": "dakika {n} iliyopita",
     "other": "dakika {n} zilizopita"
-  }
+  },
+  "Roughly where are you?": "Uko takriban wapi?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Tunahifadhi eneo lako hadi takriban 10 km, si mahali ulipo hasa. Wanachama wengine huona umbali ulio nao, na kura ya maoni unayounda huonyeshwa katika eneo lako.",
+  "Use my location": "Tumia mahali nilipo",
+  "Type a town or suburb": "Andika mji au mtaa",
+  "Skip for now": "Ruka kwa sasa",
+  "You can change or clear this any time in Settings → Your area.": "Unaweza kubadilisha au kufuta hili wakati wowote katika Mipangilio → Eneo lako.",
+  "Your area": "Eneo lako",
+  "Not set": "Halijawekwa",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Jumuiya ya dunia nzima inakuonyesha kinachotolewa karibu nawe: matoleo {max} ya karibu zaidi ndani ya {km} km.",
+  "About 10 km around {place}": "Takriban 10 km kuzunguka {place}",
+  "Find your town or suburb": "Tafuta mji au mtaa wako",
+  "Town or suburb": "Mji au mtaa",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Utafutaji wa mji haufanyi kazi sasa hivi. Tumia mahali nilipo badala yake, au ruka kwa sasa.",
+  "No matches. Try the name of a town or suburb nearby.": "Hakuna matokeo. Jaribu jina la mji au mtaa wa karibu.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Maeneo yanatoka OpenStreetMap. Unachoandika hapa kinatumwa kwao.",
+  "Choose {place}": "Chagua {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Jumuiya hii inahitaji picha ya wasifu kabla hujachapisha. Unaweza kuiongeza baadaye kutoka kwenye wasifu wako.",
+  "A picture is optional here. You can add one later from your profile.": "Picha ni ya hiari hapa. Ukipenda, unaweza kuiongeza baadaye kutoka kwenye wasifu wako."
 }

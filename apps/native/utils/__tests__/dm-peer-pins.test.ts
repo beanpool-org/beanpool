@@ -626,6 +626,17 @@ describe('salvagePinIds and the reset\'s ids for the guard list (#1938 case 14 Q
         expect(salvagePinIds(`{"pins":{"${I3}":"x","${I2}":{`)).toEqual([I2]);
     });
 
+    // Confirmation 11, finding 6: (a) alone lost an id whose value was cut off right after its `:` (GRB10's cut). The end of the
+    // value counts as an object's opening: that id is kept, and a key from a value still never comes back.
+    it('a value cut right after an entry\'s colon keeps that id; a value-key at the cut is still refused', () => {
+        const raw = record({ [I1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true }, [I2]: { peer: BEN, since: NOW, by: 'member' } });
+        const cut = raw.slice(0, raw.indexOf(`"${I2}":`) + `"${I2}":`.length);
+        expect(salvagePinIds(cut)).toEqual([I1.toLowerCase(), I2]);
+        expect(salvagePinIds(`${cut}  `)).toEqual([I1.toLowerCase(), I2]);
+        // A key in heard.tryKeys whose `]` turned into `:` at the very end: key-shaped, refused (b).
+        expect(salvagePinIds(`{"pins":{"${I2}":{"heard":{"tryKeys":["${PUPPET}","${OTHER}":`)).toEqual([I2]);
+    });
+
     it('nine adversarial values of 1-2 MiB: each salvaged quickly (measured, logged)', () => {
         const MiB = 1024 * 1024;
         const values = [

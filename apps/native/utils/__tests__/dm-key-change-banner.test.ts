@@ -126,6 +126,27 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         expect(rekeyedOnText('not a date')).toBeNull();
     });
 
+    // Confirmation 11, finding 7 (mutant KC7, the date read in local time, survived): the node fixed the re-key to a UTC day, and
+    // the banner says that day in every zone. Near midnight UTC a zone east of it is already on the next day, one west still on
+    // the one before; the guards check the zone really moved the local day, or the case would prove nothing.
+    it('the re-key date is the UTC day the node gave, whatever zone the phone is in', () => {
+        const tz = process.env.TZ;
+        try {
+            for (const zone of ['Australia/Melbourne', 'Pacific/Kiritimati', 'America/Los_Angeles', 'Pacific/Pago_Pago', 'UTC']) {
+                process.env.TZ = zone;
+                expect(rekeyedOnText('2026-10-03T23:30:00.000Z'), zone).toBe('3 Oct 2026');
+                expect(rekeyedOnText('2026-10-03T00:30:00.000Z'), zone).toBe('3 Oct 2026');
+            }
+            process.env.TZ = 'Australia/Melbourne';
+            expect(new Date('2026-10-03T23:30:00.000Z').getDate()).toBe(4);
+            process.env.TZ = 'America/Los_Angeles';
+            expect(new Date('2026-10-03T00:30:00.000Z').getDate()).toBe(2);
+        } finally {
+            if (tz === undefined) delete process.env.TZ;
+            else process.env.TZ = tz;
+        }
+    });
+
     it('a first-sight pause the re-seed made after the member\'s reset opens with the reset\'s sentence in the restored-phone sentence\'s place (§3.4 amendment 7 §1)', () => {
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, afterReset: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
         expect(host.textContent).toContain("This community's chat memory was reset, so this phone is checking this chat from the start. The earlier messages here came from a different key than the one this community now gives for Ben.");

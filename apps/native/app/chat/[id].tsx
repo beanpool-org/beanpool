@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, isDmUnplaced, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
@@ -167,11 +167,11 @@ function ChatScreen({ id }: { id: string }) {
     const [lockNotice, setLockNotice] = useState<string | null>(null);
     // The node lists another key in place of the one this phone pinned for the chat (utils/dm-peer-pins.ts): the box is
     // disabled, with one line, until the member decides on the banner below the header. Every send refuses meanwhile (db.ts).
+    // First sight that found lines it couldn't place (rule 5 of the §3.4 amendment) has the banner too, with the listed
+    // key's code, or Not now only (15 Oct words design, D1), and rule 5's own line under the box.
     const [keyChange, setKeyChange] = useState<DmKeyChange | null>(null);
     const keyChangePending = !!keyChange;
-    // First sight found lines it couldn't place (rule 5 of the §3.4 amendment): no key is pinned and nothing is offered, so
-    // the box is disabled with one line and there is no Continue. Every send refuses meanwhile (db.ts).
-    const [unplaced, setUnplaced] = useState(false);
+    const unplaced = !!keyChange?.unplaced;
     // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
     // the paused box is never cut, edge-to-edge too, and the thread keeps one message at the text size on a 320 × 533
     // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
@@ -536,12 +536,9 @@ function ChatScreen({ id }: { id: string }) {
             setFirstLoadDone(true);
         }
         messagesLenRef.current = data.length;
-        // Unreadable pins: the banner stays as it was, and a send says why it refused. Rule 5 is asked after the key change,
-        // whose check judges first sight first.
-        getDmKeyChange(id as string).then(async (change) => {
-            setKeyChange(change);
-            setUnplaced(change ? false : await isDmUnplaced(id as string));
-        }, () => {});
+        // Unreadable pins: the banner stays as it was, and a send says why it refused. The check judges first sight first;
+        // a rule-5 record comes back as a change too (unplaced).
+        getDmKeyChange(id as string).then(setKeyChange, () => {});
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -580,7 +577,7 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !unplaced && !sendingRef.current;
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current;
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
@@ -1463,8 +1460,8 @@ function ChatScreen({ id }: { id: string }) {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
-                        disabled={keyChangePending || unplaced}
-                        notice={keyChangePending ? dmKeyChangedLine(keyChange?.name) : unplaced ? t(DM_LOCK_WORDS.unplaced) : lockNotice}
+                        disabled={keyChangePending}
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

@@ -5,7 +5,7 @@
  *
  * #1938 confirmation 7, finding 3: while this community's pins or DM list can't be read, every readable send (an old node's
  * unlocked group, every enterprise thread) and a locked group this phone never held is refused with one true line, and
- * the line names the way out (Settings → Account → Chat memory). The group screen showed only "! not delivered", and a tap
+ * the line names the way out (Settings → Chat memory). The group screen showed only "! not delivered", and a tap
  * gave "This message could not be sent." with a Resend that fails the same. It now says the refusal's sentence above the
  * box, as it already said a key's (GroupChatKeyError); an error with no sentence of its own adds nothing there.
  */
@@ -163,7 +163,7 @@ describe('the group screen says why a send was refused (#1938 confirmation 7, fi
         it(`GCV (${kind}) the pins can't be read: the pins sentence above the box, naming Chat memory; the bubble stays "not delivered"`, async () => {
             const r = await sendRefused(kind, () => new DmPinStoreError());
             expect(r).toEqual({ said: [DM_PIN_STORE_UNREAD_TEXT], notDelivered: true, onTap: ['Message not delivered'] });
-            expect(DM_PIN_STORE_UNREAD_TEXT).toContain('Settings → Account → Chat memory');
+            expect(DM_PIN_STORE_UNREAD_TEXT).toContain('Settings → Chat memory');
         });
     }
 

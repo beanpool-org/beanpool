@@ -1,5 +1,5 @@
 /**
- * Settings → Account → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3): one row per community on this phone, each
+ * Settings → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3): one row per community on this phone, each
  * with its own reset of who this phone remembers its chats there are with. The reset asks first, in place, with the
  * design's sentence word for word: a chat paused because its key changed may open with the new key after it. Only the
  * member resets (db.ts resetDmChatMemory); the phone never does on its own.

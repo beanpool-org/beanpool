@@ -11,7 +11,7 @@ Every message between two people is locked so that only the other person's phone
 
 If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see **The key behind "Ben" changed.** The message box is greyed out and says sending is paused.
 
-Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as **couldn't be verified** until you decide.
+Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, messages from the new key read **Sent from the new key. Shown after you continue.** until you decide.
 
 This is on the phone app. The web app doesn't remember keys yet.
 
@@ -38,25 +38,39 @@ The code isn't secret. It's safe to read out.
 
 Tap **Not now**. Nothing is sent and nothing changes. You can come back to the chat later.
 
-A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat.
+A paused chat may stay paused until you continue. There is no other way to keep talking in it: your community keeps one chat for the two of you, so starting a new chat with the same person opens this same chat.
 
 If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.
 
 ## If the banner offers no key to continue with
 
-Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers **Not now**.
-
-To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it.
+Sometimes the community doesn't list a single key for the person in a chat between two people: it lists several, or none. There is then no key to continue with, so the banner says so and offers only **Not now**. Nothing is sent. Talk to the person in person or on a call. Your phone checks the chat again by itself when the community's list changes, and a new chat with the same person is this same chat.
 
 ## If the banner says your phone is checking the chat from the start
 
-After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above.
+After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above. After you reset the community's chat memory it starts with **This community's chat memory was reset, so this phone is checking this chat from the start.** instead.
 
-## If the message box says your phone can't match the chat to one key
+## Chat memory
 
-Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says **This phone can't match this chat to one key, so sending is off.** There is nothing to continue with.
+Your phone keeps a small memory for each community: which key each of your chats is with, and which chats are private. It is kept on the phone, and the community's server can't move a chat to another key by itself: only you can, on the banner. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.
 
-Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as **couldn't be verified**. To keep talking, start a new chat with them, and talk to them in person or on a call first.
+You can reset it for one community: open **Settings**, tap **Chat memory** under **Account & identity**, tap **Reset** next to the community, read the warning, and tap **Reset** again. The app points you here only when it says it couldn't read that memory and trying again didn't help.
+
+After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with **This community's chat memory was reset, so this phone is checking this chat from the start.** Check the code with the person as above.
+
+Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
+
+A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above).
+
+This is on the phone app. The web app has no chat memory.
+
+## If the banner says your phone can't match the chat to one key
+
+Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Above the message box it says **This phone can't match this chat to one key, so sending is off.** and the banner shows the code of the key your community now lists for the person.
+
+Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that read **This message couldn't be verified, so it isn't shown.** Those stay that way, even after you continue.
+
+Check the code with the person as above, in person or on a call. If it matches, tick the box and tap **Continue with the new key**: from then on your messages go to that key. If it doesn't match, or you can't check, tap **Not now**. A new chat with the same person is this same chat, so there is nothing else to try. If the community lists no single key for them, the banner offers only **Not now**, and your phone checks the chat again by itself when the community's list changes.
 
 ## What your phone can check, and what it can't
 

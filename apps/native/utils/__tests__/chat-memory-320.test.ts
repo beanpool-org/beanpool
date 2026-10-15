@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Settings → Account → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3, slice 2): the member's reset of one
+ * Settings → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3, slice 2): the member's reset of one
  * community's DM pins, drawn at the floor, 320 dp wide with the phone's text at 1.3× (memory product-audience-small-screens),
  * in light and in dark, its colours from the colour library's roles only. The real ChatMemoryCard is rendered as DOM
  * (react-native drawn as elements, numberOfLines and fixed heights kept as data, as key-changed-320.test.ts does); the
@@ -90,7 +90,7 @@ function whole(page: HTMLElement, text: string) {
     return s!;
 }
 
-describe('Settings → Account → Chat memory at 320dp with 1.3× text (amendment 6 §3)', () => {
+describe('Settings → Chat memory at 320dp with 1.3× text (amendment 6 §3)', () => {
     it('the confirmation is the design\'s sentence, word for word; the row is in Settings\' Account group and opens the card with the reset', () => {
         expect(CHAT_MEMORY_COPY.confirm).toBe("A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.");
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf-8');

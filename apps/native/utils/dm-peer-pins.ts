@@ -52,6 +52,13 @@ export interface DmPeerOffer {
      * sentence in the restored-phone sentence's place.
      */
     afterReset?: true;
+    /**
+     * A first-sight pause born with no key to offer (rule 3 against a listing of several keys, or none; N1 of the 15 Oct
+     * words design): nothing was ever offered. It clears when every listing names the pinned key alone, which is what
+     * rule 2 would have pinned with no question. Dropped for good once the pause offers a key, so a pause that offered one
+     * (PUPPET → Ben → several → PUPPET, the B-detour) never clears on the node's word.
+     */
+    keyless?: true;
 }
 
 export interface DmPeerPin {
@@ -157,7 +164,7 @@ export const FORMER_MAX = 4;
  * The phone couldn't read who one community's chats are with: nothing is sealed (fail closed), and the member is told so,
  * and where the way out is (§3.4 amendment 6 §3: the member's reset, never the phone's on its own).
  */
-export const DM_PIN_STORE_UNREAD_TEXT = word("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
+export const DM_PIN_STORE_UNREAD_TEXT = word("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.");
 
 /** What a DM line shows in its place while the pins can't be read: it may be anyone's, so none is shown (never "update your app"). */
 export const DM_PINS_UNREAD_LINE = word("Can't be shown until this phone can read who this chat is with.");
@@ -246,6 +253,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
         if (rekeyedAt) offered.nodeSays = { rekeyedAt };
         if (o.firstSight === true) offered.firstSight = true;
         if (o.afterReset === true) offered.afterReset = true;
+        if (o.keyless === true && offered.firstSight && offered.peer === null) offered.keyless = true;
         pin.offered = offered;
     }
     if (r.checked === true) pin.checked = true;
@@ -315,7 +323,7 @@ function storedPinsOf(raw: string | null): StoredPins {
  */
 const PIN_FORMAT_NAMES = new Set([
     'pins', 'offered', 'heard', 'nodeSays',
-    'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'afterReset', 'rekeyedAt', 'tryKeys',
+    'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'afterReset', 'keyless', 'rekeyedAt', 'tryKeys',
     'unplaced', 'listed', 'stale', 'heldLost', 'reset',
 ]);
 
@@ -486,7 +494,7 @@ export interface DmPinBook<H> {
     /** Run `change` on those pins after every change queued before it, once `at`'s file is seeded; written through when it returns true. */
     update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
     /**
-     * The member's reset of one file's pins (Settings → Account → Chat memory, §3.4 amendment 6 §3), never the phone's
+     * The member's reset of one file's pins (Settings → Chat memory, §3.4 amendment 6 §3), never the phone's
      * own: the raw value is copied aside when storage returns it (a corrupt one reads as a string), the value is replaced
      * by the reset's marker `{ reset: <date> }` (§3.4 amendment 7 §2), the copy forgotten, and the next ask seeds the file
      * over its own rows and its held lines (which the reset keeps), handed the marker's date: that seed judges, never
@@ -769,6 +777,7 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
     const pin: DmPeerPin = { peer: verdict.pin, since: now, by: 'first-seen', checked: true };
     if (verdict.offer && listed !== verdict.pin) {
         pin.offered = { peer: listed, at: now, firstSight: true };
+        if (listed === null) pin.offered.keyless = true;
         if (heard?.rekeyedAt) pin.offered.nodeSays = { rekeyedAt: heard.rekeyedAt };
     }
     return setPin(pins, id, pin);
@@ -862,11 +871,16 @@ function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
  * A first-sight pause (history placed the pin and the listing disagreed, rules 3-4) is the member's to end (design §3.4
  * amendment 2, option H): no listing lifts it, not one naming the pinned key, and not one offering a third key in between
  * (`firstSight` belongs to the pause, so PUPPET → Q → PUPPET keeps it). An existing phone's offer (no `firstSight`) clears
- * when every listing names the pin again: the pin never moved, so that is harmless.
+ * when every listing names the pin again: the pin never moved, so that is harmless. So does a first-sight pause
+ * born with no key to offer ({@link DmPeerOffer.keyless}) when every listing names the pinned key alone (N1).
  */
 function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard?: DmHeard): boolean {
     const without = named.find((o) => o.length > 0 && !o.includes(pin.peer));
     if (!without) {
+        if (pin.offered?.keyless && named.length > 0 && named.every((o) => o.length === 1 && o[0] === pin.peer)) {
+            delete pin.offered;
+            return true;
+        }
         if (!pin.offered || pin.offered.firstSight || named.some((o) => !o.includes(pin.peer))) return false;
         delete pin.offered;
         return true;
@@ -879,6 +893,7 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
     if (pause?.firstSight) pin.offered.firstSight = true;
     if (pause?.afterReset) pin.offered.afterReset = true;
+    if (pause?.keyless && peer === null) pin.offered.keyless = true;
     return true;
 }
 
@@ -886,13 +901,19 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard
  * The member's "Continue with the new key" (slice 2, pick 1): the key on offer becomes the pinned key, `by: 'member'`,
  * and the key before it goes first in `former`, so the old lines still open (pick 3). The offer, the first-sight verdict
  * and what the listing said go with it: the member decided. Only the key on offer moves a pin, from a sync or a
- * first-sight pause alike (§3.4 amendment, rules 3-4). Any other key, an offer of several keys (peer null), a pin with no
- * offer, a rule-5 record (no key placed: there is nothing to continue from), or a DM with no pin: nothing changes. True
- * when it changed.
+ * first-sight pause alike (§3.4 amendment, rules 3-4). A rule-5 record (heldLost too) continues to the one key its listing
+ * names, `listed` (the 15 Oct words design, D1): pinned `by: 'member'` with no `former`, since no key was ever placed,
+ * so the lines that didn't open stay that way. Any other key, an offer of several keys (peer null), a rule-5 record that
+ * lists no single key, a pin with no offer, or a DM with nothing kept: nothing changes. True when it changed.
  */
 export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
     const id = dmPinId(conversationId);
     const key = pinKeyOf(peer);
+    const sight = dmSightFor(pins, id);
+    if (isUnplacedSight(sight)) {
+        if (!key || sight.listed !== key || !isPinnableId(id)) return false;
+        return resized(pins, id, () => setPin(pins, id, { peer: key, since: now, by: 'member' }));
+    }
     const pin = dmPinFor(pins, id);
     if (!key || !pin?.offered || pin.offered.peer !== key) return false;
     // Newest first, the oldest dropped past FORMER_MAX (§3.4 amendment 6): its lines then read "couldn't be verified".

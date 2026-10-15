@@ -1038,8 +1038,10 @@ export async function pruneNodeUser(
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
+    // The node's own sentence: removing an owner asks a fresh proof (a current code, or Manage on the phone).
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
@@ -1899,8 +1901,10 @@ export async function updateNodeSnapshotSchedule(
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...config, ...passwordField(adminPassword) }),
     });
+    // The node's own sentence: keeping fewer snapshots, or none, asks a fresh proof (a current code, or Manage on the phone).
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     const data = await res.json();
     return data.config;

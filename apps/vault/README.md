@@ -46,14 +46,36 @@ state, under an `M` the retiring custodians never hold: with the old ticket key 
 phone and global's door believe, and with the old deposit key open every deposit box in flight. The new ticket key
 replaces the old one at the switch (the old one signs until then); the new deposit key goes first and the old ones
 stay, since boxes from builds that still seal to an old one must open. While the new state waits, its public keys
-are in the reshare's answer, `status().pending`, `/v1/report`'s `pending` and what `vault-custodian reshare` and
-`fetch-share` print, so global's `BEANPOOL_VAULT_TICKET_KEYS`, the registrar's `VAULT_TICKET_KEYS` and the app
-build list the new ticket key, first, before it signs; the old one stays listed until every build has the new one.
+are in the reshare's answer, `status().pending`, `/v1/report`'s `pending` and what `vault-custodian reshare` prints,
+so global's `BEANPOOL_VAULT_TICKET_KEYS`, the registrar's `VAULT_TICKET_KEYS` and the app build list the new ticket
+key, first, before it signs; the old one stays listed until every build has the new one. **Put them in global and
+the registrar before any new custodian touches a share:** `vault-custodian fetch-share` saves a share and confirms it
+at once, so the second new custodian's `fetch-share` is the switch (it prints the same lines, but by then the vault
+has switched). A new custodian who must not confirm yet runs `confirm --share <file>` later instead, with the sealed
+file the retiring custodian's `reshare --out` wrote for them (sealed to their key, so it is safe to send).
 A build seals deposits to the first deposit key it lists, so it lists the new deposit key only once the vault has
 switched (before that the vault in force lacks it).
 `K_index` stays: a `sub_index` can't be made again without every member's `sub`, which the vault never keeps.
 `K_disk` stays too, for now: it is the data partition's LUKS key, and changing it is a change to the image's disk
 helper (reshare rotation design §2.6).
+
+**What a reshare leaves (reshare rotation design §7).** The retiring custodians can still work out the old ticket key
+and the old deposit key, offline, from their old shares. After the switch the old ticket key signs nothing the vault
+serves, but whatever is signed with it is believed wherever it is still listed: it keeps that power until it has left
+global's env, the registrar's var and every app build (not at the switch). The old deposit key opens every box a build
+still seals to it; the vault keeps it too, until P2's `keys drop`. Beyond the keys, a reshare doesn't end:
+- the vault's DNS name and TLS (Marty's Cloudflare account): alone, an outage, never a key or a copy;
+- the GitHub organisation (the release feed and the code): an outage, never a key;
+- the app build (EAS, the Play Console): a bad app reads every member's key, with or without a vault;
+- backups from before the reshare, for their 30 days: the old `M` reads every envelope in them (each copy still needs
+  the member's sign-in `sub`, which the vault never keeps);
+- `K_index`, for good: with a later copy of the database (the host, the hosting login, or write access to a store
+  during a restore), a retired custodian can test whether a given `sub` or member key has a copy, and until P2 plant
+  deletion records for copies whose ids they know; never a copy, never a seed;
+- `K_disk`, until P2: a raw disk image shows indexes, days, holds, and envelopes they can't open;
+- whatever happened before the reshare: until the switch, the vault's protection is one person's word;
+- destruction can't be enforced: the design makes what is kept worthless rather than trusting that it is destroyed,
+  and this list is what "worthless" still leaves.
 
 A genesis or a reshare is two steps. The new state waits beside the old one (`state.next.json`), and the new shares,
 sealed to their custodians, can be fetched again (`/v1/unlock/pending`), also after the switch, until the keyholder
@@ -63,9 +85,72 @@ force, so no lost answer or restart can leave a vault that nobody can open. Two 
 nobody finished (`/v1/unlock/cancel`); a genesis nobody finished is replaced by the next one.
 
 **All three new custodians fetch and confirm their share**, the third one after the switch too (`vault-custodian
-fetch-share`): `/v1/report`'s `shares` says how many of the three have (`{generation, confirmed, of}`, known since the
-keyholder's last start). Custodians keep their old shares until the vault has switched (the confirm answer says
-`switched`), and destroy them then.
+fetch-share` does both: it saves the share under `--out`, then confirms it): `/v1/report`'s `shares` says how many of
+the three have (`{generation, confirmed, of}`, known since the keyholder's last start). Custodians keep their old
+shares until the vault has switched (the confirm answer says `switched`), and destroy them then. The order for a live
+vault, with the re-root and the pins, is in "A reshare, step by step", below.
+
+## A reshare, step by step
+
+Handing the vault from the genesis custodians (G, today all three Marty's) to new ones (N0, N1, N2), with this code.
+It is the reshare rotation design's §5 and §6, corrected where review #1996 measured otherwise.
+
+1. **The code.** The reshare's new keys are keyholder code, so they ship only in an image: the re-root image (step 3).
+2. **New keys.** Each new custodian runs `vault-custodian new-key` on their own computer and sends their public key
+   (`public-key`). The director writes `N.json` (`{"genesisCustodians": [N0, N1, N2]}`).
+3. **The re-root image and its tool bundle** are built from `N.json` (`02-build-image.sh`; build-twice in CI). The new
+   custodians use that tool, which pins N; Marty uses the released one, which pins G. Either shows the reshare's keys.
+4. **Two manifests, one version:** H in the genesis chain, signed by two genesis keys; R0, the first of the new chain
+   (`--feed-dir <empty> --root-keys N.json`), signed by two new custodians. Run `release verify` on both before
+   publishing.
+5. **Before the re-root restart, check that nothing is waiting.** A genesis key's `vault-custodian fetch-share`
+   answers `no_pending` when nothing is, or `200` with `"pending":null` when a ceremony switched at this boot (the tool
+   then confirms its share late, which does no harm). `403 unknown_custodian` means a ceremony is waiting for other
+   keys: two genesis keys run `cancel --pending <id>` first. The new keyholder starts even with one waiting, but a
+   reshare the old image made keeps the old ticket and deposit keys: cancel it, never confirm it.
+6. **The re-root restart:** two genesis keys sign the restart (`vault-custodian restart`, twice), then Marty unlocks;
+   the generation-1 state still names G, so his shares open it. Check that health's `release` is the new image and
+   that the next hourly backup lands in both stores. Do steps 7 to 9 the same day: until the switch nobody can
+   restart the vault (root wants the new custodians' signatures, the API the state's custodians).
+7. **The reshare:** Marty runs `vault-custodian reshare --new-custodians N0,N1,N2 --out <dir>` with two generation-1
+   shares. Its answer shows one new ticket key and two deposit keys (the new one first, the old one second), and it
+   prints the lines to paste. `/v1/report`'s signed `pending` shows the same keys.
+8. **The pins, before any new custodian touches their share:**
+   - global's `.env`: `BEANPOOL_VAULT_TICKET_KEYS=<new>,<old>`, with the compose exports, and the standby the same;
+   - the registrar: `VAULT_TICKET_KEYS = "<new>,<old>"`, then deploy;
+   - check that the door's nonce answer lists both keys.
+9. **The switch** comes from two new custodians confirming. Either they run `fetch-share` now (it saves and confirms,
+   and the second one switches the vault), or they run `confirm --share <file>` with the sealed files Marty sends
+   from his `--out`.
+   - Do it at a quiet time: a ticket signed before the switch is refused after it, and that member signs in again.
+   - Check: the answer says `switched`, generation 2; `/v1/report`'s `ticketKey` is the new key; `wraps.older` drops
+     to 0; the next hourly backup is generation 2; `watch --once --ticket-key <new>` says open and verified; the third
+     new custodian fetches and confirms too (the report's `shares` says 3 of 3).
+   - The Mac watcher, if it is still running, gets the new key.
+10. **The launch build** takes the new ticket key only, and the new deposit key's `key` (not its kid); the team's
+    phones and the test phones take it. Then the old ticket key leaves global's env and the registrar's var. **Only
+    now does the old ticket key stop counting**, not at the switch. The vault keeps the old deposit key until P2's
+    `keys drop`; no build seals to it any more.
+11. **Wait for two generation-2 backups in both stores** (`vault-custodian backups` with a new custodian's key; the
+    report's `backups.lastOkAt` and `offsite.lastName`). Until then the generation-1 shares are the only way back from
+    a dead box. If the newest file turns out corrupt, restore the one before it (the same generation, so it is
+    allowed). If the bad file's header or deletion records don't open, that restore waits until the bad file is
+    deleted off the box, and the deletions in it are lost. On the old machine itself, whose own store holds the bad
+    file too and can't be edited, only a wipe helps (steps 3 and 5 of "Restoring on a new machine", below).
+12. **Custody moves:** the hosting login is split; the vault mailbox's recovery address is removed; a new off-box
+    bucket goes into an account the new custodians control, and two of them send the settings that name it; whoever
+    may run a cold path holds that bucket's write credentials (#1981); the old bucket's files expire within 30 days.
+13. **Marty destroys** the three generation-1 shares (every copy), the three genesis key files (every copy and
+    backup), and any backup file he downloaded. The genesis key files go to nobody. Nothing enforces this; what they
+    would still buy after the steps above is "What a reshare leaves", above.
+14. **Measure, don't assert** (the design's §5 step 12): first on localhost, then on the live vault's public parts.
+    The results go into the memory file.
+15. **Words:** this README and the guide say what a reshare replaces, that the old ticket key's power ends when it
+    leaves every list (not at the switch), that the release root moves with the re-root image, what `K_index` still
+    buys, `K_disk` until P2, and what stays open.
+16. **Dropped** from the old checklist: "hand the genesis key files to the new custodians as rebuild keys", and "a
+    re-seal command is missing" (now P3). **Kept** from #1981: on a fresh vault, the settings and `backups` take a
+    pinned key, which after the re-root is a new custodian's key.
 
 ## Routes
 
@@ -337,12 +422,15 @@ check from the pinned keys installs anything, so a planned restart boots a two-s
 a restart nobody planned and the split hosting login (design §2.2, §2.5).
 
 An unlock of a vault waiting to finish a restore from backup shows which backup it took and which custodian key named
-it, and sends the share only when you type yes. After a reshare, `reshare` and `fetch-share` print the lines to paste
-for the pins (`BEANPOOL_VAULT_TICKET_KEYS=<new>,<old>`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=<new>`).
+it, and sends the share only when you type yes. After a reshare, `reshare` prints the lines to paste for the pins
+(`BEANPOOL_VAULT_TICKET_KEYS=<new>,<old>`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=<new>`): paste them before any new
+custodian runs `fetch-share`, which saves **and confirms** a share, so the second new custodian's fetch is the switch.
+`fetch-share` prints the same lines, by then to check, not to act on.
 
 ```
 vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --share share-1-1-xxxx.json
-vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare
+vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare: saves and confirms
+vault-custodian confirm --url https://vault.beanpool.org --key my-key.json --share share-2-3-xxxx.json   # a share saved earlier
 ```
 
 ## The custodians' restart for a new image (D3)
@@ -509,12 +597,21 @@ there are, a count the public report gives anyway. Requests to the store are sig
 **Restoring on a new machine** (the cold path, design §4; rehearse it before launch, target 24 hours):
 
 1. Install the signed image on the new machine: a fresh vault, with no keys, no data and an empty local store.
-2. Two genesis custodians set the settings: `vault-custodian settings send …` twice, as above. After a reshare these
-   are the **rebuild keys** (below): a fresh vault has no backup to read anyone else from until the settings name the
-   off-box store.
+2. Two of the custodians the image pins set the settings: `vault-custodian settings send …` twice, as above. These
+   are the **rebuild keys** (below): the genesis keys, or after a re-root the new custodians' own keys. A fresh vault
+   has no backup to read anyone else from until the settings name the off-box store.
 3. `vault-custodian backups --url … --key …` lists what each store holds; pick the newest. A backup of a generation
-   older than the newest one whose header the stores can read is refused, whoever asks (`409 older_generation`): any
-   file of the newest generation restores, an older one of it included (a bad newest file).
+   older than the newest one whose header the stores can read is refused, whoever asks (`409 older_generation`), and
+   so is any restore while a store can't be listed or the newest file can't be fetched (`503 stores_unreachable`, try
+   again; never taken as "nothing newer"). Any file of the newest generation is taken, an older one of it included.
+   So when the newest file is bad, the one before it is taken; what happens next depends on what is bad in the newest:
+   - only its snapshot: its deletion records still open by their own seal, and the restore finishes at once;
+   - its header or its deletion records: the restore waits on it, named, as in step 5, until a good copy is in a store
+     or it is deleted off the box (its deletions are then lost);
+   - every file of the newest generation with a header no store can read: an older generation is taken (the loss the
+     rule accepts), and it then waits on those files the same way;
+   - naming the bad file itself: it is taken, and the unlock refuses it (not signed by this vault). The vault is no
+     longer fresh, so a second restore is refused: only a wipe of the new machine starts again.
 4. `vault-custodian restore --url … --key … --backup bv-<time>.bin`: the vault fetches it (from its own store, or else
    the off-box one) and takes the backup's keyholder state; it is locked.
 5. Two custodians unlock with their shares (`vault-custodian unlock …`), each first shown which backup the vault took
@@ -532,10 +629,14 @@ there are, a count the public report gives anyway. Requests to the store are sig
    whoever may run this holds those credentials and knows the cost. The vault's own store can't be edited (the image
    has no login): a file bad there and missing or bad off the box leaves only a wipe of the new machine.
 
-**Rebuild keys (the custody step at the reshare).** A fresh vault's custodians in force are the genesis keys its
-image pins: they alone set its settings, and the off-box store is in the settings. So at the reshare the genesis key
-files go to the new custodians as their rebuild keys, kept like their shares; without them nobody can point a new
-machine at the off-box backups. A rebuild key opens nothing by itself: the restore still unlocks only with two shares
+**Rebuild keys (the keys an image pins).** A fresh vault's custodians in force are the keys its image pins (the
+genesis keys, until a re-root): they alone set its settings, and the off-box store is in the settings, so without two
+of them nobody can point a new machine at the off-box backups. That is why the reshare comes with a re-root (reshare
+rotation design §2.5; "A reshare, step by step", above): the image the reshare runs on is built with the new
+custodians' keys as its pinned keys, so their own keys are the rebuild keys. **The genesis key files are not handed to
+anyone: after the re-root and the reshare they are destroyed**, with the old shares. What follows is what a rebuild
+key can do, whichever keys the image pins, and it holds again at the next reshare until that one's own re-root.
+A rebuild key opens nothing by itself: the restore still unlocks only with two shares
 of the custodians the backup lists. But two rebuild keys set a fresh vault's settings, which say where its off-box
 store is, and any one starts a restore of any backup, one from before the reshare included, which the old shares
 open: on a fresh machine they are as sensitive as shares. Step 4 (its hello and the restore) also takes a key that
@@ -551,10 +652,12 @@ protects:
 - a rebuild key starts a restore of the newest generation's backups; until the first backup after a reshare is in the
   stores that is the old generation, which the old shares open, so at **every** reshare the retiring custodians
   destroy their share **and their copies of the rebuild keys**. Nothing enforces it: no command re-seals a key file,
-  and the pin is in every image. After the second reshare, keeping retired custodians out rests on it;
-- "newest" is the newest backup the stores list, so someone who can remove files from a store can make an older
-  generation's backup the newest, and its retired custodians' own keys, and any rebuild key, then pass; a file whose
-  header can't be read isn't counted (else damaging one file would stop every restore);
+  and the old keys stay pinned in every image built before the re-root. After the second reshare, keeping retired
+  custodians out rests on it;
+- "newest" is the newest backup the stores list, so someone who can write to a store can make an older generation's
+  backup the newest: adding one copy of it under a newer name is enough, as is removing the newer files. Its retired
+  custodians' own keys, and any rebuild key, then pass; a file whose header can't be read isn't counted (else
+  damaging one file would stop every restore);
 - until the first backup after a reshare is in the stores, the newest backup lists the old custodians, so their
   shares are not destroyed before it.
 

@@ -6,7 +6,7 @@
  *  - Chat: shows messages in a conversation with send input
  */
 
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
@@ -42,6 +42,8 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
+import { CreateGroupModal } from '../components/CreateGroupModal';
+import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 
@@ -187,7 +189,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useLayoutEffect(() => { conversationsRef.current = conversations; }, [conversations]);
     useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
-    const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
+    const [activeTab, setActiveTab] = useState<ConversationTab>('all');
+    // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
     // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
@@ -2492,45 +2496,128 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
+    // The rows the list shows (empty conversations are left out by the node), and the Groups chip's unread count from them.
+    const listedConversations = conversations.filter(c => (c.unreadCount || 0) > 0 || c.createdAt);
+    const groupsUnread = groupsUnreadCount(listedConversations);
+    const hasGroups = listedConversations.some(isGroupLikeChat);
+    const headerButtonStyle: CSSProperties = {
+        padding: '0.4rem 0.75rem', borderRadius: '8px', minHeight: '36px',
+        border: '1px solid var(--border-input)', background: 'var(--bg-hover)',
+        color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer',
+        fontFamily: 'inherit', whiteSpace: 'nowrap',
+    };
+    // Find groups: Commons, which opens on its Groups (the phone's FIND_GROUPS_HREF).
+    const findGroups = () => onNavigate?.('projects');
+    const filterChips: Array<{ id: ConversationTab; label: string; count: number }> = [
+        { id: 'all', label: t('All'), count: 0 },
+        { id: 'transactions', label: t('Transactions'), count: 0 },
+        { id: 'direct', label: t('Direct'), count: 0 },
+        { id: 'groups', label: t('Groups'), count: groupsUnread },
+    ];
+
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>💬 Messages</h2>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                        onClick={() => { setShowNewDm(true); loadMembers(); }}
-                        style={{
-                            padding: '0.4rem 0.75rem', borderRadius: '8px',
-                            border: '1px solid var(--border-input)', background: 'var(--bg-hover)',
-                            color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer',
-                            fontFamily: 'inherit',
-                        }}
-                    >
-                        ✉️ New DM
-                    </button>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto' }}>
+                    {activeTab !== 'groups' ? (
+                        <button onClick={() => { setShowNewDm(true); loadMembers(); }} style={headerButtonStyle}>
+                            ✉️ New DM
+                        </button>
+                    ) : hasGroups && (
+                        // As the phone's Groups: the empty view has its own two, so these show with a list.
+                        <>
+                            <button onClick={findGroups} style={headerButtonStyle}>
+                                <span aria-hidden="true">🔍 </span>{t('Find groups')}
+                            </button>
+                            <button onClick={() => setShowCreateGroup(true)} style={headerButtonStyle}>
+                                <span aria-hidden="true">➕ </span>{t('New group')}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Wraps instead of scrolling: at 320px with 1.3x text the three chips need ~390px, and a sideways
+            {/* Wraps instead of scrolling: at 320px with 1.3x text the four chips need ~470px, and a sideways
                 scroller hid "Direct" behind a grey scrollbar. scrollbar-none in case a translation still overflows. */}
             <div className="scrollbar-none" data-testid="conversation-filter-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)', paddingBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <button
-                    onClick={() => setActiveTab('all')}
-                    style={{ whiteSpace: 'nowrap', background: activeTab === 'all' ? 'var(--text-primary)' : 'var(--bg-hover)', color: activeTab === 'all' ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                >All</button>
-                <button
-                    onClick={() => setActiveTab('transactions')}
-                    style={{ whiteSpace: 'nowrap', background: activeTab === 'transactions' ? 'var(--text-primary)' : 'var(--bg-hover)', color: activeTab === 'transactions' ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                >Transactions</button>
-                <button
-                    onClick={() => setActiveTab('direct')}
-                    style={{ whiteSpace: 'nowrap', background: activeTab === 'direct' ? 'var(--text-primary)' : 'var(--bg-hover)', color: activeTab === 'direct' ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                >Direct</button>
+                {filterChips.map(chip => {
+                    const active = activeTab === chip.id;
+                    return (
+                        <button
+                            key={chip.id}
+                            onClick={() => setActiveTab(chip.id)}
+                            aria-pressed={active}
+                            aria-label={chip.count > 0 ? t('{label}, {count} unread', { label: chip.label, count: chip.count }) : undefined}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', background: active ? 'var(--text-primary)' : 'var(--bg-hover)', color: active ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                            {chip.label}
+                            {chip.count > 0 && (
+                                <span
+                                    aria-hidden="true"
+                                    data-testid={`conversation-filter-count-${chip.id}`}
+                                    style={{
+                                        background: 'var(--danger)', color: 'var(--on-danger)', fontSize: '0.7rem', fontWeight: 800,
+                                        minWidth: '18px', height: '18px', borderRadius: '9px', display: 'inline-flex', alignItems: 'center',
+                                        justifyContent: 'center', padding: '0 5px', lineHeight: 1,
+                                    }}
+                                >{chip.count > 99 ? '99+' : chip.count}</span>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
 
             {chatRefusalNotice && <div style={{ marginBottom: '1rem' }}>{chatRefusalNotice}</div>}
 
-            {conversations.length === 0 ? (
+            {showCreateGroup && (
+                <CreateGroupModal
+                    isOpen
+                    onClose={() => setShowCreateGroup(false)}
+                    onCreated={(group) => {
+                        // As the phone's (decision 8): straight into the new group's chat. Its id is the group's.
+                        setShowCreateGroup(false);
+                        setActiveConv({
+                            id: group.id, type: 'group_thread', name: group.name, participants: [identity.publicKey],
+                            createdBy: identity.publicKey, createdAt: new Date().toISOString(),
+                        });
+                        loadMembers();
+                        loadConversations();
+                    }}
+                />
+            )}
+
+            {activeTab === 'groups' && !hasGroups ? (
+                <div data-testid="groups-empty" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+                    <p aria-hidden="true" style={{ fontSize: '2.75rem', margin: 0 }}>🌻</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.6rem 0 0' }}>{t('No groups yet')}</p>
+                    <p style={{ fontSize: '0.9rem', lineHeight: 1.45, color: 'var(--text-secondary)', margin: '0.4rem auto 0', maxWidth: '28rem' }}>
+                        {t("A group is a chat for some people rather than everyone — your street, a garden crew, a choir. Enterprises you keep and events you're going to show up here too.")}
+                    </p>
+                    <button
+                        onClick={() => setShowCreateGroup(true)}
+                        style={{
+                            marginTop: '1rem', minHeight: '44px', padding: '0.55rem 1.25rem', borderRadius: '12px', border: 'none',
+                            background: 'var(--text-primary)', color: 'var(--bg-primary)', fontWeight: 700, fontSize: '0.95rem',
+                            cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                    >
+                        <span aria-hidden="true">➕ </span>{t('New group')}
+                    </button>
+                    <div>
+                        <button
+                            onClick={findGroups}
+                            style={{
+                                marginTop: '0.5rem', minHeight: '44px', padding: '0.5rem 0.75rem', border: 'none', background: 'none',
+                                color: 'var(--link)', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                        >
+                            {t('Find a group to join →')}
+                        </button>
+                    </div>
+                </div>
+            ) : conversations.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-faint)' }}>
                     <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</p>
                     <p>No conversations yet.</p>
@@ -2538,13 +2625,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 </div>
             ) : (
                 <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
-                    {conversations
-                        .filter(c => (c.unreadCount || 0) > 0 || c.createdAt) // show all (filtering empty convs happens server-side)
-                        .filter(c => {
-                            if (activeTab === 'transactions') return !!c.postId;
-                            if (activeTab === 'direct') return !c.postId;
-                            return true;
-                        })
+                    {listedConversations
+                        .filter(c => inConversationTab(c, activeTab))
                         .sort((a, b) => {
                             // Transactions Tab sorting priority
                             if (activeTab === 'transactions') {

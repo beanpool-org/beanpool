@@ -578,7 +578,7 @@ function restorePointWords(point: RestorePointInfo): Record<string, unknown> {
     return {
         restorePoint: point,
         restorePointNote: `Restore point ${point.name} is kept until at least ${point.keptAtLeastUntil.slice(0, 10)}. `
-            + `You can roll back to it from Backups & Restore, or on the server with \`beanpool restore-point\`.`,
+            + `You can roll back to it from Backups & Restore, or on the server with \`beanpool restore-point roll-back ${point.name}\`.`,
         restartNote: 'The server restarts now; sign in again.',
     };
 }

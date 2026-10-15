@@ -863,7 +863,8 @@ export function signerCheck(header: SealedEnvelopeHeader): SignerCheck {
         body: {
             error: `This backup of your community was locked by another machine, ${header.nodePeerId}, not by this community's server. `
                 + "If this file was locked by this community's previous server, restore it on the server with "
-                + `\`beanpool restore --accept-signer ${header.nodePeerId} FILE\`. Otherwise do not restore it: anyone who has seen one `
+                + `\`beanpool restore --accept-signer ${header.nodePeerId} FILE\` (the database only; add --with-keys for its keys too). `
+                + 'Otherwise do not restore it: anyone who has seen one '
                 + 'of your backup files can make one like it. Nothing was changed.',
             command: `beanpool restore --accept-signer ${header.nodePeerId} FILE`,
             signerNotPinned: true,

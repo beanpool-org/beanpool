@@ -16,7 +16,10 @@
  */
 import { dataDir } from './recover-command.js';
 import { listRestorePoints, resolveRestorePoint } from './services/restore-point-names.js';
-import { RESTORE_EXIT, stoppedNodeCheck, type ShellIo } from './restore-command.js';
+import { nodeRunningLockStillOurs } from './node-running-lock.js';
+import {
+    CODE_IN_ARGS, codeInArgs, damagedDatabase, LOCK_LOST, reason, RESTORE_EXIT, stoppedNodeCheck, type ShellIo,
+} from './restore-command.js';
 
 export const RESTORE_POINT_USAGE = `Usage: beanpool restore-point list
        beanpool restore-point roll-back NAME
@@ -34,6 +37,10 @@ function size(bytes: number): string {
 }
 
 export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir()): Promise<number> {
+    if (codeInArgs(args)) {
+        io.err(CODE_IN_ARGS);
+        return RESTORE_EXIT.usage;
+    }
     const [what, ...rest] = args;
     if (what === 'list' && rest.length === 0) {
         const points = listRestorePoints();
@@ -69,8 +76,18 @@ export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir
     if ((typed ?? '').trim() !== 'yes') return refuse('You did not type yes.');
 
     // Only now the node's own modules: they open state.db as the node does at its start, which is safe with it stopped.
-    const backup = await import('./routes/backup.js');
-    const { RestorePointError } = await import('./services/restore-points.js');
+    let backup: typeof import('./routes/backup.js');
+    let RestorePointError: typeof import('./services/restore-points.js').RestorePointError;
+    try {
+        backup = await import('./routes/backup.js');
+        ({ RestorePointError } = await import('./services/restore-points.js'));
+    } catch (e: any) {
+        const broken = damagedDatabase(e);
+        if (broken) return refuse(broken);
+        throw e;
+    }
+    // Right before anything is replaced: the lock this command took is still its own, so no node has started (B1).
+    if (!nodeRunningLockStillOurs(dir)) return refuse(LOCK_LOST);
     const before = new Set(listRestorePoints().map((p) => p.name));
     try {
         const body = await backup.rollBackTo(pointDir, name, null);
@@ -88,13 +105,13 @@ export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir
         return RESTORE_EXIT.done;
     } catch (e: any) {
         backup.cleanupRestoreTemp();
-        if (e instanceof RestorePointError) return refuse(e.message);
+        if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? e.message);
         const taken = listRestorePoints().find((p) => !before.has(p.name));
         if (taken) {
             io.err(`The roll-back stopped part way: ${e?.message || e}. Restore point ${taken.name} kept this server as it was `
                 + `just before; to go back to it: beanpool restore-point roll-back ${taken.name}`);
             return RESTORE_EXIT.refused;
         }
-        return refuse(`Nothing was rolled back: ${e?.message || e}.`);
+        return refuse(`Nothing was rolled back: ${reason(e)}`);
     }
 }

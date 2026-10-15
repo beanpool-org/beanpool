@@ -651,7 +651,7 @@ async function main(): Promise<void> {
     const forged = await sealAsNode(Buffer.from('not even a tar'), { signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)), nodePeerId: forgerPeer });
     const pinned = await restore(forged, { 'X-Recovery-Code': code.code });
     assert(pinned.status === 409 && pinned.body.signerNotPinned === true && pinned.body.signer === forgerPeer
-        && pinned.body.command === `beanpool restore --accept-signer ${forgerPeer} FILE` && pinned.body.error.includes(`beanpool restore --accept-signer ${forgerPeer} FILE\`. Otherwise`),
+        && pinned.body.command === `beanpool restore --accept-signer ${forgerPeer} FILE` && pinned.body.error.includes(`beanpool restore --accept-signer ${forgerPeer} FILE\` (the database only; add --with-keys for its keys too). Otherwise`),
         `5. a file of this community signed by another key is refused 409, naming the signer and the command (got ${pinned.status}: ${pinned.body.error})`);
     const confirmed = await restore(forged, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': forgerPeer });
     assert(confirmed.status === 409 && confirmed.body.signerNotPinned === true,

@@ -603,7 +603,7 @@ async function main(): Promise<void> {
             `1. data/restore-points/<ts>-before-restore/ was written (${JSON.stringify(rs.points)})`);
         assert(rs.body?.restorePoint?.name === name && typeof rs.body?.restorePointNote === 'string' && rs.body.restorePointNote.includes(name)
             && /kept until at least \d{4}-\d{2}-\d{2}/.test(rs.body.restorePointNote) && rs.body?.restartNote === 'The server restarts now; sign in again.'
-            && rs.body.restorePointNote.endsWith('or on the server with `beanpool restore-point`.'),
+            && rs.body.restorePointNote.endsWith(`or on the server with \`beanpool restore-point roll-back ${name}\`.`),
             `1. the answer names the point, how long it is kept, and the restart (${rs.body?.restorePointNote} / ${rs.body?.restartNote})`);
         assert(rs.pointCallsigns?.includes('FreshServerRow') && !rs.pointCallsigns?.includes('RoundTripMarker'),
             `1. the point holds the pre-restore database: the planted row is in it (${JSON.stringify(rs.pointCallsigns)})`);

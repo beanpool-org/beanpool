@@ -7,20 +7,29 @@
  *   1. While the node runs (its lock held, node-running-lock.ts, and state.db open with a write its last statement, which
  *      alone holds no lock on the file) a restore and a roll-back are refused, and nothing changes; `restore-point list`
  *      still answers, read-only.
- *   2. A recovery code is never taken on the command line (exit 2, never echoed).
+ *   1b. While the command waits at a question it holds the node's lock: a node started then would wait. The lock file
+ *      removed and taken by a node that started after → at "yes" the command refuses (exit 1), and nothing changes.
+ *   2. A recovery code is never taken on the command line (exit 2, never echoed), in any argument: after --code,
+ *      --code-file or --accept-signer, as the file, or as a restore point's name.
  *   3. A sealed file this server locked, with the code from --code-file: before anything is asked the output shows the
  *      file's community and signer beside this server's own; the database comes back (a row planted after the backup
  *      is gone), the keys and password come back (pinned signer), a restore point holds the row planted after the
  *      backup, the opened plaintext is not left behind, the code is never printed. The notice is delivered once.
- *   4. A wrong code typed at the prompt is refused, and nothing changes.
+ *   4. A wrong code typed at the prompt is refused, and nothing changes. A code file others can read is warned about.
  *   5. `restore-point list` shows the point; `roll-back` asks for `yes`, then brings the old state back (the row and
  *      the password), keeps a point of its own first, and leaves the notice.
+ *   5b. Another community's file goes by its community: --accept-signer on it → exit 2; without, "DIFFERENT" with this
+ *      server's name, member count and owners before `yes`; on a standby, a file of its community locked by another
+ *      machine names the main server it copies.
  *   6. A file of this community locked by another machine: refused without --accept-signer, and with the wrong one;
  *      with it, the database only (no key, password or genesis moves); --with-keys alone is a usage error; with
  *      --accept-signer --with-keys, `yes` declined changes nothing, `yes` typed applies its keys.
  *   7. An old unlocked .tar.gz: refused without --unlocked; with it, anything but `UNLOCKED` changes nothing;
  *      `UNLOCKED` restores the database and never the keys.
  *   8. Exit codes: no file or an unknown option → 2; an unknown restore point → 1; `restore-point` alone → 2.
+ *   9. The real node (index.ts): started while the command waits at a question, it waits, says so, and starts once the
+ *      command ends; a second node on the same data folder waits until the first stops.
+ *   10. A damaged or empty state.db: both commands refuse with what to do.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-beanpool-restore.ts
  */
@@ -29,7 +38,8 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
@@ -54,11 +64,31 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-restore-'));
 const STATE = path.join(DATA_DIR, 'state.db');
 const POINTS = path.join(DATA_DIR, 'restore-points');
 
-function cli(args: string[], input = '') {
+function cli(args: string[], input = '', env: Record<string, string> = {}) {
     const r = spawnSync(process.execPath, ['--import', 'tsx', path.join(SRC, 'recover-cli.ts'), ...args], {
-        env: { ...process.env, BEANPOOL_DATA_DIR: DATA_DIR }, encoding: 'utf8', timeout: 120_000, input,
+        env: { ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...env }, encoding: 'utf8', timeout: 120_000, input,
     });
     return { code: r.status, out: `${r.stdout}${r.stderr}`, stdout: r.stdout ?? '' };
+}
+/** The command as its own process, answered later: it can be left waiting at a question. */
+function cliWaiting(args: string[], env: Record<string, string> = {}) {
+    const c = spawn(process.execPath, ['--import', 'tsx', path.join(SRC, 'recover-cli.ts'), ...args], {
+        env: { ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...env }, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let out = '';
+    c.stdout.on('data', (d) => { out += d; });
+    c.stderr.on('data', (d) => { out += d; });
+    const done = new Promise<{ code: number | null; out: string }>((resolve) => c.on('close', (code) => resolve({ code, out })));
+    return { child: c, out: () => out, done, answer: (line: string) => { c.stdin.write(line); c.stdin.end(); } };
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function waitFor(get: () => string, text: string, ms = 90_000): Promise<boolean> {
+    const t0 = Date.now();
+    while (!get().includes(text)) {
+        if (Date.now() - t0 > ms || get().endsWith('[exited]')) return false;
+        await sleep(100);
+    }
+    return true;
 }
 const sha = (p: string) => { try { return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); } catch { return null; } };
 /** A row's presence in a database file, read with a connection of its own that is closed at once (an open one IS a running node). */
@@ -134,7 +164,7 @@ const { ed25519 } = await import('@noble/curves/ed25519.js');
 const ownerPub = Buffer.from(ed25519.getPublicKey(crypto.randomBytes(32))).toString('hex');
 seedGenesisMember(ownerPub, 'Olive');
 const PW_AT_BACKUP = hashPassword('Backup-Time-Pw-1!');
-updateLocalConfig({ adminHash: PW_AT_BACKUP.hash, salt: PW_AT_BACKUP.salt } as any);
+updateLocalConfig({ adminHash: PW_AT_BACKUP.hash, salt: PW_AT_BACKUP.salt, communityName: 'Riverbend Commons' } as any);
 
 // An old unlocked backup, made before the code, holding a row of its own.
 addMember('a1'.repeat(32), 'PlainRow');
@@ -182,6 +212,15 @@ fs.writeFileSync(forgedFile, Buffer.from(await core.sealEnvelope(new Uint8Array(
     signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)),
 })));
 
+// A file of ANOTHER community, locked by that machine: only its header matters here (nothing of it is ever applied).
+const otherCommunityId = 'f'.repeat(16);
+const otherFile = path.join(work, 'other-community.bpsealed');
+fs.writeFileSync(otherFile, Buffer.from(await core.sealEnvelope(new Uint8Array(forgedTar), {
+    kind: 'backup', communityId: otherCommunityId, nodePeerId: forgerPeer,
+    recipients: { owners: [{ pubkey: ownerPub, callsign: 'Ostrander' }], codes: [(await import('./config/local-config.js')).getLocalConfig().recoveryCode as any] },
+    signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)),
+})));
+
 // After the backup: a row, and a new password. The restore must take both away; the roll-back must bring both back.
 addMember('d1'.repeat(32), 'AfterBackup');
 const PW_LATER = hashPassword('Changed-Later-Pw-2!');
@@ -210,6 +249,26 @@ lock?.holdNodeRunningLock();
 lock?.releaseNodeRunningLock();
 db.close();
 
+// ── 1b. A node that starts while the command waits at a question ──
+console.log('\n— 1b. the command holds the lock while it asks —');
+{
+    const before = state();
+    const c = cliWaiting(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, '--with-keys', forgedFile]);
+    const asked = await waitFor(c.out, 'Type yes to go on');
+    const taking = lock?.tryHoldNodeRunningLock?.(DATA_DIR);
+    assert(asked && taking?.held === false && taking?.busy === true && lock?.nodeRunningLockHeld(DATA_DIR) === true,
+        `1b. while it waits at "Type yes" the command holds data/.node-running.lock: a node started now waits (${JSON.stringify(taking)})`);
+    // Someone removes the lock file, as a stale pid file is removed, and a node starts and holds a new one.
+    fs.rmSync(path.join(DATA_DIR, '.node-running.lock'), { force: true });
+    lock?.holdNodeRunningLock(DATA_DIR);
+    c.answer('yes\n');
+    const r = await c.done;
+    lock?.releaseNodeRunningLock();
+    assert(r.code === 1 && r.out.includes('data/.node-running.lock was removed or replaced while this command waited') && r.out.trim().endsWith('Nothing was changed.'),
+        `1b. at "yes" the lock is no longer its own → exit 1, refused in words (exit ${r.code}: ${r.out.trim().slice(-220)})`);
+    assert(state() === before && hasMember('AfterBackup'), '1b. nothing changed: database, keys, config, no restore point, no notice, no opened file left');
+}
+
 // ── 2. Never a code on the command line ──
 console.log('\n— 2. the code is never an argument —');
 {
@@ -217,6 +276,19 @@ console.log('\n— 2. the code is never an argument —');
     const r = cli(['restore', '--code', code.code, sealedFile]);
     assert(r.code === 2 && r.out.includes('never taken on the command line') && !r.out.includes(code.code),
         `2. --code <code> → exit 2, refused in words, the code not echoed (exit ${r.code}: ${r.out.trim().slice(-200)})`);
+    const body = code.code.trim().split(/\s+/).pop()!;
+    const tries: Array<[string, string[]]> = [
+        ['--code-file <code>', ['restore', '--code-file', code.code, sealedFile]],
+        ['--accept-signer <code>', ['restore', '--accept-signer', code.code, sealedFile]],
+        ['<code> as the file', ['restore', code.code]],
+        ['the code without its BPRC number', ['restore', body]],
+        ['restore-point roll-back <code>', ['restore-point', 'roll-back', code.code]],
+    ];
+    for (const [what, args] of tries) {
+        const t = cli(args, 'yes\n');
+        assert(t.code === 2 && t.out.includes('That was a recovery code; it is now in your shell history: clear it.') && !t.out.includes(body),
+            `2. ${what} → exit 2, told to clear the shell history, the code not echoed (exit ${t.code}: ${t.out.trim().slice(-160)})`);
+    }
     assert(state() === before, '2. nothing changed');
 }
 
@@ -232,6 +304,8 @@ let firstPoint = '';
         && r.stdout.includes(`node ${ownPeer}`) && r.stdout.indexOf('Locked by this server') > serverAt,
         "3. the file's community and signer are shown beside this server's own, before anything else is said");
     assert(!r.out.includes(code.code), '3. the code is never printed');
+    assert(r.stdout.trim().endsWith(`Delete ${codeFile} now: it holds the recovery code.`) && !r.out.includes('can be read by other users'),
+        '3. after a restore with --code-file: "Delete F now"; a file only its owner reads is not warned about');
     assert(hasMember('BeforeBackup') && !hasMember('AfterBackup'), '3. the backup\'s database is in place: the row planted after it is gone');
     assert(adminHash() === PW_AT_BACKUP.hash, '3. pinned signer: the bundle came back (the admin password is the one at backup time)');
     assert(sha(path.join(DATA_DIR, 'libp2p_key')) === crypto.createHash('sha256').update(nodeKeyBytes).digest('hex'), '3. the node key is this server\'s, byte for byte');
@@ -257,6 +331,12 @@ console.log('\n— 4. a wrong code typed at the prompt —');
     assert(r.code === 1 && r.out.includes('Nothing was changed.') && /Recovery code #\d+ \(not shown as you type\)/.test(r.out),
         `4. the code is asked for at the prompt; a wrong one → exit 1 (exit ${r.code}: ${r.out.trim().slice(-200)})`);
     assert(state() === before, '4. nothing changed');
+    const open = path.join(work, 'readable-code.txt');
+    fs.writeFileSync(open, `${wrong}\n`, { mode: 0o644 });
+    fs.chmodSync(open, 0o644);
+    const w = cli(['restore', '--code-file', open, sealedFile]);
+    assert(w.code === 1 && w.out.includes(`Warning: ${open} can be read by other users of this server (mode 644)`) && state() === before,
+        `4. a code file others can read is warned about (exit ${w.code}: ${w.out.trim().slice(-200)})`);
 }
 
 // ── 5. restore-point list and roll-back ──
@@ -278,6 +358,31 @@ console.log('\n— 5. restore-point list, roll-back —');
     const d = delivered();
     assert(d.n === 1 && d.told[0]?.startsWith('This community was rolled back: This community was rolled back to how it was on '),
         `5. the roll-back's notice is delivered (${d.told[0]?.slice(0, 100)})`);
+}
+
+// ── 5b. Another community's file goes by its community (before 6 gives this server another machine's key) ──
+console.log('\n— 5b. another community —');
+{
+    const before = state();
+    const accept = cli(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, otherFile]);
+    assert(accept.code === 2 && accept.out.includes('--accept-signer and --with-keys are for a backup of this community locked by another machine') && state() === before,
+        `5b. --accept-signer on another community's file → exit 2, never the database-only route (exit ${accept.code}: ${accept.out.trim().slice(-200)})`);
+    const both = cli(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, '--with-keys', otherFile]);
+    assert(both.code === 2 && state() === before, `5b. --accept-signer --with-keys on it → exit 2 (exit ${both.code})`);
+    const no = cli(['restore', '--code-file', codeFile, otherFile], 'no\n');
+    const serverAt = no.stdout.indexOf('This server:');
+    const n = JSON.parse(people())[0].length;
+    assert(no.code === 1 && no.out.includes('This backup is from a DIFFERENT community') && no.stdout.includes('opens with the phones of @Ostrander')
+        && serverAt > 0 && no.stdout.indexOf(`"Riverbend Commons", ${n} members, owners @Olive`) > serverAt
+        && no.stdout.includes(`replaces the community on this server ("Riverbend Commons", ${n} members, owners @Olive), and everyone in it`),
+        `5b. without them: DIFFERENT, with this server's name, member count and owners beside its IDs, before "yes" (exit ${no.code}: ${no.stdout.trim().slice(-420)})`);
+    assert(state() === before, '5b. "no" → nothing changed');
+    // A standby: the same community's file locked by another machine names the main server it copies.
+    fs.writeFileSync(path.join(DATA_DIR, 'connectors.json'), JSON.stringify([{ trustLevel: 'mirror', address: `/ip4/127.0.0.1/tcp/4001/p2p/${ownPeer}` }]));
+    const standby = cli(['restore', '--code-file', codeFile, forgedFile], '', { NODE_ROLE: 'backup' });
+    fs.rmSync(path.join(DATA_DIR, 'connectors.json'), { force: true });
+    assert(standby.code === 1 && standby.out.includes(`locked by another machine, ${forgerPeer}, not by the main server this standby copies`) && state() === before,
+        `5b. on a standby: "not by the main server this standby copies" (exit ${standby.code}: ${standby.out.trim().slice(-200)})`);
 }
 
 // ── 6. Locked by another machine ──
@@ -349,6 +454,110 @@ console.log('\n— 8. exit codes —');
     assert(missing.code === 1 && missing.out.includes('There is no restore point'), `8. an unknown restore point → 1 (got ${missing.code})`);
     assert(nofile.code === 1, `8. a file that is not there → 1 (got ${nofile.code})`);
     assert(state() === before, '8. none of them changed anything');
+}
+
+// ── 9. The real node waits for the lock ──
+console.log('\n— 9. the real node (index.ts) waits while the lock is held —');
+{
+    const HELD = 'data/.node-running.lock is held: a beanpool restore or another node is using this data folder';
+    const started: ChildProcess[] = [];
+    const freePort = () => new Promise<number>((resolve) => {
+        const s = net.createServer();
+        s.listen(0, '127.0.0.1', () => { const p = (s.address() as net.AddressInfo).port; s.close(() => resolve(p)); });
+    });
+    const canListen = (port: number) => new Promise<boolean>((resolve) => {
+        const s = net.createServer();
+        s.once('error', () => resolve(false));
+        s.listen(port, '0.0.0.0', () => s.close(() => resolve(true)));
+    });
+    /** index.ts listens on PORT_HTTP, PORT_HTTPS, PORT_P2P and PORT_P2P + 1 (test-clean-stop's freePorts). */
+    const ports = async () => {
+        const http = await freePort();
+        const https = await freePort();
+        for (;;) {
+            const p2p = await freePort();
+            if (p2p < 65_000 && ![http, https].includes(p2p) && ![http, https].includes(p2p + 1) && await canListen(p2p + 1)) {
+                return { PORT_HTTP: String(http), PORT_HTTPS: String(https), PORT_P2P: String(p2p) };
+            }
+        }
+    };
+    const startNode = async () => {
+        const child = spawn(process.execPath, ['--import', 'tsx', path.join(SRC, 'index.ts')], {
+            env: {
+                ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...(await ports()),
+                // As test-clean-stop runs it: nothing leaves this machine.
+                DISABLE_UPDATE_CHECK: 'true', DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
+                CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '', ADMIN_PASSWORD: '',
+            } as NodeJS.ProcessEnv,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        started.push(child);
+        let out = '';
+        child.stdout!.on('data', (d) => { out += d; });
+        child.stderr!.on('data', (d) => { out += d; });
+        const exited = new Promise<void>((resolve) => child.on('exit', () => resolve()));
+        /** Its output, and a line that ends any wait once it has exited. */
+        const seen = () => (child.exitCode !== null || child.signalCode !== null ? `${out}\n[exited]` : out);
+        return { child, out: () => out, seen, exited };
+    };
+    const tail = (n: { out: () => string }) => n.out().trim().split('\n').filter((l) => !/connection is not open|Deprecation|trace-deprecation/.test(l)).slice(-4).join(' | ').slice(0, 400);
+    const stop = async (n: { child: ChildProcess; exited: Promise<void> }) => {
+        n.child.kill('SIGTERM');
+        await Promise.race([n.exited, sleep(30_000)]);
+        if (n.child.exitCode === null && n.child.signalCode === null) { n.child.kill('SIGKILL'); await n.exited; }
+    };
+    try {
+        const c = cliWaiting(['restore-point', 'roll-back', firstPoint]);
+        const asked = await waitFor(c.out, 'Type yes to roll back');
+        const a = await startNode();
+        const waited = await waitFor(a.seen, HELD);
+        await sleep(1_000);
+        assert(asked && waited && !a.out().includes('BeanPool Node starting') && a.child.exitCode === null,
+            `9. a node started while the command waits at "Type yes" waits, says why, and starts nothing (${tail(a)})`);
+        c.answer('no\n');
+        const r = await c.done;
+        const live = await waitFor(a.seen, 'BeanPool Node is live', 150_000) && a.out().includes('BeanPool Node is live');
+        assert(r.code === 1 && live && a.out().includes('data/.node-running.lock was let go: this node starts.'),
+            `9. the command ends (exit ${r.code}) → the node starts (${tail(a)})`);
+
+        const b = await startNode();
+        const bWaited = await waitFor(b.seen, HELD);
+        await sleep(1_000);
+        assert(bWaited && !b.out().includes('BeanPool Node starting') && b.child.exitCode === null,
+            `9. a second node on the same data folder waits while the first runs, and starts nothing (${tail(b)})`);
+        await stop(a);
+        const bLive = await waitFor(b.seen, 'BeanPool Node is live', 150_000) && b.out().includes('BeanPool Node is live');
+        assert(bLive, `9. once the first stops, the second starts (${tail(b)})`);
+        await stop(b);
+    } finally {
+        for (const ch of started) if (ch.exitCode === null && ch.signalCode === null) ch.kill('SIGKILL');
+    }
+}
+
+// ── 10. A damaged or empty state.db ──
+console.log('\n— 10. a damaged or empty state.db —');
+{
+    const good = path.join(work, 'state.db.good');
+    fs.copyFileSync(STATE, good);
+    const pointsBefore = points();
+    const recipe = 'move state.db, state.db-wal and state.db-shm out of the data folder (keep them); start the node once';
+    fs.writeFileSync(STATE, '');
+    const z = cli(['restore', '--code-file', codeFile, sealedFile]);
+    const zr = cli(['restore-point', 'roll-back', firstPoint], 'yes\n');
+    assert(z.code === 1 && z.out.includes("This server's database (state.db) has no tables (it is empty)") && z.out.includes(recipe) && !z.out.includes('..'),
+        `10. an empty state.db: restore refuses with what to do (exit ${z.code}: ${z.out.trim().slice(-260)})`);
+    assert(zr.code === 1 && zr.out.includes('has no tables (it is empty)') && zr.out.includes(recipe), `10. and roll-back too (exit ${zr.code})`);
+    const buf = fs.readFileSync(good);
+    for (let off = 8 * 4096; off < Math.min(buf.length, 40 * 4096); off += 4096) buf.fill(0xa5, off, off + 4096);
+    fs.writeFileSync(STATE, buf);
+    const d = cli(['restore', '--code-file', codeFile, sealedFile]);
+    const dr = cli(['restore-point', 'roll-back', firstPoint], 'yes\n');
+    assert(d.code === 1 && d.out.includes("This server's database (state.db) is damaged (SQLITE_CORRUPT)") && d.out.includes(recipe),
+        `10. a damaged state.db: restore refuses with what to do (exit ${d.code}: ${d.out.trim().slice(-260)})`);
+    assert(dr.code === 1 && dr.out.includes('is damaged (SQLITE_') && dr.out.includes(recipe), `10. and roll-back too (exit ${dr.code}: ${dr.out.trim().slice(-200)})`);
+    assert(JSON.stringify(points()) === JSON.stringify(pointsBefore) && sha(STATE) === crypto.createHash('sha256').update(buf).digest('hex'),
+        '10. nothing changed: no restore point, the file as it was');
+    fs.copyFileSync(good, STATE);
 }
 
 fs.rmSync(work, { recursive: true, force: true });

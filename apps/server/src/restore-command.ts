@@ -27,18 +27,25 @@
  * where the shell's history and the process list keep it, and it is never printed or logged. The phone unlock is not
  * offered here: it needs the running server.
  *
- * The node must be stopped: a running node holds state.db, and the restore replaces it. The check opens state.db alone
- * with an exclusive lock and no wait ({@link nodeIsRunning}); only after it does this process load the node's modules,
- * which open the database as the node does.
+ * The node must be stopped: a running node holds state.db, and the restore replaces it. The check ({@link stoppedNodeCheck})
+ * takes the node's own lock, data/.node-running.lock, and keeps it until this command ends: a node started while it asks
+ * its questions waits for it (node-running-lock.ts), and just before anything is replaced the command checks the lock is
+ * still its own. Then state.db alone, with an exclusive lock and no wait, for a node of an older version that holds no
+ * lock; and that state.db opens and has its tables (a damaged one is refused with what to do). Only after all that does
+ * this process load the node's modules, which open the database as the node does.
  *
  * Exit codes: 0 restored, 1 refused (nothing was changed), 2 usage.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { parseRecoveryCode } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { listRestorePoints } from './services/restore-point-names.js';
-import { nodeRunningLockHeld } from './node-running-lock.js';
+import {
+    NODE_RUNNING_LOCK, NODE_RUNNING_LOCK_SHOWN, nodeRunningLockHeld, nodeRunningLockStillOurs, releaseNodeRunningLock,
+    tryHoldNodeRunningLock,
+} from './node-running-lock.js';
 import type { Ask } from './shell-prompt.js';
 
 export const RESTORE_USAGE = `Usage: beanpool restore [--code-file F] [--accept-signer <PeerId>] [--with-keys] FILE.bpsealed
@@ -65,8 +72,24 @@ export interface ShellIo {
 
 type RestoreArgs = { file: string; codeFile?: string; acceptSigner?: string; withKeys: boolean; unlocked: boolean };
 
+/** An argument that is a recovery code, typed where a file, a name or a key goes (#2017 review N4): never echoed back. */
+export const CODE_IN_ARGS = 'That was a recovery code; it is now in your shell history: clear it. A code is never taken on the '
+    + 'command line: give it with --code-file F, or type it when asked. Nothing was changed.';
+
+export function codeInArgs(args: string[]): boolean {
+    return args.some((a) => {
+        try {
+            parseRecoveryCode(a.replace(/^--[a-z-]+=/, ''));
+            return true;
+        } catch {
+            return false;
+        }
+    });
+}
+
 function parseRestoreArgs(args: string[]): RestoreArgs | { usage: string } {
     const out: RestoreArgs = { file: '', withKeys: false, unlocked: false };
+    if (codeInArgs(args)) return { usage: CODE_IN_ARGS };
     const files: string[] = [];
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
@@ -101,7 +124,11 @@ function parseRestoreArgs(args: string[]): RestoreArgs | { usage: string } {
  * through db/db.ts. Closing it folds any -wal a stopped node left into state.db.
  */
 export function nodeIsRunning(dbPath: string): boolean {
-    if (nodeRunningLockHeld(path.dirname(dbPath))) return true;
+    return nodeRunningLockHeld(path.dirname(dbPath)) || stateDbHeld(dbPath);
+}
+
+/** state.db held by a node: what a node of a version before the lock leaves to go by. */
+function stateDbHeld(dbPath: string): boolean {
     const conn = new Database(dbPath, { fileMustExist: true });
     try {
         conn.pragma('busy_timeout = 0');
@@ -120,16 +147,77 @@ export function nodeIsRunning(dbPath: string): boolean {
 export const NODE_RUNNING = 'The node is running: it holds the database this would replace. Stop it first '
     + '(docker compose stop beanpool-node), then run this with docker compose run --rm beanpool-node beanpool …. Nothing was changed.';
 
-/** The checks every command that replaces the database makes first. A reason when it must not go on; null when it may. */
+/** Said just before anything is replaced, when the lock this command took is no longer its own. */
+export const LOCK_LOST = `${NODE_RUNNING_LOCK_SHOWN} was removed or replaced while this command waited, so a node may have `
+    + 'started on this data folder. Stop it (docker compose stop beanpool-node), then run this again. Nothing was changed.';
+
+/**
+ * A state.db neither command can work on: they load the node's modules, which open it, and keep a restore point of it
+ * first (#2017 review N1). What to do, since Settings cannot open it either.
+ */
+export function brokenDatabaseRefusal(what: string): string {
+    return `This server's database (state.db) ${what}, so nothing can be restored onto it as it is. Stop the node; move `
+        + 'state.db, state.db-wal and state.db-shm out of the data folder (keep them); start the node once (docker compose up -d) '
+        + 'so it makes a fresh database; stop it again (docker compose stop beanpool-node); then run this again. Nothing was changed.';
+}
+
+const DAMAGED = new Set(['SQLITE_CORRUPT', 'SQLITE_NOTADB']);
+
+/** The refusal for an error that came from this server's own state.db being damaged; null for any other. */
+export function damagedDatabase(e: any): string | null {
+    return DAMAGED.has(e?.code) ? brokenDatabaseRefusal(`is damaged (${e.code})`) : null;
+}
+
+/** Does state.db open, and does it have the node's tables? One made empty (zero bytes) has none. */
+function unusableDatabase(dbPath: string): string | null {
+    let conn: Database.Database | null = null;
+    try {
+        conn = new Database(dbPath, { fileMustExist: true });
+        conn.pragma('busy_timeout = 0');
+        const members = conn.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'members'").get() as { n: number };
+        if (!members.n) return brokenDatabaseRefusal('has no tables (it is empty)');
+        conn.prepare('SELECT COUNT(*) FROM members').get();
+        return null;
+    } catch (e: any) {
+        return damagedDatabase(e) ?? `The node's database could not be opened (${e?.code || e?.message || e}). Nothing was changed.`;
+    } finally {
+        conn?.close();
+    }
+}
+
+/**
+ * The checks every command that replaces the database makes first. A reason when it must not go on; null when it may,
+ * and then this process holds the node's lock until it ends (#2017 review B1): BUSY taking it is a node running.
+ */
 export function stoppedNodeCheck(dir = dataDir()): string | null {
     const dbPath = path.join(dir, 'state.db');
     if (!fs.existsSync(dbPath)) return `No node database at ${dbPath}. Run this in the node's container, or set BEANPOOL_DATA_DIR. Nothing was changed.`;
+    const lock = tryHoldNodeRunningLock(dir);
+    if (!lock.held && lock.busy) return NODE_RUNNING;
+    const refuse = (why: string): string => {
+        releaseNodeRunningLock();
+        return why;
+    };
     try {
-        if (nodeIsRunning(dbPath)) return NODE_RUNNING;
+        if (stateDbHeld(dbPath)) return refuse(NODE_RUNNING);
     } catch (e: any) {
-        return `The node's database could not be opened (${e?.code || e?.message || e}). Nothing was changed.`;
+        return refuse(damagedDatabase(e) ?? `The node's database could not be opened (${e?.code || e?.message || e}). Nothing was changed.`);
     }
+    if (!lock.held) {
+        return refuse(`${NODE_RUNNING_LOCK_SHOWN} cannot be taken (${lock.code}), so a node started while this runs would not `
+            + `wait for it. With the node stopped, move it aside (mv ${path.join(dir, NODE_RUNNING_LOCK)} ${path.join(dir, NODE_RUNNING_LOCK)}.aside) `
+            + 'and run this again. Nothing was changed.');
+    }
+    const unusable = unusableDatabase(dbPath);
+    if (unusable) return refuse(unusable);
     return null;
+}
+
+/** An error's message as a sentence, without the "Nothing was changed." the refusal adds (#2017 review N5). */
+export function reason(e: any): string {
+    let m = String(e?.message || e).trim().replace(/\s*Nothing was changed\.$/, '');
+    if (!/[.!?]$/.test(m)) m += '.';
+    return m;
 }
 
 function day(iso: string | null | undefined): string {
@@ -173,21 +261,45 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     if (stopped) return refuse(stopped);
 
     // Only now the node's own modules: they open state.db as the node does at its start, which is safe with it stopped.
-    const sealed = await import('./services/sealed-backup.js');
-    const backup = await import('./routes/backup.js');
-    const { RestorePointError } = await import('./services/restore-points.js');
-    const core = await import('@beanpool/core');
-    const { readNodeIdentity } = await import('./services/takeover-envelope.js');
+    let sealed: typeof import('./services/sealed-backup.js');
+    let backup: typeof import('./routes/backup.js');
+    let RestorePointError: typeof import('./services/restore-points.js').RestorePointError;
+    let core: typeof import('@beanpool/core');
+    let readNodeIdentity: typeof import('./services/takeover-envelope.js').readNodeIdentity;
+    let getNodeRole: typeof import('./config/node-role.js').getNodeRole;
+    let thisCommunity: () => string;
+    try {
+        sealed = await import('./services/sealed-backup.js');
+        backup = await import('./routes/backup.js');
+        ({ RestorePointError } = await import('./services/restore-points.js'));
+        core = await import('@beanpool/core');
+        ({ readNodeIdentity } = await import('./services/takeover-envelope.js'));
+        ({ getNodeRole } = await import('./config/node-role.js'));
+        const { db } = await import('./db/db.js');
+        const { getLocalConfig } = await import('./config/local-config.js');
+        thisCommunity = () => describeCommunity(db, getLocalConfig().communityName);
+    } catch (e: any) {
+        const broken = damagedDatabase(e);
+        if (broken) return refuse(broken);
+        throw e;
+    }
 
     const ownCommunity = sealed.ownCommunityId();
     let ownPeer: string | null = null;
     try { ownPeer = readNodeIdentity()?.peerId ?? null; } catch { ownPeer = null; }
-    const thisServer = [
+    /** This server beside the file; with `people`, who is in its community (the file is of another one, #2017 review N3). */
+    const thisServer = (people = false): string[] => [
         `This server:  community ${ownCommunity ?? '(its genesis.json cannot be read)'}`,
+        ...(people ? [`              ${thisCommunity()}`] : []),
         `              node ${ownPeer ?? '(its node key cannot be read)'}`,
     ];
 
     const run = async (tarPath: string, header: any, applyKeys: boolean): Promise<number> => {
+        // Right before anything is replaced: the lock this command took is still its own, so no node has started (B1).
+        if (!nodeRunningLockStillOurs(dir)) {
+            backup.cleanupRestoreTemp();
+            return refuse(LOCK_LOST);
+        }
         const before = new Set(listRestorePoints().map((p) => p.name));
         try {
             const body = await backup.restoreFromTar(tarPath, header, null, { applyKeys });
@@ -195,7 +307,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
             return RESTORE_EXIT.done;
         } catch (e: any) {
             backup.cleanupRestoreTemp();
-            if (e instanceof RestorePointError) return refuse(e.message);
+            if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? e.message);
             // Every check comes before the point; a failure after it may have replaced part of the server.
             const taken = listRestorePoints().find((p) => !before.has(p.name));
             if (taken) {
@@ -203,7 +315,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
                     + `just before; to go back to it: beanpool restore-point roll-back ${taken.name}`);
                 return RESTORE_EXIT.refused;
             }
-            return refuse(`Nothing was restored: ${e?.message || e}.`);
+            return refuse(`Nothing was restored: ${reason(e)}`);
         }
     };
 
@@ -212,7 +324,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     if (parsed.unlocked) {
         if (!isGzip) return refuse('This file is not an unlocked backup (.tar.gz). A locked backup (.bpsealed) restores without --unlocked.');
         io.out(`The backup:   ${path.basename(file)}, NOT locked`);
-        for (const l of thisServer) io.out(l);
+        for (const l of thisServer()) io.out(l);
         io.out('');
         io.out('This file is not locked: anyone who has a copy can read every member\'s data in it. It brings back the database and '
             + 'photos only, never keys, the admin password or 2FA. Everything on this server since the backup was made goes; a '
@@ -237,13 +349,24 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     if (!signer.ok && signer.body.badSignature) return refuse('This backup file has been altered: its signature does not match the server it names.');
     const pins = sealed.restorePins(header);
     const pinned = pins.includes(header.nodePeerId);
+    // Another community's file goes by its community, not by the pins (#2017 review N2): only a pin here vouches for one (a
+    // standby whose genesis is still its own, and the main server it copies). It never takes the database-only route.
+    const otherCommunity = !pinned && ownCommunity !== null && header.communityId !== ownCommunity;
+    const standby = getNodeRole() === 'backup';
 
     io.out(`The backup:   ${path.basename(file)}, made ${day(header.createdAt)}`);
     io.out(`              community ${header.communityId}`);
+    const fileOwners = sealed.describeSealedHeader(header).owners;
+    if (otherCommunity && fileOwners.length) io.out(`              opens with the phones of ${fileOwners.map((c) => '@' + c).join(', ')}`);
     io.out(`              locked by ${header.nodePeerId}`);
-    for (const l of thisServer) io.out(l);
+    for (const l of thisServer(otherCommunity)) io.out(l);
     io.out('');
 
+    if (otherCommunity && (parsed.acceptSigner || parsed.withKeys)) {
+        io.err('--accept-signer and --with-keys are for a backup of this community locked by another machine. This file is of '
+            + 'another community: run again without them, and you are asked to confirm. Nothing was changed.');
+        return RESTORE_EXIT.usage;
+    }
     if (parsed.acceptSigner && parsed.acceptSigner !== header.nodePeerId) {
         return refuse(`This file was locked by ${header.nodePeerId}, not by ${parsed.acceptSigner}.`);
     }
@@ -252,15 +375,21 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     const replaces = 'its node key, community key, genesis.json and connectors.json, the key that opens members\' sign-in '
         + 'recovery copies, the open door\'s key, and the admin password, 2FA and recovery-code record; and its owners come '
         + 'with its database';
-    if (pinned) {
+    if (otherCommunity) {
+        applyKeys = true;
+        askYes = `This backup is from a DIFFERENT community. Restoring it replaces the community on this server (${thisCommunity()}), `
+            + `and everyone in it, with the backup's, and replaces this server's keys: ${replaces}.`;
+    } else if (pinned) {
         io.out(header.nodePeerId === ownPeer
             ? 'Locked by this server: its database, photos and keys come back.'
             : 'Locked by the main server this standby copies: its database, photos and keys come back.');
         applyKeys = true;
     } else if (pins.length > 0) {
         if (!parsed.acceptSigner) {
-            return refuse(`This backup of your community was locked by another machine, ${header.nodePeerId}, not by this community's `
-                + 'server. If this file was locked by this community\'s previous server, run again with '
+            return refuse(`This backup of your community was locked by another machine, ${header.nodePeerId}, `
+                + (standby ? 'not by the main server this standby copies. If this file was locked by the main server\'s previous '
+                    + 'machine, run again with ' : 'not by this community\'s server. If this file was locked by this community\'s '
+                    + 'previous server, run again with ')
                 + `beanpool restore --accept-signer ${header.nodePeerId} FILE (the database only), and add --with-keys to bring `
                 + 'back its keys too. Otherwise do not restore it: anyone who has seen one of your backup files can make one like it.');
         }
@@ -269,11 +398,8 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         else io.out('Locked by another machine, which you accepted: the database and photos only. This server keeps its own keys, password and 2FA.');
     } else {
         applyKeys = true;
-        askYes = ownCommunity === null || ownCommunity === header.communityId
-            ? 'This server cannot read its own community record or node key, so nothing here vouches for this file. '
-              + `Restoring it puts the backup's community and keys in place: ${replaces}.`
-            : 'This backup is from a DIFFERENT community. Restoring it replaces the community on this server, and everyone in '
-              + `it, with the backup's, and replaces this server's keys: ${replaces}.`;
+        askYes = 'This server cannot read its own community record or node key, so nothing here vouches for this file. '
+            + `Restoring it puts the backup's community and keys in place: ${replaces}.`;
     }
     if (askYes) {
         io.out(askYes);
@@ -287,7 +413,16 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     const needed = stanzas.map((c: any) => `#${c.codeId}`).join(' or ');
     let code: string | null;
     if (parsed.codeFile) {
-        try { code = fs.readFileSync(parsed.codeFile, 'utf-8').trim(); } catch { return refuse(`The code file ${parsed.codeFile} cannot be read.`); }
+        try {
+            const mode = fs.statSync(parsed.codeFile).mode & 0o777;
+            code = fs.readFileSync(parsed.codeFile, 'utf-8').trim();
+            if (mode & 0o077) {
+                io.err(`Warning: ${parsed.codeFile} can be read by other users of this server (mode ${mode.toString(8)}), and it holds `
+                    + 'the recovery code. Delete it once this is done.');
+            }
+        } catch {
+            return refuse(`The code file ${parsed.codeFile} cannot be read.`);
+        }
     } else {
         code = (await io.ask(`Recovery code ${needed} (not shown as you type): `, { secret: true }))?.trim() ?? null;
     }
@@ -322,5 +457,23 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     } finally {
         code = null;
     }
-    return run(openedTarPath, header, applyKeys);
+    const done = await run(openedTarPath, header, applyKeys);
+    if (done === RESTORE_EXIT.done && parsed.codeFile) io.out(`Delete ${parsed.codeFile} now: it holds the recovery code.`);
+    return done;
+}
+
+/** This server's community as people know it, read here: its name, how many are in it, and its owners (#2017 review N3). */
+function describeCommunity(db: Database.Database, name: string | null | undefined): string {
+    let members = '? members';
+    let owners = '';
+    try {
+        const n = (db.prepare("SELECT COUNT(*) AS c FROM members WHERE COALESCE(status, '') != 'pruned'").get() as { c: number }).c;
+        members = `${n} ${n === 1 ? 'member' : 'members'}`;
+    } catch { /* said as unknown */ }
+    try {
+        const rows = db.prepare(`SELECT m.callsign FROM node_roles r JOIN members m ON m.public_key = r.member_pubkey
+            WHERE r.role = 'owner' ORDER BY m.callsign`).all() as Array<{ callsign: string }>;
+        owners = rows.length ? `, owners ${rows.map((r) => '@' + r.callsign).join(', ')}` : ', no owners';
+    } catch { /* left out */ }
+    return `${name ? `"${name}"` : 'not named'}, ${members}${owners}`;
 }

@@ -19,7 +19,10 @@
 // state crash-loops, so no boot ever reaches the scrub either. See report-privacy.ts; it imports nothing,
 // deliberately.
 import './report-privacy.js';
-// SECOND, and before anything that imports db/db.ts, which opens state.db as it is imported: a standby's whole copy built
+// SECOND: data/.node-running.lock, held for this process's life. While a `beanpool restore` or another node on this data
+// folder holds it, this import blocks, before anything below renames or opens state.db (boot-lock.ts).
+import './boot-lock.js';
+// THIRD, and before anything that imports db/db.ts, which opens state.db as it is imported: a standby's whole copy built
 // in data/staging and made ready is swapped in here, by rename, before the database opens (db/swap-at-boot.ts).
 import './db/swap-at-boot.js';
 
@@ -70,7 +73,6 @@ import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
 import { startRecoverNoticeWatch } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
-import { holdNodeRunningLock } from './node-running-lock.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -107,8 +109,6 @@ const PORT_P2P = Number(process.env.PORT_P2P ?? 4001);
 const PORT_P2P_WS = PORT_P2P + 1; // 4002
 
 async function main() {
-    // First: the lock that tells `beanpool restore` this node is running, held until the process ends (node-running-lock.ts).
-    holdNodeRunningLock();
     console.log('\n🫘  BeanPool Node starting...\n');
 
     // Step 0.5: the data dir's files before anything reads them: a crash's temp files removed, key files made 0600,

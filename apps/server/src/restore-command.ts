@@ -38,6 +38,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { dataDir } from './recover-command.js';
 import { listRestorePoints } from './services/restore-point-names.js';
+import { nodeRunningLockHeld } from './node-running-lock.js';
 import type { Ask } from './shell-prompt.js';
 
 export const RESTORE_USAGE = `Usage: beanpool restore [--code-file F] [--accept-signer <PeerId>] [--with-keys] FILE.bpsealed
@@ -94,10 +95,13 @@ function parseRestoreArgs(args: string[]): RestoreArgs | { usage: string } {
 }
 
 /**
- * Is a node using this database? A running node holds state.db open (WAL); an exclusive lock taken with no wait fails
- * then. Opened alone, never through db/db.ts. Closing it folds any -wal a stopped node left into state.db.
+ * Is a node using this database? First the lock the node holds for its whole life (node-running-lock.ts). Then state.db
+ * itself: a node that has read it holds a shared lock there (WAL), and an exclusive lock taken with no wait fails; on its
+ * own this misses a node whose last statement was a write, which is why the node's lock comes first. Opened alone, never
+ * through db/db.ts. Closing it folds any -wal a stopped node left into state.db.
  */
 export function nodeIsRunning(dbPath: string): boolean {
+    if (nodeRunningLockHeld(path.dirname(dbPath))) return true;
     const conn = new Database(dbPath, { fileMustExist: true });
     try {
         conn.pragma('busy_timeout = 0');

@@ -520,7 +520,7 @@ async function main(): Promise<void> {
     assert(copied.length > 10 && copied.every((t) => !has(tableText(t))), `9. so in none of the ${copied.length} tables a standby copies`);
     db.pragma('wal_checkpoint(TRUNCATE)');
     assert(!has(fs.readFileSync(path.join(dataDir!, 'state.db')).toString('latin1')), "9. nor in state.db's bytes");
-    const snap = createSnapshot();
+    const snap = createSnapshot('scheduled');
     assert(!has(fs.readFileSync(resolveSnapshotPath(snap.name)!).toString('latin1')), '9. nor in a snapshot');
     const sealed = await createSealedBackup();
     const sealedFile = path.join(work, 'b.bpsealed');

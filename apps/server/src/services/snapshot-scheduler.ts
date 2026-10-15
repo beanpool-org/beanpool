@@ -405,9 +405,10 @@ export function expireSnapshots(now = Date.now()): number {
  * {@link MANUAL_SNAPSHOTS_KEPT}. Returns the new snapshot's filename. Never overlaps with a concurrent create.
  *
  * `kind` is 'scheduled' for the scheduler's timer alone. Every route, token and assistant passes 'manual': a snapshot
- * they take must never push a scheduled one out (see the note at the top).
+ * they take must never push a scheduled one out (see the note at the top). It has no default, so a new caller has to
+ * say which it is (#1984 confirmation N-3).
  */
-export function createSnapshot(kind: SnapshotKind = 'scheduled'): SnapshotInfo {
+export function createSnapshot(kind: SnapshotKind): SnapshotInfo {
     if (creating) throw new Error('A snapshot is already being created');
     creating = true;
     try {

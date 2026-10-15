@@ -514,10 +514,13 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * owner-only route does; an admin appointing or removing a moderator is not asked.
  */
 /**
- * The proof a role change that needs an owner asks for (roleChangeNeedsOwner). An owner: the fresh proof every time
- * (design case 18, C6 and C8), so a stolen session can neither leave an owner key of its own behind nor strip the other
- * owners. In break-glass mode too (#1984 review B2): the password and an earlier 2FA session are the stolen session C6 is
- * for, and the owner recovering sends a current code with the password. Anyone else (an admin, a break-glass code) is
+ * The proof a role change that needs an owner asks for (roleChangeNeedsOwner), and a re-key of an owner or admin, which
+ * moves their role to the new key (rekeyProof). An owner: the fresh proof every time (design case 18, C6 and C8), so a
+ * stolen session can't give a key of its own an owner's or admin's role (enrol, node-roles, re-key), or take one away
+ * with a role change. Removing (pruning, offboarding) or emergency-suspending an owner asks only the step-up
+ * (stepUpIfOwnerOnly; design D4 and D5, #1984 confirmation N-1). In break-glass mode too (#1984 review B2): the password
+ * and an earlier 2FA session are the stolen session C6 is for, and the owner recovering sends a current code with the
+ * password. Anyone else (an admin, a break-glass code) is
  * asked what they were asked before, the phone step-up, and the engine decides as it always has: it refuses them unless
  * the node has no acting owner (grantNodeRole's bootstrap, #1006), and a break-glass code is the owners' recovery factor
  * itself.
@@ -537,15 +540,28 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
 /**
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
  * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
- * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) or re-keying an
- * owner or admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
- * engine is given. Answers 403 and returns false when that is due.
+ * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
+ * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof). From
+ * the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the engine is given.
+ * Answers 403 and returns false when that is due.
  */
 function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     // An automation token acts for the owner who made it but never as them: what an owner may do to themselves (prune
     // their own branch) is still an owner's action, so it is refused to the token (requirePhoneStepUp).
     const asActor = ctx.state?.automationTokenId ? '' : actor;
     return !adminActionNeedsOwner(action, target, asActor) || requirePhoneStepUp(ctx);
+}
+
+/**
+ * Making or using a re-key code for an owner or admin (#1984 confirmation R1): the code suspends the target and stops
+ * their key, and binding it moves their role to the new key (engine/member-wizards.ts). So an owner gives the fresh proof
+ * each time (roleChangeProof); anyone else gets the step-up and the engine's refusal (assertMayRekey). Cancelling a code
+ * or declining a phone gives back, so those keep the step-up (stepUpIfOwnerOnly). A member's or moderator's re-key asks
+ * nothing more. `complete` already has a `code` (the re-key code), so the fresh code may come as the X-Fresh-Proof header.
+ */
+async function rekeyProof(ctx: any, target: string, code: unknown): Promise<boolean> {
+    if (!adminActionNeedsOwner('rekey', target)) return true;
+    return roleChangeProof(ctx, code, 're-key an owner or admin');
 }
 
 const handleEnrol = async (ctx: any) => {
@@ -2540,7 +2556,8 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
     // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
-    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    if (!(await rekeyProof(ctx, String(pubkey).trim().toLowerCase(), body.code ?? ctx.get('x-fresh-proof')))) return;
 
     try {
         const result = issueRekeyCode(pubkey, effectiveActor);
@@ -2618,7 +2635,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
 
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
-    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+    if (!(await rekeyProof(ctx, String(pubkey).trim().toLowerCase(), ctx.get('x-fresh-proof')))) return;
 
     try {
         const result = byMatch

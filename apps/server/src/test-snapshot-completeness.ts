@@ -331,7 +331,7 @@ async function main(): Promise<void> {
     ]);
 
     // ── 1. The snapshot captures its own images ────────────────────────────────────────────────
-    const snap = createSnapshot();
+    const snap = createSnapshot('scheduled');
     const snapPath = path.join(SNAPSHOTS_DIR, snap.name);
     const snapImages = snapshotImagesDir(snapPath);
     assert(fs.existsSync(snapImages) && fs.statSync(snapImages).isDirectory(),
@@ -544,10 +544,10 @@ async function main(): Promise<void> {
     // ── 7. Pruning takes the images with the snapshot; no route deletes one ────────────────────
     // The fewest kept is MIN_SNAPSHOTS_KEPT (design case 18, A4), so that many newer snapshots push `snap` out.
     updateAutoSnapshotConfig({ keep: MIN_SNAPSHOTS_KEPT });
-    let survivor = createSnapshot();
+    let survivor = createSnapshot('scheduled');
     for (let i = 0; i < MIN_SNAPSHOTS_KEPT; i++) {
         await nextSecond();
-        survivor = createSnapshot(); // the last of these prunes `snap`
+        survivor = createSnapshot('scheduled'); // the last of these prunes `snap`
     }
     assert(!fs.existsSync(snapPath), 'pruning removes the old snapshot');
     assert(!fs.existsSync(snapImages), 'and its captured images go with it');
@@ -565,7 +565,7 @@ async function main(): Promise<void> {
     // ── 8. The orphan sweep cannot reach a snapshot ────────────────────────────────────────────
     updateAutoSnapshotConfig({ keep: 7 });
     await nextSecond();
-    const guarded = createSnapshot();
+    const guarded = createSnapshot('scheduled');
     const guardedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, guarded.name));
     const guardedKey = keptKey;
     const guardedFile = path.join(guardedImages, guardedKey);
@@ -600,7 +600,7 @@ async function main(): Promise<void> {
         undefined, undefined, [dataUrl(legacyPhoto)]);
     assert(!!legacyPost, 'setup: a post whose photo the live node put in the store');
     await nextSecond();
-    const legacy = createSnapshot();
+    const legacy = createSnapshot('scheduled');
     const legacyPath = path.join(SNAPSHOTS_DIR, legacy.name);
     makeSnapshotPreUpgrade(legacyPath, new Map([[keyOf(legacyPost!.id), dataUrl(legacyPhoto)]]));
     // A pre-upgrade node never wrote a captured-images directory either.
@@ -713,7 +713,7 @@ async function main(): Promise<void> {
         .run(restoreMsgId, crypto.randomBytes(24).toString('base64'), 'image/jpeg', restoreKey);
 
     await nextSecond();
-    const linked = createSnapshot();
+    const linked = createSnapshot('scheduled');
     const linkedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, linked.name));
     const snapshotCopy = path.join(linkedImages, restoreKey);
     const liveCopy = path.join(imagesDir(), restoreKey);

@@ -251,8 +251,8 @@ async function main(): Promise<void> {
 
     // ── 1. An admin is refused; an owner is not ──────────────────────────────────────────────────────────────────
     console.log('\n— 1. owner only —');
-    const snapA = createSnapshot();
-    const snapB = createSnapshot();
+    const snapA = createSnapshot('scheduled');
+    const snapB = createSnapshot('scheduled');
     // The restore an admin would send: this database, with themselves as its owner.
     const selfPromotion = plainArchive(databaseCopy((h) => h.prepare(`UPDATE node_roles SET role = 'owner' WHERE member_pubkey = ?`).run(admin)));
     const tokenHashBefore = getLocalConfig().replicationTokenHash;

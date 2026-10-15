@@ -14,7 +14,9 @@
  *     code is spent (sent again: 401); a phone hand-off whose unlock is 91 s old 403 step_up_required, a fresh one passes;
  *     a computer's key session 403 phone_required; an admin 403; an admin token 403 token_not_allowed. Removing or
  *     re-pointing an off-box destination is held on each refusal. In break-glass mode the password and an earlier 2FA
- *     session enrol no owner key; a current code does.
+ *     session enrol no owner key; a current code does. Re-keying an owner or admin (making the code and binding it) asks
+ *     the same, and each refusal leaves their key, status and role as they were; cancelling, and a member's or a
+ *     moderator's re-key, ask nothing more.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
  *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
@@ -178,7 +180,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. the removed routes ──────────────────────────────────────────────────────────────────────────────────
         console.log('\n── 1. no route wipes the node, deletes a snapshot, or serves the legacy settings page ──');
-        const snap = await createSnapshot();
+        const snap = await createSnapshot('scheduled');
         assert(!!snap?.name && listSnapshots().some((s: any) => s.name === snap.name), `setup: a snapshot exists (${snap?.name})`);
         const removed: Array<[string, string, unknown]> = [
             ['POST', '/api/local/reset', {}],
@@ -433,6 +435,95 @@ async function main(): Promise<void> {
         assert(revokeComputer.status === 403 && revokeComputer.json?.code === 'phone_required', `taking admin from a computer → 403 phone_required (${short(revokeComputer)})`);
         const revokeCode = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, { ...pwSession(), 'x-fresh-proof': tfa.code() });
         assert(revokeCode.status === 200, `taking admin with a current code in X-Fresh-Proof → 200 (${short(revokeCode)})`);
+
+        // Re-keying an owner or admin moves their role to the new key (#1984 confirmation R1): making the code (which holds
+        // their key and suspends them) and binding it ask the same fresh proof. issue-code takes the code in its body;
+        // complete's `code` is the re-key code, so there the fresh code is X-Fresh-Proof. On every refusal the target's key
+        // is not held, their status and role are as they were, and no new key holds a role.
+        console.log('\n── 3b. re-keying an owner or admin asks the fresh proof; a member or moderator as before ──');
+        const rekeyRoute = (pk: string, step: string) => `/api/local/admin/members/${pk}/rekey/${step}`;
+        const keyHeld = (pk: string) => !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending'").get(pk);
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status ?? null;
+        // The node_roles row itself: nodeRoleOf counts only an active member's, and a re-key code suspends the member.
+        const roleRow = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const pendingCode = (pk: string) => (db.prepare("SELECT code FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending'").get(pk) as any)?.code ?? null;
+        const wrongMatches = (pk: string) => (db.prepare("SELECT wrong_matches FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending'").get(pk) as any)?.wrong_matches ?? 0;
+        const coOwners: string[] = [];
+        const coOwner = (name: string): string => { const pk = addMember(name); grantNodeRole(pk, 'owner', owner); coOwners.push(pk); return pk; };
+        const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession });
+        const askedForCode = (r: any) => r.status === 401 && r.json?.totpRequired === true;
+        type Refusal = [string, () => Record<string, string>, (r: any) => boolean];
+        const refusals = (proofHeader: string | null): Refusal[] => [
+            ['a password session without a code', pwSession, askedForCode],
+            ['the password with an earlier 2FA session and no code', earlier2fa, askedForCode],
+            ["a co-owner's computer session, with a code", () => ({ ...asComputer, ...(proofHeader ? { [proofHeader]: tfa.code() } : {}) }),
+                (r) => r.status === 403 && r.json?.code === 'phone_required'],
+            ['Manage pressed 91 s ago', asStalePhone, (r) => r.status === 403 && r.json?.code === 'step_up_required'],
+            ['an admin', () => asAdmin, inWords],
+            ['an admin token', () => asToken, (r) => r.status === 403],
+        ];
+        const cy = coOwner('Cy');
+        for (const [who, headers, refused] of refusals(null)) {
+            // The computer's row sends its code in the body, as the owner's own would.
+            const r = await call('POST', rekeyRoute(cy, 'issue-code'), headers(), who.includes('computer') ? { code: tfa.code() } : {});
+            assert(refused(r), `re-key an owner (issue-code), ${who}: refused (${short(r)})`);
+            assert(!keyHeld(cy) && statusOf(cy) === 'active' && roleRow(cy) === 'owner' && nodeRoleOf(cy) === 'owner' && pendingCode(cy) === null,
+                `re-key an owner (issue-code), ${who}: their key not held, still active, still an owner, no code (${statusOf(cy)}, ${roleRow(cy)})`);
+        }
+        const ada = addMember('Ada');
+        grantNodeRole(ada, 'admin', owner);
+        const adaRefused = await call('POST', rekeyRoute(ada, 'issue-code'), earlier2fa(), {});
+        assert(askedForCode(adaRefused) && !keyHeld(ada) && statusOf(ada) === 'active' && roleRow(ada) === 'admin',
+            `re-key an admin (issue-code), the password with an earlier 2FA session and no code → 401, nothing changed (${short(adaRefused)})`);
+        const cyIssued = await call('POST', rekeyRoute(cy, 'issue-code'), pwSession(), { code: tfa.code() });
+        const rkCode: string = cyIssued.json?.code;
+        assert(cyIssued.status === 200 && typeof rkCode === 'string' && keyHeld(cy) && pendingCode(cy) === rkCode,
+            `re-key an owner (issue-code), the password with a current code → 200, the code made (${short(cyIssued)})`);
+        const newCy = pubkey();
+        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+            const r = await call('POST', rekeyRoute(cy, 'complete'), headers(), { code: rkCode, newPubkey: newCy });
+            assert(refused(r), `re-key an owner (complete), ${who}: refused (${short(r)})`);
+            assert(roleRow(cy) === 'owner' && roleRow(newCy) === null && statusOf(newCy) === null && pendingCode(cy) === rkCode,
+                `re-key an owner (complete), ${who}: the role stays on their key, the new key is nobody, the code still waits (${roleRow(cy)}, ${roleRow(newCy)})`);
+        }
+        // By the number on their phone too, and a refused bind counts no wrong number against the code.
+        const byMatch = await call('POST', rekeyRoute(cy, 'complete'), earlier2fa(), { code: rkCode, match: '42' });
+        assert(askedForCode(byMatch) && wrongMatches(cy) === 0 && pendingCode(cy) === rkCode,
+            `re-key an owner (complete by the number), the password with an earlier 2FA session → 401, no try counted (${short(byMatch)})`);
+        const bound = await call('POST', rekeyRoute(cy, 'complete'), { ...pwSession(), 'x-fresh-proof': tfa.code() }, { code: rkCode, newPubkey: newCy });
+        assert(bound.status === 200 && roleRow(newCy) === 'owner' && nodeRoleOf(newCy) === 'owner' && roleRow(cy) === null,
+            `re-key an owner (complete), a current code in X-Fresh-Proof → 200, the owner role on the new key (${short(bound)})`);
+        coOwners.push(newCy);
+        // The real owner on their phone, Manage pressed just now: both steps go through.
+        const dee = coOwner('Dee');
+        const deeIssued = await call('POST', rekeyRoute(dee, 'issue-code'), asPhone(), {});
+        const newDee = pubkey();
+        const deeBound = await call('POST', rekeyRoute(dee, 'complete'), asPhone(), { code: deeIssued.json?.code, newPubkey: newDee });
+        assert(deeIssued.status === 200 && deeBound.status === 200 && nodeRoleOf(newDee) === 'owner' && roleRow(dee) === null,
+            `re-key an owner from the phone, Manage pressed just now → 200, 200, the role moves (${short(deeIssued)}; ${short(deeBound)})`);
+        coOwners.push(newDee);
+        // Cancelling gives back: the step-up, as before, and the co-owner is as they were.
+        const eve = coOwner('Eve');
+        const eveIssued = await call('POST', rekeyRoute(eve, 'issue-code'), asPhone(), {});
+        const eveCancel = await call('POST', rekeyRoute(eve, 'cancel'), asComputer, {});
+        assert(eveIssued.status === 200 && eveCancel.status === 200 && !keyHeld(eve) && statusOf(eve) === 'active' && nodeRoleOf(eve) === 'owner',
+            `cancelling an owner's re-key code from a computer still goes through, and gives back (${short(eveCancel)})`);
+        // A member's or a moderator's re-key asks nothing more: an admin's computer, and the password with its 2FA session.
+        const mo = addMember('Mo');
+        const mod = addMember('Moddy');
+        grantNodeRole(mod, 'moderator', owner);
+        for (const [what, target, headers, roleAfter] of [
+            ['a member, by an admin', mo, () => asAdmin, null],
+            ['a moderator, by an admin', mod, () => asAdmin, 'moderator'],
+            ['a member, by the password with an earlier 2FA session', addMember('Mae'), earlier2fa, null],
+        ] as Array<[string, string, () => Record<string, string>, string | null]>) {
+            const i = await call('POST', rekeyRoute(target, 'issue-code'), headers(), {});
+            const nk = pubkey();
+            const c = await call('POST', rekeyRoute(target, 'complete'), headers(), { code: i.json?.code, newPubkey: nk });
+            assert(i.status === 200 && c.status === 200 && statusOf(nk) === 'active' && roleRow(nk) === roleAfter,
+                `re-key ${what}: no proof asked, 200 and 200 (${short(i)}; ${short(c)}; role ${roleRow(nk)})`);
+        }
+        for (const pk of [...coOwners, ada]) if (roleRow(pk)) revokeNodeRole(pk, roleRow(pk), owner);
         // Retiring the password is a key session's alone: the phone, unlocked within 90 seconds. Last, as it ends the password.
         const retireStale = await call('POST', '/api/local/admin/auth/retire-password', asStalePhone(), { acceptOneOwner: true });
         assert(retireStale.status === 403 && retireStale.json?.code === 'step_up_required', `retire the password (C4), Manage 91 s ago → 403 step_up_required (${short(retireStale)})`);
@@ -454,7 +545,7 @@ async function main(): Promise<void> {
         const MANUAL_KEPT: number = snapshots.MANUAL_SNAPSHOTS_KEPT ?? 3;
         const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
         // The scheduler's own, named to the second.
-        for (let i = 0; i < keepNow; i++) { await sleep(1100); createSnapshot(); }
+        for (let i = 0; i < keepNow; i++) { await sleep(1100); createSnapshot('scheduled'); }
         const scheduled: string[] = listSnapshots().filter((s: any) => !s.manual).map((s: any) => s.name);
         assert(scheduled.length === keepNow, `setup: ${keepNow} scheduled snapshots (${scheduled.length})`);
         const onDisk = (name: string) => listSnapshots().some((s: any) => s.name === name) && fs.existsSync(path.join(dataDir!, 'snapshots', name));
@@ -491,7 +582,7 @@ async function main(): Promise<void> {
         const expired = snapshots.expireSnapshots();
         assert(expired === 0 && scheduled.every(onDisk) && manualNow.every(onDisk), `the hourly expiry keeps them all (${expired} removed)`);
         await sleep(1100);
-        const nextScheduled = createSnapshot();
+        const nextScheduled = createSnapshot('scheduled');
         assert(onDisk(nextScheduled.name) && !onDisk(scheduled[scheduled.length - 1]) && scheduled.slice(0, -1).every(onDisk) && manualNow.every(onDisk),
             "the scheduler's own next snapshot pushes out its oldest scheduled one, and no manual one");
         const oldManual: string | undefined = manualNow[manualNow.length - 1];

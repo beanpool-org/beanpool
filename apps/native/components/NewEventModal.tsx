@@ -52,7 +52,7 @@ import { EVENT_ACCENT } from './EventCard';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
-import { looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
+import { deviceLocalClock, looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields } from './EventRepeatFields';
 import { onlineEventsOn } from '../utils/node-profile';
 
@@ -723,7 +723,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             </View>
                         )}
 
-                        <EventRepeatFields start={start} end={end} repeat={repeat} until={repeatUntil} onRepeatChange={setRepeat} onUntilChange={setRepeatUntil} />
+                        <EventRepeatFields start={start} end={end} repeat={repeat} until={repeatUntil} onRepeatChange={setRepeat} onUntilChange={setRepeatUntil}
+                            kept={editOf?.values.start ? { firstDate: deviceLocalClock(editOf.values.start).slice(0, 10), rule: editOf.values.repeatRule ?? null } : null} />
 
                         {onlineOffered && (
                             <View style={styles.field}>

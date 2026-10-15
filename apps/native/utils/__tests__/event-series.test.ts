@@ -3,6 +3,8 @@
  * create draft and the edit patch send, the cache's two columns, the ↻ caption and the Home line. The same choices and words
  * as the web app (both read @beanpool/core event-repeat).
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildEventDraft, buildEventEditPatch, eventCacheColumns, eventEditValues, eventPinCard, eventRepeatCaption, eventRepeatOf, withMovedFromLine } from '../events';
 import { eventLine } from '../home-cards';
@@ -72,6 +74,15 @@ describe('the edit patch', () => {
         const before = eventEditValues(post);
         const out = buildEventEditPatch(before, { ...before, end: new Date(2026, 9, 23, 21, 0) }, NOW);
         expect(out).toEqual({ ok: false, error: 'An event that repeats must end before its next date starts' });
+    });
+    it('a rule the form cannot make carries its words to the form, and its Until is the host\'s to change (confirmation of #1993, NB1)', () => {
+        const before = eventEditValues({ ...post, eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 16, time: '20:50', minutes: 120 }, eventRepeatUntil: '2027-10-16' });
+        expect(before.repeat).toBe('other');
+        expect(before.repeatRule).toEqual({ freq: 'monthly', interval: 3, byMonthDay: 16 });
+        const later = buildEventEditPatch(before, { ...before, repeatUntil: '2028-01-16' }, NOW);
+        expect(later.ok && later.patch).toEqual({ eventRepeatUntil: '2028-01-16' });
+        const src = readFileSync(join(__dirname, '../../components/NewEventModal.tsx'), 'utf8');
+        expect(src).toContain("kept={editOf?.values.start ? { firstDate: deviceLocalClock(editOf.values.start).slice(0, 10), rule: editOf.values.repeatRule ?? null } : null}");
     });
     it('every 3 weeks or every 3 months (a rule the form cannot make): kept or asked about, never re-sent as another (review of #1993, N3)', () => {
         for (const rule of [{ freq: 'weekly', interval: 3, byDay: 'FR' }, { freq: 'monthly', interval: 3, byMonthDay: 16 }]) {

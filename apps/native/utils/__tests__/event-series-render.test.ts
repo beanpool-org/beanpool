@@ -247,6 +247,18 @@ describe('the form: Repeats and Until, drawn', () => {
         expect(byTestId('event-repeat-problem')[0].textContent).toBe('Choose how the event repeats from the list');
     });
 
+    it('a rule the form cannot make, on its own date, is named and kept in a plain line, with Until; red once the date moves (confirmation of #1993, NB1)', async () => {
+        const kept = { firstDate: '2027-10-15', rule: { freq: 'monthly', interval: 3, byMonthDay: 15 } };
+        await drawFields({ start: new Date(2027, 9, 15, 18, 50), repeat: 'other', until: '2028-12-15', onRepeatChange: noop, onUntilChange: noop, kept });
+        expect(byTestId('event-repeat-kept')[0].textContent).toBe('Every 3 months on the 15th — kept unless you choose another');
+        expect(byTestId('event-repeat-problem')).toHaveLength(0);
+        expect(byTestId('event-repeat-until')[0].textContent).toBe('15 Dec 2028');
+        expect(byTestId('event-repeat-until-clear')).toHaveLength(1);
+        await drawFields({ start: new Date(2027, 9, 22, 18, 50), repeat: 'other', until: '2028-12-15', onRepeatChange: noop, onUntilChange: noop, kept });
+        expect(byTestId('event-repeat-kept')).toHaveLength(0);
+        expect(byTestId('event-repeat-problem')[0].textContent).toBe('Choose how the event repeats from the list');
+    });
+
     it('the 31st says which months are skipped; a choice the date does not offer says so', async () => {
         await drawFields({ start: new Date(2026, 9, 31, 10, 0), repeat: 'monthly-day', until: '', onRepeatChange: noop, onUntilChange: noop });
         expect(byTestId('event-repeat-note')[0].textContent).toBe('(months without a 31st are skipped)');

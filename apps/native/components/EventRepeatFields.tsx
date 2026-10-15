@@ -4,14 +4,17 @@
  * row per choice (a radio list: no native picker to fight at 320 dp and 1.3× text). Until is optional (blank = until the host
  * cancels it), on or after the first date, at most five years out, shown with its year ("15 Dec 2028", as the caption
  * has it); the date picker opens only when tapped. A date as long as the gap to the next is said here before Save, in the
- * node's sentence; a stored rule the form can't make ('other') asks for a choice (the deciding review of #1993, N3, N4, N7).
+ * node's sentence. A stored rule the form can't make ('other': every 3 months) is named in a plain line, "Every 3 months on
+ * the 16th — kept unless you choose another", with its Until as on the web, and asks for a choice in red only once the date
+ * moves (the deciding review of #1993, N3, N4, N7; its confirmation, NB1).
  */
 
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
-    deviceLocalClock, repeatChoicesFor, repeatLengthProblem, repeatSkipNote, repeatUntilLabel, repeatUntilMax, repeatUntilProblem, t, type RepeatChoiceKey,
+    deviceLocalClock, repeatCaption, repeatChoicesFor, repeatLengthProblem, repeatSkipNote, repeatUntilLabel, repeatUntilMax, repeatUntilProblem, t,
+    type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { eventFormMinutes } from '../utils/events';
@@ -25,22 +28,27 @@ interface Props {
     until: string;
     onRepeatChange: (key: RepeatChoiceKey) => void;
     onUntilChange: (date: string) => void;
+    /** On an edit: the rule as stored and the first date it had, so one the form can't make is named and kept (null when creating). */
+    kept?: { firstDate: string; rule: Partial<RepeatPattern> | null } | null;
 }
 
 function dateAt(date: string): Date {
     return new Date(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), 12, 0);
 }
 
-export function EventRepeatFields({ start, end = null, repeat, until, onRepeatChange, onUntilChange }: Props) {
+export function EventRepeatFields({ start, end = null, repeat, until, onRepeatChange, onUntilChange, kept = null }: Props) {
     const styles = useStyles(makeStyles);
     const [picking, setPicking] = useState(false);
     const firstDate = start ? deviceLocalClock(start).slice(0, 10) : '';
     const choices = repeatChoicesFor(firstDate);
     // A choice the new first date does not offer stays chosen and says so, rather than turning into "Does not repeat".
     const offered = choices.some(c => c.key === repeat);
+    // A rule the form can't make, on its own date: said in words and kept, in plain text; red only once the date moves.
+    const keptWords = repeat === 'other' && !!kept && kept.firstDate === firstDate ? repeatCaption(kept.rule) : '';
+    const asks = !offered && !keptWords;
     const note = offered ? repeatSkipNote(repeat, firstDate) : null;
     const lengthProblem = offered ? repeatLengthProblem(repeat, firstDate, eventFormMinutes(start, end)) : null;
-    const untilProblem = repeat !== 'never' && offered ? repeatUntilProblem(until, firstDate) : null;
+    const untilProblem = repeat !== 'never' && (offered || !!keptWords) ? repeatUntilProblem(until, firstDate) : null;
     const untilWords = until ? repeatUntilLabel(until) || until : t('Until I cancel it');
 
     const onPicked = (e: DateTimePickerEvent, d?: Date) => {
@@ -64,9 +72,10 @@ export function EventRepeatFields({ start, end = null, repeat, until, onRepeatCh
                 })}
             </View>
             {!!note && <Text testID="event-repeat-note" style={styles.helper}>{note}</Text>}
-            {!offered && <Text testID="event-repeat-problem" style={styles.problem} accessibilityRole="alert">{t('Choose how the event repeats from the list')}</Text>}
+            {!!keptWords && <Text testID="event-repeat-kept" style={styles.helper}>{t('{repeats} — kept unless you choose another', { repeats: keptWords })}</Text>}
+            {asks && <Text testID="event-repeat-problem" style={styles.problem} accessibilityRole="alert">{t('Choose how the event repeats from the list')}</Text>}
             {!!lengthProblem && <Text testID="event-repeat-length-problem" style={styles.problem} accessibilityRole="alert">{lengthProblem}</Text>}
-            {repeat !== 'never' && offered && (
+            {repeat !== 'never' && (
                 <View style={styles.untilBox}>
                     <Text style={styles.label}>{t('UNTIL')}</Text>
                     <View style={styles.untilRow}>

@@ -749,6 +749,8 @@ export interface EventEditValues {
     /** How it repeats and its last date ('' = until cancelled). */
     repeat?: RepeatChoiceKey;
     repeatUntil?: string;
+    /** The rule as stored, for the words of one the form can't make ('other': "Every 3 months on the 16th"). Never sent. */
+    repeatRule?: RepeatPattern | null;
 }
 
 /** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
@@ -778,6 +780,7 @@ export function eventEditValues(post: any): EventEditValues {
         hostLetsIn: post?.eventHostLetsIn === true,
         repeat: repeatChoiceKeyOf(eventRepeatOf(post).rule),
         repeatUntil: eventRepeatOf(post).until ?? '',
+        repeatRule: eventRepeatOf(post).rule,
     };
 }
 

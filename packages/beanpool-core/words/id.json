@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -39,5 +39,80 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Tempat dari OpenStreetMap. Apa yang kamu ketik di sini dikirim ke mereka.",
   "Choose {place}": "Pilih {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Komunitas ini meminta foto profil sebelum kamu memposting. Kamu bisa menambahkannya nanti lewat profilmu.",
-  "A picture is optional here. You can add one later from your profile.": "Foto bersifat opsional di sini. Kamu bisa menambahkannya nanti lewat profilmu."
+  "A picture is optional here. You can add one later from your profile.": "Foto bersifat opsional di sini. Kamu bisa menambahkannya nanti lewat profilmu.",
+  "{n}st\u0004day of the month": "tanggal {n}",
+  "{n}nd\u0004day of the month": "tanggal {n}",
+  "{n}rd\u0004day of the month": "tanggal {n}",
+  "{n}th\u0004day of the month": "tanggal {n}",
+  "Every month on the first {weekday}": "Setiap bulan pada {weekday} pertama",
+  "Every month on the second {weekday}": "Setiap bulan pada {weekday} kedua",
+  "Every month on the third {weekday}": "Setiap bulan pada {weekday} ketiga",
+  "Every month on the fourth {weekday}": "Setiap bulan pada {weekday} keempat",
+  "Every month on the last {weekday}": "Setiap bulan pada {weekday} terakhir",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "other": "Setiap {n} bulan, {weekday} pertama"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "other": "Setiap {n} bulan, {weekday} kedua"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "other": "Setiap {n} bulan, {weekday} ketiga"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "other": "Setiap {n} bulan, {weekday} keempat"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "other": "Setiap {n} bulan, {weekday} terakhir"
+  },
+  "Monthly, first {weekday}": "Bulanan, {weekday} pertama",
+  "Monthly, second {weekday}": "Bulanan, {weekday} kedua",
+  "Monthly, third {weekday}": "Bulanan, {weekday} ketiga",
+  "Monthly, fourth {weekday}": "Bulanan, {weekday} keempat",
+  "Monthly, last {weekday}": "Bulanan, {weekday} terakhir",
+  "Does not repeat": "Tidak berulang",
+  "Every week on {weekday}": "Setiap minggu pada hari {weekday}",
+  "Every 2 weeks on {weekday}": "Setiap 2 minggu pada hari {weekday}",
+  "Every month on the {day}": "Setiap bulan pada {day}",
+  "An event that repeats must end before its next date starts": "Acara yang berulang harus berakhir sebelum tanggal berikutnya dimulai",
+  "(months without a {day} are skipped)": "(bulan tanpa {day} dilewati)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "other": "Setiap {n} minggu pada hari {weekday}"
+  },
+  "Every {weekday}": "Setiap {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "other": "Setiap {n} bulan pada {day}"
+  },
+  "Monthly on the {day}": "Bulanan pada {day}",
+  "{repeats} · until {date}": "{repeats} · sampai {date}",
+  "The last date must be a date on or after the first one": "Tanggal terakhir harus bertepatan dengan atau setelah tanggal pertama",
+  "The last date can be at most {n} years after the first one": "Tanggal terakhir paling lambat {n} tahun setelah tanggal pertama",
+  "{date} is cancelled. Next: {next}": "{date} dibatalkan. Berikutnya: {next}",
+  "{date} is cancelled.": "{date} dibatalkan.",
+  "{date} is back on": "{date} kembali diadakan",
+  "Moved from the regular {weekday}": "Dipindahkan dari hari {weekday} biasanya",
+  "Moved from the regular date": "Dipindahkan dari tanggal biasanya",
+  "Choose how the event repeats from the list": "Pilih pengulangan acara dari daftar",
+  "An event can repeat every 1 to 12 weeks or months": "Acara dapat berulang setiap 1 hingga 12 minggu atau bulan",
+  "The first date must be one of the repeating dates": "Tanggal pertama harus menjadi salah satu tanggal pengulangan",
+  "The last date can be at most 5 years after the first one": "Tanggal terakhir paling lambat 5 tahun setelah tanggal pertama",
+  "Pick one of the dates this event repeats on": "Pilih salah satu tanggal pengulangan acara ini",
+  "This event does not repeat": "Acara ini tidak berulang",
+  "Only the host can cancel or restore a date": "Hanya penyelenggara yang dapat membatalkan atau memulihkan tanggal",
+  "This is the last date: change when the event ends, or cancel the event": "Ini adalah tanggal terakhir: ubah waktu berakhirnya acara, atau batalkan acara",
+  "At most 100 dates can be cancelled": "Maksimal 100 tanggal dapat dibatalkan",
+  "This event has been cancelled": "Acara ini telah dibatalkan",
+  "Pick a time zone from the list": "Pilih zona waktu dari daftar",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Ditampilkan sekitar 1 km. Tanyakan titik pastinya kepada {name} saat membuat janji temu.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Ditampilkan kepada semua orang yang dapat melihat acara. Tuliskan alamat lengkap pada catatan di bawah.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Ini tampak seperti alamat jalan. Semua orang yang dapat melihat acara bisa membacanya, jadi lebih aman dimasukkan pada catatan di bawah.",
+  "An earlier message was removed when this chat was locked": "Pesan sebelumnya dihapus saat obrolan ini dikunci",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "other": "{n} pesan sebelumnya dihapus saat obrolan ini dikunci"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "other": "{n} pesan dihapus oleh pengelola"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "other": "{n} pesan telah dihapus"
+  }
 }

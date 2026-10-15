@@ -95,7 +95,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
-import { chargeNearestPeopleRead } from '../nearest-people-budget.js';
+import { chargeNearestPeopleRead, chargePeopleSearch } from '../nearest-people-budget.js';
 import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
@@ -2429,7 +2429,20 @@ function answerMembersOnDemand(ctx: any, point: Point | null): void {
         const n = wholeUpTo(limit, MEMBERS_SEARCH_MAX, MEMBERS_SEARCH_MAX);
         if (typed.length < MEMBERS_SEARCH_MIN_CHARS) return refuse(400, `q is at least ${MEMBERS_SEARCH_MIN_CHARS} characters of a name`);
         if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_SEARCH_MAX}`);
-        const rows = MEMBER_KEY_ANY_CASE.test(typed)
+        const byKey = MEMBER_KEY_ANY_CASE.test(typed);
+        // Where anyone can join in a minute, a day's budget of searches by name per member too (READ_LIMITS
+        // .peopleSearchesPerDay), so two letters after two letters never walks the whole community. A key is one member,
+        // never counted. Elsewhere none.
+        if (!byKey && getProfileSwitches().openMembership) {
+            const spent = chargePeopleSearch(ctx.state.actor as string);
+            if (spent) {
+                ctx.status = 429;
+                ctx.set('Retry-After', String(spent.retryAfterSec));
+                ctx.body = spent.body;
+                return;
+            }
+        }
+        const rows = byKey
             ? getMemberDirectoryRowsByKeys([typed.toLowerCase()])
             : searchMemberDirectoryRows(typed, n);
         body = directoryMembers(directoryPeople(rows));

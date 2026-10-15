@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t } from '@beanpool/core';
+import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -27,6 +27,7 @@ import {
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { visitorDistanceText } from '../lib/visitor-lobby';
+import { useCommunityInfo } from '../lib/features';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -349,6 +350,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
+    const openMembership = (useCommunityInfo()?.features as { openMembership?: boolean } | undefined)?.openMembership === true;
     // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
     const letInState = eventLetInState(p, isHost);
     const letInLine = eventLetInLine(letInState);
@@ -448,6 +450,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             >
                                 Show on map
                             </button>
+                        )}
+                        {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
+                        {placeShownRoughly(p, identity?.publicKey, openMembership) && (
+                            <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
+                                {t(PLACE_WORDS.roughPlace, { name: hostName })}
+                            </p>
                         )}
                     </div>
                 )}

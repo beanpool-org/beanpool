@@ -22,9 +22,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
+import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
-import { t } from '@beanpool/core';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
@@ -40,6 +40,8 @@ import {
 
 interface EventDetailProps {
     post: any;
+    /** The node says `openMembership` (anyone can join in a minute): the spot is the host's to give (ROUGH_PLACE_LINE). */
+    openMembership?: boolean;
 }
 
 function countsOf(p: any): RsvpCounts {
@@ -50,7 +52,7 @@ function countsOf(p: any): RsvpCounts {
     };
 }
 
-export function EventDetail({ post }: EventDetailProps) {
+export function EventDetail({ post, openMembership = false }: EventDetailProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -313,6 +315,10 @@ export function EventDetail({ post }: EventDetailProps) {
                         )}
                     </View>
                 )}
+                {placeShownRoughly({ authorPublicKey: p.authorPublicKey ?? p.author_pubkey, type: 'event', lat: p.lat, lng: p.lng,
+                    eventRsvps: p.eventRsvps, myRsvp: p.myRsvp, myLetIn: p.myLetIn }, identity?.publicKey, openMembership) && (
+                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: hostName })}</Text>
+                )}
 
                 {note ? (
                     <View style={styles.noteBox}>
@@ -494,6 +500,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         letInTextOn: { color: colors.text.inverse },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
         place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
+        roughPlace: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: -6, marginBottom: 12 },
         linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },
         link: { fontSize: 14, fontWeight: '700', color: colors.text.link },
         noteBox: {

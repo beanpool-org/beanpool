@@ -6,6 +6,10 @@
  */
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { forgetRecentLookups } from '../lib/members-on-demand';
+
+// Each case asks the node afresh: an answer kept from the last case (the search's and near read's recent answers) isn't this one's.
+beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 import { PeoplePage } from './PeoplePage';

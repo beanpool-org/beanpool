@@ -592,7 +592,7 @@ async function main(): Promise<void> {
     {
         const plain = await restore(legacyTar);
         assert(plain.status === 400 && plain.body.notLocked === true && plain.body.command === 'beanpool restore --unlocked FILE'
-            && /Backups that are not locked no longer restore from Settings\. Make a recovery code so every backup is locked\. To bring back an old unlocked file, run `beanpool restore --unlocked FILE` on the server\./.test(plain.body.error),
+            && /^Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked\. An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE` \(coming in the next update\)\. Nothing was changed\.$/.test(plain.body.error),
             `2. a plain .tar.gz: 400, naming the command (${plain.status} ${plain.body.error})`);
         assert(liveMembers() === membersBefore && noLeftovers().length === 0 && !fs.existsSync(path.join(dataDir!, 'restore-points')),
             '2. …nothing extracted, no restore point, the live database untouched');
@@ -651,7 +651,7 @@ async function main(): Promise<void> {
     const forged = await sealAsNode(Buffer.from('not even a tar'), { signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)), nodePeerId: forgerPeer });
     const pinned = await restore(forged, { 'X-Recovery-Code': code.code });
     assert(pinned.status === 409 && pinned.body.signerNotPinned === true && pinned.body.signer === forgerPeer
-        && pinned.body.command === `beanpool restore --accept-signer ${forgerPeer}` && pinned.body.error.includes(`beanpool restore --accept-signer ${forgerPeer}`),
+        && pinned.body.command === `beanpool restore --accept-signer ${forgerPeer}` && pinned.body.error.includes(`beanpool restore --accept-signer ${forgerPeer}\` (coming in the next update).`),
         `5. a file of this community signed by another key is refused 409, naming the signer and the command (got ${pinned.status}: ${pinned.body.error})`);
     const confirmed = await restore(forged, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': forgerPeer });
     assert(confirmed.status === 409 && confirmed.body.signerNotPinned === true,

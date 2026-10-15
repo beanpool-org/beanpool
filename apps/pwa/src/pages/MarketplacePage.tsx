@@ -572,7 +572,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         });
         return () => { live = false; };
         // Taken once per link: myTransactions is read at the moment the link arrives.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openReviewTxId, identity?.publicKey]);
     const [reviewStars, setReviewStars] = useState(5);
     const [reviewComment, setReviewComment] = useState('');

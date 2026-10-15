@@ -82,7 +82,7 @@ async function callRouter(
     router: any,
     method: string,
     path: string,
-    opts: { actor?: string; body?: Record<string, unknown>; ip?: string } = {}
+    opts: { actor?: string; body?: Record<string, unknown>; ip?: string; state?: Record<string, unknown> } = {}
 ): Promise<{ status: number; body: any }> {
     const layer = (router as any).stack.find((l: any) =>
         l.regexp.test(path) && l.methods.includes(method.toUpperCase())
@@ -96,7 +96,7 @@ async function callRouter(
         });
     }
     const ctx: any = {
-        state: opts.actor ? { actor: opts.actor, auth_signer: opts.actor } : {},
+        state: { ...(opts.actor ? { actor: opts.actor, auth_signer: opts.actor } : {}), ...(opts.state ?? {}) },
         requestBody: opts.body ?? {},
         params,
         query: {},
@@ -191,8 +191,15 @@ async function run() {
     const removeOwner = { id: removalInGraceFromBefore(owner, doomedOwner, 'Remove DoomedOwner') };
     const accelPlainOwner = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`, { actor: plainAdmin });
     assert(accelPlainOwner.status === 403 && statusOf(doomedOwner) === 'disabled', 'nor on removing an owner');
+    // Cutting short an owner's removal removes an owner: the owner's fresh proof (#1984 confirmation N-1). The password with
+    // the node's 2FA off has none to give, so it is refused (fail closed); the phone's Manage, pressed just now, is one.
     const accelPassword = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`);
-    assert(accelPassword.status === 200 && statusOf(doomedOwner) === 'pruned', 'the password (owner level) can');
+    assert(accelPassword.status === 403 && accelPassword.body?.code === 'fresh_proof_needs_2fa' && statusOf(doomedOwner) === 'disabled'
+        && getDecision(removeOwner.id)!.status === 'execution_pending_grace',
+        `the password (owner level) without a fresh proof cannot: still in grace (got ${accelPassword.status} ${JSON.stringify(accelPassword.body)})`);
+    const accelFresh = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`,
+        { actor: owner, state: { isKeySession: true, phoneHandoff: true, keySessionCreatedAt: Date.now() } });
+    assert(accelFresh.status === 200 && statusOf(doomedOwner) === 'pruned', `an owner with a fresh proof (Manage just now) can (got ${accelFresh.status} ${JSON.stringify(accelFresh.body)})`);
 
     const plainMember = makeMember('PlainMember');
     const removePlain = createDecision({ authorPubkey: owner, title: 'Remove PlainMember', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: plainMember });
@@ -331,18 +338,24 @@ async function run() {
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key IN (?, ?)').run(root, sibling, owner);
     const otherOwners = (db.prepare("SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?").all(owner) as any[]);
     assert(otherOwners.length === 0, 'setup: Owner is the only active owner');
-    const pruneSole = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`);
+    // A branch with an owner in it asks the owner's fresh proof first (#1984 confirmation N-1): the password with the node's
+    // 2FA off has none (fail closed). With the phone's Manage just now, the engine's sole-owner rule answers.
+    const freshPhone = () => ({ isKeySession: true, phoneHandoff: true, keySessionCreatedAt: Date.now() });
+    const pruneNoProof = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`);
+    assert(pruneNoProof.status === 403 && pruneNoProof.body?.code === 'fresh_proof_needs_2fa' && [root, sibling, owner].every(pk => statusOf(pk) === 'active'),
+        `without a fresh proof a branch with an owner in it is refused, nobody pruned (got ${pruneNoProof.status} ${JSON.stringify(pruneNoProof.body)})`);
+    const pruneSole = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`, { state: freshPhone() });
     assert(pruneSole.status === 400 && /only owner/.test(pruneSole.body?.error || ''), `a branch holding the only owner is refused (got ${pruneSole.status} ${JSON.stringify(pruneSole.body)})`);
     assert(statusOf(root) === 'active' && statusOf(sibling) === 'active' && statusOf(owner) === 'active', 'and nobody in it is pruned — not even those walked before the owner');
     const coOwner = makeMember('BranchCoOwner');
     grantNodeRole(coOwner, 'owner', owner);
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(sibling, coOwner);
-    const pruneBoth = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`);
+    const pruneBoth = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`, { state: freshPhone() });
     assert(pruneBoth.status === 400 && [root, sibling, owner, coOwner].every(pk => statusOf(pk) === 'active'),
         'two co-owners who are the only owners, both in the branch: refused too, nobody pruned');
     const outsideOwner = makeMember('OutsideOwner');
     grantNodeRole(outsideOwner, 'owner', owner);
-    const prunedOk = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`, { actor: outsideOwner });
+    const prunedOk = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`, { actor: outsideOwner, state: freshPhone() });
     assert(prunedOk.status === 200 && [root, sibling, owner, coOwner].every(pk => statusOf(pk) === 'pruned') && statusOf(outsideOwner) === 'active',
         `with an owner left outside the branch, it prunes the whole branch (got ${prunedOk.status} ${JSON.stringify(prunedOk.body)})`);
 

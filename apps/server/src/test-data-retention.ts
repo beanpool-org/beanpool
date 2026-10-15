@@ -156,11 +156,12 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the snapshot settings (owner only)
     // are changed under an owner's key session.
-    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
-    const asOwner = ownerSessionHeaders();
-    const setConfig = async (body: Record<string, unknown>) => {
+    const { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+    const ownerKey = seedOwnerForTests('retentionOwner');
+    const asOwner = ownerSessionHeaders(ownerKey);
+    const setConfig = async (body: Record<string, unknown>, headers: Record<string, string> = asOwner) => {
         const res = await fetch(`${base}/api/local/admin/snapshots/config`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner },
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(body),
         });
         return { status: res.status, body: await res.json().catch(() => ({})) as any };
@@ -173,7 +174,11 @@ async function main() {
         assert(snap.getAutoSnapshotConfig().keep === 7, `and the schedule still keeps 7 (${snap.getAutoSnapshotConfig().keep})`);
         const fourteen = await setConfig({ keep: 14 });
         assert(fourteen.status === 200 && fourteen.body?.config?.keep === 14, `it takes 14 (${fourteen.status} ${j(fourteen.body)})`);
-        const seven = await setConfig({ keep: 7 });
+        // Keeping fewer asks the owner's fresh proof (#1984 confirmation N-2): a computer's session is sent to the phone.
+        const sevenComputer = await setConfig({ keep: 7 });
+        assert(sevenComputer.status === 403 && sevenComputer.body?.code === 'phone_required' && snap.getAutoSnapshotConfig().keep === 14,
+            `fewer (7) from a computer's session: sent to the phone, still 14 (${sevenComputer.status} ${j(sevenComputer.body)})`);
+        const seven = await setConfig({ keep: 7 }, ownerPhoneSessionHeaders(ownerKey));
         assert(seven.status === 200 && seven.body?.config?.keep === 7, `and 7, the default (${seven.status} ${j(seven.body)})`);
     } finally {
         server.close();

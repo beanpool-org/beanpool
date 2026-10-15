@@ -451,10 +451,11 @@ export class Keyholder {
      * A new custodian shows they hold their share: a signed check of its words. At two, the vault switches. Kept on disk,
      * so a restart in between loses no confirmation.
      *
-     * Not for a reshare whose file has no public keys (written by a keyholder from before they were kept): its new
-     * ticket key is listed nowhere, and the switch would put it in force. Two current custodians cancel it and start
-     * again. A genesis has no key in force to keep listed, and an unlock with the new shares opens the vault on its keys,
-     * which are then read from it: both still switch.
+     * Not for a reshare whose file has no public keys, written by an image from before they were kept: this keyholder
+     * can't say which keys the switch would put in force, and that image kept the old ticket and deposit keys, which the
+     * retiring custodians' shares still open. Two current custodians cancel it and start again. A genesis, with no key
+     * in force to keep, still switches. So does an unlock with the new shares (the way back if only those are left): it
+     * opens the vault on that image's keys, and the report shows them.
      */
     confirmShare(raw: unknown) {
         const c = raw as ShareConfirmation;
@@ -472,7 +473,7 @@ export class Keyholder {
         const next = p.file.state;
         this.checkConfirmation(p.file, c);
         if (p.file.purpose === 'reshare' && !p.file.publicKeys) {
-            fail('keys_unknown', 'This reshare was started by an older image, whose new keys are unknown: the switch would put in force keys nobody has listed. Two current custodians cancel it and start the reshare again.');
+            fail('keys_unknown', 'This reshare was started by an older image, whose new keys are unknown here (that image kept the old ticket and deposit keys): two current custodians cancel it and start the reshare again.');
         }
         if (!p.file.confirmed.includes(c.custodian)) {
             const record = { ...p.file, confirmed: [...p.file.confirmed, c.custodian] };

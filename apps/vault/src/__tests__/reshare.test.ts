@@ -468,7 +468,7 @@ describe('a reshare gives the vault new signing keys', () => {
         await present(v, c1, g.shares[0]);
         expect((await present(v, c2, g.shares[1])).body.state).toBe('open');
         expect((await reportOf(v)).text.pending).toEqual({ generation: 2, publicKeys: null });
-        // Its new keys are listed nowhere, so no new custodian's confirmation counts: the switch would put them in force.
+        // Which keys its switch would put in force is unknown here (that image kept the old ones), so no confirmation counts.
         for (const r of await confirmWith(v, fresh, [0, 2], [c1, c2, c4])) {
             expect(r.status).toBe(409);
             expect(r.body.code).toBe('keys_unknown');

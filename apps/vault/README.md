@@ -107,7 +107,8 @@ It is the reshare rotation design's §5 and §6, corrected where review #1996 me
    answers `no_pending` when nothing is, or `200` with `"pending":null` when a ceremony switched at this boot (the tool
    then confirms its share late, which does no harm). `403 unknown_custodian` means a ceremony is waiting for other
    keys: two genesis keys run `cancel --pending <id>` first. The new keyholder starts even with one waiting, but a
-   reshare the old image made keeps the old ticket and deposit keys: cancel it, never confirm it.
+   reshare the old image made keeps the old ticket and deposit keys, so the new keyholder refuses to confirm it
+   (`409 keys_unknown`): two genesis keys cancel it, and the reshare starts again (step 7).
 6. **The re-root restart:** two genesis keys sign the restart (`vault-custodian restart`, twice), then Marty unlocks;
    the generation-1 state still names G, so his shares open it. Check that health's `release` is the new image and
    that the next hourly backup lands in both stores. Do steps 7 to 9 the same day: until the switch nobody can

@@ -1,22 +1,34 @@
 {
   "_about": "English a member reads outside t() (JSX text, text props, alert arguments), per directory. scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. `lint --update` lowers it; a rise needs `--update --raise \"<reason>\"`, which is recorded in `raises` (words.test.mjs compares with origin/main).",
   "counts": {
-    "apps/native/app": 1075,
-    "apps/native/app/(tabs)": 631,
+    "apps/native/app": 1069,
+    "apps/native/app/(tabs)": 632,
     "apps/native/app/auth": 8,
     "apps/native/app/chat": 63,
     "apps/native/app/group": 8,
     "apps/native/app/guide": 7,
     "apps/native/app/guide/section": 3,
-    "apps/native/app/post": 158,
-    "apps/native/components": 911,
+    "apps/native/app/post": 157,
+    "apps/native/components": 904,
     "apps/native/components/chat": 14,
     "apps/native/components/home": 33,
     "apps/native/components/info-content": 282,
     "apps/native/components/showcase": 17,
     "apps/native/utils": 3,
     "apps/pwa/src": 22,
-    "apps/pwa/src/components": 865,
-    "apps/pwa/src/pages": 1008
-  }
+    "apps/pwa/src/components": 864,
+    "apps/pwa/src/pages": 1005
+  },
+  "raises": [
+    {
+      "date": "2026-10-15",
+      "reason": "a11y: add dynamic accessibilityLabel to Save Profile button",
+      "dirs": {
+        "apps/native/app/(tabs)": [
+          631,
+          632
+        ]
+      }
+    }
+  ]
 }

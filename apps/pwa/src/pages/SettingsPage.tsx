@@ -1398,9 +1398,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                   The grid holds its height while the words load. They arrive a
                                   tick after this screen opens, and without the placeholder the
                                   panel drew as an empty box and then jumped as twelve cells
-                                  appeared underneath the buttons.
+                                  appeared underneath the buttons. The words are English in every
+                                  language, so the browser's page translation may not rewrite them
+                                  (translate="no" + notranslate; #1947 confirmation N-B).
                                 */}
-                                <div className="grid grid-cols-3 gap-2 mb-6 min-h-[7.5rem]">
+                                <div data-testid="seed-words" translate="no" className="notranslate grid grid-cols-3 gap-2 mb-6 min-h-[7.5rem]">
                                     {seedWords ? seedWords.map((word, i) => (
                                         <div key={i} className="bg-oat-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl p-2.5 text-center">
                                             <span className="text-[10px] text-nature-400 block font-mono mb-0.5">{i + 1}.</span>

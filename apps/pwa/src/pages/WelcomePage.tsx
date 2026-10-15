@@ -315,18 +315,19 @@ const LEAVE_WAIT_MS = 5_000;
  * How it works where the node has Beans off (`features.beans` false: the worldwide community). Rehearsal 14 Oct 2026,
  * B3: the step sold a credit line to -2000 Beans, the Commons fee, the Trust Wallet and Ledger sends, none of which exist
  * there, in a 350 px scroll box about 140 px wide at 320 px with 130 % text. This says what is on, in a few short lines
- * that fit the step without a box of their own.
+ * that fit the step without a box of their own. Marked with word() and translated by t() where shown: the worldwide
+ * community is where strangers land (#1947 confirmation N-A). A title keeps its full stop, so a language picks its own.
  */
 export const HOW_IT_WORKS_WITHOUT_BEANS = {
-    intro: 'Here is what you can do here.',
+    intro: word('Here is what you can do here.'),
     things: [
-        { icon: '📦', title: 'Offers and needs', line: 'List what you can give, ask for what you need, and find people near you. You agree the details between you.' },
-        { icon: '📅', title: 'Events', line: "See what's on near you, and say you're going." },
-        { icon: '👥', title: 'Groups', line: 'Find people around a place or an interest, and talk together.' },
-        { icon: '💬', title: 'Messages', line: 'Tap Message on any post to talk with the person who posted it.' },
+        { icon: '📦', title: word('Offers and needs.'), line: word('List what you can give, ask for what you need, and find people near you. You agree the details between you.') },
+        { icon: '📅', title: word('Events.'), line: word("See what's on near you, and say you're going.") },
+        { icon: '👥', title: word('Groups.'), line: word('Find people around a place or an interest, and talk together.') },
+        { icon: '💬', title: word('Messages.'), line: word('Tap Message on any post to talk with the person who posted it.') },
     ],
-    local: 'A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.',
-    words: 'Your 12 words are always in Settings → Recovery Phrase.',
+    local: word('A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.'),
+    words: word('Your 12 words are always in Settings → Recovery Phrase.'),
 } as const;
 
 function HowItWorksWithoutBeans() {
@@ -338,15 +339,15 @@ function HowItWorksWithoutBeans() {
                     <li key={thing.title} className="flex gap-2 items-start">
                         <span aria-hidden="true" className="shrink-0 text-lg leading-6">{thing.icon}</span>
                         <p className="m-0 min-w-0 break-words text-sm leading-relaxed text-nature-900 dark:text-nature-100">
-                            <strong className="text-nature-950 dark:text-oat-50">{thing.title}.</strong> {thing.line}
+                            <strong className="text-nature-950 dark:text-oat-50">{t(thing.title)}</strong> {t(thing.line)}
                         </p>
                     </li>
                 ))}
             </ul>
             <p className="m-0 pt-3 border-t border-nature-200 dark:border-nature-700 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">
-                {copy.local}
+                {t(copy.local)}
             </p>
-            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 {copy.words}</p>
+            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 <>{t(copy.words)}</></p>
         </div>
     );
 }
@@ -1937,7 +1938,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">{t('🫘 Welcome to BeanPool')}</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: beansOff ? '1rem' : '1.5rem', lineHeight: 1.5 }}>
-                                {beansOff ? HOW_IT_WORKS_WITHOUT_BEANS.intro : t("Let's look at how this community economy works.")}
+                                {beansOff ? t(HOW_IT_WORKS_WITHOUT_BEANS.intro) : t("Let's look at how this community economy works.")}
                             </p>
 
                             {beansOff ? <HowItWorksWithoutBeans /> : (

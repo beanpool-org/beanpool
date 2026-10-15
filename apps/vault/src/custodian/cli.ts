@@ -293,13 +293,15 @@ function print(result: CustodianCall): void {
 }
 
 /**
- * After a reshare, or a new custodian's fetch of their share: the lines to paste so the pins list the new keys before
- * the switch (reshare rotation design §2.4). The new ticket key first, then the one in force (from the public report),
- * which signs until two new custodians confirm and must stay listed until every app build has the new one.
+ * After a reshare, or a new custodian's fetch of their share while it waits: the lines to paste so the pins list the
+ * new keys before the switch (reshare rotation design §2.4). The new ticket key first, then the one in force (from the
+ * public report, read before this custodian confirms), which signs until two new custodians confirm and must stay
+ * listed until every app build has the new one. None for a genesis: there is no key in force to keep.
  */
-async function printPins(url: string, answer: Record<string, unknown>): Promise<void> {
-    const waiting = (answer.pending as { publicKeys?: { ticket: string[]; deposit: { key: string }[] } } | null)?.publicKeys;
-    if (!waiting) return;
+async function pinLines(url: string, answer: Record<string, unknown>): Promise<string[]> {
+    const pending = answer.pending as { purpose?: string; publicKeys?: { ticket: string[]; deposit: { key: string }[] } } | null;
+    const waiting = pending?.purpose === 'reshare' ? pending.publicKeys : undefined;
+    if (!waiting) return [];
     let inForce: string | null = null;
     try {
         const res = await fetch(`${url.replace(/\/$/, '')}/v1/report`);
@@ -308,12 +310,15 @@ async function printPins(url: string, answer: Record<string, unknown>): Promise<
     } catch {
         // Said below: the key in force is to be added by hand.
     }
-    console.log('\nThe new keys, to list before two new custodians confirm (global\'s .env and the registrar take the ticket keys; the app build after the switch takes the new deposit key):');
-    console.log(`BEANPOOL_VAULT_TICKET_KEYS=${[...waiting.ticket, ...(inForce ? [inForce] : [])].join(',')}`);
-    console.log(`EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`);
-    console.log(inForce
-        ? 'The old ticket key (the second) stops signing at the switch; keep it listed until every app build has the new one.'
-        : 'The ticket key in force could not be read from the report: add it after the new one by hand, and keep it listed until every app build has the new one.');
+    return [
+        '',
+        'The new keys, to list before two new custodians confirm (global\'s .env and the registrar take the ticket keys; the app build after the switch takes the new deposit key):',
+        `BEANPOOL_VAULT_TICKET_KEYS=${[...waiting.ticket, ...(inForce ? [inForce] : [])].join(',')}`,
+        `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`,
+        inForce
+            ? 'The old ticket key (the second) stops signing at the switch; keep it listed until every app build has the new one.'
+            : 'The ticket key in force could not be read from the report: add it after the new one by hand, and keep it listed until every app build has the new one.',
+    ];
 }
 
 function keyList(text: string, what: string): string[] {
@@ -604,6 +609,7 @@ async function main(): Promise<void> {
 
     let result: CustodianCall;
     let confirmed: CustodianCall | null = null;
+    let pins: string[] = [];
     if (command === 'settings send') {
         const file = arg('--file') as string;
         const local = settingsHash(readSettings(file));
@@ -636,7 +642,10 @@ async function main(): Promise<void> {
         result = await presentShare(url, key, share as CustodianShare, opts);
     } else if (command === 'reshare') {
         result = await presentShare(url, key, share as CustodianShare, { ...opts, purpose: 'reshare', newCustodians });
-        if (result.status === 200 && result.body.custodianShares) confirmed = await keep(result.body.custodianShares as CustodianShare[]);
+        if (result.status === 200 && result.body.custodianShares) {
+            pins = await pinLines(url, result.body);
+            confirmed = await keep(result.body.custodianShares as CustodianShare[]);
+        }
     } else if (command === 'fetch-share') {
         const fetched = await fetchPendingShare(url, key);
         result = fetched.call;
@@ -644,6 +653,7 @@ async function main(): Promise<void> {
             console.error('The vault no longer has the new shares (it restarted). Use the copy you saved, or two current custodians cancel and start again.');
             process.exit(1);
         }
+        if (result.status === 200) pins = await pinLines(url, result.body);
         if (fetched.share) confirmed = await keep([fetched.share]);
     } else if (command === 'confirm') {
         result = await confirmShare(url, key, share as CustodianShare);
@@ -658,7 +668,7 @@ async function main(): Promise<void> {
         process.stdout.write('confirmed: ');
         print(confirmed);
     }
-    if ((command === 'reshare' || command === 'fetch-share') && result.status === 200) await printPins(url, result.body);
+    for (const line of pins) console.log(line);
     if (result.status !== 200 || (confirmed && confirmed.status !== 200)) process.exit(1);
 }
 

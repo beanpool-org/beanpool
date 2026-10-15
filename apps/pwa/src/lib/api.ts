@@ -1100,8 +1100,12 @@ export interface MarketplacePost {
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
-    /** Sent only to the host and to members marked Going. */
+    /** Sent only to the host and to members marked Going (where the host lets people in, the ones let in). */
     eventPrivateNote?: string;
+    /** The host lets people in to the note and the chat (DESIGN-global-member-privacy-fable.md §2); absent where not. */
+    eventHostLetsIn?: true;
+    /** Where the host lets people in: whether they have let this viewer in; null with no RSVP. */
+    myLetIn?: boolean | null;
     eventState?: 'scheduled' | 'updated' | 'cancelled';
     /**
      * The clock the host set, "YYYY-MM-DDTHH:MM", and the zone it is in (an IANA id). The node made the instants above
@@ -1118,8 +1122,8 @@ export interface MarketplacePost {
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
     myRsvp?: EventRsvpStatus | null;
-    /** Host only: who has RSVPd. */
-    eventRsvps?: Array<{ memberPubkey: string; memberCallsign?: string; status: EventRsvpStatus; updatedAt: string }>;
+    /** Host only: who has RSVPd, and (where the host lets people in) when each was let in. */
+    eventRsvps?: Array<{ memberPubkey: string; memberCallsign?: string; status: EventRsvpStatus; updatedAt: string; letInAt?: string | null }>;
 }
 
 export interface MarketplaceTransaction {
@@ -1217,6 +1221,7 @@ export async function createMarketplacePost(post: {
     eventEndAt?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
+    eventHostLetsIn?: boolean;
     /** The clock the host typed and its zone: the node works out the instants from these (DESIGN-event-times §2). */
     eventStartLocal?: string;
     eventEndLocal?: string;
@@ -1404,6 +1409,14 @@ export async function rsvpEvent(postId: string, status: EventRsvpStatus | null):
 }
 
 /**
+ * The host lets a Going member in to the note and the chat, takes it back (`letIn` false), or lets everyone waiting in
+ * (DESIGN-global-member-privacy-fable.md §2.2). Answers the event as the host sees it.
+ */
+export async function letInToEvent(postId: string, who: { memberPublicKey: string } | { everyone: true }, letIn = true): Promise<{ success: boolean; post: MarketplacePost; changed: number }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/let-in`, { ...who, letIn });
+}
+
+/**
  * The signer's own upcoming RSVPs, soonest first — what "Your events" shows (the shared contract).
  * A node older than this route answers 404; `isRouteMissing` is how the row hides itself there.
  */
@@ -1514,6 +1527,7 @@ export async function updateMarketplacePost(
         eventEndAt?: string;
         eventPlaceName?: string;
         eventPrivateNote?: string;
+        eventHostLetsIn?: boolean;
         eventStartLocal?: string;
         eventEndLocal?: string;
         eventTz?: string;
@@ -2243,6 +2257,7 @@ export async function treasuryPostEvent(treasury: string, body: {
     eventEndAt?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
+    eventHostLetsIn?: boolean;
     eventStartLocal?: string;
     eventEndLocal?: string;
     eventTz?: string;
@@ -2488,6 +2503,8 @@ export interface EventThreadMessage {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** A system line's kind, e.g. 'event_opened_to_going' (lib/events.ts eventChatSystemText). */
+    systemType?: string;
 }
 
 export interface EventThreadView {

@@ -353,6 +353,7 @@ import {
     closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
+    letInEvent as letInEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
     type EscrowRefundShortfall,
@@ -5165,6 +5166,7 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        eventHostLetsIn?: unknown;
         /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
         eventStartLocal?: unknown;
         eventEndLocal?: unknown;
@@ -6109,7 +6111,18 @@ export function rsvpEvent(
     status: 'going' | 'interested' | null,
     signature?: string
 ): { success: boolean; post: MarketplacePost } {
-    return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature);
+    // The push dispatcher, so a host whose event lets people in hears that people are waiting (at most hourly).
+    return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature, dispatchPushNotification);
+}
+
+/** The host lets a Going member in, or everyone waiting, or takes it back (DESIGN-global-member-privacy-fable.md §2.2). */
+export function letInEvent(
+    postId: string,
+    actorPubkey: string,
+    target: { memberPublicKey?: string; everyone?: boolean },
+    letIn = true,
+): { success: true; post: MarketplacePost; changed: number } {
+    return letInEventEngine(postId, actorPubkey, target, letIn, dispatchPushNotification);
 }
 // ===================== MARKETPLACE TRANSACTIONS =====================
 

@@ -554,14 +554,17 @@ async function main(): Promise<void> {
             await closeIfOpened(seven);
             const nine = await open('9');
             await closeIfOpened(nine);
+            const ten = await open('10');
+            await closeIfOpened(ten);
             const log = await main.send('access-log');
-            const needs = /reads replica format 9, and copies from this server need 10; update it/;
-            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 10/.test(none.text)
-                && nine.status === 426 && needs.test(nine.text) && JSON.parse(nine.text).needsReplicaFormat === 10
+            const needs = /reads replica format 10, and copies from this server need 11; update it/;
+            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 11/.test(none.text)
+                && nine.status === 426 && /reads replica format 9, and copies from this server need 11/.test(nine.text)
+                && ten.status === 426 && needs.test(ten.text) && JSON.parse(ten.text).needsReplicaFormat === 11
                 && needs.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
-                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 10 (no format, 7 before photos by reference, 9 before event times) `
-                + `is refused, 426, and M's Replication Access log says why `
-                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status} ${nine.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
+                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 11 (no format, 7 before photos by reference, 9 before event times, `
+                + `10 before the let-in) is refused, 426, and M's Replication Access log says why `
+                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status} ${ten.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
             const current = await open(String(await main.send('replica-format')));
             await closeIfOpened(current);
             assert(current.status === 200, `one at this build's REPLICA_FORMAT opens its copy (${current.status} ${current.text.slice(0, 120)})`);

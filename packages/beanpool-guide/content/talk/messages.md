@@ -83,7 +83,7 @@ Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notificati
 - A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.
 - Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.
 - Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See "Leaving or deleting your account".
-- An event's chat can also be read by the host and everyone going.
+- An event's chat can also be read by the host and everyone going (where the host lets people in, the ones the host has let in).
 - An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers.
 
 ## Blocking someone from a chat

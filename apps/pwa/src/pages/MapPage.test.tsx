@@ -524,7 +524,9 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
         fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'Bindarrabi Hall' } });
         fireEvent.change(within(panel).getByLabelText('Note for people who are going'), { target: { value: 'Gate code 1234' } });
-        expect(within(panel).getByText('Only people who tap Going see this.')).toBeInTheDocument();
+        // A local community (no openMembership): unticked, and the words say everyone Going reads it (the privacy design §2.3).
+        expect(within(panel).getByText('Everyone who taps Going sees this.')).toBeInTheDocument();
+        expect(within(panel).getByTestId('event-host-lets-in')).not.toBeChecked();
         expect(within(panel).getByTestId('event-location-visibility')).toHaveTextContent("Anyone who opens this node's map will see this spot.");
 
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
@@ -543,6 +545,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             // The clock as typed, for the node to resolve in the pin's zone (DESIGN-event-times §2), and this device's
             // instant beside it, which a node from before clocks reads (review of #1952, finding 4).
             eventStartLocal: '2030-09-28T09:00', eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+            eventHostLetsIn: false,
         });
         expect(body).not.toHaveProperty('eventEndAt');
         expect(body).not.toHaveProperty('eventEndLocal');
@@ -905,6 +908,23 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
             eventStartAt: new Date(2030, 8, 28, 10, 0).toISOString(),
             eventEndAt: new Date(2030, 8, 28, 12, 0).toISOString(),
         });
+    });
+
+    // Marty, 15 Oct (board card privacy-global-calls): a host may untick "Only people I let in"; the form says, before
+    // saving, what that opens. Not shown while it stays ticked, nor on a new event.
+    it('unticking "Only people I let in" on an edit says everyone going will see the note and the chat so far', async () => {
+        const letsIn = { ...hosted, id: 'ev-lets-in', eventHostLetsIn: true };
+        setup(letsIn);
+        const view = await openEdit(letsIn);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        const box = within(panel).getByTestId('event-host-lets-in') as HTMLInputElement;
+        await waitFor(() => expect(box).toBeChecked());
+        expect(within(panel).queryByTestId('event-host-lets-in-off')).toBeNull();
+        fireEvent.click(box);
+        expect(within(panel).getByTestId('event-host-lets-in-off').textContent).toBe('Everyone going will see the note and the chat so far.');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-lets-in', 'user-alice-pubkey', { eventHostLetsIn: false });
     });
 
     it('is refused for an event that has ended, and says so (A3)', async () => {

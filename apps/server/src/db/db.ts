@@ -1382,6 +1382,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row reads as off.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_host_lets_in INTEGER`).run(); } catch { }
     // Event times (DESIGN-event-times §2): the host's clock and its zone beside the instant, and online events. NULL on
     // every non-event row, and on an event from before them until it is next edited.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_local TEXT`).run(); } catch { }
@@ -1418,6 +1420,10 @@ export function initSchema() {
     // is not the failure we want to discover at boot. NULL on every existing row means "my default
     // applies", which is exactly the behaviour a node that upgrades into this should have.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
+    // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
+    // matters only on an event whose host lets people in, and no existing event is one.
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_by TEXT`).run(); } catch { }
 
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }

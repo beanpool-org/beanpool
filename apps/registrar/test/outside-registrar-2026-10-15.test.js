@@ -398,6 +398,40 @@ test('a pending claim\'s retry whose tunnel list is one page of several answers 
     } finally { w.restore(); }
 });
 
+// A count Cloudflare reports differently from its list must never be "can't tell" for good: only total_pages, or a
+// full page that doesn't say it is the only one, means more pages.
+for (const [label, reshape] of [
+    ['no result_info', () => undefined],
+    ['a total_count larger than the list (counted differently), one page', (i) => ({ ...i, total_count: i.total_count + 40 })],
+    ['result_info without total_count or total_pages', (i) => ({ page: i.page, per_page: i.per_page, count: i.count })],
+]) {
+    test(`a pending claim's retry whose tunnel list has ${label} is finished: live, never a 502 loop`, async () => {
+        const w = await world();
+        try {
+            const key = await makeKey();
+            const rec = await pendingWithPastTunnels(w, key, 2);
+            w.cf.paging.info = reshape;
+            const r = await w.claim(key, { name: 'halfway' });
+            assert.equal(r.status, 200, JSON.stringify(r.body));
+            assert.equal(r.body.status, 'live');
+            assert.equal((await w.row('halfway')).dns_record_id, rec.id, 'its own record adopted');
+        } finally { w.restore(); }
+    });
+}
+
+test('a pending claim\'s retry whose tunnel list is a full page that doesn\'t say it is the only one answers 502 (retried)', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        await pendingWithPastTunnels(w, key, 2);
+        w.cf.paging.max = 3;   // the name's 3 tunnels fill the page exactly
+        w.cf.paging.info = (i) => ({ page: i.page, per_page: i.per_page, count: i.count });
+        const r = await w.claim(key, { name: 'halfway' });
+        assert.equal(r.status, 502, JSON.stringify(r.body));
+        assert.ok(!w.events('halfway').some((e) => e.event === 'claim-refused'), 'not refused: can\'t tell');
+    } finally { w.restore(); }
+});
+
 // NB-6: /rotate on a pending row runs its heal, which refuses what the registrar did not make. Refused, it rotated
 // nothing: no `rotated` in the trail, and the name's one rotate per 5 minutes is not used up.
 test('a refused /rotate on a pending row logs no rotate and leaves the name its rotate', async () => {

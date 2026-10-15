@@ -48,7 +48,11 @@ export async function listTunnelsNamed(env, name, { withDeleted = false } = {}) 
     const data = await cfAnswer(env, 'GET', path);
     const list = Array.isArray(data.result) ? data.result : [];
     const info = data.result_info;
-    if (info && (info.total_pages > 1 || (info.total_count != null && (info.count ?? list.length) < info.total_count))) {
+    // More pages only when Cloudflare says so, or the page came back full without saying it is the only one. Never from
+    // total_count: if Cloudflare counted it differently from the list (deleted tunnels, the name filter), every retry
+    // and heal at this name would answer 502 for good — an address lost (the #1985 fix-round check, NB 1).
+    const perPage = info?.per_page || TUNNELS_PER_PAGE;
+    if (info?.total_pages > 1 || (list.length >= perPage && info?.total_pages !== 1)) {
         throw Object.assign(new Error(`CF GET ${path} → page ${info.page ?? '?'} of ${info.total_pages ?? '?'} (${info.count ?? list.length} of ${info.total_count ?? '?'} tunnels): can't tell`), { status: 502 });
     }
     return list.filter((t) => t && t.name === name && (withDeleted || !t.deleted_at));

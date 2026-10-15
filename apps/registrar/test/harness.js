@@ -91,7 +91,10 @@ export function fakeCloudflare() {
             const per = Math.min(Number(url.searchParams.get('per_page')) || 20, paging.max);
             const page = Number(url.searchParams.get('page')) || 1;
             const result = all.slice((page - 1) * per, page * per);
-            return Response.json({ success: true, result, result_info: { page, per_page: per, count: result.length, total_count: all.length, total_pages: Math.max(1, Math.ceil(all.length / per)) } });
+            const info = { page, per_page: per, count: result.length, total_count: all.length, total_pages: Math.max(1, Math.ceil(all.length / per)) };
+            // `paging.info(info)`: a test reshapes the answer's result_info (undefined leaves it out).
+            const shown = paging.info ? paging.info(info) : info;
+            return Response.json({ success: true, result, ...(shown === undefined ? {} : { result_info: shown }) });
         }
         if ((m = p.match(/^\/accounts\/acct\/cfd_tunnel\/([^/]+)$/))) {
             const t = tunnels.get(m[1]);

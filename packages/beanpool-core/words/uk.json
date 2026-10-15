@@ -2,10 +2,10 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "боби",
@@ -48,5 +48,110 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Місця з OpenStreetMap. Те, що ви вводите тут, надсилається до OpenStreetMap.",
   "Choose {place}": "Обрати {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Ця спільнота просить фото профілю, перш ніж ви щось опублікуєте. Додати його можна пізніше у своєму профілі.",
-  "A picture is optional here. You can add one later from your profile.": "Тут фото необов’язкове. За бажанням додати його можна пізніше у своєму профілі."
+  "A picture is optional here. You can add one later from your profile.": "Тут фото необов’язкове. За бажанням додати його можна пізніше у своєму профілі.",
+  "{n}st\u0004day of the month": "{n}-го числа",
+  "{n}nd\u0004day of the month": "{n}-го числа",
+  "{n}rd\u0004day of the month": "{n}-го числа",
+  "{n}th\u0004day of the month": "{n}-го числа",
+  "Every month on the first {weekday}": "Щомісяця в перший {weekday}",
+  "Every month on the second {weekday}": "Щомісяця в другий {weekday}",
+  "Every month on the third {weekday}": "Щомісяця в третій {weekday}",
+  "Every month on the fourth {weekday}": "Щомісяця в четвертий {weekday}",
+  "Every month on the last {weekday}": "Щомісяця в останній {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Кожен {n} місяць, перший {weekday}",
+    "few": "Кожні {n} місяці, перший {weekday}",
+    "many": "Кожні {n} місяців, перший {weekday}",
+    "other": "Кожні {n} місяця, перший {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Кожен {n} місяць, другий {weekday}",
+    "few": "Кожні {n} місяці, другий {weekday}",
+    "many": "Кожні {n} місяців, другий {weekday}",
+    "other": "Кожні {n} місяця, другий {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Кожен {n} місяць, третій {weekday}",
+    "few": "Кожні {n} місяці, третій {weekday}",
+    "many": "Кожні {n} місяців, третій {weekday}",
+    "other": "Кожні {n} місяця, третій {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Кожен {n} місяць, четвертий {weekday}",
+    "few": "Кожні {n} місяці, четвертий {weekday}",
+    "many": "Кожні {n} місяців, четвертий {weekday}",
+    "other": "Кожні {n} місяця, четвертий {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Кожен {n} місяць, останній {weekday}",
+    "few": "Кожні {n} місяці, останній {weekday}",
+    "many": "Кожні {n} місяців, останній {weekday}",
+    "other": "Кожні {n} місяця, останній {weekday}"
+  },
+  "Monthly, first {weekday}": "Щомісяця, перший {weekday}",
+  "Monthly, second {weekday}": "Щомісяця, другий {weekday}",
+  "Monthly, third {weekday}": "Щомісяця, третій {weekday}",
+  "Monthly, fourth {weekday}": "Щомісяця, четвертий {weekday}",
+  "Monthly, last {weekday}": "Щомісяця, останній {weekday}",
+  "Does not repeat": "Не повторюється",
+  "Every week on {weekday}": "Щотижня у {weekday}",
+  "Every 2 weeks on {weekday}": "Кожні 2 тижні у {weekday}",
+  "Every month on the {day}": "Щомісяця {day}",
+  "An event that repeats must end before its next date starts": "Подія, що повторюється, має закінчитися до початку наступної дати",
+  "(months without a {day} are skipped)": "(місяці без {day} пропускаються)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Кожен {n} тиждень у {weekday}",
+    "few": "Кожні {n} тижні у {weekday}",
+    "many": "Кожні {n} тижнів у {weekday}",
+    "other": "Кожні {n} тижня у {weekday}"
+  },
+  "Every {weekday}": "Щотижня у {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Кожен {n} місяць {day}",
+    "few": "Кожні {n} місяці {day}",
+    "many": "Кожні {n} місяців {day}",
+    "other": "Кожні {n} місяця {day}"
+  },
+  "Monthly on the {day}": "Щомісяця {day}",
+  "{repeats} · until {date}": "{repeats} · до {date}",
+  "The last date must be a date on or after the first one": "Остання дата має бути такою самою або пізнішою за першу",
+  "The last date can be at most {n} years after the first one": "Остання дата може бути щонайбільше через {n} р. після першої",
+  "{date} is cancelled. Next: {next}": "{date} скасовано. Наступна: {next}",
+  "{date} is cancelled.": "{date} скасовано.",
+  "{date} is back on": "{date} знову відбудеться",
+  "Moved from the regular {weekday}": "Перенесено зі звичайного дня ({weekday})",
+  "Moved from the regular date": "Перенесено зі звичайної дати",
+  "Choose how the event repeats from the list": "Виберіть зі списку, як повторюється подія",
+  "An event can repeat every 1 to 12 weeks or months": "Подія може повторюватися кожні 1–12 тижнів або місяців",
+  "The first date must be one of the repeating dates": "Перша дата має бути однією з повторюваних дат",
+  "The last date can be at most 5 years after the first one": "Остання дата може бути щонайбільше через 5 років після першої",
+  "Pick one of the dates this event repeats on": "Виберіть одну з дат повторення цієї події",
+  "This event does not repeat": "Ця подія не повторюється",
+  "Only the host can cancel or restore a date": "Лише організатор може скасувати або відновити дату",
+  "This is the last date: change when the event ends, or cancel the event": "Це остання дата: змініть час завершення події або скасуйте подію",
+  "At most 100 dates can be cancelled": "Можна скасувати щонайбільше 100 дат",
+  "This event has been cancelled": "Цю подію скасовано",
+  "Pick a time zone from the list": "Виберіть часовий пояс зі списку",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Показується з точністю приблизно до 1 км. Домовляючись про зустріч, запитайте точне місце в {name}.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Показується всім, хто бачить подію. Вкажіть точну адресу в примітці нижче.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Це схоже на адресу. Її побачать усі, хто бачить подію, тому безпечніше вказати її в примітці нижче.",
+  "An earlier message was removed when this chat was locked": "Попереднє повідомлення було видалено під час блокування цього чату",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "Видалено {n} попереднє повідомлення, коли цей чат було заблоковано",
+    "few": "Видалено {n} попередні повідомлення, коли цей чат було заблоковано",
+    "many": "Видалено {n} попередніх повідомлень, коли цей чат було заблоковано",
+    "other": "Видалено {n} попереднього повідомлення, коли цей чат було заблоковано"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} повідомлення видалено модератором",
+    "few": "{n} повідомлення видалено модератором",
+    "many": "{n} повідомлень видалено модератором",
+    "other": "{n} повідомлення видалено модератором"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} повідомлення було видалено",
+    "few": "{n} повідомлення були видалені",
+    "many": "{n} повідомлень було видалено",
+    "other": "{n} повідомлення було видалено"
+  }
 }

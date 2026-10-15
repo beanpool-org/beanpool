@@ -77,16 +77,41 @@ function cardsWithin(path: string, signal?: AbortSignal): Promise<MemberCard[]> 
     return bounded(stop => getMemberCards(path, stop), MEMBERS_REQUEST_TIMEOUT_MS, signal);
 }
 
+/**
+ * Where anyone can join in a minute the node counts each search by name and each "near you" against a day's budget
+ * (100 each a member), so the web app never spends one the member didn't ask for (Marty's call 3, 15 Oct 2026): the same
+ * search or "near you" asked again soon is answered from here. A page opened again, a re-render, a tab switched back: none
+ * of them asks the node twice. A read by key is never counted, and never kept.
+ */
+export const RECENT_LOOKUP_MS = 2 * 60 * 1000;
+const RECENT_LOOKUPS_MAX = 50;
+const recentLookups = new Map<string, { at: number; cards: MemberCard[] }>();
+
+/** Forget the answers kept: App does on every change of the signed-in account (they are kept by path alone), and tests. */
+export function forgetRecentLookups(): void {
+    recentLookups.clear();
+}
+
+async function countedCards(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    const kept = recentLookups.get(path);
+    if (kept && Date.now() - kept.at < RECENT_LOOKUP_MS) return kept.cards;
+    const cards = await cardsWithin(path, signal);
+    recentLookups.delete(path);
+    recentLookups.set(path, { at: Date.now(), cards });
+    if (recentLookups.size > RECENT_LOOKUPS_MAX) recentLookups.delete(recentLookups.keys().next().value!);
+    return cards;
+}
+
 /** The members whose name starts with what was typed; none, without asking, under 2 characters. */
 export async function searchMembers(typed: string, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = memberSearchPath(typed);
-    return path ? cardsWithin(path, signal) : [];
+    return path ? countedCards(path, signal) : [];
 }
 
 /** The 50 members nearest a stored area, nearest first; none, without asking, with no area. */
 export async function membersNear(point: { lat: number; lng: number } | null | undefined, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = membersNearPath(point);
-    return path ? cardsWithin(path, signal) : [];
+    return path ? countedCards(path, signal) : [];
 }
 
 /** One batch of people's cards (memberKeysBatches): those the node holds, in the order asked. */
@@ -95,24 +120,37 @@ export async function membersByKeys(batch: string[], signal?: AbortSignal): Prom
 }
 
 /**
+ * The node's own words when it refused a lookup because the member has used up today's (a 429 `…_day_budget`, where
+ * anyone can join in a minute): how many, until when, and what still works. Null for any other failure, which the
+ * screens still call a connection problem. Never "check your connection" for a day that is spent (#1965 review N4).
+ */
+export function dayBudgetWords(e: unknown): string | null {
+    const code = (e as { code?: unknown } | null)?.code;
+    const words = (e as { message?: unknown } | null)?.message;
+    return typeof code === 'string' && code.endsWith('_day_budget') && typeof words === 'string' && words.trim() ? words : null;
+}
+
+/**
  * A search box's answer from the node while `enabled`: asked once the typing pauses (MEMBERS_SEARCH_DEBOUNCE_MS), from
  * 2 characters; each new word stops the one asked before it. `found` is null while there is nothing to show.
  */
-export function useMemberSearch(typed: string, enabled: boolean): { found: MemberCard[] | null; state: 'idle' | 'searching' | 'failed' } {
+export function useMemberSearch(typed: string, enabled: boolean): { found: MemberCard[] | null; state: 'idle' | 'searching' | 'failed'; refusal: string | null } {
     const [found, setFound] = useState<MemberCard[] | null>(null);
     const [state, setState] = useState<'idle' | 'searching' | 'failed'>('idle');
+    // With 'failed': the node's words when the day's searches are spent (dayBudgetWords), else null.
+    const [refusal, setRefusal] = useState<string | null>(null);
     useEffect(() => {
         if (!enabled || !memberSearchPath(typed)) { setFound(null); setState('idle'); return; }
         const stop = new AbortController();
         setState('searching');
         const timer = setTimeout(() => {
             searchMembers(typed, stop.signal)
-                .then(people => { if (!stop.signal.aborted) { setFound(people); setState('idle'); } })
-                .catch(() => { if (!stop.signal.aborted) { setFound(null); setState('failed'); } });
+                .then(people => { if (!stop.signal.aborted) { setFound(people); setState('idle'); setRefusal(null); } })
+                .catch((e) => { if (!stop.signal.aborted) { setFound(null); setState('failed'); setRefusal(dayBudgetWords(e)); } });
         }, MEMBERS_SEARCH_DEBOUNCE_MS);
         return () => { clearTimeout(timer); stop.abort(); };
     }, [typed, enabled]);
-    return { found, state };
+    return { found, state, refusal };
 }
 
 /**

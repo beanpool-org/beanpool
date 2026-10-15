@@ -154,6 +154,22 @@ the note never leaves a stale copy.
 
 ### 2.2 Server rules
 
+> **Amendment, 2026-10-15 (the global privacy design, `scratch/global-node/DESIGN-global-member-privacy-fable.md` §2; the
+> privacy review of 2026-10-14, M1).** "No host approval" and "shown only to people who tapped Going" below stand as
+> history. Each event now has a **"host lets people in"** flag (`posts.event_host_lets_in`): ticked by default where
+> `features.openMembership` is on (the global node), unticked elsewhere, the host's to change on any node. When it is on,
+> Going is still one tap and still counted, but the private note and the event chat open to a Going member only once the
+> host has let them in (`event_rsvps.let_in_at`; `POST /api/marketplace/posts/:id/let-in`, one member, `everyone`, or
+> `letIn: false` to take it back). The host's own friends are let in as they tap Going. Waiting, the chat answers 403
+> `code: 'waiting_for_host'`. The member is pushed on let-in; the host at most once an hour per event that people wait.
+> One rule for both readers: `mayReadEventPrivate` (@beanpool/engine). The chat's participants are only those who may read
+> it.
+>
+> **Marty, 2026-10-15 (board card privacy-global-calls, "All four as recommended"):** a global host MAY untick it. On an edit
+> from ticked to unticked the form says, before saving, "Everyone going will see the note and the chat so far.", and the
+> chat gets one system line, "The host opened this chat to everyone going." (`system_type` `event_opened_to_going`; the
+> apps word it by that type). Only a member who can see the event is let in, never a visitor (#1953 review N2).
+
 **Create** goes through `createPost` (`posts.ts:101`) with a `type === 'event'` branch beside the poll branch
 (`posts.ts:190-232`):
 

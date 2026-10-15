@@ -334,7 +334,10 @@ import {
     type GroupMemberStatus,
     type CreateGroupParams,
     type UpdateGroupParams,
-    type ListGroupsFilter
+    type ListGroupsFilter,
+    exactPlaceReaders,
+    neighbourhoodOf,
+    placeForOthers,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -353,6 +356,7 @@ import {
     closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
+    letInEvent as letInEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
     type EscrowRefundShortfall,
@@ -443,6 +447,7 @@ export {
     dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
     type MyEvent,
 } from './engine/event-reminders.js';
+import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped } from './engine/event-series-roll.js';
 import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
 export {
     HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
@@ -1031,6 +1036,10 @@ function armMainServerTimers(): void {
         // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
         // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
         try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
+        // Repeating events whose date has ended move to their next date (DESIGN-event-times §8), and RSVPs for dates a
+        // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
+        try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
+        try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
     }), 60 * 1000);
 }
 
@@ -1562,8 +1571,11 @@ function keepersOf(treasuries: string[]): Set<string> {
 /**
  * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
  * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
- * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
- * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
+ * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it: where
+ * anyone can join, `openMembership`, from its neighbourhood, about 1.1 km across, for everyone but the members who have the place
+ * exactly, engine exactPlaceReaders, who are measured from the place and visited as parties; whether a socket gets a copy
+ * is a yes or no about the place, so measured from the place it located a listing to ~100 m from ~25 areas, #1965
+ * deciding review B1), and the listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
  * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
  * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
@@ -1589,8 +1601,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
-        { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1600,14 +1612,21 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
     const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
+    // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
+    // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
+    // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
+    // sockets get a copy would place it to ~100 m from ~25 areas (#1965 deciding review C).
+    const nb = placed && getProfileSwitches().openMembership ? neighbourhoodOf(row.lat!, row.lng!) : null;
+    const exactReaders = nb ? exactPlaceReaders(db, row) : null;
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
         if (!placed || blockers!.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
-        return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
+        const at = nb && !exactReaders!.has(pubkey) ? nb : { lat: row.lat!, lng: row.lng! };
+        return !!area && engine.haversineKm(area.lat, area.lng, at.lat, at.lng) <= radiusKm;
     };
-    return { reaches, parties: [...sides, ...keepers], place: placed ? { lat: row.lat!, lng: row.lng! } : null, radiusKm };
+    return { reaches, parties: [...sides, ...keepers, ...(exactReaders ?? [])], place: placed ? (nb ?? { lat: row.lat!, lng: row.lng! }) : null, radiusKm };
 }
 
 // Whether a listing's push by area visits only the sockets the index finds (wsClients.reachable), not every socket. On,
@@ -1617,12 +1636,57 @@ let listingPushIndex = true;
 export function setListingPushIndex(on: boolean): void {
     listingPushIndex = on;
 }
+/**
+ * For test-global-pins: the keys a listing's own event visits wherever they are (listingReach's parties), or null where it
+ * isn't measured by area. The sockets' index looks a degree past the radius, so leaving a member who has the place exactly
+ * out of the parties changes no socket today; this is how a test holds the rule that they are parties (#1965 confirmation
+ * finding 2).
+ */
+export function listingReachParties(event: any): string[] | null {
+    return listingReach(event)?.parties ?? null;
+}
 /** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
 export function inspectWsClients(): ReturnType<WsClients['inspect']> {
     return wsClients.inspect();
 }
 
+/**
+ * A listing's own event where anyone can join in a minute (`openMembership`, the global node): its place as stored, and
+ * who has it exactly (engine exactPlaceReaders: the author, an enterprise's keepers, an event's hosts and the people let
+ * in). Every other socket's copy carries its neighbourhood (neighbourhoodOf, about 1.1 km across), as their reads do (engine PostFilter.neighbourhood;
+ * DESIGN-global-member-privacy-fable.md §4). The place is read from the row, so a copy read for one member (an RSVP's,
+ * already rounded for them) still reaches the author exact, and their app never keeps a rounded pin to edit. Null
+ * elsewhere, or for an event with no listing in it.
+ */
+function placeOfListingEvent(event: any): { event: any; exact: Set<string> } | null {
+    if ((event?.type !== 'new_post' && event?.type !== 'post_updated') || !event.post || typeof event.post !== 'object') return null;
+    if (typeof event.post.id !== 'string' || !getProfileSwitches().openMembership) return null;
+    const row = db.prepare('SELECT id, lat, lng, author_pubkey, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?')
+        .get(event.post.id) as { id: string; lat: number | null; lng: number | null; author_pubkey: string; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
+    if (!row) return null;
+    const post = { ...event.post };
+    if (typeof post.lat === 'number' && typeof row.lat === 'number') post.lat = row.lat;
+    if (typeof post.lng === 'number' && typeof row.lng === 'number') post.lng = row.lng;
+    return { event: { ...event, post }, exact: exactPlaceReaders(db, row) };
+}
+
+/** A copy of a listing's event (a JSON string) with its place to the neighbourhood (placeOfListingEvent). */
+function withNeighbourhood(json: string): string {
+    const e = JSON.parse(json);
+    // Half a place is no place (engine placeForOthers): the one coordinate there would be exact.
+    const shown = e?.post ? placeForOthers(e.post.lat, e.post.lng) : null;
+    if (shown) {
+        e.post.lat = shown.lat;
+        e.post.lng = shown.lng;
+    }
+    return JSON.stringify(e);
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
+    const placed = placeOfListingEvent(event);
+    if (placed) event = placed.event;
+    // Each full copy below, with the place to the neighbourhood, made once (withNeighbourhood).
+    const neighbourhoodCopies = new Map<string, string>();
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -1756,6 +1820,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = out === msg
                 ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
                 : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
+        }
+        if (placed && out !== doorbell && !(ws._memberPubkey && placed.exact.has(ws._memberPubkey))) {
+            let rounded = neighbourhoodCopies.get(out);
+            if (rounded === undefined) { rounded = withNeighbourhood(out); neighbourhoodCopies.set(out, rounded); }
+            out = rounded;
         }
         try {
             ws.send(out);
@@ -5165,12 +5234,16 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        eventHostLetsIn?: unknown;
         /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
         eventStartLocal?: unknown;
         eventEndLocal?: unknown;
         eventTz?: unknown;
         eventOnline?: unknown;
         eventLink?: unknown;
+        /** A repeating event's rule and its last date (engine/event-series-roll.ts). */
+        eventRepeat?: unknown;
+        eventRepeatUntil?: unknown;
         /** Filled when a clock the host set was adjusted (engine/posts.ts EventTimeOut). */
         out?: EventTimeOut;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -6109,7 +6182,23 @@ export function rsvpEvent(
     status: 'going' | 'interested' | null,
     signature?: string
 ): { success: boolean; post: MarketplacePost } {
-    return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature);
+    // The push dispatcher, so a host whose event lets people in hears that people are waiting (at most hourly).
+    return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature, dispatchPushNotification);
+}
+
+/** The host lets a Going member in, or everyone waiting, or takes it back (DESIGN-global-member-privacy-fable.md §2.2). */
+export function letInEvent(
+    postId: string,
+    actorPubkey: string,
+    target: { memberPublicKey?: string; everyone?: boolean },
+    letIn = true,
+): { success: true; post: MarketplacePost; changed: number } {
+    return letInEventEngine(postId, actorPubkey, target, letIn, dispatchPushNotification);
+}
+
+/** "Cancel this date" of a repeating event, or its undo (engine/event-series-roll.ts): the host only. */
+export function skipEventDate(postId: string, actorPubkey: string, date: unknown, skipped: boolean): { post: MarketplacePost; skips: string[] } {
+    return setSeriesDateSkipped(broadcast, dispatchPushNotification, postId, actorPubkey, date, skipped);
 }
 // ===================== MARKETPLACE TRANSACTIONS =====================
 

@@ -13,9 +13,10 @@
  */
 
 import {
-    initPairingSession,
-    transferPairingPayload,
-    pollPairingSession,
+    initPairingSession as initRaw,
+    transferPairingPayload as transferRaw,
+    pollPairingSession as pollRaw,
+    confirmPairingTransfer,
     cancelPairingSession,
     clearAllPairingSessions,
     PAIRING_RELAY_LIMITS,
@@ -27,6 +28,22 @@ import {
     encryptPairingPayload,
     decryptPairingPayload,
 } from '@beanpool/core';
+
+// The browser that opened each session (its binding secret), and a phone whose digits that browser types at once: the
+// checks of what the relay holds and for how long below read as before number matching. The digits themselves, the
+// wrong browser and the burn are checked on their own (section 7).
+const secrets = new Map<string, string>();
+function initPairingSession(sessionId: string, desktopPubHex: string) {
+    const r = initRaw(sessionId, desktopPubHex);
+    if (r.ok && r.secret) secrets.set(sessionId, r.secret);
+    return r;
+}
+function transferPairingPayload(sessionId: string, mobilePubHex: string, nonceHex: string, ciphertextHex: string) {
+    const r = transferRaw(sessionId, mobilePubHex, nonceHex, ciphertextHex);
+    if (r.ok) confirmPairingTransfer(sessionId, secrets.get(sessionId), r.confirmCode);
+    return r;
+}
+const pollPairingSession = (sessionId: string) => pollRaw(sessionId, secrets.get(sessionId));
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -242,6 +259,41 @@ async function main() {
     assert(lastCollect.payload?.ciphertextHex === 'b'.repeat(64) && pollPairingSession(kept[1_000]).status === 'expired'
         && keptCounts.collected === 1_000 && keptCounts.held === 0,
         `past 1,000 kept, a collect still brings its payload and the session ends at once (${JSON.stringify(keptCounts)})`);
+    clearAllPairingSessions();
+
+    // 7. Number matching (fable-security-signin finding 1): held until the opening browser types the phone's digits.
+    {
+        const d = createPairingSession();
+        const opened = initRaw(d.sessionId, d.publicKeyHex);
+        assert(opened.ok && /^[0-9a-f]{64}$/.test(opened.secret || ''), 'init hands the opening browser a binding secret');
+        const sent = transferRaw(d.sessionId, mobileHex, nonce, 'ab'.repeat(32));
+        assert(sent.ok && /^\d{2}$/.test(sent.confirmCode || ''), `the phone's send answers two digits to show (${sent.confirmCode})`);
+        const held = pollRaw(d.sessionId, opened.secret);
+        assert(held.status === 'confirming' && !held.payload, 'the opening browser is told "confirming" and gets no payload yet');
+        assert(pollRaw(d.sessionId, undefined).status === 'wrong-browser' && pollRaw(d.sessionId, 'f'.repeat(64)).status === 'wrong-browser',
+            'a browser without the secret, or with another one, is "wrong-browser" and gets nothing');
+        assert(confirmPairingTransfer(d.sessionId, undefined, sent.confirmCode).result === 'wrong-browser'
+            && pollRaw(d.sessionId, opened.secret).status === 'confirming', 'the right digits from another browser release nothing');
+        const wrong = String((Number(sent.confirmCode) + 1) % 100).padStart(2, '0');
+        const once = confirmPairingTransfer(d.sessionId, opened.secret, wrong);
+        assert(once.result === 'wrong' && (once as any).triesLeft === 2, 'wrong digits: two tries left');
+        const right = confirmPairingTransfer(d.sessionId, opened.secret, sent.confirmCode);
+        const got = pollRaw(d.sessionId, opened.secret);
+        assert(right.result === 'released' && got.status === 'transferred' && got.payload?.ciphertextHex === 'ab'.repeat(32),
+            'the right digits from the opening browser release the payload to its next poll');
+    }
+    {
+        const d = createPairingSession();
+        const opened = initRaw(d.sessionId, d.publicKeyHex);
+        const sent = transferRaw(d.sessionId, mobileHex, nonce, 'cd'.repeat(32));
+        const wrong = String((Number(sent.confirmCode) + 1) % 100).padStart(2, '0');
+        const tries = [0, 1, 2].map(() => confirmPairingTransfer(d.sessionId, opened.secret, wrong).result);
+        const late = confirmPairingTransfer(d.sessionId, opened.secret, sent.confirmCode);
+        const after = pollRaw(d.sessionId, opened.secret);
+        assert(tries.join() === 'wrong,wrong,burned' && late.result === 'burned' && after.status === 'burned' && !after.payload
+            && _pairingRelayCountsForTests().held === 0, `three wrong burn the session and drop its payload; the right digits then give nothing (${tries.join()})`);
+        assert(!transferRaw(d.sessionId, mobileHex, nonce, 'cd'.repeat(32)).ok, 'and a burned session takes no second send');
+    }
     clearAllPairingSessions();
 
     console.log(`\nDevice Pairing Test Summary: ${passed}/${run} assertions passed.`);

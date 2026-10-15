@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -58,6 +58,7 @@ import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
@@ -176,7 +177,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [eventEnd, setEventEnd] = useState('');
     const [eventPlaceName, setEventPlaceName] = useState('');
     const [eventNote, setEventNote] = useState('');
+    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): null until the host touches
+    // it, so the node's default (ticked where anyone can join in a minute) holds even when its info arrives late.
+    const [eventHostLetsInChoice, setEventHostLetsIn] = useState<boolean | null>(null);
     const [postApproximate, setPostApproximate] = useState(false);
+    // The spot a new pin was placed at, kept while the pin shows Approximate, so the member can still choose it.
+    const exactPinRef = useRef<{ lat: number; lng: number } | null>(null);
     // Where and when (DESIGN-event-times §3): at a place or online, the link to join, and the zone the typed times are in
     // with where it came from. The picker's list is the node's, read the first time Change is tapped.
     const [eventOnline, setEventOnline] = useState(false);
@@ -218,6 +224,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Until the node's info arrives, the local rules stand.
     const nodeInfo = useCommunityInfo(!visitor);
     const postRules = postRulesFor((nodeInfo?.features as { beans?: unknown } | undefined)?.beans !== false);
+    const openMembership = hostLetsInDefault(nodeInfo?.features as { openMembership?: boolean } | undefined);
+    // Read by the map's tap handler, which is bound once per pin-drop mode.
+    const openMembershipRef = useRef(openMembership);
+    openMembershipRef.current = openMembership;
+    const eventHostLetsIn = eventHostLetsInChoice ?? openMembership;
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -829,6 +840,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setEventEnd('');
         setEventPlaceName('');
         setEventNote('');
+        setEventHostLetsIn(null);
         setEventHost('me');
         setPostApproximate(false);
         setEventIsCopy(false);
@@ -856,6 +868,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
+            hostLetsIn: eventHostLetsIn,
         };
     }
 
@@ -966,6 +979,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 ...(!eventOnline && eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
+                // Always the host's choice, never left to the node's default.
+                eventHostLetsIn,
             };
             // Hosting AS an enterprise goes through the enterprise's own route, with the enterprise in the
             // PATH. Naming it in the body is refused by the node's spoof check before the route runs — every
@@ -1137,11 +1152,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             mapRef.current,
             false,
             (latlng) => {
-                setPostLat(Math.round(latlng.lat * 10000) / 10000);
-                setPostLng(Math.round(latlng.lng * 10000) / 10000);
-                setPostApproximate(false);
+                placeFreshPin(Math.round(latlng.lat * 10000) / 10000, Math.round(latlng.lng * 10000) / 10000);
                 setPinDropMode(false);
-                placePreviewPin(latlng.lat, latlng.lng);
             },
             () => {
                 setPinDropMode(true);
@@ -1155,15 +1167,41 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPostLat(null);
         setPostLng(null);
         setPostApproximate(false);
+        exactPinRef.current = null;
         if (pinDropMarkerRef.current) {
             pinDropMarkerRef.current.remove();
             pinDropMarkerRef.current = null;
         }
     }
 
+    /**
+     * A new pin from a tap, the member's location or an address. Where anyone can join in a minute (`openMembership`, the
+     * global node) it starts Approximate, rounded to about 100 m, and the member can still choose the exact spot
+     * (DESIGN-global-member-privacy-fable.md, director amendment 1 item 3); elsewhere it is the spot, as always.
+     */
+    function placeFreshPin(lat: number, lng: number) {
+        exactPinRef.current = { lat, lng };
+        const at = openMembershipRef.current ? approximateLocation(lat, lng) : { lat, lng };
+        setPostLat(at.lat);
+        setPostLng(at.lng);
+        setPostApproximate(openMembershipRef.current);
+        placePreviewPin(at.lat, at.lng);
+    }
+
+    /** Back to the spot the pin was placed at, after Approximate (placeFreshPin, approximatePin). */
+    function chooseExactSpot() {
+        const exact = exactPinRef.current;
+        if (!exact) return;
+        setPostLat(exact.lat);
+        setPostLng(exact.lng);
+        setPostApproximate(false);
+        placePreviewPin(exact.lat, exact.lng);
+    }
+
     // One tap rounds the pin to roughly 100 m before it is sent, as for enterprise pins (§2.3).
     function approximatePin() {
         if (postLat == null || postLng == null) return;
+        if (!postApproximate) exactPinRef.current = { lat: postLat, lng: postLng };
         const approx = approximateLocation(postLat, postLng);
         setPostLat(approx.lat);
         setPostLng(approx.lng);
@@ -1177,13 +1215,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     function pickAddress(result: AddressResult) {
         const lat = Math.round(result.lat * 10000) / 10000;
         const lng = Math.round(result.lng * 10000) / 10000;
-        setPostLat(lat);
-        setPostLng(lng);
-        setPostApproximate(false);
+        placeFreshPin(lat, lng);
         setPinDropMode(false);
         setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); if (result.shortName) n.delete('event_place'); return n; });
         setEventPlaceName(prev => prev.trim() ? prev : result.shortName.slice(0, EVENT_PLACE_NAME_MAX));
-        placePreviewPin(lat, lng);
         const map = mapRef.current;
         if (map) {
             centredRef.current = true;
@@ -1230,12 +1265,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         const map = mapRef.current;
         function onMapClick(e: L.LeafletMouseEvent) {
             if (!pinDropMode) return;
-            const lat = Math.round(e.latlng.lat * 10000) / 10000;
-            const lng = Math.round(e.latlng.lng * 10000) / 10000;
-            setPostLat(lat);
-            setPostLng(lng);
-            setPostApproximate(false);
-            placePreviewPin(lat, lng);
+            placeFreshPin(Math.round(e.latlng.lat * 10000) / 10000, Math.round(e.latlng.lng * 10000) / 10000);
         }
         map.on('click', onMapClick);
         return () => { map.off('click', onMapClick); };
@@ -1616,6 +1646,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setEventEnd(form.end);
             setEventPlaceName(form.placeName);
             setEventNote(form.privateNote);
+            setEventHostLetsIn(form.hostLetsIn);
             setAudienceScope(source.audienceScope === 'group' ? 'group' : 'public');
             setTargetGroupId(source.audienceScope === 'group' ? (source.targetGroupId ?? '') : '');
             setPostLat(form.lat);
@@ -1687,6 +1718,28 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
                     ✓ Location set
                 </p>
+            )}
+            {/* Where anyone can join, a listing's pin starts Approximate; the member may choose the exact spot. The event
+                form has its own Approximate box below the address search. */}
+            {openMembership && newPostType !== 'event' && postLat != null && postLng != null && (
+                <div data-testid="listing-pin-precision" className="mb-3 flex items-center gap-2 flex-wrap">
+                    <p className="m-0 flex-1 min-w-0 text-xs text-nature-600 dark:text-nature-300 break-words">
+                        {postApproximate ? t('Saved to about 100 m. Other members see about 1 km.') : t('Saved at the exact spot. Other members see about 1 km.')}
+                    </p>
+                    {postApproximate ? (
+                        exactPinRef.current && (
+                            <button type="button" onClick={chooseExactSpot}
+                                className="min-h-[48px] px-3 rounded-md border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100">
+                                {t('Use the exact spot')}
+                            </button>
+                        )
+                    ) : (
+                        <button type="button" onClick={approximatePin}
+                            className="min-h-[48px] px-3 rounded-md border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100">
+                            {t('Approximate (~100m)')}
+                        </button>
+                    )}
+                </div>
             )}
             </>
         );
@@ -2440,6 +2493,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => { setEventPlaceName(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_place'); return n; }); }}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('event_place') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
+                            {/* Where anyone can join, the place name is the one place everyone who can see the event reads
+                                (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
+                            {openMembership && (
+                                <p data-testid="event-place-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400 break-words">
+                                    {looksLikeStreetAddress(eventPlaceName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
+                                </p>
+                            )}
                         </div>
 
                         <div>
@@ -2472,6 +2532,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                             ~100m
                                         </span>
                                     )}
+                                    {postApproximate && exactPinRef.current && (
+                                        <button
+                                            type="button"
+                                            onClick={chooseExactSpot}
+                                            className="min-h-[48px] px-3 py-1 rounded-md bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100 border border-nature-300 dark:border-nature-600"
+                                        >
+                                            {t('Use the exact spot')}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -2502,7 +2571,26 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 rows={2}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all resize-y ${validationErrors.has('event_note') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
-                            <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see this.</p>
+                            <p data-testid="event-note-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">{privateNoteHelper(eventHostLetsIn, openMembership)}</p>
+                            <label className="mt-2 flex items-start gap-2 min-h-[44px] cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    data-testid="event-host-lets-in"
+                                    checked={eventHostLetsIn}
+                                    onChange={e => setEventHostLetsIn(e.target.checked)}
+                                    className="mt-1 h-5 w-5 flex-shrink-0 accent-violet-700"
+                                />
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{hostLetsInLabel()}</span>
+                                    <span className="block text-xs text-nature-500 dark:text-nature-400">{hostLetsInHint()}</span>
+                                </span>
+                            </label>
+                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
+                            {eventEdit && hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn) && (
+                                <p data-testid="event-host-lets-in-off" role="status" className="m-0 mt-1 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">
+                                    {hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn)}
+                                </p>
+                            )}
                         </div>
                         {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
                             <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">

@@ -5,6 +5,8 @@
  *   PUT /api/events/:postId/reminder      — the signer's reminders for one event
  *   GET /api/events/zone?lat=&lng=        — the time zone of a pin, for the event form (DESIGN-event-times §2)
  *   GET /api/events/zones                 — every zone this node accepts, for the form's picker
+ *   POST /api/events/:postId/skip         — the host cancels one date of a repeating event (DESIGN-event-times §8)
+ *   DELETE /api/events/:postId/skip       — and restores it
  *
  * Both are the SIGNER's and nobody else's. The member is `ctx.state.actor`, which only the signature
  * middleware sets, and never a field in the body or the query — the same rule the RSVP route already keeps
@@ -16,9 +18,11 @@
 
 import Router from '@koa/router';
 import {
-    listMyEvents, setEventReminderOffsets, parseReminderOffsets,
+    listMyEvents, setEventReminderOffsets, parseReminderOffsets, skipEventDate,
     NO_RSVP_MESSAGE, BAD_OFFSETS_MESSAGE,
 } from '../state-engine.js';
+import { SKIP_HOST_ONLY } from '../engine/event-series-roll.js';
+import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { zoneOfPin, describeZone, acceptedZones } from '../engine/event-zone.js';
 
@@ -118,6 +122,37 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: msg };
         }
     });
+
+    /**
+     * POST /api/events/:postId/skip    body `{ date: "YYYY-MM-DD" }`  → `{ success, post, skips }`
+     * DELETE /api/events/:postId/skip  body `{ date }` (or `?date=`)
+     *
+     * "Cancel this date" of a repeating event, and its undo (DESIGN-event-times §8; engine/event-series-roll.ts
+     * setSeriesDateSkipped). The host only: its author, a keeper of the enterprise it is for, a group's convenor
+     * (isEventHost), as the signer, never a field in the body. The date is one of the series' own, in the event's zone,
+     * and not over. Cancelling the current date moves the event to its next date at once, and tells those going.
+     */
+    const skipRoute = (skipped: boolean) => async (ctx: any) => {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'A signed request is required' };
+            return;
+        }
+        if (!membersOnlyHere(ctx)) return;
+        const body = ctx.requestBody || {};
+        const date = body.date ?? ctx.query?.date;
+        try {
+            const out = skipEventDate(ctx.params.postId, actor, date, skipped);
+            ctx.body = { success: true, post: out.post, skips: out.skips };
+        } catch (e: any) {
+            const msg = e?.message || 'Could not change that date';
+            ctx.status = msg === 'Event not found' ? 404 : msg === SKIP_HOST_ONLY ? 403 : 400;
+            ctx.body = { error: msg };
+        }
+    };
+    router.post('/api/events/:postId/skip', skipRoute(true));
+    router.delete('/api/events/:postId/skip', skipRoute(false));
 
     return router;
 }

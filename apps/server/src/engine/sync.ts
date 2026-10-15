@@ -39,6 +39,9 @@ import {
     setGroupPicture,
     setMemberPhoto,
     isWellFormedKey,
+    isLocalDate,
+    repeatRuleCell,
+    repeatSkipsCell,
     summariseLedger,
     type LedgerSummary,
     type SyncAccount,
@@ -104,14 +107,25 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     five, so a copy it made lacks them and the re-seed brings them. OLDEST_STANDBY_FORMAT is 10 from here: a main server
  *     refuses a copy or a delta to an older standby, loudly, rather than send it one that loses them (an online event
  *     would land as a pinless in-person one with no link).
+ * 11. An event's "host lets people in" and each RSVP's let-in are the main server's (posts.event_host_lets_in,
+ *     event_rsvps.let_in_at and let_in_by; DESIGN-global-member-privacy-fable.md §2.4). An importer before this one drops
+ *     them, under stamps no later copy moves past, and the state hash reads no flag: promoted, such a standby would open an
+ *     event's note and chat to everyone Going. The re-seed brings them. OLDEST_STANDBY_FORMAT is 11 from here, for the same
+ *     reason as 10: a copy or a delta sent to an older standby would lose them.
+ * 12. Repeating events (DESIGN-event-times §8): a series' rule, its last date and its cancelled dates (event_repeat,
+ *     event_repeat_until, event_repeat_skips), the date each RSVP is for (event_rsvps.occurrence_at), and reminder marks
+ *     keyed on the date (event_reminders_sent.occurrence_at). An importer before this one drops them: a series would land
+ *     as a one-off that never moves on after a take-over, every regular's old RSVP would count for the new date, and a
+ *     second week's reminder mark would fold into the first's. OLDEST_STANDBY_FORMAT is 12 from here, as 10 and 11 were.
  */
-export const REPLICA_FORMAT = 10;
+export const REPLICA_FORMAT = 12;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
- * reference, 10 event times; raise it with any format whose older importer drops a column.
+ * reference, 10 event times, 11 the let-in, 12 repeating events; raise it with any format whose older importer drops a
+ * column.
  */
-export const OLDEST_STANDBY_FORMAT = 10;
+export const OLDEST_STANDBY_FORMAT = 12;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -1100,17 +1114,22 @@ function postScope(rp: any): [string, string | null, string | null, string | nul
 
 /**
  * An event's clock, zone and online columns (DESIGN-event-times §2): event_start_local, event_end_local, event_tz,
- * event_online, event_link, in that order. Plain assignment on update, like the note: an edit that clears the link must
- * clear it here too. A main server from before them sends none, and held none.
+ * event_online, event_link, then a series' event_repeat, event_repeat_until, event_repeat_skips (§8), in that order. Plain
+ * assignment on update, like the note: an edit that clears the link or ends the repeat must clear it here too. A main
+ * server from before them sends none, and held none. The rule and the dates are written in the one spelling the main
+ * server writes them (@beanpool/engine repeatRuleCell, repeatSkipsCell), so the row is the same byte for byte.
  */
-function postEventTimes(rp: any): [string | null, string | null, string | null, number | null, string | null] {
-    if (rp.type !== 'event') return [null, null, null, null, null];
+function postEventTimes(rp: any): [string | null, string | null, string | null, number | null, string | null, string | null, string | null, string | null] {
+    if (rp.type !== 'event') return [null, null, null, null, null, null, null, null];
     return [
         typeof rp.eventStartLocal === 'string' ? rp.eventStartLocal : null,
         typeof rp.eventEndLocal === 'string' ? rp.eventEndLocal : null,
         typeof rp.eventTz === 'string' ? rp.eventTz : null,
         rp.eventOnline === true ? 1 : rp.eventOnline === false ? 0 : null,
         typeof rp.eventLink === 'string' ? rp.eventLink : null,
+        repeatRuleCell(rp.eventRepeat),
+        isLocalDate(rp.eventRepeatUntil) ? rp.eventRepeatUntil : null,
+        repeatSkipsCell(rp.eventRepeatSkips),
     ];
 }
 
@@ -1119,6 +1138,11 @@ function postEventTimes(rp: any): [string | null, string | null, string | null, 
  * update: a restore clears the hide on the replica too. A main server from before G3 sends neither, and never set
  * either, so null is what it holds.
  */
+/** The event's "host lets people in" flag as the main server holds it; null from a peer older than it (the update keeps what is here). */
+function hostLetsInValue(rp: any): number | null {
+    return rp.eventHostLetsIn === true ? 1 : rp.eventHostLetsIn === false ? 0 : null;
+}
+
 function postModeration(rp: any): [string | null, string | null] {
     return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
 }
@@ -1882,9 +1906,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
                                 event_start_local, event_end_local, event_tz, event_online, event_link,
+                                event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1921,6 +1946,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postEventTimes(rp),
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -1961,6 +1987,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         event_tz = ?,
                         event_online = ?,
                         event_link = ?,
+                        event_repeat = ?,
+                        event_repeat_until = ?,
+                        event_repeat_skips = ?,
+                        event_host_lets_in = COALESCE(?, event_host_lets_in),
                         audience_scope = ?,
                         target_group_id = ?,
                         target_pubkey = ?,
@@ -2000,6 +2030,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postEventTimes(rp),
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -2610,24 +2641,33 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 const RSVP_CONFLICT_GUARD = `
                     WHERE excluded.updated_at IS NOT NULL
                       AND (event_rsvps.updated_at IS NULL OR excluded.updated_at >= event_rsvps.updated_at)`;
+                // occurrence_at (DESIGN-event-times §8) is written as sent, like the status: the main server stamps it, and
+                // a main server from before it holds none (OLDEST_STANDBY_FORMAT keeps an older importer from this copy).
                 const importRsvp = db.prepare(`INSERT INTO event_rsvps
-                    (post_id, member_pubkey, status, signature, reminder_offsets, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (post_id, member_pubkey, status, signature, reminder_offsets, occurrence_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
                         status = excluded.status,
                         signature = excluded.signature,
                         reminder_offsets = excluded.reminder_offsets,
+                        occurrence_at = excluded.occurrence_at,
                         updated_at = excluded.updated_at
                     ${RSVP_CONFLICT_GUARD}`);
                 // The pre-reminders peer: same row, same watermark, reminder_offsets untouched.
                 const importRsvpNoOffsets = db.prepare(`INSERT INTO event_rsvps
-                    (post_id, member_pubkey, status, signature, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    (post_id, member_pubkey, status, signature, occurrence_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
                         status = excluded.status,
                         signature = excluded.signature,
+                        occurrence_at = excluded.occurrence_at,
                         updated_at = excluded.updated_at
                     ${RSVP_CONFLICT_GUARD}`);
+                // The let-in (DESIGN-global-member-privacy-fable.md §2.4) rides on the same row and the same watermark: written
+                // only onto the row this import just made the main server's (its updated_at), so an older copy never sets
+                // or clears it. `undefined` (a peer older than the let-in) keeps what is here, as for reminders.
+                const importLetIn = db.prepare(`UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?
+                    WHERE post_id = ? AND member_pubkey = ? AND updated_at = ?`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`);
                 for (const er of remote.eventRsvps) {
                     if (er.status !== 'going' && er.status !== 'interested') continue;
@@ -2637,11 +2677,15 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         conflictsSkipped++;
                         continue;
                     }
+                    const occurrenceAt = typeof er.occurrenceAt === 'string' ? er.occurrenceAt : null;
                     if (er.reminderOffsets === undefined) {
-                        importRsvpNoOffsets.run(er.postId, er.memberPubkey, er.status, er.signature || '', updatedAt);
+                        importRsvpNoOffsets.run(er.postId, er.memberPubkey, er.status, er.signature || '', occurrenceAt, updatedAt);
                     } else {
                         importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '',
-                            er.reminderOffsets, updatedAt);
+                            er.reminderOffsets, occurrenceAt, updatedAt);
+                    }
+                    if (er.letInAt !== undefined) {
+                        importLetIn.run(er.letInAt ?? null, er.letInBy ?? null, er.postId, er.memberPubkey, updatedAt);
                     }
                 }
             }

@@ -22,7 +22,7 @@ On an event, tap **Going** or **Interested**. Tap your choice again to clear it.
 
 When you are **Going**:
 
-- you can read the host's **Note for people who are going**;
+- you can read the host's **Note for people who are going**, once the host lets you in, where the host chose that;
 - you can open the **event chat**. See "Event chat".
 
 Tap the event to see everything, and **Show on map**. On the phone it opens your maps app. In the web app it shows the place on the Map.
@@ -63,7 +63,7 @@ The entry carries the name, the time, the place and the link back to the event. 
 - **Place name**, like "Town hall".
 - Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See "Where your pin goes".
 - A **Description**, and a photo if you like.
-- **Note for people who are going:** only they will see it. A good place for the exact address or a gate code.
+- **Note for people who are going:** everyone who taps Going sees it, unless you tick **Only people I let in see the note and chat** (ticked to start with on the global community, where anyone can join in a minute): then only the people you let in see it, and the event chat. A good place for the exact address or a gate code; the place name is for everyone.
 - **Who can see it:** your whole community, or one group.
 - If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.
 - Tap **Create**. Your event is in the Market and on the Map.
@@ -76,7 +76,7 @@ You can have 5 upcoming events at a time. A group's events count against the gro
 
 Open your event. As the host you can:
 
-- see **Who's going**;
+- see **Who's going**, and let people in: **Let in** beside a name (tap again to take it back), or **Let everyone in**. Your own friends are let in as they tap Going. If you untick **Only people I let in see the note and chat**, everyone going sees the note and the chat so far, and the chat says the host opened it;
 - **Edit event**. If you change the time or the place, everyone going is told;
 - **Copy to a new date**, to run it again;
 - **Cancel event**, then **Cancel event** again to confirm. Everyone going can see it is cancelled, and its chat becomes read-only.

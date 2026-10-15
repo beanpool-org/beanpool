@@ -17,15 +17,17 @@
  */
 
 import { useEffect, useState } from 'react';
-import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
+import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
+import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
-import { t } from '@beanpool/core';
 import { visitorDistanceText } from '../lib/visitor-lobby';
+import { useCommunityInfo } from '../lib/features';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -348,6 +350,32 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
+    const openMembership = (useCommunityInfo()?.features as { openMembership?: boolean } | undefined)?.openMembership === true;
+    // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
+    const letInState = eventLetInState(p, isHost);
+    const letInLine = eventLetInLine(letInState);
+    const hostLetsIn = !!p.eventHostLetsIn;
+    const waiting = hostLetsIn ? eventWaitingCount(p.eventRsvps) : 0;
+    const [letting, setLetting] = useState<string | null>(null);
+    const [letInError, setLetInError] = useState<string | null>(null);
+
+    const saveLetIn = async (key: string, who: { memberPublicKey: string } | { everyone: true }, on: boolean) => {
+        if (letting) return;
+        setLetting(key);
+        setLetInError(null);
+        try {
+            const res = await letInToEvent(p.id, who, on);
+            if (res?.post) rsvp.setLivePost(res.post);
+        } catch (e: any) {
+            setLetInError(e?.message || t('Could not reach the node.'));
+        } finally {
+            setLetting(null);
+        }
+    };
+    const letEveryoneIn = () => {
+        if (!window.confirm(letEveryoneInQuestion(waiting))) return;
+        void saveLetIn('everyone', { everyone: true }, true);
+    };
 
     const handleCancel = async () => {
         if (!window.confirm('Cancel this event? Everyone will see it as cancelled.')) return;
@@ -398,9 +426,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 {t('Join')}
                             </a>
                         ) : !isHost && open ? (
-                            // Going already: the host has not added one (yet). Never "tap Going" to someone who did.
+                            // Going already: the host has not added one (yet). Never "tap Going" to someone who did. Where the host
+                            // lets people in, the link waits for them like the note (eventPrivateOpenTo), and the hint says so.
                             <p data-testid="event-join-hint" className="m-0 text-xs text-nature-500 dark:text-nature-400">
-                                {p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
+                                {letInLine
+                                    ? t('The link to join shows here once the host lets you in.')
+                                    : p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
                             </p>
                         ) : null}
                     </div>
@@ -419,6 +450,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             >
                                 Show on map
                             </button>
+                        )}
+                        {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
+                        {placeShownRoughly(p, identity?.publicKey, openMembership) && (
+                            <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
+                                {t(PLACE_WORDS.roughPlace, { name: hostName })}
+                            </p>
                         )}
                     </div>
                 )}
@@ -452,7 +489,20 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
                 {!isHost && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
 
-                {onOpenChat && (isHost || p.myRsvp === 'going') && (
+                {letInLine && open && (
+                    <p data-testid="event-let-in-line" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words">{letInLine}</p>
+                )}
+                {onOpenChat && letInState === 'waiting' && (
+                    <button
+                        type="button"
+                        disabled
+                        data-testid="event-chat-waiting"
+                        className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-700 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
+                    >
+                        💬 {eventChatWaitingText()}
+                    </button>
+                )}
+                {onOpenChat && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
                     <button
                         type="button"
                         data-testid="event-open-chat"
@@ -468,7 +518,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">Note for people who are going</p>
                         <p className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
                     </div>
-                ) : !isHost && open ? (
+                ) : !isHost && open && !letInLine ? (
                     <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
                         If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.
                     </p>
@@ -477,6 +527,20 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {isHost && (
                     <div data-testid="event-host-panel" className="flex flex-col gap-2 pt-2 border-t border-nature-100 dark:border-nature-800">
                         <p className="m-0 text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400">Who's going</p>
+                        {waiting > 0 && (
+                            <p data-testid="event-waiting-count" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-200">{eventWaitingLine(waiting)}</p>
+                        )}
+                        {waiting >= 2 && open && (
+                            <button
+                                type="button"
+                                data-testid="event-let-everyone-in"
+                                onClick={letEveryoneIn}
+                                disabled={!!letting}
+                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                            >
+                                {t('Let everyone in')}
+                            </button>
+                        )}
                         {going.length === 0 && interested.length === 0 ? (
                             <p className="m-0 text-sm text-nature-500 dark:text-nature-400">Nobody yet.</p>
                         ) : (
@@ -486,9 +550,25 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                         <span className="flex-1 min-w-0 truncate font-semibold text-nature-900 dark:text-white">
                                             {r.memberCallsign || r.memberPubkey.slice(0, 8)}
                                         </span>
-                                        <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
-                                            {r.status === 'going' ? 'Going' : 'Interested'}
-                                        </span>
+                                        {hostLetsIn && r.status === 'going' && open ? (
+                                            <button
+                                                type="button"
+                                                data-testid="event-let-in"
+                                                onClick={() => saveLetIn(r.memberPubkey, { memberPublicKey: r.memberPubkey }, !r.letInAt)}
+                                                disabled={!!letting}
+                                                aria-pressed={!!r.letInAt}
+                                                aria-label={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
+                                                className={`flex-shrink-0 min-h-[44px] min-w-[88px] px-3 rounded-xl border text-sm font-bold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${r.letInAt
+                                                    ? 'border-violet-700 dark:border-violet-400 bg-violet-700 dark:bg-violet-600 text-white'
+                                                    : 'border-violet-300 dark:border-violet-800 bg-transparent text-violet-800 dark:text-violet-200'}`}
+                                            >
+                                                {r.letInAt ? t('Let in ✓') : t('Let in')}
+                                            </button>
+                                        ) : (
+                                            <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
+                                                {r.status === 'going' ? 'Going' : 'Interested'}
+                                            </span>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
@@ -527,6 +607,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             </button>
                         )}
                         {cancelError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{cancelError}</p>}
+                        {letInError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{letInError}</p>}
                     </div>
                 )}
             </div>

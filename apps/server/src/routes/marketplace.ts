@@ -1392,7 +1392,27 @@ router.get('/api/marketplace/transactions', async (ctx) => {
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
-    ctx.body = getMarketplaceTransactions(publicKey, status ? { status } : undefined, limit, offset);
+    const transactions = getMarketplaceTransactions(publicKey, status ? { status } : undefined, limit, offset);
+    // The phone reads this on every sync cycle (apps/native services/pillar-sync.ts), and a member with deals was sent the
+    // whole list each time: 12,617 bytes, 3,288 gzipped (#1792's measurement). So it has a tag of the answer itself and of
+    // who asked, as routes/home.ts makes one: no change to a trade that shows in the list (a new one, a step on, a rating,
+    // a cancel, a dispute settled, a party renamed, a cover photo) can leave the tag standing, and one reader's tag never
+    // confirms another's copy, two keepers of the same enterprise included. The list is still read on every request; what
+    // a 304 saves is the bytes. `private, no-cache`: the phone's platform cache (OkHttp, NSURLCache) keeps the copy and
+    // asks each time, and no shared cache in front of the node may keep it. Vary on the reader's key only, never on the
+    // signature headers, which change on every request and would leave the platform cache no copy to ask about.
+    const etag = `"mtx-${crypto.createHash('sha256').update(`${actor}\n${publicKey}\n${JSON.stringify(transactions)}`).digest('hex').slice(0, 32)}"`;
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', 'private, no-cache');
+    if (typeof ctx.vary === 'function') ctx.vary('X-Public-Key');
+    // Compared the weak way, as every route here does: an answer gzipped on the way out carries the tag as W/"…"
+    // (api-compression.ts), and the phone sends back whichever it was given.
+    const inm = ctx.get('If-None-Match');
+    if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag)) {
+        ctx.status = 304;
+        return;
+    }
+    ctx.body = transactions;
 });
 
 

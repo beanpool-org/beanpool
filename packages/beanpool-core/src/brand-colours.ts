@@ -50,11 +50,16 @@ const WHITE = '#ffffff';
 const CHARCOAL = '#1d231d'; // nature-950, the brand charcoal
 const TERRA_600_DEEP = '#b85236';
 const TERRA_700 = '#a3472e';
+const TERRA_400 = '#e5967f'; // the web's terra-400
 const EMERALD_100 = '#d1fae5';
+const EMERALD_200 = '#a7f3d0';
 const EMERALD_300 = '#6ee7b7';
 const EMERALD_400 = '#34d399';
+const EMERALD_500 = '#10b981';
+const EMERALD_600 = '#059669';
 const EMERALD_700 = '#047857';
 const EMERALD_800 = '#065f46';
+const EMERALD_900 = '#064e3b';
 const EMERALD_950 = '#022c22';
 const AMBER_100 = '#fef3c7';
 const AMBER_300 = '#fcd34d';
@@ -69,9 +74,16 @@ const ORANGE_800 = '#9a3412';
 const ORANGE_900 = '#7c2d12';
 const RED_100 = '#fee2e2';
 const RED_300 = '#fca5a5';
+const RED_400 = '#f87171';
+const RED_500 = '#ef4444';
 const RED_700 = '#b91c1c';
 const RED_800 = '#991b1b';
 const RED_950 = '#450a0a';
+const GREY_555 = '#555555';
+const GREY_333 = '#333333';
+const BLUE_300 = '#93c5fd';
+const BLUE_600 = '#2563eb';
+const BLUE_700 = '#1d4ed8';
 // The web's sage scale (tailwind `nature`). sage-650 sits halfway between nature-600 and 700.
 const NATURE_100 = '#eef1ee';
 const NATURE_200 = '#dce3dc';
@@ -109,6 +121,13 @@ export const BRAND_COLOURS = {
     action: { fill: same(ORANGE_700), hover: same(ORANGE_800), on: same(WHITE) },
     /** Destructive: Submit report, Remove, Delete; alert badges. */
     danger: { fill: same(RED_700), hover: same(RED_800), on: same(WHITE) },
+    /**
+     * The web's onboarding blue: Next, Join, Open, Install, Save my area. #2563eb in both themes (white words 5.17), as
+     * the web app has always drawn it in light (Marty/Damo 13 Oct: light unchanged unless contrast needs it).
+     */
+    info: { fill: same(BLUE_600), hover: same(BLUE_700), on: same(WHITE) },
+    /** Grey under white words: a web button while it sends (fill), the install banner's How? while its steps show (hover). */
+    neutral: { fill: same(GREY_555), hover: same(GREY_333), on: same(WHITE) },
     /** Gold: Vouch, Approve, rating. Charcoal words, never white. */
     gold: { fill: same(AMBER_500), hover: same(AMBER_400), on: same(CHARCOAL) },
     /**
@@ -124,6 +143,16 @@ export const BRAND_COLOURS = {
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
         accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300), border: themed(NATURE_200, NATURE_800) },
     },
+    /**
+     * A trade's lines in a direct message: Beans held in trust, released to the provider, cancelled. Light is the web's
+     * look from before the library (Marty, 15 Oct: light as is); dark is new (the old lines were 1.5-2.2:1 there). The
+     * tints are the phone's too: the web lays a tint at DEAL_TINT_ALPHA over the chat, the phone at its own 0.7.
+     */
+    deal: {
+        held: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300), border: themed(EMERALD_500, EMERALD_400) },
+        released: { tint: themed(EMERALD_200, EMERALD_900), ink: themed(EMERALD_800, EMERALD_300), border: themed(EMERALD_600, EMERALD_500) },
+        cancelled: { tint: themed(RED_100, RED_950), ink: themed(RED_800, RED_300), border: themed(RED_500, RED_400) },
+    },
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
         /** The brand green as text, icons, links-in-green: the phone's `brand.primary`. */
@@ -136,6 +165,12 @@ export const BRAND_COLOURS = {
         warning: themed(AMBER_800, AMBER_400),
         /** The sage accent as text and icons. */
         accent: themed(SAGE_650, NATURE_300),
+        /** Terracotta as words and icons: the manager's links, section labels and hovered titles. */
+        terra: themed(TERRA_700, TERRA_400),
+        /**
+         * The onboarding blue as words, outlines, rings and progress (the web's --link pair). Web only: see WEB_ONLY_INKS.
+         */
+        info: themed(BLUE_600, BLUE_300),
     },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };
@@ -175,6 +210,25 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
         '#2b422c', // manager raised row and input (nature-800)
     ],
 };
+
+/** The web app's own grounds, a subset of INK_GROUNDS: page, card and sunken background in each theme. */
+export const WEB_INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
+    light: ['#ffffff', '#f6f4f0', '#fbfaf8'],
+    dark: ['#1d231d', '#2a322a', '#384038'],
+};
+
+/**
+ * Inks only the web app draws, judged on WEB_INK_GROUNDS (still 4.5). The phone's colors.ts never reads them
+ * (__tests__/brand-colours.test.ts checks). `info`: #2563eb is 4.71-5.17 on the web's grounds but 4.498 on the phone's
+ * sunken row (#f1efea), where it is never drawn; deepening it would change the web's light mode, which needs no change.
+ */
+export const WEB_ONLY_INKS: readonly string[] = ['info'];
+
+/**
+ * How much of a deal tint the web lays over the chat (its old rgba alpha). Its words are judged on that composite; the
+ * web draws it from the `--bp-deal-<name>-wash` variable brandCssVariableMap() writes.
+ */
+export const DEAL_TINT_ALPHA = 0.4;
 
 /** Roles allowed 3.0 instead of 4.5 because their words are always 24 px or larger (WCAG "large text"). None today. */
 export const LARGE_TEXT_ROLES: readonly string[] = [];
@@ -222,6 +276,22 @@ export function relativeLuminance(hex: string): number {
     return 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
 }
 
+/** `hex` laid at `alpha` (0 to 1) over the opaque `ground`, as the opaque `#rrggbb` a reader sees. */
+export function blendOver(hex: string, alpha: number, ground: string): string {
+    let out = '#';
+    for (const offset of [1, 3, 5]) {
+        const v = Math.round(parseInt(hex.slice(offset, offset + 2), 16) * alpha + parseInt(ground.slice(offset, offset + 2), 16) * (1 - alpha));
+        out += v.toString(16).padStart(2, '0');
+    }
+    return out;
+}
+
+/** `#d1fae5` at 0.7 → `rgba(209, 250, 229, 0.7)`: a library colour where a screen needs it translucent. */
+export function rgbaOf(hex: string, alpha: number): string {
+    const [r, g, b] = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** WCAG 2.x contrast ratio between two `#rrggbb` colours, 1 to 21. */
 export function contrastRatio(a: string, b: string): number {
     const la = relativeLuminance(a);
@@ -250,13 +320,21 @@ export function brandContrastPairs(): BrandContrastPair[] {
         pairs.push({ theme, role, pair, ink, ground, ratio: contrastRatio(ink, ground), min: min(role) });
     for (const theme of ['light', 'dark'] as const) {
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
-            if (role === 'chip') {
+            if (role === 'deal') {
+                // Only the web draws these words, over the chat: judged on the web's grounds through the tint.
+                for (const [name, line] of Object.entries(node as BrandColours['deal'])) {
+                    for (const ground of WEB_INK_GROUNDS[theme]) {
+                        add(theme, `deal.${name}`, `ink / tint at ${DEAL_TINT_ALPHA} over ${ground}`, line.ink[theme], blendOver(line.tint[theme], DEAL_TINT_ALPHA, ground));
+                    }
+                }
+            } else if (role === 'chip') {
                 for (const [name, chip] of Object.entries(node as BrandColours['chip'])) {
                     add(theme, `chip.${name}`, 'ink / tint', chip.ink[theme], chip.tint[theme]);
                 }
             } else if (role === 'ink') {
                 for (const [name, ink] of Object.entries(node as BrandColours['ink'])) {
-                    for (const ground of INK_GROUNDS[theme]) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
+                    const grounds = WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS[theme] : INK_GROUNDS[theme];
+                    for (const ground of grounds) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
                 }
             } else {
                 const fill = node as FillRole;
@@ -275,10 +353,14 @@ export function brandCssVariableName(path: string): string {
     return `--bp-${path.split('.').join('-')}`;
 }
 
-/** One theme's custom properties: `{ '--bp-cta-fill': '#b85236', … }`. */
+/**
+ * One theme's custom properties: `{ '--bp-cta-fill': '#b85236', … }`, and each deal tint as the web lays it, a plain
+ * rgba (`--bp-deal-held-wash: rgba(209, 250, 229, 0.4)`): no color-mix(), which old Android WebViews drop.
+ */
 export function brandCssVariableMap(theme: BrandTheme): Record<string, string> {
     const out: Record<string, string> = {};
     for (const { path, colour } of brandColourLeaves()) out[brandCssVariableName(path)] = colour[theme];
+    for (const [name, line] of Object.entries(BRAND_COLOURS.deal)) out[`--bp-deal-${name}-wash`] = rgbaOf(line.tint[theme], DEAL_TINT_ALPHA);
     return out;
 }
 

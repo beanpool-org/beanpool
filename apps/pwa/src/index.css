@@ -91,6 +91,7 @@
   --text-secondary: #384038;  /* nature-900 */
   --text-muted: #647664;      /* nature-600 (Sage Green) */
   --text-faint: #9eaf9e;      /* nature-400 */
+  --text-muted-on-hover: var(--text-muted); /* muted words on a --bg-hover pill (a removed group line) */
   --border-primary: #dce3dc;  /* nature-200 */
   --border-secondary: #eef1ee;/* nature-100 */
   --border-input: #c0ccc0;    /* nature-300 */
@@ -154,6 +155,7 @@
   --text-secondary: #dce3dc;
   --text-muted: #9eaf9e;
   --text-faint: #9eaf9e;
+  --text-muted-on-hover: var(--bp-ink-accent); /* #c0ccc0, 5.25:1 on --bg-hover; --text-muted's #9eaf9e is 3.77 there */
   --border-primary: #434e43;
   --border-secondary: #384038;
   --border-input: #809380;

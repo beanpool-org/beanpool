@@ -204,7 +204,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                                                 type="checkbox"
                                                 checked={confirmDeficit}
                                                 onChange={(ev) => setConfirmDeficit(ev.target.checked)}
-                                                className="mt-0.5 rounded border-nature-700 text-terra-500 focus:ring-0"
+                                                className="mt-0.5 rounded border-nature-700 text-bp-ink-terra focus:ring-0"
                                             />
                                             <span>I confirm the Commons goes to {afterText}</span>
                                         </label>

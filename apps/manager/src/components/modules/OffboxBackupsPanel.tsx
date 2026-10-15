@@ -213,7 +213,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
 
             {!status && !loadError && (
                 <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="offbox-loading">
-                    <span className="animate-spin text-terra-500">🔄</span>
+                    <span className="animate-spin text-bp-ink-terra">🔄</span>
                     <span>Loading backup settings…</span>
                 </div>
             )}

@@ -133,9 +133,9 @@ export default function PeopleScreen() {
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
         addBtnTextFriended: { color: colors.brand.primary },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
+        msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },
-        removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
+        removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
         removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.fg, fontWeight: '700' },
 
         // Community virtualized row (fixed height)

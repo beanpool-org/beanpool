@@ -306,6 +306,7 @@ export const SUITES = [
     'test-group-rosters-photo-urls',
     'test-group-pictures-crowdfund-urls',
     'test-contact-trade-partners',
+    'test-marketplace-transactions-etag',
     'test-ratings-privacy',
     'test-sync-signature',
     'test-trust-value-curve',

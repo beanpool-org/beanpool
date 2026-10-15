@@ -123,6 +123,8 @@ async function sync() {
 beforeEach(async () => {
     store.clear();
     store.set('beanpool_anchor_url', ANCHOR);
+    // A local community, as the phone knows it (utils/node-profile.ts): with no copy, a sync asks the node first.
+    store.set('beanpool_node_profiles', JSON.stringify(Object.fromEntries([ANCHOR, OTHER].map(u => [u, { profile: 'local', features: {}, checkedAt: new Date().toISOString() }]))));
     // A phone that ran utils/db.ts's one-shot trust migration long ago: opening a database no longer clears the cursors.
     store.set('bp_trust_sync_v3', 'true');
     resetSyncFingerprints();

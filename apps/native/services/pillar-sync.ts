@@ -15,13 +15,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
 import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
-import { absentAfter, cardsToDrop, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
+import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
-import { getCachedNodeProfile } from '../utils/node-profile';
+import { fetchNodeProfile, getCachedNodeProfile, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import { nearbySetHash } from '../utils/nearby-hash';
 import {
@@ -337,6 +337,9 @@ export const PILLAR_SYNC_ENDED = 'pillar_sync_ended';
 export const ALREADY_SYNCING = 'Already syncing';
 /** performSync's answer when the copy it was writing was cleared under it (copyGeneration): it stored nothing. */
 export const COPY_CLEARED = 'The local copy was cleared during the sync';
+/** performSync's answer when this phone holds no copy of the node's profile and the node didn't answer for one: it read
+ *  nothing, so a community that syncs by area is never read whole. The next sync asks again. */
+export const PROFILE_UNREAD = "The community's profile could not be read";
 /** How long a Force Resync waits for a cycle already running to end before it runs its own (performSyncWhenFree). */
 export const RESYNC_WAIT_MS = 90_000;
 
@@ -472,6 +475,23 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             } catch (e) {}
         }
 
+        // What kind of node this is, known before anything is read. A phone with no copy of the profile (a restore on a
+        // fresh install, a first boot whose tab strip hasn't asked yet) read a community that syncs by area the old way:
+        // every listing, 2.16 MB and 10,000 listings a cycle, and no members at all (scratch/global-node/
+        // REPORT-1792-first-sync-2026-10-16.md, result 3). So with no copy the node is asked (one small read), and with
+        // no answer the cycle ends here, having read nothing; the next one (the socket, the app's return, the 5-minute
+        // timer) asks again, and the app shows what it holds meanwhile. Without the phone's key nothing reads by area.
+        let profile: NodeProfile | null = null;
+        if (pubKey) {
+            profile = (await getCachedNodeProfile(anchorUrl)) ?? (await fetchNodeProfile(anchorUrl));
+            if (!profile) {
+                console.warn(`[Pillar Sync] ${anchorUrl} didn't say what kind of community it is; nothing read this cycle.`);
+                result.errorMessage = PROFILE_UNREAD;
+                result.durationMs = Date.now() - startTime;
+                return result;
+            }
+        }
+
         onProgress?.(2, 5, 'Synchronizing Members & Profiles...');
         const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
         const kEpoch = await getSyncCursorKey(StorageKeysConfig.IDENTITY_EPOCH);
@@ -514,8 +534,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // A community that says `membersOnDemand` (the worldwide one, DESIGN-global-members-by-area §2.2): this phone never
         // reads its directory whole nor asks for everyone who changed. It holds the cards it has a reason to show and asks
-        // for those by key once the cycle has landed (syncMembersOnDemand). Anywhere else, every request is as it was.
-        const membersOnDemand = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.membersOnDemand === true : false;
+        // for those by key once the cycle has landed (syncMembersOnDemand). Anywhere else, every request is as it was. A
+        // node that refuses the whole read as `members_on_demand` turns it on below (a copy from before its switch).
+        let membersOnDemand = profile?.features.membersOnDemand === true;
 
         let shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
@@ -559,7 +580,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // A community that syncs listings by area (utils/posts-nearby.ts, the node's profile `nearbyListings`): the posts
         // read says `nearby=1` and gets its member's set. Anywhere else, and without the phone's key, every request below is
         // as it always was.
-        const nearbyLimits = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings ?? null : null;
+        const nearbyLimits = profile?.features.nearbyListings ?? null;
         let nearbyArea: NearbyAreaCopy | null = null;
         // The set this phone holds, the `tied` the node hashed with it, and the node's hash of them: the read sends the hash
         // back (`setHash`), and while that is still the set the node names none, only echoes the hash; once it moved, a node
@@ -1049,6 +1070,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     await storeForCopy(kLastMembersSync, String(Date.now()));
                     // Every member as they are now: no held delta needs to ask again.
                     if (dirData === undefined || Array.isArray(dirData)) membersLanded = true;
+                } else if (directoryRes && await refusedAsOnDemand(directoryRes, anchorUrl)) {
+                    membersOnDemand = true;
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Members fetch failed:', e);
@@ -1077,6 +1100,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     }
                     // The same answer as the last one applied (undefined), or a list.
                     membersLanded = deltaData === undefined || Array.isArray(deltaData);
+                } else if (deltaRes && await refusedAsOnDemand(deltaRes, anchorUrl)) {
+                    membersOnDemand = true;
+                    // Nothing to hold back for: this node is never asked for everyone who changed again.
+                    membersLanded = true;
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Incremental members fetch failed:', e);
@@ -1450,6 +1477,20 @@ async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: strin
     _lastAppliedFingerprints[key] = fp;
     rawGated?.add(table);
     return JSON.parse(raw);
+}
+
+/**
+ * Whether a members read was refused as `members_on_demand` (members-on-demand.ts isMembersOnDemandRefusal): this phone's
+ * copy of the profile is from before the node's switch. Noted (node-profile.ts noteMembersOnDemand), so this cycle and
+ * every later one reads the members by key instead of holding none. Never throws.
+ */
+async function refusedAsOnDemand(res: { status: number; json(): Promise<any> }, anchorUrl: string): Promise<boolean> {
+    if (res.status !== 403) return false;
+    const body = await res.json().catch(() => null);
+    if (!isMembersOnDemandRefusal(res.status, body)) return false;
+    console.warn(`[Pillar Sync] ${anchorUrl} reads members by key; switching to that.`);
+    await noteMembersOnDemand(anchorUrl);
+    return true;
 }
 
 /**

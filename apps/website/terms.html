@@ -49,31 +49,97 @@
             </details>
         </div>
     </nav>
+    <!--
+        HELD until the release. Drafted from the code on main, not yet read by a lawyer. Every bracketed placeholder is
+        visible on purpose: [LAWYER: ...] needs the lawyer, [MARTY: ...] is a fact or decision only Marty has. Each
+        factual sentence was checked against main; the table is in the PR.
+    -->
+    <style>
+        .placeholder { background: #fde68a; color: #1f2937; padding: 0 0.25em; border-radius: 3px; font-weight: 600; }
+        .draft-banner { border: 2px solid #f59e0b; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+    </style>
     <section class="legal-content glass-panel">
-        <h1>Terms of Service &amp; Protocol Guidelines</h1>
-        <p><strong style="color: #94a3b8;">Last Updated: April 1, 2026</strong></p>
-        
-        <h2>1. The Exchange Protocol Architecture</h2>
-        <p>BeanPool functions strictly as decentralized mutual credit infrastructure. It is not a commercial financial institution, a regulated central exchange, or a custodial bank. By utilizing this software, you acknowledge that localized trades, mutual credit balances, and peer-to-peer exchanges are cooperative agreements between autonomous community members bound by local community compacts.</p>
+        <h1>Terms of Use</h1>
+        <p><strong style="color: #94a3b8;">Last updated: <span class="placeholder">[MARTY: the release date]</span></strong></p>
+        <p class="draft-banner"><strong>Draft for legal review.</strong> Bracketed notes are open questions for our lawyer and will be gone before these terms take effect.</p>
 
-        <h2>2. Community Balances &amp; Non-Speculative Nature</h2>
-        <p>Internal network tokens (represented as <i>Beans</i>) carry zero speculative fiat value. They represent mathematically signed network proofs recording reciprocal service exchange and trust on a zero-sum community ledger. Beans cannot be purchased with fiat debt, cannot be converted into speculative cryptocurrency pools, and are designed purely to facilitate direct community wealth exchange.</p>
+        <p>These terms cover the BeanPool apps, the website, and the services BeanPool runs. Each community you join is run by its own operator, under that community's own rules; these terms say where our responsibility ends and theirs begins. Our <a href="privacy.html">Privacy Policy</a> says what is kept about you.</p>
 
-        <h2>3. Zero Tolerance UGC &amp; Safety Policy</h2>
-        <p>To operate securely across public spaces, community networks enforce a strict, algorithmically and community-monitored zero-tolerance policy against abusive User-Generated Content (UGC):</p>
+        <h2 id="who">1. Who you are agreeing with</h2>
+        <p>"BeanPool", "we" and "us" means <span class="placeholder">[MARTY/LAWYER: legal entity, ABN, address]</span>. We publish the software, the apps and this website, and we run the services in section 2. <span class="placeholder">[LAWYER: if there is no entity, say who is bound; the trademark filing should name the same party.]</span></p>
+
+        <h2 id="three">2. Three different things</h2>
         <ul>
-            <li>No unlawful, threatening, or defamatory listings allowed.</li>
-            <li>No sexually explicit, illicit, or harmful imagery permitted.</li>
-            <li>No harassment, abusive communication, or discriminatory behavior tolerated.</li>
-            <li>Users can utilize the in-app shield/reporting tool on every post or profile to instantly block abusive users and flag them to community administrators.</li>
-            <li>Accounts verified as violating community safety compacts are removed from local node networks.</li>
+            <li><strong>The software.</strong> BeanPool is open source under the MIT licence. Anyone can read it, run it and change it. The licence, not these terms, governs the code, and it comes with no warranty.</li>
+            <li><strong>Services we run:</strong> the global community at global.beanpool.org; a few local communities in Australia <span class="placeholder">[MARTY: named or not]</span>; the key vault; the address service that gives communities names such as yourtown.beanpool.org; the communities directory; this website; the feedback service; and the apps on Google Play and the App Store.</li>
+            <li><strong>Communities run by others.</strong> Most communities are run by the people in them, on servers we cannot log in to. The operator sets that community's rules, keeps its data, and answers to the law where they are. BeanPool is not a party to anything that happens inside such a community, and cannot restore, moderate or refund it. <span class="placeholder">[LAWYER: safe to say?]</span></li>
         </ul>
-        
-        <h2>4. Member-Connected Channels &amp; Syndicated Content</h2>
-        <p>If you choose to link external publishing channels (such as TikTok, Instagram, YouTube, SoundCloud, or RSS feeds) or syndicate posts to the community Pulse feed, you represent that you own or have the right to publish and syndicate that content. You remain solely responsible for all content syndicated through your account. All syndicated items must comply with community safety standards and the zero-tolerance policies set out in Section 3.</p>
 
-        <h2>5. Open Source Disclaimer</h2>
-        <p>Because BeanPool operates without centralized corporate intermediaries, it is provided "As-Is" under open-source licenses. The protocol developers make no warranties regarding continuous uptime or third-party device compatibility.</p>
+        <h2 id="account">3. Your account</h2>
+        <ul>
+            <li>Your account is a <strong>key</strong> made on your device, and your <strong>12 words</strong> rebuild it. We cannot reset them. Keep them private: anyone who has them has your account. You are responsible for what is done with your key.</li>
+            <li>If you link a Google, Apple or Facebook sign-in, or join the global community with one, a locked copy of your account is kept in our key vault (section 8). <span class="placeholder">[MARTY: true only if the release build carries the live vault; a build without it keeps the copy at your community]</span></li>
+            <li>On the global community you may hold <strong>one account per sign-in</strong>, and one account per person is the rule everywhere: a second account to get round a limit, a vote or a block may be removed.</li>
+            <li>If you lose your key and have no words and no sign-in, an admin of your community may re-key your account to a new phone with a one-time code; the admin confirms your phone in person. An admin may refuse.</li>
+            <li>You may close your account in Settings. What is deleted, what stays, and why, is in the <a href="privacy.html#choices">Privacy Policy</a>.</li>
+            <li><strong>Adults.</strong> BeanPool is meant for adults. It does not ask your age. <span class="placeholder">[LAWYER: wording, and one wording for this page and the Child Safety page, which says under-18s are strongly discouraged without strict parental supervision]</span> <span class="placeholder">[MARTY: app-store age ratings]</span></li>
+            <li>You keep your device safe: the app's lock and your phone's lock are yours to use.</li>
+        </ul>
+
+        <h2 id="beans">4. Beans</h2>
+        <ul>
+            <li>Beans are <strong>mutual credit</strong> inside one community: a record, on that community's server, of value given and received. Everyone starts at zero. A positive balance means the community owes you; a negative one means you owe it.</li>
+            <li>Beans are <strong>not money, not a currency, not a security and not a crypto-asset</strong>. They have no cash value, cannot be bought, sold or exchanged for money through BeanPool, and are not redeemable from BeanPool or from any operator. <span class="placeholder">[LAWYER: Australian financial-services and non-cash-payment-facility law; GST and income tax on barter credits for members who trade in business (ATO barter rulings); whether a statement to members is required.]</span></li>
+            <li><strong>Credit</strong> comes from a vouch, an admin's grant and completed trades, down to −2,000 Beans; how much of it you may use depends on how many offers you keep active. If you drop below the offers your debt needs, spending on credit pauses. These numbers are the software's defaults; a community's owner can set a different floor for confirmed members, and an admin can lower or freeze one member's.</li>
+            <li><strong>Fees:</strong> 1.5&nbsp;% of a marketplace sale or of a pay-out a Decision makes, and a monthly circulation fee on the part of a positive balance above 200, both paid into that community's Commons pool. Gifts between members are free. The community decides what the Commons is spent on. Nothing goes to BeanPool.</li>
+            <li><strong>When you leave</strong> with a balance, it is settled with the Commons. A debt left behind in a known community stays on its record for three years and may be paid back, worked off or forgiven by a Decision.</li>
+            <li><strong>A trade is between its two members.</strong> BeanPool and the operator guarantee neither that the other side performs nor the quality of anything offered. Escrow holds Beans, not goods. Disputes are settled by the community's admins under its rules, and those looks at your trade are logged.</li>
+            <li><strong>Beans on the global community:</strong> none. Global is for finding people and communities.</li>
+        </ul>
+
+        <h2 id="conduct">5. What you may and may not do</h2>
+        <ul>
+            <li>Follow the rules of each community you join, and its operator's decisions about its own space.</li>
+            <li>Post only what you have the right to post. You keep ownership of what you write and photograph; you give the community's server, its standby and its members the right to store and show it as the app does, including after you leave, in the forms the Privacy Policy describes.</li>
+            <li><strong>Not allowed anywhere:</strong> anything unlawful; content that sexualises or endangers children (zero tolerance, reported to the authorities; see <a href="safety.html">Child Safety</a>); threats, harassment, slurs; scams and fraud, including trades that only move Beans around; posting anyone's 12 words, keys or private messages; impersonation; scraping, probing or attacking servers (report a weakness privately through GitHub's form instead); reselling or re-publishing members' data.</li>
+            <li><strong>The Pulse.</strong> If you connect TikTok, Instagram, Facebook, YouTube, SoundCloud, a website or a feed, you confirm you own or may syndicate that content, and you follow that platform's terms. Your platform tokens are kept on your device.</li>
+            <li><strong>Moderation.</strong> Any member can report. A community's moderators review reports and may remove posts; its owner and admins may also suspend or remove members, and a community may vote on removing a member. On global, posts reported by enough independent members are hidden until a moderator looks, repeat offenders are muted, new accounts have daily limits, and accounts that joined together from one connection can be acted on together. Decisions on a local community are its own; on global, the BeanPool team decides, and there is no appeal beyond <a href="mailto:admin@beanpool.org">admin@beanpool.org</a> <span class="placeholder">[MARTY]</span>.</li>
+        </ul>
+
+        <h2 id="operators">6. Running a community</h2>
+        <p>If you run a BeanPool server you are its operator. You accept the MIT licence for the software, and:</p>
+        <ul>
+            <li>You are responsible to your members for their data, under your own law: you hold their profiles, trades, chats that are not end-to-end encrypted, and backups. Publish your own privacy information if your law requires it. <span class="placeholder">[LAWYER]</span></li>
+            <li>You moderate your community and answer its reports, including child-safety reports first.</li>
+            <li><strong>A beanpool.org name</strong> is ours, lent to your server's key: up to three names per key; a name is paused when a different server answers behind it, and we may pause, block or release a name, for example for abuse or impersonation; some names are reserved and some need our approval. Traffic to that name passes through Cloudflare in our account, which can read it; a name on your own domain does not. We may change or end the address service with notice <span class="placeholder">[MARTY: how much]</span>.</li>
+            <li><strong>The directory</strong> lists your community unless you switch it off; what it shows is your choice in Settings.</li>
+            <li>Off-box backups go to a store you choose, locked to your recovery code and your owners; we never hold them.</li>
+            <li>Linking to other communities is off unless you turn it on, and cross-community trades are between the two operators' servers.</li>
+        </ul>
+
+        <h2 id="global">7. The global community</h2>
+        <p>We run global.beanpool.org as a public lobby. Today it is a private preview; at the release it opens to anyone with 12 words or a sign-in. There are no Beans and no community votes. Visitors who have not joined see members' listings with no names and only a rough area; members see where each listing is placed. We may remove posts or accounts, reset or close the community, or change what it does, and we will say so on this website.</p>
+
+        <h2 id="vault">8. The key vault</h2>
+        <p>If you link a sign-in, we keep a locked copy of your account in our key vault in Iceland. We promise: the vault checks your sign-in itself; every restore waits 24 hours unless one of your own devices approves it; your devices are warned and can stop it; Disconnect deletes your copy at once, and the vault's own locked backups drop it within 30 days; we open a copy only to give it back to you or under a valid court order, and we tell you unless forbidden. We do not promise that the vault's host, a compromised sign-in account, or a court cannot reach a copy; the Privacy Policy says what we cannot protect you from. Your 12 words always work without the vault. <span class="placeholder">[LAWYER: a consumer service with promises; what the Australian Consumer Law implies and what can be limited.]</span></p>
+
+        <h2 id="availability">9. Availability, changes and ending</h2>
+        <p>The software is provided as is. We may change the apps, the website and our services, and we may stop any of them; where we can, we say so in advance on this website. A community's operator may stop their server at any time. You may leave at any time by deleting your account. We may close an account on the global community or on a community we run for breaking section 5. An operator may remove a member from their community under its rules.</p>
+
+        <h2 id="liability">10. Warranties and liability</h2>
+        <p><span class="placeholder">[LAWYER: no-warranty and limitation-of-liability clauses that survive the Australian Consumer Law for consumers ("to the extent permitted by law"; the consumer guarantees for services cannot be excluded); the MIT licence's disclaimer for the code; no liability for communities run by others, for a trade's performance, for a lost key or 12 words, for a third-party provider's acts (Cloudflare, DigitalOcean, Binary Lane, Supabase, Expo, 1984, Apple, Google).]</span></p>
+
+        <h2 id="stores">11. The apps and the stores</h2>
+        <p>The phone apps are distributed by Apple and Google under their own terms <span class="placeholder">[LAWYER: Apple's minimum EULA terms for third-party apps; Google Play's]</span>. The apps contain no advertising code and no third-party analytics; they tell the community's own server, as an anonymous count, how far a newcomer got through joining. <span class="placeholder">[MARTY: the store listing names must read "BeanPool", not "Bean Pool", before these terms are published.]</span></p>
+
+        <h2 id="marks">12. Names and marks</h2>
+        <p>"BeanPool" and the bean mark are ours <span class="placeholder">[MARTY: trademark filing date and classes]</span>. The code is free to use and fork under its licence; a fork that is not run by us should not call itself BeanPool or use our domain <span class="placeholder">[MARTY: trademark-use policy]</span>. "Technomutualism" is free for anyone to use.</p>
+
+        <h2 id="law">13. Law, disputes and changes</h2>
+        <p>These terms are governed by the law of <span class="placeholder">[MARTY/LAWYER: jurisdiction]</span>, and its courts <span class="placeholder">[LAWYER: consumer-protection override for members abroad; GDPR members' rights; whether a dispute step before court]</span>. We may change these terms; the date at the top changes and earlier versions are in the <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub repository</a>. Material changes are announced on this website <span class="placeholder">[MARTY: and in the apps?]</span>. If part of these terms cannot be enforced, the rest stands.</p>
+
+        <h2 id="contact">14. Contact</h2>
+        <p><a href="mailto:admin@beanpool.org">admin@beanpool.org</a> for anything about BeanPool's services; <a href="mailto:safety@beanpool.org">safety@beanpool.org</a> for child-safety concerns; the GitHub private report form (or security@beanpool.org) for security weaknesses <span class="placeholder">[MARTY: confirm the mailboxes exist and are read]</span>. For a community run by someone else, contact its operator first.</p>
     </section>
 
     <!-- Footer Module -->

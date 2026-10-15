@@ -39,8 +39,21 @@ Any restart of the keyholder leaves the vault locked until two custodians unlock
 `M` (32 bytes) is split 2 of 3 in SLIP-0039 (`src/keyholder/slip39.ts`, checked against the 45 official vectors), each
 share sealed to one custodian's pinned Ed25519 key. `M` opens `DK`, the working keys: `K_index` (the `sub_index` and
 `pk_index` HMACs), `K_wrap` (envelopes), `K_disk` (the data partition's LUKS2 key), `K_backup`, the Ed25519 ticket
-key and the X25519 deposit key. The apps pin the last two. A reshare changes `M`, `K_wrap` and `K_backup` and keeps
-the rest.
+key and the X25519 deposit key. The apps pin the last two; global's door and the registrar pin the ticket key.
+
+A reshare changes `M`, `K_wrap`, `K_backup`, the ticket key and the deposit key. The new ones are made in the new
+state, under an `M` the retiring custodians never hold: with the old ticket key they could still sign what every
+phone and global's door believe, and with the old deposit key open every deposit box in flight. The new ticket key
+replaces the old one at the switch (the old one signs until then); the new deposit key goes first and the old ones
+stay, since boxes from builds that still seal to an old one must open. While the new state waits, its public keys
+are in the reshare's answer, `status().pending`, `/v1/report`'s `pending` and what `vault-custodian reshare` and
+`fetch-share` print, so global's `BEANPOOL_VAULT_TICKET_KEYS`, the registrar's `VAULT_TICKET_KEYS` and the app
+build list the new ticket key, first, before it signs; the old one stays listed until every build has the new one.
+A build seals deposits to the first deposit key it lists, so it lists the new deposit key only once the vault has
+switched (before that the vault in force lacks it).
+`K_index` stays: a `sub_index` can't be made again without every member's `sub`, which the vault never keeps.
+`K_disk` stays too, for now: it is the data partition's LUKS key, and changing it is a change to the image's disk
+helper (reshare rotation design §2.6).
 
 A genesis or a reshare is two steps. The new state waits beside the old one (`state.next.json`), and the new shares,
 sealed to their custodians, can be fetched again (`/v1/unlock/pending`), also after the switch, until the keyholder
@@ -323,6 +336,10 @@ check from the pinned keys installs anything, so a planned restart boots a two-s
 `none`, can boot anything it likes: against that there is nothing technical, only the reinstall-before-unlock rule after
 a restart nobody planned and the split hosting login (design §2.2, §2.5).
 
+An unlock of a vault waiting to finish a restore from backup shows which backup it took and which custodian key named
+it, and sends the share only when you type yes. After a reshare, `reshare` and `fetch-share` print the lines to paste
+for the pins (`BEANPOOL_VAULT_TICKET_KEYS=<new>,<old>`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=<new>`).
+
 ```
 vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --share share-1-1-xxxx.json
 vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare
@@ -495,10 +512,13 @@ there are, a count the public report gives anyway. Requests to the store are sig
 2. Two genesis custodians set the settings: `vault-custodian settings send …` twice, as above. After a reshare these
    are the **rebuild keys** (below): a fresh vault has no backup to read anyone else from until the settings name the
    off-box store.
-3. `vault-custodian backups --url … --key …` lists what each store holds; pick the newest.
+3. `vault-custodian backups --url … --key …` lists what each store holds; pick the newest. A backup of a generation
+   older than the newest one whose header the stores can read is refused, whoever asks (`409 older_generation`): any
+   file of the newest generation restores, an older one of it included (a bad newest file).
 4. `vault-custodian restore --url … --key … --backup bv-<time>.bin`: the vault fetches it (from its own store, or else
    the off-box one) and takes the backup's keyholder state; it is locked.
-5. Two custodians unlock with their shares (`vault-custodian unlock …`). The vault finishes the restore before it
+5. Two custodians unlock with their shares (`vault-custodian unlock …`), each first shown which backup the vault took
+   and which custodian key named it, and asked yes. The vault finishes the restore before it
    serves anything: it applies the deletion records of every newer backup in either store (an off-box store it can't
    list makes it wait and try again, rather than bring back a copy its member deleted), holds every open restore a
    fresh 24 hours and tells those members' devices again, then opens. A newer backup's records are read from each
@@ -524,12 +544,17 @@ the newest backup's generation (V1, `backupListsKey` in `src/api/server.ts`). So
 the vault's own store still holds its backups, the custodians in force at the newest backup restore a backup of
 that generation with their own keys. A custodian a later reshare retired is refused **with their own key**,
 whichever older backup still lists them, and so is a custodian the reshare kept who names an older generation's
-backup (its state would unlock with the retired custodians' shares). That is all it protects:
-- a rebuild key starts a restore of any generation, so at **every** reshare the retiring custodians destroy their
-  share **and their copies of the rebuild keys**. Nothing enforces it: no command re-seals a key file, and the pin is
-  in every image. After the second reshare, keeping retired custodians out rests on it;
+backup (its state would unlock with the retired custodians' shares). And whatever the key, rebuild keys included, a
+fresh vault refuses a backup of an older generation than the newest one whose header the stores can read (`409
+older_generation`, `newestReadableGeneration` in `src/api/server.ts`; reshare rotation design §3). That is all it
+protects:
+- a rebuild key starts a restore of the newest generation's backups; until the first backup after a reshare is in the
+  stores that is the old generation, which the old shares open, so at **every** reshare the retiring custodians
+  destroy their share **and their copies of the rebuild keys**. Nothing enforces it: no command re-seals a key file,
+  and the pin is in every image. After the second reshare, keeping retired custodians out rests on it;
 - "newest" is the newest backup the stores list, so someone who can remove files from a store can make an older
-  generation's backup the newest, and its retired custodians' own keys then pass;
+  generation's backup the newest, and its retired custodians' own keys, and any rebuild key, then pass; a file whose
+  header can't be read isn't counted (else damaging one file would stop every restore);
 - until the first backup after a reshare is in the stores, the newest backup lists the old custodians, so their
   shares are not destroyed before it.
 

@@ -94,6 +94,24 @@ describe('the monthly restart installs only what root checks from the pinned key
         expect(readdirSync(t.transferDir)).toEqual([]);
     });
 
+    it('a re-root (reshare rotation design §2.5): the image rooted at the genesis keys installs H, signed by two of them and naming the new custodians, with R0 of the new chain beside it in the feed', async () => {
+        const t = setUp();
+        const n = keys3();
+        const h = makeRelease({ version: '1.1.0', previous: t.r1, custodianKeys: n, signers: t.root.slice(0, 2), image: t.next.image });
+        const r0 = makeRelease({ version: '1.1.0', previous: null, custodianKeys: n, signers: n.slice(0, 2), image: t.next.image, label: 'vault-v1.1.0-root' });
+        const names = t.stage(h, t.next, [t.r1, h, r0]);
+        expect(await installStaged(t.opts())).toEqual({ installed: true, version: '1.1.0' });
+        expect(t.installed).toHaveLength(1);
+        expect(t.installed[0][names.uki].equals(t.next.uki)).toBe(true);
+        // R0 alone (the new chain's first release) is no release of the chain this image walks: nothing installed.
+        const u = setUp();
+        const m = keys3();
+        const alone = makeRelease({ version: '1.1.0', previous: null, custodianKeys: m, signers: m.slice(0, 2), image: u.next.image, label: 'vault-v1.1.0-root' });
+        u.stage(alone, u.next, [u.r1, alone]);
+        expect(await installStaged(u.opts())).toMatchObject({ installed: false });
+        u.nothingInstalled();
+    });
+
     it('unsigned files (no release with them), as the API\'s user wrote them in the reviewer\'s test: nothing installed', async () => {
         const t = setUp();
         const names = stagedNames('9.9.9', crypto.randomBytes(32).toString('hex'));

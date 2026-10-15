@@ -3150,6 +3150,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     distanceKm={near ? distanceOf(post) : null}
+                                                    beansMarked={priceMarked}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
@@ -3251,6 +3252,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     distanceKm={near ? distanceOf(post) : null}
+                                                    beansMarked={priceMarked}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,

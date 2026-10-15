@@ -27,9 +27,15 @@ interface Props {
     onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
     /** How far the listing is (km), as the node measured it from the point the Market read from; none, no distance. */
     distanceKm?: number | null;
+    /**
+     * Beans live in a local community for this reader (preview or read-only, lib/features `marked`): no price, no
+     * founding-trade chip, no tier badge or Elder look. There every price reads 0 and every author is a Newcomer with
+     * a founding trade to make, which can't happen on that node (DESIGN-global-showcase-fable.md §1–§2).
+     */
+    beansMarked?: boolean;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm, beansMarked = false }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -40,6 +46,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     ) || null;
 
     const hasPhoto = post.photos && post.photos.length > 0;
+    // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`).
+    const showPrice = !isPulse && !beansMarked;
+    const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
     const isGrid = viewMode === 'grid';
     // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
@@ -63,7 +72,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">🗞️ Daily Pulse</span>
     ) : null;
 
-    const elderCard = isElder(authorEnergy);
+    const elderCard = !beansMarked && isElder(authorEnergy);
     const isGroupScope = post.audienceScope === 'group' || !!post.targetGroupId;
     const targetGroupName = post.targetGroupName || 'Group';
     const groupScopeBadge = isGroupScope ? `🔒 Only ${targetGroupName} can see this` : null;
@@ -92,7 +101,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
                             by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
                             {distanceTag}
-                            {post.authorFoundingNeeded && (
+                            {foundingChip && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                     🌱 FOUNDING
                                 </span>
@@ -108,7 +117,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     {/* Compact Price */}
-                    {!isPulse && (
+                    {showPrice && (
                         <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
                             {post.credits !== undefined ? post.credits : '?'}
                             <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
@@ -212,7 +221,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     💸 CASH TOO
                                 </span>
                             )}
-                            {post.authorFoundingNeeded && (
+                            {foundingChip && (
                                 <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                     🌱 FOUNDING TRADE
                                 </span>
@@ -225,7 +234,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </div>
                         
                         {/* Compact Price Header */}
-                        {!isPulse && (
+                        {showPrice && (
                             <div className="flex items-center">
                                 <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     {post.credits !== undefined ? post.credits : '?'}
@@ -249,6 +258,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         avatarUrl={authorAvatarUrl}
                         publicKey={post.authorPublicKey}
                         mode="full"
+                        showTier={!beansMarked}
                         onOpenProfile={onOpenProfile}
                     />
                 </div>
@@ -283,6 +293,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         avatarUrl={authorAvatarUrl}
                         publicKey={post.authorPublicKey}
                         mode="compact"
+                        showTier={!beansMarked}
                         className="mb-1"
                         onOpenProfile={onOpenProfile}
                     />
@@ -345,7 +356,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 🌐 {nodeBadge}
                             </span>
                         )}
-                        {post.authorFoundingNeeded && (
+                        {foundingChip && (
                             <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
@@ -353,7 +364,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
 
                     {/* Price Overlay */}
-                    {!isPulse && (
+                    {showPrice && (
                         <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 <span>{post.credits !== undefined ? post.credits : '?'}</span>
@@ -388,14 +399,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 🌐 {nodeBadge}
                             </span>
                         )}
-                        {post.authorFoundingNeeded && (
+                        {foundingChip && (
                             <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
                     </div>
 
-                    {!isPulse && (
+                    {showPrice && (
                         <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 <span>{post.credits !== undefined ? post.credits : '?'}</span>

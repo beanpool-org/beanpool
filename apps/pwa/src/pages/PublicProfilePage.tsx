@@ -838,10 +838,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     }`}>
                                                                         {p.type?.toUpperCase()}
                                                                     </div>
-                                                                    <div className="flex items-center gap-1">
-                                                                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
-                                                                        <span className="text-[10px]">🫘</span>
-                                                                    </div>
+                                                                    {/* A price is Beans: none where Beans are marked (the line above says where they live). */}
+                                                                    {!beansMarked && (
+                                                                        <div className="flex items-center gap-1" data-testid="profile-listing-price">
+                                                                            <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
+                                                                            <span className="text-[10px]">🫘</span>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                                 <div className="font-bold text-nature-900 dark:text-white text-sm truncate">{p.title}</div>
                                                                 <div className="text-xs text-nature-400 font-medium mt-0.5">Active</div>

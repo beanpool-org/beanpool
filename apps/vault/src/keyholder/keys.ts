@@ -301,9 +301,11 @@ export interface PendingStateFile {
     confirmed: string[];
     /**
      * The new state's public keys, newest first: what global's door, the registrar and the app list before the switch.
-     * Kept here because they outlive a restart, when the new keys themselves are no longer in memory.
+     * Kept here because they outlive a restart, when the new keys themselves are no longer in memory. Null in a file
+     * written by a keyholder from before they were kept: that file must still start the keyholder, or a ceremony left
+     * waiting across an image update would keep the vault down until a wipe.
      */
-    publicKeys: PendingPublicKeys;
+    publicKeys: PendingPublicKeys | null;
 }
 
 export interface PendingPublicKeys {
@@ -326,8 +328,8 @@ export function readPendingFile(dir: string): PendingStateFile | null {
     if (!existsSync(file)) return null;
     const p = JSON.parse(readFileSync(file, 'utf8')) as Partial<PendingStateFile> | null;
     const state = asStateFile(p?.state);
-    const publicKeys = asPendingPublicKeys(p?.publicKeys);
-    if (!p || p.v !== 1 || !publicKeys || (p.purpose !== 'genesis' && p.purpose !== 'reshare') || !state
+    const publicKeys = p?.publicKeys === undefined ? null : asPendingPublicKeys(p.publicKeys);
+    if (!p || p.v !== 1 || (p.publicKeys !== undefined && !publicKeys) ||(p.purpose !== 'genesis' && p.purpose !== 'reshare') || !state
         || !Array.isArray(p.shareChecks) || p.shareChecks.length !== state.custodians.length || !p.shareChecks.every(c => typeof c === 'string')
         || !Array.isArray(p.confirmed) || !p.confirmed.every(c => state.custodians.includes(c))) {
         throw new Error(`${file} is not a pending vault state.`);

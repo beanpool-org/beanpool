@@ -257,7 +257,7 @@ export class Keyholder {
         return {
             id: p.id, purpose: p.file.purpose, vaultId: p.file.state.vaultId, generation: p.file.state.generation,
             custodians: [...p.file.state.custodians], confirmed: [...p.file.confirmed], sharesHeld: !!p.shares, cancels: p.cancels.size,
-            publicKeys: { ticket: [...p.file.publicKeys.ticket], deposit: p.file.publicKeys.deposit.map(d => ({ ...d })) },
+            publicKeys: p.file.publicKeys && { ticket: [...p.file.publicKeys.ticket], deposit: p.file.publicKeys.deposit.map(d => ({ ...d })) },
         };
     }
 
@@ -1031,9 +1031,11 @@ export class Keyholder {
      * A backup's deletion records only. Opens across reshares (they are under K_index, which a reshare keeps).
      *
      * They are read by their own seal, signed or not (B2, review #1981): sealed under a key from K_index with the whole
-     * header as associated data, only a holder of K_index makes records that open, and every state that holds K_index
-     * holds the ticket keys that sign backups too (keys.ts `WorkingKeys`), so they authenticate as strongly as the
-     * signature. A file damaged elsewhere (its snapshot, its signature) still gives its deletions, which a restore must
+     * header as associated data, only a holder of K_index makes records that open. That is weaker than the signature:
+     * a reshare replaces the ticket key but keeps K_index, so a retired custodian (who can still work out the old state's
+     * K_index offline) with write access to a store can seal deletion records that a later restore applies, deleting
+     * copies whose ids they know. Reshare rotation design §2.6 and §7 name this; P2's per-generation deletions seal
+     * closes it. A file damaged elsewhere (its snapshot, its signature) still gives its deletions, which a restore must
      * not lose: skipping them brings back copies their members deleted. `signed` says whether the whole file checked.
      */
     openBackupDeletions(file: Buffer): { name: string; createdAt: number; deletions: string; signed: boolean } {

@@ -223,8 +223,11 @@ interface KeyholderStatus {
     /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
     pending: {
         purpose: string; generation: number; custodians: string[]; confirmed: string[];
-        /** The new state's public keys: listed by global's door, the registrar and the app before the switch. */
-        publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] };
+        /**
+         * The new state's public keys: listed by global's door, the registrar and the app before the switch. Null for
+         * one left waiting by a keyholder from before they were kept.
+         */
+        publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] } | null;
     } | null;
     /** The genesis or reshare that switched at this boot: who has shown they hold their new share (in memory only). */
     switched: { generation: number; custodians: string[]; confirmed: string[] } | null;

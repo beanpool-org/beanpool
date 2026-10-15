@@ -299,7 +299,7 @@ function print(result: CustodianCall): void {
  * listed until every app build has the new one. None for a genesis: there is no key in force to keep.
  */
 async function pinLines(url: string, answer: Record<string, unknown>): Promise<string[]> {
-    const pending = answer.pending as { purpose?: string; publicKeys?: { ticket: string[]; deposit: { key: string }[] } } | null;
+    const pending = answer.pending as { purpose?: string; publicKeys?: { ticket: string[]; deposit: { key: string }[] } | null } | null;
     const waiting = pending?.purpose === 'reshare' ? pending.publicKeys : undefined;
     if (!waiting) return [];
     let inForce: string | null = null;

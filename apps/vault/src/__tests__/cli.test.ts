@@ -175,7 +175,7 @@ describe('vault-custodian', () => {
         expect(first.out).not.toContain('BEANPOOL_VAULT_TICKET_KEYS');
         const second = await cli(['reshare', '--url', v.baseUrl, '--key', keys[1], '--share', share1, '--new-custodians', newSet, '--out', path.join(dir, 'p-rs-1'), '--no-hardware-proof', ...feed]);
         expect(second.code).toBe(0);
-        const waiting = v.keyholder().status().pending!.publicKeys;
+        const waiting = v.keyholder().status().pending!.publicKeys!;
         expect(waiting.ticket[0]).not.toBe(oldTicket);
         const lines = [`BEANPOOL_VAULT_TICKET_KEYS=${waiting.ticket[0]},${oldTicket}`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`];
         for (const line of lines) expect(second.out).toContain(`\n${line}\n`);

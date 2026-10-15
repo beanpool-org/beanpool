@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -445,6 +445,46 @@ describe('a reshare gives the vault new signing keys', () => {
         expect((await present(v, c4, fresh[2])).body.state).toBe('open');
         expect(v.keyholder().status().publicKeys).toEqual(waiting);
         expect(await ticketUnder(v, waiting.ticket)).toBe('ok');
+    });
+
+    /** Rewrites the waiting file as a keyholder from before the waiting keys were kept wrote it: no `publicKeys`. */
+    function asOlderKeyholderWroteIt(v: VaultUnderTest): void {
+        const file = path.join(v.stateDir, PENDING_FILE);
+        const { publicKeys, ...older } = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+        expect(publicKeys).toBeTruthy();
+        writeFileSync(file, JSON.stringify(older));
+    }
+
+    it('a reshare left waiting by an older keyholder (no keys in its file) doesn\'t stop the keyholder starting; it shows no keys and still switches', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const { fresh } = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        asOlderKeyholderWroteIt(v);
+
+        await v.restartKeyholder();
+        expect(v.keyholder().status()).toMatchObject({ state: 'locked', generation: 1, pending: { purpose: 'reshare', generation: 2, publicKeys: null } });
+        await present(v, c1, g.shares[0]);
+        expect((await present(v, c2, g.shares[1])).body.state).toBe('open');
+        expect((await reportOf(v)).text.pending).toEqual({ generation: 2, publicKeys: null });
+        expect((await confirmWith(v, fresh, [0, 2], [c1, c2, c4]))[1].body).toMatchObject({ state: 'locked', switched: true, generation: 2 });
+        await present(v, c1, fresh[0]);
+        expect((await present(v, c4, fresh[2])).body.state).toBe('open');
+    });
+
+    it('a genesis left waiting by an older keyholder doesn\'t stop the keyholder starting; two custodians confirm and their shares open it', async () => {
+        const v = await vault();
+        const r = await genesis(v.baseUrl, v.custodians[0], v.call());
+        expect(r.status).toBe(200);
+        asOlderKeyholderWroteIt(v);
+
+        await v.restartKeyholder();
+        expect(v.keyholder().status()).toMatchObject({ state: 'fresh', pending: { purpose: 'genesis', generation: 1, publicKeys: null } });
+        const shares = r.body.custodianShares as CustodianShare[];
+        expect((await confirmWith(v, shares, [0, 1]))[1].body).toMatchObject({ state: 'locked', switched: true, generation: 1 });
+        await present(v, v.custodians[0], shares[0]);
+        expect((await present(v, v.custodians[1], shares[1])).body.state).toBe('open');
     });
 
     it('a vault rebuilt from a backup made before the reshare cannot pose as the vault after it', async () => {

@@ -472,18 +472,23 @@ async function main(): Promise<void> {
         // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls on each node go under an owner's key
         // session the node makes (takeover-test-harness.ts owner-session).
         const pAdmin: Record<string, string> = await P.send('owner-session');
-        const claim = (base: string, admin: Record<string, string>, name: string) => call(base, 'POST', '/api/local/admin/public-address/claim', admin, { name, mode: 'tunnel' });
+        // Claiming over a live name, and taking the address offline, ask the owner's fresh proof (design case 18, B1, B3):
+        // those go under a session from the phone's Manage, pressed just now, that node makes for each call.
+        const claim = async (base: string, node: NodeProc, name: string) =>
+            call(base, 'POST', '/api/local/admin/public-address/claim', await node.send('owner-phone-session'), { name, mode: 'tunnel' });
+        const offline = async (base: string, node: NodeProc) =>
+            call(base, 'POST', '/api/local/admin/public-address/offline', await node.send('owner-phone-session'), {});
         const statusOpen = (base: string, admin: Record<string, string>) => call(base, 'GET', '/api/local/admin/public-address/status', admin);
 
         console.log('— P claims one registrar name per case —');
         // r-none first: the registrar's `none` names no name, so Settings writes it on the current one.
-        const first = await claim(pBase, pAdmin, 'r-none');
+        const first = await claim(pBase, P, 'r-none');
         reg.status = { status: 'none' };
         const none = await statusOpen(pBase, pAdmin);
         const labels = ['fast', 'ours48', 'r-revoked', 'r-released', 'r-blocked', 'h-401', 'h-timeout', 'h-404', 'h-5xx',
             'e-drop', 'e-dns', 'e-530', 'reserved', 'self-fail', 'epage', 'foreign', 'recheck', 'envname', 'pcurrent'];
         const claimed = [first];
-        for (const l of labels) claimed.push(await claim(pBase, pAdmin, l));
+        for (const l of labels) claimed.push(await claim(pBase, P, l));
         for (const w of ['revoked', 'released', 'blocked']) {
             reg.status = { status: w, name: `r-${w}`, hostname: host(`r-${w}`) };
             await statusOpen(pBase, pAdmin);
@@ -695,9 +700,9 @@ async function main(): Promise<void> {
         await section('11', async () => {
             const NOW = Date.now();
             const heldUntilS = Math.floor(NOW / 1000) + 30 * 86_400;
-            assert((await claim(pBase, pAdmin, 'tname')).status === 200, 'P claims tname');
+            assert((await claim(pBase, P, 'tname')).status === 200, 'P claims tname');
             reg.release = { status: 'released', name: 'tname', held_until: heldUntilS };
-            const off = await call(pBase, 'POST', '/api/local/admin/public-address/offline', pAdmin, {});
+            const off = await offline(pBase, P);
             assert(off.status === 200, `and takes it offline (${show(off)})`);
             holderSays('tname', { held: 'you', state: 'released', held_until: heldUntilS });
             const d29 = await rounds(P, 'tname', [NOW + 29 * DAY]);
@@ -706,22 +711,22 @@ async function main(): Promise<void> {
             const d30 = await rounds(P, 'tname', [NOW + 30 * DAY + MIN]);
             assert(d30[0]?.lost?.why === 'released', `30 days on, the registrar says free: lost, released by this community (${JSON.stringify(d30[0])})`);
             assert((await statusOf(P, host('tname'))) === 421, 'a request signed for tname.beanpool.org → 421 (main: 200)');
-            assert((await claim(pBase, pAdmin, 'tname')).status === 200 && (await statusOf(P, host('tname'))) === 200,
+            assert((await claim(pBase, P, 'tname')).status === 200 && (await statusOf(P, host('tname'))) === 200,
                 'claiming it again brings it back: 200');
 
             // Taken back inside the hold: no timer.
-            await claim(pBase, pAdmin, 'tback');
+            await claim(pBase, P, 'tback');
             reg.release = { status: 'released', name: 'tback', held_until: heldUntilS };
-            await call(pBase, 'POST', '/api/local/admin/public-address/offline', pAdmin, {});
-            assert((await claim(pBase, pAdmin, 'tback')).status === 200, 'P releases tback, then takes it back inside the hold');
+            await offline(pBase, P);
+            assert((await claim(pBase, P, 'tback')).status === 200, 'P releases tback, then takes it back inside the hold');
             holderSays('tback', { held: 'free' });
             const tb = await rounds(P, 'tback', [NOW + 31 * DAY]);
             assert(noneLost(tb) && (await statusOf(P, host('tback'))) === 200, `31 days on, even with the registrar saying free: accepted (${sum(tb)})`);
 
             // An older registrar can't say: nothing is dropped.
-            await claim(pBase, pAdmin, 'told');
+            await claim(pBase, P, 'told');
             reg.release = { status: 'released', name: 'told', held_until: heldUntilS };
-            await call(pBase, 'POST', '/api/local/admin/public-address/offline', pAdmin, {});
+            await offline(pBase, P);
             reg.holder.set('told', { code: 404, body: { error: 'not found' } });
             const to = await rounds(P, 'told', [NOW + 31 * DAY]);
             assert(noneLost(to) && (await statusOf(P, host('told'))) === 200, `released, 31 days on, an older registrar (404): accepted (${sum(to)})`);
@@ -776,8 +781,7 @@ async function main(): Promise<void> {
             const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, ADMIN_PASSWORD: PW_N, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(N);
             const nSetup = await N.send('setup', { ownerSeedHex, replicationToken });
-            const nAdmin: Record<string, string> = await N.send('owner-session');
-            assert((await claim(nSetup.https, nAdmin, 'sname')).status === 200, 'N claims sname');
+            assert((await claim(nSetup.https, N, 'sname')).status === 200, 'N claims sname');
 
             fs.mkdirSync(dirs.standby, { recursive: true });
             fs.copyFileSync(path.join(dirs.n, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
@@ -819,7 +823,7 @@ async function main(): Promise<void> {
         // ── 14 ──
         console.log('\n— 14. a claim that lands while a round is still asking: that round never undoes it —');
         await section('14', async () => {
-            assert((await claim(pBase, pAdmin, 'race')).status === 200, 'P claims race');
+            assert((await claim(pBase, P, 'race')).status === 200, 'P claims race');
             other('race');
             edgeKey('race');
             const dropped = await rounds(P, 'race', [T0, T0 + 10 * MIN]);
@@ -836,7 +840,7 @@ async function main(): Promise<void> {
             const inFlight = rounds(P, 'race', [T0 + 20 * MIN]).finally(() => { done = true; });
             await sleep(700);
             holderSays('race', { held: 'you', state: 'live' });
-            const back = await claim(pBase, pAdmin, 'race');
+            const back = await claim(pBase, P, 'race');
             assert(back.status === 200 && !done, `0.7 s into the round, the admin claims race again (${show(back)}; the round still asking: ${!done})`);
             const seen: number[] = [];
             while (!done) {
@@ -864,7 +868,7 @@ async function main(): Promise<void> {
             assert(at31[0]?.lost?.why === 'another-key', `10 minutes of both channels after the claim: lost again (${JSON.stringify(at31[0])})`);
 
             // A claim between rounds does the same.
-            assert((await claim(pBase, pAdmin, 'race')).status === 200 && (await statusOf(P, host('race'))) === 200, 'claimed back between rounds: 200');
+            assert((await claim(pBase, P, 'race')).status === 200 && (await statusOf(P, host('race'))) === 200, 'claimed back between rounds: 200');
             const afterClaim = await rounds(P, 'race', [T0 + 32 * MIN]);
             assert(noneLost(afterClaim) && (await statusOf(P, host('race'))) === 200,
                 `the next round, the registrar still naming K and K answering: not lost at once (${JSON.stringify(afterClaim[0])}; 07535a17: lost)`);
@@ -884,7 +888,7 @@ async function main(): Promise<void> {
             // Any write to the name while a round is asking, not only one that clears a mark: race2 is revoked, the
             // registrar names K and K answers; the round that would complete the 10 minutes is still asking when Settings'
             // status check says race2 is this key's, live.
-            assert((await claim(pBase, pAdmin, 'race2')).status === 200, 'P claims race2');
+            assert((await claim(pBase, P, 'race2')).status === 200, 'P claims race2');
             reg.status = { status: 'revoked', name: 'race2', hostname: host('race2') };
             await statusOpen(pBase, pAdmin);
             other('race2');

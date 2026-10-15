@@ -597,7 +597,8 @@ async function main(): Promise<void> {
             closesAt: new Date(Date.now() + 2500).toISOString(),
         })).decision;
         for (const v of [gwen, kip, nia, bo]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${removal.id}/vote`, { support: true }));
-        built('the admin makes Lou an owner', await A('/api/local/admin/node-roles', { pubkey: lou.pk, role: 'owner' }));
+        // Granting owner asks the owner's fresh proof (design case 18, C8): Manage on the phone, pressed just now.
+        built('the admin makes Lou an owner', await api(m, 'POST', '/api/local/admin/node-roles', { admin: await main.send('owner-phone-session'), body: { pubkey: lou.pk, role: 'owner' } }));
         const suspended = built('and suspends her: a vote on keeping it opens, her role held aside', await A(`/api/local/admin/users/${lou.pk}/suspend`, { reason: 'An emergency on the street' }));
         const suspensionId = suspended.decision?.id as string;
         built('the admin makes Moe a moderator', await A('/api/local/admin/node-roles', { pubkey: moe.pk, role: 'moderator' }));

@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark dark-theme" style="color-scheme: dark">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#1d231d" />
+    <!-- Before anything is drawn: the stored theme, or Dark (the default, also written above). A file, as the node allows no
+         inline script; src/lib/useTheme.ts takes over once the app mounts. -->
+    <script src="/theme-boot.js"></script>
     <meta name="description" content="BeanPool — Local-first independent community marketplace" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <!-- Inter comes from this node (public/fonts, named in src/index.css), never from Google. -->

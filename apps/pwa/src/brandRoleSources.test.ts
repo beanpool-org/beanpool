@@ -31,7 +31,7 @@ const HUES = '(?:emerald|green|terra|red|rose|orange|amber|yellow)';
 const RAW_FILL = new RegExp(`^bg-(?:${HUES}-(?:400|500|600|700|800|900)(?:/\\d+)?|\\[#[0-9a-fA-F]{3,8}\\])$`);
 const RAW_TINT = new RegExp(`^bg-${HUES}-(?:50|100|200)(?:/\\d+)?$`);
 const RAW_INK = new RegExp(`^text-${HUES}-(?:600|700|800|900)$`);
-const ROLE_FILL = /^bg-bp-(cta|commit|action|danger|gold|accent)-fill$/;
+const ROLE_FILL = /^bg-bp-(cta|commit|action|danger|gold|accent|sage)-fill$/;
 
 function files(dir: string): string[] {
     return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

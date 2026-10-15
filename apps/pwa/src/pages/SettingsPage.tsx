@@ -130,7 +130,7 @@ function LanguageRow() {
                 aria-label={t('Language')}
                 value={value}
                 onChange={(e) => { if (isLang(e.target.value)) void choose(e.target.value); }}
-                className="mt-3 w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-[15px] text-nature-900 dark:text-white cursor-pointer"
+                className="mt-3 w-full min-h-[48px] px-3 rounded-xl border border-border-input bg-nature-50 dark:bg-nature-800 text-[15px] text-nature-900 dark:text-white cursor-pointer"
             >
                 {LANGS.map((l) => <option key={l} value={l} lang={l}>{LANGUAGE_NAMES[l]}</option>)}
             </select>

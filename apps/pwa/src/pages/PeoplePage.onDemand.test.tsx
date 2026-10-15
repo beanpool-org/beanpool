@@ -200,9 +200,60 @@ describe('People on a community with members on demand', () => {
 
     it('a node that cannot be asked about its switch reads as before', async () => {
         info.value = new Error('offline');
+        whole.mockResolvedValue([{ publicKey: 'c'.repeat(64), callsign: 'Cleo', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '' }]);
         openCommunity();
-        await waitFor(() => expect(whole).toHaveBeenCalledTimes(1));
+        await screen.findByText('Cleo');
+        expect(whole).toHaveBeenCalledTimes(1);
         expect(cards).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('people-members-failed')).toBeNull();
+    });
+
+    // Review of #1999, item 1: global's first visit with a failed info read. The whole read is refused 403
+    // members_on_demand, and that is the node saying people are asked for here: the search and "near you", never an
+    // empty list with no words.
+    it('the info read failed and the whole read is refused 403 members_on_demand: the on-demand view, not an empty list', async () => {
+        info.value = new Error('offline');
+        whole.mockRejectedValue(Object.assign(new Error('On this community people are found by name or by key, not listed whole'), { status: 403, code: 'members_on_demand' }));
+        openCommunity();
+        await screen.findByTestId('people-on-demand');
+        await screen.findByTestId('people-near');
+        expect(whole).toHaveBeenCalledTimes(1);
+        expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?lat=-28.6&lng=153.6&limit=50']);
+        expect(screen.getByLabelText('Search members by name')).toBeInTheDocument();
+        expect(screen.queryByText(/All members on this node/)).toBeNull();
+        // Kept as the node's answer, so the next visit asks from the start.
+        const kept = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!).filter(k => k.startsWith('bp_members_on_demand:'));
+        expect(kept.map(k => localStorage.getItem(k))).toEqual(['1']);
+    });
+
+    it("can't tell (the info read and the whole read both fail): says so in words, with Try again, which reads again", async () => {
+        info.value = new Error('offline');
+        whole.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        whole.mockResolvedValueOnce([{ publicKey: 'c'.repeat(64), callsign: 'Cleo', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '' }]);
+        openCommunity();
+        const failed = await screen.findByTestId('people-members-failed');
+        expect(failed).toHaveTextContent("Couldn't load this community's members just now.");
+        expect(screen.queryByTestId('people-on-demand')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByText('Cleo');
+        expect(whole).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('people-members-failed')).toBeNull();
+    });
+
+    it('a local node whose whole read fails for another reason (403 without the code) is never switched to the on-demand view', async () => {
+        info.value = { profile: 'local', features: {} };
+        whole.mockRejectedValue(Object.assign(new Error('Members only'), { status: 403, code: 'members_only' }));
+        openCommunity();
+        await screen.findByTestId('people-members-failed');
+        expect(screen.queryByTestId('people-on-demand')).toBeNull();
+        expect(cards).not.toHaveBeenCalled();
+    });
+
+    it('a node that says openMembership (it refuses the whole directory) is asked for people, whatever membersOnDemand says', async () => {
+        info.value = { profile: 'global', features: { openMembership: true } };
+        openCommunity();
+        await screen.findByTestId('people-near');
+        expect(whole).not.toHaveBeenCalled();
     });
 
     it("the search's day budget spent (429): the node's words, never \"check your connection\" (#1965 review N4)", async () => {

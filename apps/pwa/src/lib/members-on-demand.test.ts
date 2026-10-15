@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import {
     memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
     MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
-    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS, dayBudgetWords,
+    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS, dayBudgetWords, getMembersWhole, isMembersOnDemandRefusal,
 } from './members-on-demand';
 import * as api from './api';
 
@@ -19,6 +19,9 @@ describe('members on demand: the requests the web app builds (DESIGN-global-memb
         expect(membersOnDemandOn({ features: {} } as never)).toBe(false);
         expect(membersOnDemandOn(null)).toBe(false);
         expect(membersOnDemandOn({ features: { membersOnDemand: 'yes' } } as never)).toBe(false);
+        // Where anyone can join in a minute the node refuses the whole directory (403 members_on_demand): asked for too.
+        expect(membersOnDemandOn({ features: { openMembership: true } } as never)).toBe(true);
+        expect(membersOnDemandOn({ features: { openMembership: 'yes' } } as never)).toBe(false);
     });
 
     it('searches from 2 characters, trimmed, encoded, 20 at most', () => {
@@ -99,6 +102,56 @@ describe('members on demand: a node that can\'t be asked counts as it last answe
         expect(await switchOnce()).toBe(true);
         fails();
         expect(await switchOnce()).toBe(false);
+    });
+});
+
+describe('members on demand: a whole read refused 403 members_on_demand is the node saying so (review of #1999, item 1)', () => {
+    const GLOBAL_NODE = 'https://global.example.test';
+    const refused = () => Object.assign(new Error('On this community people are found by name or by key, not listed whole'), { status: 403, code: 'members_on_demand' });
+    beforeEach(() => { localStorage.clear(); localStorage.setItem('bp_node_url', GLOBAL_NODE); info.read = async () => { throw new TypeError('Failed to fetch'); }; });
+    afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+
+    it('tells the refusal from any other failure', () => {
+        expect(isMembersOnDemandRefusal(refused())).toBe(true);
+        expect(isMembersOnDemandRefusal(Object.assign(new Error('x'), { status: 403, code: 'members_only' }))).toBe(false);
+        expect(isMembersOnDemandRefusal(Object.assign(new Error('x'), { status: 503, code: 'members_on_demand' }))).toBe(false);
+        expect(isMembersOnDemandRefusal(new TypeError('Failed to fetch'))).toBe(false);
+        expect(isMembersOnDemandRefusal(null)).toBe(false);
+    });
+
+    it('a never-answered node whose info read failed: the hook says false, the refused whole read turns every hook on the page true, and it is kept', async () => {
+        vi.spyOn(api, 'getMembers').mockRejectedValue(refused());
+        const first = renderHook(() => useMembersOnDemand());
+        const second = renderHook(() => useMembersOnDemand());
+        await waitFor(() => expect(first.result.current).toBe(false));
+        await waitFor(() => expect(second.result.current).toBe(false));
+        await act(async () => { await expect(getMembersWhole()).rejects.toMatchObject({ code: 'members_on_demand' }); });
+        expect(first.result.current).toBe(true);
+        expect(second.result.current).toBe(true);
+        expect(localStorage.getItem(MEMBERS_ON_DEMAND_SEEN_PREFIX + GLOBAL_NODE)).toBe('1');
+        first.unmount();
+        second.unmount();
+        // The next page open that can't ask still knows.
+        const later = renderHook(() => useMembersOnDemand());
+        await waitFor(() => expect(later.result.current).toBe(true));
+        later.unmount();
+    });
+
+    it('any other failure of the whole read switches nothing and is the caller\'s to say', async () => {
+        vi.spyOn(api, 'getMembers').mockRejectedValue(new TypeError('Failed to fetch'));
+        const hook = renderHook(() => useMembersOnDemand());
+        await waitFor(() => expect(hook.result.current).toBe(false));
+        await act(async () => { await expect(getMembersWhole()).rejects.toThrow('Failed to fetch'); });
+        expect(hook.result.current).toBe(false);
+        expect(localStorage.getItem(MEMBERS_ON_DEMAND_SEEN_PREFIX + GLOBAL_NODE)).toBeNull();
+        hook.unmount();
+    });
+
+    it('a local node reads whole exactly as before', async () => {
+        const rows = [{ publicKey: 'c'.repeat(64), callsign: 'Cleo', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '' }];
+        const whole = vi.spyOn(api, 'getMembers').mockResolvedValue(rows as never);
+        await expect(getMembersWhole()).resolves.toEqual(rows);
+        expect(whole).toHaveBeenCalledTimes(1);
     });
 });
 

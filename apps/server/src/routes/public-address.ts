@@ -349,8 +349,6 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
-        // The name goes to anyone after the hold: the fresh proof (design case 18, B2).
-        if (!(await requireFreshProof(ctx, b.code, 'release a name'))) return;
         const name = String(b.name || '').toLowerCase().trim();
         if (!isAddressLabel(name)) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
         if (getNodeRole() !== 'primary') { ctx.status = 409; ctx.body = { error: 'Only the main server releases names.' }; return; }
@@ -361,6 +359,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const since = publicAddressGeneration();
         const before = notReleasable(name);
         if (before || busy()) { ctx.status = 409; ctx.body = { error: before || `${host} is being changed right now; nothing was released.` }; return; }
+        // The name goes to anyone after the hold: the fresh proof (design case 18, B2). After the checks of the request and
+        // of this node's own address, which spend nothing; a current code is spent when it is checked (#2002 NB1). Before
+        // the registrar is asked anything. The checks after /holder below still run, and `since` now spans the proof too.
+        if (!(await requireFreshProof(ctx, b.code, 'release a name'))) return;
         const h = await heldByThisKey(name);
         if (!h.held) {
             ctx.status = 409;

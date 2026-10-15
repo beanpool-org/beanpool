@@ -659,8 +659,6 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
-    if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     let target: string;
     if (state.isKeySession) {
         target = state.actor;
@@ -682,6 +680,10 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
             return;
         }
     }
+    // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
+    // Last, after the checks of the request itself: a current code is spent when it is checked (#2002 NB1). Whether the
+    // named key holds the owner role is the engine's answer, after it.
+    if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     try {
         const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
             state.isKeySession ? 'key-session' : 'password');
@@ -711,12 +713,13 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
     // On, the password reaches key enrolment only, so a password-only co-owner is shut out of Settings: the fresh proof
     // every time (design case 18, C5).
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'enabled (boolean) is required' };
         return;
     }
+    // After the check of the request: a current code is spent when it is checked (#2002 NB1).
+    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
     setBreakGlassMode(body.enabled);
     ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
 });
@@ -2218,13 +2221,14 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can change its gateway settings')) return;
     const { code, ...body } = (ctx as any).requestBody || {};
-    if (!(await requireFreshProof(ctx, code, 'change the gateway settings'))) return;
     const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
     if (allowlistRefusal) {
         ctx.status = 400;
         ctx.body = allowlistRefusal;
         return;
     }
+    // After the check of the request: a current code is spent when it is checked (#2002 NB1).
+    if (!(await requireFreshProof(ctx, code, 'change the gateway settings'))) return;
     const updated = updateGatewayConfig(body);
     ctx.body = { success: true, gateway: updated };
 });

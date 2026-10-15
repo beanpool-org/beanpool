@@ -130,8 +130,11 @@ export interface VaultUnderTest {
     release: MadeRelease;
     feedDir: string;
     keyholder(): Keyholder;
-    /** A reboot of the keyholder: everything in its memory is gone; it comes back locked. */
-    restartKeyholder(): Promise<void>;
+    /**
+     * A reboot of the keyholder: everything in its memory is gone; it comes back locked. With `pinned`, it comes back
+     * pinning those genesis keys instead (a new image built with other keys as its root).
+     */
+    restartKeyholder(pinned?: string[]): Promise<void>;
     /** A restart of the API alone (a crash, or a new release): on a new port, so `baseUrl` changes. */
     restartApi(): Promise<void>;
     /**
@@ -179,8 +182,9 @@ export async function startVault(opts: {
     const feedDir = path.join(dir, 'feed');
     const release = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2) });
     publish(feedDir, release);
+    let pinned = custodians.map(c => c.publicKey);
     const makeKeyholder = () => new Keyholder({
-        stateDir, genesisCustodians: custodians.map(c => c.publicKey), clock: clock.now, iterationExponent: 0, hygiene: opts.hygiene,
+        stateDir, genesisCustodians: pinned, clock: clock.now, iterationExponent: 0, hygiene: opts.hygiene,
         releaseHash: release.manifest.imageHash,
     });
     let kh = makeKeyholder();
@@ -202,7 +206,8 @@ export async function startVault(opts: {
     const v: VaultUnderTest = {
         dir, stateDir, dataDir, restoreDir, storeDir, settingsFile, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
         keyholder: () => kh,
-        restartKeyholder: async () => {
+        restartKeyholder: async repin => {
+            if (repin) pinned = [...repin];
             await server.close();
             kh.lock();
             kh = makeKeyholder();

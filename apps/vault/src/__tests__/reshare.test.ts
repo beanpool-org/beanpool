@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { checkVaultAnswer, checkVaultTicket, newVaultChallenge, openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
-import { cancelPending, confirmShare, custodianKey, fetchPendingShare, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
+import { cancelPending, confirmShare, custodianKey, fetchPendingShare, genesis, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
 import { KeyholderError } from '../keyholder/keyholder.js';
 import { PENDING_FILE, readStateFile, writePendingFile } from '../keyholder/keys.js';
 import { buildConfirmation, confirmStatement, shareCheck, signStatement, type CustodianShare } from '../shared/ceremony.js';
@@ -504,5 +504,46 @@ describe('a reshare gives the vault new signing keys', () => {
         const m1 = newMember();
         expect((await depositTo(v, g.depositKey, m1, 'rotate-gen1-box')).reply.status).toBe(200);
         await expectCopy(v, 'google', 'rotate-gen1-box', m1);
+    });
+});
+
+/**
+ * The re-root (reshare rotation design §2.5, test §2.8 item 7, at the keyholder): the new custodians' keys are the next
+ * image's genesis keys. That image boots over today's generation-1 state, which names the genesis keys G: a locked
+ * vault unlocks with the shares of the custodians its state names, not the pin, so G's shares open it for the reshare
+ * that follows. A fresh vault from that image takes a genesis or a restore from the new keys only.
+ */
+describe('an image re-rooted to the new custodians', () => {
+    it('boots over the generation-1 state locked; the genesis shares open it; a reshare to the new keys switches; a fresh vault of it refuses the genesis keys', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const member = newMember();
+        expect((await deposit(v, g, member, 'google', 're-root')).status).toBe(200);
+        const n = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const newSet = n.map(c => c.publicKey);
+
+        await v.restartKeyholder(newSet);
+        expect(v.keyholder().status()).toMatchObject({ state: 'locked', generation: 1, custodians: v.custodians.map(c => c.publicKey) });
+        await present(v, v.custodians[0], g.shares[0]);
+        expect((await present(v, v.custodians[1], g.shares[1])).body.state).toBe('open');
+        await present(v, v.custodians[0], g.shares[0], { purpose: 'reshare', newCustodians: newSet });
+        const r = await present(v, v.custodians[1], g.shares[1], { purpose: 'reshare', newCustodians: newSet });
+        const fresh = r.body.custodianShares as CustodianShare[];
+        expect((await confirmWith(v, fresh, [0, 1], n))[1].body).toMatchObject({ switched: true, generation: 2 });
+        await v.api.idle();
+        v.clock.advance(60 * 60 * 1000);
+        const gen2 = await v.api.runBackup();
+        await expectCopy(v, 'google', 're-root', member);
+
+        // A fresh vault of the same image (it pins N) on the same store.
+        const b = await vault({ stub: v.stub, clock: v.clock, custodians: n, storeDir: v.storeDir });
+        const call = b.call();
+        await expect(genesis(b.baseUrl, v.custodians[0], call)).rejects.toThrow(/403/);
+        await expect(restoreFromBackup(b.baseUrl, v.custodians[0], gen2, call)).rejects.toThrow(/403/);
+        expect(b.keyholder().status().state).toBe('fresh');
+        expect((await restoreFromBackup(b.baseUrl, n[2], gen2, call)).body).toMatchObject({ state: 'locked', generation: 2 });
+        await presentShare(b.baseUrl, n[0], fresh[0], call);
+        expect((await presentShare(b.baseUrl, n[2], fresh[2], call)).body.state).toBe('open');
+        await expectCopy(b, 'google', 're-root', member);
     });
 });

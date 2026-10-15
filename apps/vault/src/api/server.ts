@@ -686,7 +686,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             }
         }
         if (why !== null) {
-            throw new Error(`the newer backup ${name} does not open${fetchError ? ', nor can its other copy be fetched' : ' in any store'} (${why}): put a good copy in a store, or delete it from the off-box store and lose its deletions`);
+            throw new Error(`the newer backup ${name} does not open${fetchError ? ', nor can its other copy be fetched' : ' in any store'} (${why})${fetchError ? ': it is tried again, and opens if that copy is good; delete nothing while it cannot be fetched' : ': put a good copy in a store, or delete it from the off-box store if it is there and lose its deletions'}`);
         }
         if (fetchError || !otherVault) throw fetchError ?? new Error(`the newer backup ${name} is in neither store`);
         return null;

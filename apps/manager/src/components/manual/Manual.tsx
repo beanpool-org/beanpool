@@ -79,7 +79,7 @@ export function HelpLink({ screen, className = '' }: { screen: HelpScreen; class
             title={`Manual: ${page.title}`}
             className={`inline-flex items-center justify-center min-w-[48px] min-h-[48px] -my-2 rounded-full group shrink-0 ${className}`}
         >
-            <span className="w-7 h-7 rounded-full border border-nature-600 bg-nature-900 text-nature-200 text-sm font-black flex items-center justify-center group-hover:border-terra-400 group-hover:text-terra-300 transition-colors">
+            <span className="w-7 h-7 rounded-full border border-nature-600 bg-nature-900 text-nature-200 text-sm font-black flex items-center justify-center group-hover:border-terra-500 group-hover:text-bp-ink-terra transition-colors">
                 ?
             </span>
         </button>
@@ -118,7 +118,7 @@ function StandaloneImage({
                 <button
                     type="button"
                     onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
-                    className="w-full aspect-[16/10] bg-nature-950 block text-left group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-terra-400"
+                    className="w-full aspect-[16/10] bg-nature-950 block text-left group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-terra-500"
                     aria-label={`Enlarge: ${img.alt}`}
                 >
                     <img
@@ -144,7 +144,7 @@ function StandaloneImage({
             <button
                 type="button"
                 onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
-                className="w-full block text-left group relative focus:outline-none focus:ring-2 focus:ring-terra-400"
+                className="w-full block text-left group relative focus:outline-none focus:ring-2 focus:ring-terra-500"
                 aria-label={`Enlarge: ${img.alt}`}
             >
                 <img
@@ -178,7 +178,7 @@ function LinkedImageCard({
             type="button"
             onClick={() => onOpen(img.href!)}
             aria-label={`Open ${img.alt}`}
-            className="group w-full text-left rounded-xl border border-nature-800 bg-nature-900/60 overflow-hidden hover:border-terra-500/60 transition-all focus:outline-none focus:ring-2 focus:ring-terra-400 flex flex-col"
+            className="group w-full text-left rounded-xl border border-nature-800 bg-nature-900/60 overflow-hidden hover:border-terra-500/60 transition-all focus:outline-none focus:ring-2 focus:ring-terra-500 flex flex-col"
         >
             <div className="aspect-[16/10] bg-nature-950 overflow-hidden w-full relative">
                 <img
@@ -189,10 +189,10 @@ function LinkedImageCard({
                 />
             </div>
             <div className="p-2.5 flex items-center justify-between gap-2 border-t border-nature-800/80 bg-nature-900/40 w-full flex-1">
-                <span className="text-xs font-bold text-nature-200 group-hover:text-terra-300 line-clamp-2 leading-snug">
+                <span className="text-xs font-bold text-nature-200 group-hover:text-bp-ink-terra line-clamp-2 leading-snug">
                     {img.alt}
                 </span>
-                <span className="text-xs font-bold text-nature-500 group-hover:text-terra-400 shrink-0">
+                <span className="text-xs font-bold text-nature-500 group-hover:text-bp-ink-terra shrink-0">
                     →
                 </span>
             </div>
@@ -329,7 +329,7 @@ export function ManualPanel({ slug, onNavigate, onClose, pages }: { slug: string
             <div className="border-b border-nature-800 bg-nature-900/80">
                 <div className="max-w-3xl mx-auto flex items-center gap-2 px-4 py-2">
                     {page ? (
-                        <button type="button" onClick={() => open(null)} className="min-h-[48px] px-2 text-sm font-bold text-terra-300 hover:text-terra-200">
+                        <button type="button" onClick={() => open(null)} className="min-h-[48px] px-2 text-sm font-bold text-bp-ink-terra hover:text-oat-50">
                             ← Contents
                         </button>
                     ) : (
@@ -356,7 +356,7 @@ export function ManualPanel({ slug, onNavigate, onClose, pages }: { slug: string
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Search the manual"
-                            className="w-full min-h-[48px] px-4 rounded-xl bg-nature-900 border border-nature-700 text-white placeholder:text-nature-500 focus:outline-none focus:border-terra-400"
+                            className="w-full min-h-[48px] px-4 rounded-xl bg-nature-900 border border-nature-700 text-white placeholder:text-nature-500 focus:outline-none focus:border-terra-500"
                         />
                     </label>
 

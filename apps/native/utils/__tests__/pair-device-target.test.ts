@@ -1,45 +1,127 @@
 /**
- * "Use your account on another device" sends the key and the 12 words only to a server this phone already uses
- * (utils/pair-device-target.ts; fable-security-signin finding 1, round 2). The relay's two digits hold only on an honest
- * server: a hand-made QR naming the sender's own server could skip them, so a QR naming any other host sends nothing.
+ * "Use your account on another device" sends the key and the 12 words only to a server this phone already uses, and
+ * only to the phone's own saved address for it (utils/pair-device-target.ts; fable-security-signin finding 1, and the
+ * deciding review of #1983, BLOCKING 1).
+ *
+ * The review's case: a QR naming `https://mullum.example\@evil.test` passed a WHATWG-origin check (it reads
+ * mullum.example) and the phone then posted to the QR's own string, which iOS's NSURL sends to evil.test. Now the QR is
+ * read by a strict grammar (any other spelling is refused outright), and the request goes to the matched saved origin,
+ * never to the scanned text. Every hostile spelling below ends with nothing sent; the real saved servers are reached at
+ * exactly their own origin.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { transferTarget } from '../pair-device-target';
+import { pairingRequestUrls, parsePairingQr, transferTarget } from '../pair-device-target';
 
+const SESSION = 'a1'.repeat(16);
+const PUB = 'b2'.repeat(32);
 const OWN = 'https://mullum.example';
-const SAVED = ['https://castlemaine.example', 'https://other.example:8443'];
+const SAVED = ['https://castlemaine.example', 'https://lan.example:8443'];
 
-describe('transferTarget: only a server this phone uses', () => {
-    it('the community the phone is on, however the QR writes it', () => {
-        expect(transferTarget('https://MULLUM.example/', OWN, [])).toEqual({ kind: 'ok', nodeUrl: 'https://MULLUM.example/' });
-        expect(transferTarget('https://mullum.example:443', OWN, [])).toEqual({ kind: 'ok', nodeUrl: 'https://mullum.example:443' });
+/** The QR exactly as the web page builds it (WelcomePage): the node encoded with encodeURIComponent. */
+const qr = (node: string) => `beanpool://pair?session=${SESSION}&pub=${PUB}&node=${encodeURIComponent(node)}`;
+
+/** What the phone does with a scanned QR: the transfer URL it would post to, or 'refused' (nothing sent). */
+function decide(raw: string, own: string | null = OWN, saved: readonly string[] = SAVED): string {
+    const parsed = parsePairingQr(raw);
+    if (!parsed) return 'refused';
+    const target = transferTarget(parsed.nodeUrl, own, saved);
+    return target.kind === 'ok' ? pairingRequestUrls(target, parsed.sessionId).transfer : 'refused';
+}
+
+describe('hostile spellings of a server: refused, nothing sent', () => {
+    const hostile: Array<[string, string]> = [
+        ["the review's case: backslash then @", qr('https://mullum.example\\@evil.test')],
+        ['two backslashes then @', qr('https://mullum.example\\\\@evil.test')],
+        ['backslash then @, not encoded in the QR', `beanpool://pair?session=${SESSION}&pub=${PUB}&node=https://mullum.example\\@evil.test`],
+        ['a login before the host', qr('https://evil@mullum.example')],
+        ['the host as a login, then another host', qr('https://mullum.example@evil.test')],
+        ['an encoded @ (%40) in the host', qr('https://mullum.example%40evil.test')],
+        ['an @ encoded twice in the QR', `beanpool://pair?session=${SESSION}&pub=${PUB}&node=https%3A%2F%2Fmullum.example%2540evil.test`],
+        ['an encoded backslash (%5C)', qr('https://mullum.example%5C@evil.test')],
+        ['upper case', qr('https://MULLUM.example')],
+        ['a trailing dot', qr('https://mullum.example.')],
+        ['the default port written out', qr('https://mullum.example:443')],
+        ['another port', qr('https://mullum.example:8443')],
+        ["the saved node's port with a leading zero", qr('https://lan.example:08443')],
+        ["the saved node without its port", qr('https://lan.example')],
+        ['an IPv4 address for a name', qr('https://203.0.113.5')],
+        ['an IPv4 address as one number', qr('https://3405803781')],
+        ['an IPv4 address in hex', qr('https://0xcb.0.113.5')],
+        ['an IPv6 form', qr('https://[::ffff:203.0.113.5]')],
+        ['a tab in the host', qr('https://mullum.example\t@evil.test')],
+        ['a newline in the host', qr('https://mullum.example\n.evil.test')],
+        ['a tab in the QR itself', `beanpool://pair?session=${SESSION}&pub=${PUB}&node=${encodeURIComponent(OWN)}\t`],
+        ['http', qr('http://mullum.example')],
+        ['a path', qr('https://mullum.example/evil')],
+        ['a path that names another host', qr('https://mullum.example/@evil.test')],
+        ['a query', qr('https://mullum.example?x@evil.test')],
+        ['a fragment', qr('https://mullum.example#x')],
+        ['two trailing slashes', qr('https://mullum.example//')],
+        ['a look-alike (Cyrillic а)', qr('https://mullum.exаmple')],
+        ['the look-alike in punycode', qr('https://mullum.xn--exmple-4nf')],
+        ['a suffix look-alike', qr('https://mullum.example.attacker.example')],
+        ['a server the phone never used', qr('https://attacker.example')],
+        ['a scheme that is no server', qr('javascript:alert(1)')],
+        ['no scheme', qr('//mullum.example')],
+        ['an extra parameter', `${qr(OWN)}&x=1`],
+        ['node given twice', `${qr('https://attacker.example')}&node=${encodeURIComponent(OWN)}`],
+        ['a plain https link instead of the pairing QR', `https://mullum.example/?session=${SESSION}&pub=${PUB}`],
+        ['the QR in other case', qr(OWN).replace('beanpool://pair', 'BEANPOOL://pair')],
+    ];
+    for (const [name, raw] of hostile) {
+        it(name, () => expect(decide(raw)).toBe('refused'));
+    }
+});
+
+describe("the phone's own servers: reached at exactly their saved origin", () => {
+    it("the community it is on, at its own origin, with or without one trailing slash", () => {
+        expect(decide(qr(OWN))).toBe('https://mullum.example/api/pair/transfer');
+        expect(decide(qr(`${OWN}/`))).toBe('https://mullum.example/api/pair/transfer');
     });
 
-    it('a saved community, port and all', () => {
-        expect(transferTarget('https://castlemaine.example', OWN, SAVED).kind).toBe('ok');
-        expect(transferTarget('https://other.example:8443', OWN, SAVED).kind).toBe('ok');
+    it('a phone with two communities: each QR goes to its own one', () => {
+        const saved = ['https://castlemaine.example', OWN];
+        expect(decide(qr('https://castlemaine.example'), OWN, saved)).toBe('https://castlemaine.example/api/pair/transfer');
+        expect(decide(qr(OWN), OWN, saved)).toBe('https://mullum.example/api/pair/transfer');
+        // On castlemaine, the mullum QR still reaches mullum, a saved community.
+        expect(decide(qr(OWN), 'https://castlemaine.example', saved)).toBe('https://mullum.example/api/pair/transfer');
     });
 
-    it('a QR naming a foreign host is refused, naming that host', () => {
-        expect(transferTarget('https://attacker.example', OWN, SAVED)).toEqual({ kind: 'foreign', scannedHost: 'attacker.example' });
-        // Same name, another port or scheme: another server.
-        expect(transferTarget('https://other.example', OWN, SAVED).kind).toBe('foreign');
-        expect(transferTarget('http://mullum.example', OWN, SAVED).kind).toBe('foreign');
-        // A look-alike.
-        expect(transferTarget('https://mullum.example.attacker.example', OWN, SAVED).kind).toBe('foreign');
-        // Not a server address at all.
-        expect(transferTarget('javascript:alert(1)', OWN, SAVED).kind).toBe('foreign');
+    it('a saved node with its port', () => {
+        expect(decide(qr('https://lan.example:8443'))).toBe('https://lan.example:8443/api/pair/transfer');
     });
 
-    it('a phone on no community sends to no QR server', () => {
-        expect(transferTarget('https://attacker.example', null, []).kind).toBe('foreign');
-        expect(transferTarget('', null, [])).toEqual({ kind: 'no-node' });
+    it("the address used is the phone's canonical one, not the QR's spelling", () => {
+        // Saved as typed long ago; the QR spells it canonically. The request goes to the saved server's canonical origin.
+        expect(decide(qr(OWN), 'https://Mullum.Example/', [])).toBe('https://mullum.example/api/pair/transfer');
+        const target = transferTarget('https://mullum.example/', OWN, []);
+        expect(target).toEqual({ kind: 'ok', nodeUrl: 'https://mullum.example' });
+        if (target.kind === 'ok') {
+            expect(pairingRequestUrls(target, SESSION)).toEqual({
+                probe: `https://mullum.example/api/pair/poll?session=${SESSION}`,
+                transfer: 'https://mullum.example/api/pair/transfer',
+                cancel: 'https://mullum.example/api/pair/cancel',
+            });
+        }
     });
 
     it("a QR with no server goes to the phone's own", () => {
-        expect(transferTarget('', OWN, SAVED)).toEqual({ kind: 'ok', nodeUrl: OWN });
+        expect(decide(`beanpool://pair?session=${SESSION}&pub=${PUB}`)).toBe('https://mullum.example/api/pair/transfer');
+    });
+
+    it('a saved address that is not plain is never a target', () => {
+        expect(decide(qr('https://evil.test'), 'https://mullum.example\\@evil.test', ['https://x@evil.test'])).toBe('refused');
+    });
+
+    it('a phone on no community sends to no QR server', () => {
+        expect(decide(qr('https://attacker.example'), null, [])).toBe('refused');
+        expect(transferTarget('', null, [])).toEqual({ kind: 'no-node' });
+    });
+
+    it('the refusal names both servers', () => {
+        expect(transferTarget('https://attacker.example', OWN, SAVED)).toEqual({ kind: 'foreign', scannedHost: 'attacker.example', appHost: 'mullum.example' });
     });
 });
 
@@ -48,23 +130,47 @@ const code = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*
 const pair = () => code(fs.readFileSync(path.resolve(__dirname, '../../app/pair-device.tsx'), 'utf-8'));
 
 describe('pair-device: the rule is wired in (the screen cannot be rendered here, see vitest.config.ts)', () => {
-    it('checks at scan, against the phone\'s community and its saved ones, and says a foreign host plainly', () => {
+    it('reads the QR with the strict grammar and checks it at scan, against its community and its saved ones', () => {
         const scan = pair().slice(pair().indexOf('async function handleBarcodeScanned('), pair().indexOf('async function handleConfirmLink('));
-        expect(scan).toContain("const target = transferTarget(parsed.nodeUrl, anchor, saved);");
+        expect(scan).toContain('const parsed = parsePairingQr(result.data);');
+        expect(scan).toContain('const target = transferTarget(parsed.nodeUrl, anchor, saved);');
         expect(scan).toContain("await AsyncStorage.getItem('beanpool_anchor_url')");
         expect(scan).toContain('await getSavedNodes()');
-        expect(pair()).toContain("t('This code is from a server your phone doesn\\'t use ({host}), so nothing was sent.");
+        expect(pair()).not.toContain('parsePairingUri');
+        expect(pair()).not.toMatch(/new URL\(/);
     });
 
-    it('a target that is not ok asks nothing, reads nothing and sends nothing; the send goes to the checked server', () => {
+    it('a target that is not ok asks nothing, reads nothing and sends nothing', () => {
         const body = pair().slice(pair().indexOf('async function handleConfirmLink() {'));
         const refused = body.indexOf("if (!target || target.kind !== 'ok') {");
         expect(refused).toBeGreaterThan(-1);
         for (const later of ['await requireDeviceUnlock(', 'await getMnemonic(identity)', 'encryptPairingPayload(', 'await fetch(']) {
             expect(body.indexOf(later)).toBeGreaterThan(refused);
         }
-        expect(body).toContain('const targetNode = target.nodeUrl;');
-        expect(body).not.toContain('let targetNode = scanned.nodeUrl');
+    });
+
+    it("every request goes to the matched saved origin (pairingRequestUrls), never to the QR's text", () => {
+        const fetches = pair().match(/fetch\(([^,)]*)/g) ?? [];
+        // The only three requests the screen makes: the probe, the transfer, and the cancel.
+        expect(fetches).toEqual(['fetch(urls.probe', 'fetch(urls.transfer', 'fetch(pairingRequestUrls(target']);
+        expect(pair()).toContain('fetch(pairingRequestUrls(target, scannedData.sessionId).cancel, {');
+        expect(pair()).toContain('const urls = pairingRequestUrls(target, scanned.sessionId);');
+        expect(pair()).not.toMatch(/scanned(?:Data)?\??\.nodeUrl/);
+    });
+
+    it('asks the relay first, and an older one is told so before the words are read', () => {
+        const body = pair().slice(pair().indexOf('async function handleConfirmLink() {'));
+        const probe = body.indexOf('await fetch(urls.probe');
+        expect(probe).toBeGreaterThan(-1);
+        expect(body.indexOf("probeBody.status === 'waiting'")).toBeGreaterThan(probe);
+        expect(body.indexOf('await getMnemonic(identity)')).toBeGreaterThan(body.indexOf("probeBody.status === 'waiting'"));
+    });
+
+    it('Cancel while the digits are up tells the relay to drop the account; Done does not', () => {
+        const dismiss = pair().slice(pair().indexOf('function handleDismissSheet() {'), pair().indexOf('if (!permission) {'));
+        expect(dismiss).toMatch(/if \(confirmCode && scannedData && target\?\.kind === 'ok'\) \{\s*fetch\(pairingRequestUrls\(target, scannedData\.sessionId\)\.cancel/);
+        expect(pair()).toContain("tap Cancel and the other device gets nothing");
+        expect(pair()).toMatch(/onPress=\{handleDismissSheet\} accessibilityRole="button">\s*<Text style=\{styles\.cancelBtnText\}>\{t\('Cancel'\)\}/);
     });
 
     it('the Confirm button shows only for a server this phone uses', () => {

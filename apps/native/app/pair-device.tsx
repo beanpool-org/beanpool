@@ -32,14 +32,11 @@ import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
-import { transferTarget, type TransferTarget } from '../utils/pair-device-target';
+import { pairingRequestUrls, parsePairingQr, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface ParsedPairingData {
-    sessionId: string;
-    desktopPubHex: string;
-    nodeUrl: string;
+interface ParsedPairingData extends PairingQr {
     /** Where the account may go: only a server this phone already uses (utils/pair-device-target.ts). Set at scan. */
     target?: TransferTarget;
 }
@@ -291,37 +288,6 @@ export default function PairDeviceScreen() {
         })
     );
 
-    function parsePairingUri(raw: string): ParsedPairingData | null {
-        try {
-            let session = '';
-            let pub = '';
-            let node = '';
-
-            if (raw.startsWith('beanpool://pair') || raw.startsWith('beanpool://')) {
-                const url = new URL(raw.replace('beanpool://pair', 'https://placeholder.invalid'));
-                session = url.searchParams.get('session') || '';
-                pub = url.searchParams.get('pub') || '';
-                node = url.searchParams.get('node') || '';
-            } else if (raw.includes('session=') && raw.includes('pub=')) {
-                const url = new URL(raw);
-                session = url.searchParams.get('session') || '';
-                pub = url.searchParams.get('pub') || '';
-                node = url.searchParams.get('node') || url.origin;
-            }
-
-            if (session && pub && /^[0-9a-fA-F]{16,64}$/.test(session) && /^[0-9a-fA-F]{64}$/.test(pub)) {
-                return {
-                    sessionId: session,
-                    desktopPubHex: pub,
-                    nodeUrl: node || '',
-                };
-            }
-        } catch (e) {
-            console.warn('[Pairing] Malformed QR barcode:', e);
-        }
-        return null;
-    }
-
     async function handleBarcodeScanned(result: BarcodeScanningResult) {
         if (isScanningLocked.current || isTransferring || scannedData) return;
         // A server's claim QR (`beanpool claim`): the claim screen, which offers the claim only while that server has no owner.
@@ -331,7 +297,8 @@ export default function PairDeviceScreen() {
             router.replace(claimRouteFor(claim) as any);
             return;
         }
-        const parsed = parsePairingUri(result.data);
+        // Read by a strict grammar (utils/pair-device-target.ts): any other spelling is refused here, nothing sent.
+        const parsed = parsePairingQr(result.data);
         if (parsed) {
             isScanningLocked.current = true;
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -346,9 +313,10 @@ export default function PairDeviceScreen() {
     }
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
-        return target.kind === 'foreign'
-            ? t('This code is from a server your phone doesn\'t use ({host}), so nothing was sent. Scan the code on your own community\'s web page instead. To bring your account to a new community, restore it there with your 12 words.', { host: target.scannedHost })
-            : t('Connect to your community first.');
+        if (target.kind === 'no-node') return t('Connect to your community first.');
+        return target.appHost
+            ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.', { host: target.scannedHost, own: target.appHost })
+            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. To use your account there, restore it with your 12 words.', { host: target.scannedHost });
     }
 
     async function handleConfirmLink() {
@@ -371,6 +339,7 @@ export default function PairDeviceScreen() {
             setErrorMessage(t('Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone\'s Settings, under Security, then try again.'));
             return;
         }
+        if (unlock === 'failed' && scannedDataRef.current === scanned) setErrorMessage(t('The phone\'s unlock did not pass, so nothing was sent.'));
         // Not passed, or the sheet was closed (or another code scanned) while it asked: nothing is sent.
         if (unlock !== 'ok' || scannedDataRef.current !== scanned) return;
 
@@ -378,13 +347,26 @@ export default function PairDeviceScreen() {
         setErrorMessage(null);
 
         try {
-            // A server this phone already uses (transferTarget): the QR's, or the phone's own when the QR names none.
+            // The phone's own saved address for the server the QR names (transferTarget), in its canonical origin: never
+            // the QR's text. Every request below is built from it (pairingRequestUrls).
             const targetNode = target.nodeUrl;
 
             if (shouldBlockCleartextNodeUrl(targetNode)) {
                 throw new Error('Insecure pairing relay URL. HTTPS required for public host.');
             }
-            const normalizedTargetNode = targetNode.trim().replace(/\/+$/, '');
+            const urls = pairingRequestUrls(target, scanned.sessionId);
+
+            // Before the words are read: a relay that can't hold the account for the digits answers a poll from a phone
+            // (no binding cookie) with the session itself; one that can answers wrong-browser. Ask first, so an older
+            // server is told so with nothing sent.
+            const probe = await fetch(urls.probe, { headers: { Accept: 'application/json' } });
+            const probeBody = await probe.json().catch(() => ({}));
+            if (probe.status === 200 && probeBody.status === 'waiting') {
+                throw new Error(t('Your community\'s server runs an older BeanPool that can\'t ask for the two digits, so nothing was sent. Ask its host to update it.'));
+            }
+            if (probe.status === 200 && probeBody.status === 'expired') {
+                throw new Error(t('That code has expired, so nothing was sent. Make a new code on the other device and scan it again.'));
+            }
 
             // Retrieve full mnemonic recovery words if available
             const mnemonic = await getMnemonic(identity);
@@ -405,7 +387,7 @@ export default function PairDeviceScreen() {
             );
 
             // POST to target node relay
-            const res = await fetch(`${normalizedTargetNode}/api/pair/transfer`, {
+            const res = await fetch(urls.transfer, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -427,7 +409,7 @@ export default function PairDeviceScreen() {
             // only sent a QR never sees this screen. A relay that gives none is too old to hold it: say so.
             const done = await res.json().catch(() => ({}));
             const code = typeof done.confirmCode === 'string' && /^\d{2}$/.test(done.confirmCode) ? done.confirmCode : null;
-            if (!code) throw new Error(t('That device\'s community is running an older BeanPool. Ask its host to update it, then try again.'));
+            if (!code) throw new Error(t('Your community\'s server did not ask for the two digits. Ask its host to update BeanPool before you try again.'));
             setConfirmCode(code);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
@@ -441,6 +423,13 @@ export default function PairDeviceScreen() {
 
     function handleDismissSheet() {
         if (isTransferring) return;
+        // Closed while the relay holds the account for the digits: it drops it, so the other device gets nothing.
+        const target = scannedData?.target;
+        if (confirmCode && scannedData && target?.kind === 'ok') {
+            fetch(pairingRequestUrls(target, scannedData.sessionId).cancel, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: scannedData.sessionId }),
+            }).catch(() => {});
+        }
         setScannedData(null);
         setErrorMessage(null);
         setConfirmCode(null);
@@ -542,10 +531,13 @@ export default function PairDeviceScreen() {
                                     {confirmCode}
                                 </Text>
                                 <Text style={styles.sheetSubtitle}>
-                                    {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, close this and nothing is sent.')}
+                                    {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.')}
                                 </Text>
                                 <Pressable style={styles.cancelBtn} onPress={() => router.back()} accessibilityRole="button">
                                     <Text style={styles.cancelBtnText}>{t('Done')}</Text>
+                                </Pressable>
+                                <Pressable style={styles.cancelBtn} onPress={handleDismissSheet} accessibilityRole="button">
+                                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
                                 </Pressable>
                             </View>
                         ) : (
@@ -566,7 +558,7 @@ export default function PairDeviceScreen() {
                                     <View style={styles.infoRow}>
                                         <Text style={styles.infoLabel}>Target Host</Text>
                                         <Text style={styles.infoValue}>
-                                            {scannedData?.nodeUrl ? (() => { try { return new URL(scannedData.nodeUrl).host; } catch { return scannedData.nodeUrl; } })() : 'Local Node'}
+                                            {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target?.kind === 'foreign' ? scannedData.target.scannedHost : ''}
                                         </Text>
                                     </View>
                                     <View style={[styles.infoRow, { marginBottom: 0 }]}>

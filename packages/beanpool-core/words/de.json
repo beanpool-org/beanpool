@@ -2,10 +2,10 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "Bohnen",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Orte von OpenStreetMap. Was du hier eingibst, wird an sie gesendet.",
   "Choose {place}": "{place} auswählen",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Diese Community möchte ein Profilfoto, bevor du etwas veröffentlichst. Du kannst es später in deinem Profil hinzufügen.",
-  "A picture is optional here. You can add one later from your profile.": "Ein Foto ist hier freiwillig. Du kannst es später in deinem Profil hinzufügen."
+  "A picture is optional here. You can add one later from your profile.": "Ein Foto ist hier freiwillig. Du kannst es später in deinem Profil hinzufügen.",
+  "{n}st\u0004day of the month": "{n}.",
+  "{n}nd\u0004day of the month": "{n}.",
+  "{n}rd\u0004day of the month": "{n}.",
+  "{n}th\u0004day of the month": "{n}.",
+  "Every month on the first {weekday}": "Jeden Monat am ersten {weekday}",
+  "Every month on the second {weekday}": "Jeden Monat am zweiten {weekday}",
+  "Every month on the third {weekday}": "Jeden Monat am dritten {weekday}",
+  "Every month on the fourth {weekday}": "Jeden Monat am vierten {weekday}",
+  "Every month on the last {weekday}": "Jeden Monat am letzten {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Monatlich, am ersten {weekday}",
+    "other": "Alle {n} Monate, am ersten {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Monatlich, am zweiten {weekday}",
+    "other": "Alle {n} Monate, am zweiten {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Monatlich, am dritten {weekday}",
+    "other": "Alle {n} Monate, am dritten {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Monatlich, am vierten {weekday}",
+    "other": "Alle {n} Monate, am vierten {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Monatlich, am letzten {weekday}",
+    "other": "Alle {n} Monate, am letzten {weekday}"
+  },
+  "Monthly, first {weekday}": "Monatlich, am ersten {weekday}",
+  "Monthly, second {weekday}": "Monatlich, am zweiten {weekday}",
+  "Monthly, third {weekday}": "Monatlich, am dritten {weekday}",
+  "Monthly, fourth {weekday}": "Monatlich, am vierten {weekday}",
+  "Monthly, last {weekday}": "Monatlich, am letzten {weekday}",
+  "Does not repeat": "Wiederholt sich nicht",
+  "Every week on {weekday}": "Jede Woche am {weekday}",
+  "Every 2 weeks on {weekday}": "Alle 2 Wochen am {weekday}",
+  "Every month on the {day}": "Jeden Monat am {day}",
+  "An event that repeats must end before its next date starts": "Eine sich wiederholende Veranstaltung muss enden, bevor der nächste Termin beginnt",
+  "(months without a {day} are skipped)": "(Monate ohne einen {day} werden übersprungen)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Jeden {weekday}",
+    "other": "Alle {n} Wochen am {weekday}"
+  },
+  "Every {weekday}": "Jeden {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Monatlich am {day}",
+    "other": "Alle {n} Monate am {day}"
+  },
+  "Monthly on the {day}": "Monatlich am {day}",
+  "{repeats} · until {date}": "{repeats} · bis {date}",
+  "The last date must be a date on or after the first one": "Der letzte Termin muss am oder nach dem ersten Termin liegen",
+  "The last date can be at most {n} years after the first one": "Der letzte Termin darf höchstens {n} Jahre nach dem ersten liegen",
+  "{date} is cancelled. Next: {next}": "{date} ist abgesagt. Nächster: {next}",
+  "{date} is cancelled.": "{date} ist abgesagt.",
+  "{date} is back on": "{date} findet wieder statt",
+  "Moved from the regular {weekday}": "Vom regulären {weekday} verschoben",
+  "Moved from the regular date": "Vom regulären Termin verschoben",
+  "Choose how the event repeats from the list": "Wähle aus der Liste, wie sich die Veranstaltung wiederholt",
+  "An event can repeat every 1 to 12 weeks or months": "Eine Veranstaltung kann sich alle 1 bis 12 Wochen oder Monate wiederholen",
+  "The first date must be one of the repeating dates": "Der erste Termin muss einer der Wiederholungstermine sein",
+  "The last date can be at most 5 years after the first one": "Der letzte Termin darf höchstens 5 Jahre nach dem ersten liegen",
+  "Pick one of the dates this event repeats on": "Wähle einen der Termine, an denen sich diese Veranstaltung wiederholt",
+  "This event does not repeat": "Diese Veranstaltung wiederholt sich nicht",
+  "Only the host can cancel or restore a date": "Nur der Gastgeber kann einen Termin absagen oder wiederherstellen",
+  "This is the last date: change when the event ends, or cancel the event": "Dies ist der letzte Termin: Ändere das Enddatum der Veranstaltung oder sage sie ab",
+  "At most 100 dates can be cancelled": "Es können höchstens 100 Termine abgesagt werden",
+  "This event has been cancelled": "Diese Veranstaltung wurde abgesagt",
+  "Pick a time zone from the list": "Wähle eine Zeitzone aus der Liste",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Wird auf etwa 1 km genau angezeigt. Frage {name} nach dem genauen Ort, wenn ihr ein Treffen vereinbart.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Für alle sichtbar, die die Veranstaltung sehen können. Trage die genaue Adresse unten in die Notiz ein.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Das sieht wie eine Straßenadresse aus. Jeder, der die Veranstaltung sehen kann, wird sie lesen; in der Notiz unten ist sie sicherer.",
+  "An earlier message was removed when this chat was locked": "Eine frühere Nachricht wurde entfernt, als dieser Chat gesperrt wurde",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} frühere Nachricht entfernt, als dieser Chat gesperrt wurde",
+    "other": "{n} frühere Nachrichten entfernt, als dieser Chat gesperrt wurde"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} Nachricht von einem Moderator entfernt",
+    "other": "{n} Nachrichten von einem Moderator entfernt"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} Nachricht wurde gelöscht",
+    "other": "{n} Nachrichten wurden gelöscht"
+  }
 }

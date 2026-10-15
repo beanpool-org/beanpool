@@ -40,7 +40,8 @@
  *     e. one invited member joins that server: 409; that member suspended: still 409;
  *     f. a lived-in server's own backup (this community, signed by this server) with its own code: still 200;
  *     h. a lived-in server whose genesis.json cannot be read: its own backup and the other community's are both 409,
- *        in their own words; nothing moved.
+ *        in their own words; nothing moved;
+ *     i. the global profile, lived-in from its first sign-up: the other community's file is 409 there too.
  *  8. A plain archive naming a new owner, sent by the password with an earlier 2FA session, is refused 400 naming the
  *     command; no role moved, nothing extracted (#1984 confirmation 2, NON-BLOCKING 1: the last C6-shaped path).
  *
@@ -842,9 +843,9 @@ async function main(): Promise<void> {
         const made = runChild('make-other', fs.mkdtempSync(path.join(os.tmpdir(), 'restore-points-other-')), { TEST_WORK: work });
         assert(made.ok === true && typeof made.code === 'string', `setup: another community made its own locked backups and code (${made.community})`);
         const env = { ...childEnv, TEST_OTHER_FILE: path.join(work, 'other.bpsealed'), TEST_OTHER_BARE: path.join(work, 'other-bare.bpsealed'), TEST_OTHER_CODE: made.code ?? '' };
-        const row = (scenario: 'lived-in' | 'claimed', name: string): any => {
+        const row = (scenario: 'lived-in' | 'claimed', name: string, extra: Record<string, string> = {}): any => {
             const d = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-points-s2b-'));
-            try { return runChild(scenario, d, { ...env, TEST_ROW: name }); } finally { fs.rmSync(d, { recursive: true, force: true }); }
+            try { return runChild(scenario, d, { ...env, ...extra, TEST_ROW: name }); } finally { fs.rmSync(d, { recursive: true, force: true }); }
         };
         const OTHER_WORDS = "This backup is from a different community, and people have already joined the community on this server. To bring the "
             + "backup's community back, restore the file on a fresh server (install, claim, restore), or on this server with `beanpool restore FILE` "
@@ -886,6 +887,8 @@ async function main(): Promise<void> {
                 `S2b-h. genesis.json cannot be read, ${which === 'h-own' ? "the server's own backup" : "the other community's"}: 409 in its own words (${said(h)})`);
             assert(nothingMoved(h), `S2b-h. …nothing moved (${JSON.stringify(h.after?.points)})`);
         }
+        const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
+        assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)})`);
     }
 
     // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──

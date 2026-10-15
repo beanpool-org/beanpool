@@ -18,7 +18,7 @@ import { dataDir } from './recover-command.js';
 import { listRestorePoints, resolveRestorePoint } from './services/restore-point-names.js';
 import { nodeRunningLockStillOurs } from './node-running-lock.js';
 import {
-    CODE_IN_ARGS, codeInArgs, damagedDatabase, LOCK_LOST, reason, RESTORE_EXIT, stoppedNodeCheck, type ShellIo,
+    CODE_IN_ARGS, codeInArgs, damagedDatabase, LOCK_LOST, reason, RESTORE_EXIT, shown, stoppedNodeCheck, type ShellIo,
 } from './restore-command.js';
 
 export const RESTORE_POINT_USAGE = `Usage: beanpool restore-point list
@@ -65,7 +65,7 @@ export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir
         return RESTORE_EXIT.refused;
     };
     const pointDir = resolveRestorePoint(name);
-    if (!pointDir) return refuse(`There is no restore point ${name}. beanpool restore-point list shows them.`);
+    if (!pointDir) return refuse(`There is no restore point ${shown(name)}. beanpool restore-point list shows them.`);
     const stopped = stoppedNodeCheck(dir);
     if (stopped) return refuse(stopped);
     const point = listRestorePoints().find((p) => p.name === name)!;
@@ -105,10 +105,10 @@ export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir
         return RESTORE_EXIT.done;
     } catch (e: any) {
         backup.cleanupRestoreTemp();
-        if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? e.message);
+        if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? shown(e.message, null));
         const taken = listRestorePoints().find((p) => !before.has(p.name));
         if (taken) {
-            io.err(`The roll-back stopped part way: ${e?.message || e}. Restore point ${taken.name} kept this server as it was `
+            io.err(`The roll-back stopped part way: ${shown(e?.message || e, null)}. Restore point ${taken.name} kept this server as it was `
                 + `just before; to go back to it: beanpool restore-point roll-back ${taken.name}`);
             return RESTORE_EXIT.refused;
         }

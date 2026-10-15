@@ -39,6 +39,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { peerIdFromString } from '@libp2p/peer-id';
 import { parseRecoveryCode } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { listRestorePoints } from './services/restore-point-names.js';
@@ -63,6 +64,38 @@ A restore point of this server is kept first; \`beanpool restore-point\` rolls b
   --unlocked             an old backup that is not locked (.tar.gz): database and photos only, never keys`;
 
 export const RESTORE_EXIT = { done: 0, refused: 1, usage: 2 } as const;
+
+/** Line breaks, and the controls a terminal acts on: C0 (ESC among them), DEL, C1, and the bidi embeddings, overrides
+ *  and isolates (U+202A to U+202E, U+2066 to U+2069) with the marks U+200E, U+200F and U+061C. */
+const LINE_BREAKS = /[\r\n\u2028\u2029]+/g;
+// eslint-disable-next-line no-control-regex -- these are the characters it removes
+const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+/**
+ * Text that came from a backup file, as the terminal shows it (#2017 confirmation review B2). A file's header is
+ * whoever sealed it: its community, signer and owner callsigns are a stranger's when the file is another community's,
+ * and are printed before the one `yes` that lets it replace this server. Raw, an ESC sequence or a line break in a
+ * callsign can move the cursor, overwrite this command's own lines, or draw them black on black. So: line breaks
+ * become one space, the controls go, and at most `max` characters are shown (null: no cap, for a whole sentence).
+ */
+export function shown(s: unknown, max: number | null = 80): string {
+    const t = String(s ?? '').replace(LINE_BREAKS, ' ').replace(CONTROLS, '');
+    const chars = [...t];
+    return max !== null && chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : t;
+}
+
+/** The node's community ID (genesis.ts: the first 16 hex characters of a SHA-256). */
+const COMMUNITY_ID = /^[0-9a-f]{16}$/;
+
+/** A node's PeerId as the node writes it: one that parses, written the way it prints. */
+function isPeerId(s: unknown): boolean {
+    if (typeof s !== 'string') return false;
+    try {
+        return peerIdFromString(s).toString() === s;
+    } catch {
+        return false;
+    }
+}
 
 export interface ShellIo {
     ask: Ask;
@@ -145,7 +178,10 @@ function stateDbHeld(dbPath: string): boolean {
 }
 
 export const NODE_RUNNING = 'The node is running: it holds the database this would replace. Stop it first '
-    + '(docker compose stop beanpool-node), then run this with docker compose run --rm beanpool-node beanpool …. Nothing was changed.';
+    + '(docker compose stop beanpool-node), then run this with docker compose run --rm beanpool-node beanpool …. If it is '
+    + `stopped, another beanpool restore holds ${NODE_RUNNING_LOCK_SHOWN} (docker ps shows one left open, a container named `
+    + '…-run-…), or this folder is on a file system without working file locks (some network shares), where BeanPool '
+    + 'cannot run. Nothing was changed.';
 
 /** Said just before anything is replaced, when the lock this command took is no longer its own. */
 export const LOCK_LOST = `${NODE_RUNNING_LOCK_SHOWN} was removed or replaced while this command waited, so a node may have `
@@ -213,9 +249,12 @@ export function stoppedNodeCheck(dir = dataDir()): string | null {
     return null;
 }
 
-/** An error's message as a sentence, without the "Nothing was changed." the refusal adds (#2017 review N5). */
+/**
+ * An error's message as a sentence, without the "Nothing was changed." the refusal adds (#2017 review N5). On one line
+ * and without controls: a refused archive's message can quote it (a trigger's name, an integrity check's output).
+ */
 export function reason(e: any): string {
-    let m = String(e?.message || e).trim().replace(/\s*Nothing was changed\.$/, '');
+    let m = shown(e?.message || e, null).trim().replace(/\s*Nothing was changed\.$/, '');
     if (!/[.!?]$/.test(m)) m += '.';
     return m;
 }
@@ -225,17 +264,17 @@ function day(iso: string | null | undefined): string {
     return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'an unknown date';
 }
 
-/** What the restore said, for the owner at the terminal. */
+/** What the restore said, for the owner at the terminal. Its warnings can name what the archive held (a bucket). */
 function tellResult(io: ShellIo, body: Record<string, any>, keysExpected: boolean): void {
     io.out('');
     io.out(body.backup?.createdAt ? `Restored the backup made ${day(body.backup.createdAt)}.` : 'Restored the backup.');
     const keys: string[] = Array.isArray(body.keysWritten) ? body.keysWritten : [];
-    if (keys.length) io.out(`Its keys came back: ${keys.join(', ')}.`);
+    if (keys.length) io.out(`Its keys came back: ${keys.map((k) => shown(k)).join(', ')}.`);
     else if (keysExpected) io.out('The file carried no keys: this server keeps its own.');
     else io.out('The database only: this server keeps its own keys, password and 2FA.');
-    io.out(body.complete ? 'Every photo and attachment the database names is here.' : (body.warning || 'Some photos or attachments may be missing.'));
-    if (body.recoverySeal?.message) io.out(body.recoverySeal.message);
-    if (body.openDoor?.message) io.out(body.openDoor.message);
+    io.out(body.complete ? 'Every photo and attachment the database names is here.' : shown(body.warning || 'Some photos or attachments may be missing.', null));
+    if (body.recoverySeal?.message) io.out(shown(body.recoverySeal.message, null));
+    if (body.openDoor?.message) io.out(shown(body.openDoor.message, null));
     if (body.restorePoint?.name) {
         io.out(`Restore point ${body.restorePoint.name} is kept until at least ${String(body.restorePoint.keptAtLeastUntil).slice(0, 10)}. `
             + `To undo this restore: beanpool restore-point roll-back ${body.restorePoint.name}`);
@@ -307,11 +346,11 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
             return RESTORE_EXIT.done;
         } catch (e: any) {
             backup.cleanupRestoreTemp();
-            if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? e.message);
+            if (e instanceof RestorePointError) return refuse(damagedDatabase(e) ?? shown(e.message, null));
             // Every check comes before the point; a failure after it may have replaced part of the server.
             const taken = listRestorePoints().find((p) => !before.has(p.name));
             if (taken) {
-                io.err(`The restore stopped part way: ${e?.message || e}. Restore point ${taken.name} kept this server as it was `
+                io.err(`The restore stopped part way: ${shown(e?.message || e, null)}. Restore point ${taken.name} kept this server as it was `
                     + `just before; to go back to it: beanpool restore-point roll-back ${taken.name}`);
                 return RESTORE_EXIT.refused;
             }
@@ -323,7 +362,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     const isGzip = sealed.isGzip(sealed.readFileStart(file, 2));
     if (parsed.unlocked) {
         if (!isGzip) return refuse('This file is not an unlocked backup (.tar.gz). A locked backup (.bpsealed) restores without --unlocked.');
-        io.out(`The backup:   ${path.basename(file)}, NOT locked`);
+        io.out(`The backup:   ${shown(path.basename(file))}, NOT locked`);
         for (const l of thisServer()) io.out(l);
         io.out('');
         io.out('This file is not locked: anyone who has a copy can read every member\'s data in it. It brings back the database and '
@@ -345,6 +384,10 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         return refuse('This is not a BeanPool backup file (.bpsealed).');
     }
     if (header.kind !== 'backup') return refuse('This sealed file is a take-over envelope, not a backup.');
+    // A node writes no other community ID or signer: anything else was made by hand, and is never shown (B2).
+    if (!COMMUNITY_ID.test(header.communityId) || !isPeerId(header.nodePeerId)) {
+        return refuse('This is not a BeanPool backup file (.bpsealed): its community ID or the server it names is not one a BeanPool server makes.');
+    }
     const signer = sealed.signerCheck(header);
     if (!signer.ok && signer.body.badSignature) return refuse('This backup file has been altered: its signature does not match the server it names.');
     const pins = sealed.restorePins(header);
@@ -354,11 +397,14 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     const otherCommunity = !pinned && ownCommunity !== null && header.communityId !== ownCommunity;
     const standby = getNodeRole() === 'backup';
 
-    io.out(`The backup:   ${path.basename(file)}, made ${day(header.createdAt)}`);
-    io.out(`              community ${header.communityId}`);
+    // Everything below that comes from the file goes through shown(): the ID and signer were checked above, the callsigns
+    // are any text (B2).
+    const signerShown = shown(header.nodePeerId);
+    io.out(`The backup:   ${shown(path.basename(file))}, made ${day(header.createdAt)}`);
+    io.out(`              community ${shown(header.communityId)}`);
     const fileOwners = sealed.describeSealedHeader(header).owners;
-    if (otherCommunity && fileOwners.length) io.out(`              opens with the phones of ${fileOwners.map((c) => '@' + c).join(', ')}`);
-    io.out(`              locked by ${header.nodePeerId}`);
+    if (otherCommunity && fileOwners.length) io.out(`              opens with the phones of ${fileOwners.map((c) => '@' + shown(c)).join(', ')}`);
+    io.out(`              locked by ${signerShown}`);
     for (const l of thisServer(otherCommunity)) io.out(l);
     io.out('');
 
@@ -368,7 +414,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         return RESTORE_EXIT.usage;
     }
     if (parsed.acceptSigner && parsed.acceptSigner !== header.nodePeerId) {
-        return refuse(`This file was locked by ${header.nodePeerId}, not by ${parsed.acceptSigner}.`);
+        return refuse(`This file was locked by ${signerShown}, not by ${shown(parsed.acceptSigner)}.`);
     }
     let applyKeys: boolean;
     let askYes: string | null = null;
@@ -386,11 +432,11 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         applyKeys = true;
     } else if (pins.length > 0) {
         if (!parsed.acceptSigner) {
-            return refuse(`This backup of your community was locked by another machine, ${header.nodePeerId}, `
+            return refuse(`This backup of your community was locked by another machine, ${signerShown}, `
                 + (standby ? 'not by the main server this standby copies. If this file was locked by the main server\'s previous '
                     + 'machine, run again with ' : 'not by this community\'s server. If this file was locked by this community\'s '
                     + 'previous server, run again with ')
-                + `beanpool restore --accept-signer ${header.nodePeerId} FILE (the database only), and add --with-keys to bring `
+                + `beanpool restore --accept-signer ${signerShown} FILE (the database only), and add --with-keys to bring `
                 + 'back its keys too. Otherwise do not restore it: anyone who has seen one of your backup files can make one like it.');
         }
         applyKeys = parsed.withKeys;
@@ -453,7 +499,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         await sealed.openSealedFileTo(file, { type: 'code', code }, openedTarPath);
     } catch (e: any) {
         backup.cleanupRestoreTemp();
-        return refuse(e instanceof core.SealedEnvelopeError ? 'The backup file did not open: it has been altered or cut short.' : `The backup file did not open: ${e?.message || e}.`);
+        return refuse(e instanceof core.SealedEnvelopeError ? 'The backup file did not open: it has been altered or cut short.' : `The backup file did not open: ${shown(e?.message || e, null)}.`);
     } finally {
         code = null;
     }
@@ -462,18 +508,26 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     return done;
 }
 
-/** This server's community as people know it, read here: its name, how many are in it, and its owners (#2017 review N3). */
+/**
+ * This server's community as people know it, read here: its name, how many people are in it, and its owners (#2017
+ * review N3). People only (confirmation review N9): not SYSTEM, the genesis row or the Commons pot (genesis.ts
+ * notABrandNewInstall, decisions-engine.ts getActiveMembersCount30d), escrow accounts, and no treasury (is_treasury:
+ * the Daily Pulse, the BeanPool enterprise, every project and enterprise), as the People directory leaves them out.
+ * A restored database's text can be anyone's, so its name and callsigns are shown as a file's are.
+ */
 function describeCommunity(db: Database.Database, name: string | null | undefined): string {
     let members = '? members';
     let owners = '';
     try {
-        const n = (db.prepare("SELECT COUNT(*) AS c FROM members WHERE COALESCE(status, '') != 'pruned'").get() as { c: number }).c;
+        const n = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE COALESCE(status, '') != 'pruned'
+            AND COALESCE(is_treasury, 0) = 0 AND public_key NOT IN ('SYSTEM', 'genesis', 'COMMONS_POOL')
+            AND public_key NOT LIKE 'escrow_%'`).get() as { c: number }).c;
         members = `${n} ${n === 1 ? 'member' : 'members'}`;
     } catch { /* said as unknown */ }
     try {
         const rows = db.prepare(`SELECT m.callsign FROM node_roles r JOIN members m ON m.public_key = r.member_pubkey
             WHERE r.role = 'owner' ORDER BY m.callsign`).all() as Array<{ callsign: string }>;
-        owners = rows.length ? `, owners ${rows.map((r) => '@' + r.callsign).join(', ')}` : ', no owners';
+        owners = rows.length ? `, owners ${rows.map((r) => '@' + shown(r.callsign)).join(', ')}` : ', no owners';
     } catch { /* left out */ }
-    return `${name ? `"${name}"` : 'not named'}, ${members}${owners}`;
+    return `${name ? `"${shown(name)}"` : 'not named'}, ${members}${owners}`;
 }

@@ -7,8 +7,13 @@
  *   1. While the node runs (its lock held, node-running-lock.ts, and state.db open with a write its last statement, which
  *      alone holds no lock on the file) a restore and a roll-back are refused, and nothing changes; `restore-point list`
  *      still answers, read-only.
+ *      The refusal also names a restore left open and a file system without working locks (#2017 confirmation N8).
  *   1b. While the command waits at a question it holds the node's lock: a node started then would wait. The lock file
  *      removed and taken by a node that started after → at "yes" the command refuses (exit 1), and nothing changes.
+ *   1c. A question nobody answers (stdin left open, as a dropped session's container keeps it): at "Type yes" and at the
+ *      code, the command gives up after BEANPOOL_PROMPT_GIVE_UP_MS (30 min unless set), exit 1, and lets go of the lock (N7).
+ *   1d. A node waiting for the lock names the way out on every line (docker ps, docker rm -f), and after its minute also
+ *      a file system without working file locks (N7, N8; the minute shortened).
  *   2. A recovery code is never taken on the command line (exit 2, never echoed), in any argument: after --code,
  *      --code-file or --accept-signer, as the file, or as a restore point's name.
  *   3. A sealed file this server locked, with the code from --code-file: before anything is asked the output shows the
@@ -20,14 +25,18 @@
  *      the password), keeps a point of its own first, and leaves the notice.
  *   5b. Another community's file goes by its community: --accept-signer on it → exit 2; without, "DIFFERENT" with this
  *      server's name, member count and owners before `yes`; on a standby, a file of its community locked by another
- *      machine names the main server it copies.
+ *      machine names the main server it copies. The count is people: SYSTEM, the genesis row, the Commons pot, escrow,
+ *      the Daily Pulse and a project, added, change nothing; a person adds one (N9). B2: a file whose owner callsign
+ *      carries ESC sequences, CR, LF and a bidi override → no control character in the output, the callsign on its own
+ *      line, the DIFFERENT warning there; a community ID that is not 16 hex, or a signer that is not a PeerId → "not a
+ *      BeanPool backup", nothing shown or asked.
  *   6. A file of this community locked by another machine: refused without --accept-signer, and with the wrong one;
  *      with it, the database only (no key, password or genesis moves); --with-keys alone is a usage error; with
  *      --accept-signer --with-keys, `yes` declined changes nothing, `yes` typed applies its keys.
  *   7. An old unlocked .tar.gz: refused without --unlocked; with it, anything but `UNLOCKED` changes nothing;
  *      `UNLOCKED` restores the database and never the keys.
  *   8. Exit codes: no file or an unknown option → 2; an unknown restore point → 1; `restore-point` alone → 2.
- *   9. The real node (index.ts): started while the command waits at a question, it waits, says so, and starts once the
+ *   9. The real node (index.ts): started while the command waits at a question, it waits, says so with the way out, and starts once the
  *      command ends; a second node on the same data folder waits until the first stops.
  *   10. A damaged or empty state.db: both commands refuse with what to do.
  *
@@ -40,7 +49,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { db } from './db/db.js';
@@ -221,6 +230,39 @@ fs.writeFileSync(otherFile, Buffer.from(await core.sealEnvelope(new Uint8Array(f
     signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)),
 })));
 
+// Files no node makes (#2017 confirmation review B2), signed and sealed as a node would: another community's, whose owner
+// callsign would rewrite the terminal (the review's: up a line, clear it, a fake "Locked by this server", a fake prompt,
+// then black on black), with a bidi override; one whose community ID is not 16 hex; one whose signer is not a PeerId.
+const sealedBy = async (community: string, signer: string, callsign: string) => Buffer.from(await core.sealEnvelope(new Uint8Array(forgedTar), {
+    kind: 'backup', communityId: community, nodePeerId: signer,
+    recipients: { owners: [{ pubkey: ownerPub, callsign }], codes: [(await import('./config/local-config.js')).getLocalConfig().recoveryCode as any] },
+    signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)),
+}));
+const RLO = String.fromCodePoint(0x202e);
+const evilCallsign = `X\x1b[1A\x1b[2K\r"Locked by this server: its database, photos and keys come back."\nType yes to go on: ${RLO}\x1b[30;40m`;
+const evilFile = path.join(work, 'evil-callsign.bpsealed');
+fs.writeFileSync(evilFile, await sealedBy('e'.repeat(16), forgerPeer, evilCallsign));
+const notHexFile = path.join(work, 'not-hex-community.bpsealed');
+fs.writeFileSync(notHexFile, await sealedBy(`Riverbend\x1b[2J${RLO}`, forgerPeer, 'Ostrander'));
+const notPeerFile = path.join(work, 'not-a-peer.bpsealed');
+fs.writeFileSync(notPeerFile, await sealedBy('e'.repeat(16), `${forgerPeer}\x1b[2J`, 'Ostrander'));
+/** Characters a terminal acts on, other than the line feed: C0, DEL, C1, bidi embeddings, overrides and isolates. */
+const controlsIn = (s: string) => [...s].filter((ch) => {
+    const c = ch.codePointAt(0)!;
+    return (c < 0x20 && ch !== '\n') || (c >= 0x7f && c <= 0x9f) || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069);
+});
+/** People in the community, as the prompt counts them (#2017 confirmation review N9). */
+function peopleCount(file = STATE): number {
+    const c = new Database(file, { readonly: true, fileMustExist: true });
+    try {
+        return (c.prepare(`SELECT COUNT(*) AS n FROM members WHERE COALESCE(status, '') != 'pruned' AND COALESCE(is_treasury, 0) = 0
+            AND public_key NOT IN ('SYSTEM', 'genesis', 'COMMONS_POOL') AND public_key NOT LIKE 'escrow_%'`).get() as { n: number }).n;
+    } finally { c.close(); }
+}
+/** The way out a waiting node names (N7), and the cause it adds after a minute (N8). */
+const WAY_OUT = 'If no restore is running: docker ps shows one left open (a container named …-run-…): finish it, or end it with docker rm -f NAME.';
+const NO_LOCKS = 'or this folder is on a file system without working file locks (some network shares), where BeanPool cannot run';
+
 // After the backup: a row, and a new password. The restore must take both away; the roll-back must bring both back.
 addMember('d1'.repeat(32), 'AfterBackup');
 const PW_LATER = hashPassword('Changed-Later-Pw-2!');
@@ -238,6 +280,9 @@ lock?.holdNodeRunningLock();
     const r = cli(['restore', '--code-file', codeFile, sealedFile]);
     assert(r.code === 1 && r.out.includes('The node is running') && r.out.includes('Nothing was changed.'),
         `1. restore while state.db is held open → exit 1, "The node is running" (exit ${r.code}: ${r.out.trim().slice(-200)})`);
+    assert(r.out.includes('another beanpool restore holds data/.node-running.lock (docker ps shows one left open, a container named …-run-…)')
+        && r.out.includes(`${NO_LOCKS}. Nothing was changed.`),
+        `1. …and names the other causes: a restore left open, a file system without working locks (N8) (${r.out.trim().slice(-320)})`);
     assert(state() === before && hasMember('AfterBackup'), '1. nothing changed: database, keys, config, no restore point, no notice');
     const l = cli(['restore-point', 'list']);
     assert(l.code === 0 && l.out.includes('No restore points'), `1. restore-point list answers beside the running node, read-only (exit ${l.code}: ${l.out.trim().slice(-160)})`);
@@ -267,6 +312,59 @@ console.log('\n— 1b. the command holds the lock while it asks —');
     assert(r.code === 1 && r.out.includes('data/.node-running.lock was removed or replaced while this command waited') && r.out.trim().endsWith('Nothing was changed.'),
         `1b. at "yes" the lock is no longer its own → exit 1, refused in words (exit ${r.code}: ${r.out.trim().slice(-220)})`);
     assert(state() === before && hasMember('AfterBackup'), '1b. nothing changed: database, keys, config, no restore point, no notice, no opened file left');
+}
+
+// ── 1c. A question nobody answers: the command gives up (#2017 confirmation review N7) ──
+console.log('\n— 1c. no answer: the command gives up —');
+{
+    const before = state();
+    const giveUp = { BEANPOOL_PROMPT_GIVE_UP_MS: '2000' };
+    const said = 'No answer in 2 s: this command gives up, so the node can start. Nothing was changed.';
+    const ended = async (c: ReturnType<typeof cliWaiting>) => {
+        const r = await Promise.race([c.done, sleep(60_000).then(() => null)]);
+        if (!r) c.child.kill('SIGKILL');
+        return r ?? { code: null, out: c.out() };
+    };
+    // At "Type yes", with stdin left open: a dropped session's container keeps its stdin.
+    const y = await ended(cliWaiting(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, '--with-keys', forgedFile], giveUp));
+    assert(y.code === 1 && y.out.includes('Type yes to go on') && y.out.trim().endsWith(said) && lock?.nodeRunningLockHeld(DATA_DIR) === false,
+        `1c. at "Type yes": exit 1, "${said}", and the lock is let go (exit ${y.code}: ${y.out.trim().slice(-200)})`);
+    // At the code, which is not echoed: "yes" typed, then nothing.
+    const c = cliWaiting(['restore', otherFile], giveUp);
+    const askedYes = await waitFor(c.out, 'Type yes to go on');
+    c.child.stdin.write('yes\n');
+    const k = await ended(c);
+    assert(askedYes && k.code === 1 && k.out.includes('Recovery code #') && k.out.trim().endsWith(said) && lock?.nodeRunningLockHeld(DATA_DIR) === false,
+        `1c. at the recovery code: the same (exit ${k.code}: ${k.out.trim().slice(-200)})`);
+    assert(state() === before && hasMember('AfterBackup'), '1c. nothing changed');
+}
+
+// ── 1d. What a node waiting for the lock says (#2017 confirmation review N7, N8) ──
+console.log('\n— 1d. the waiting line —');
+{
+    const c = cliWaiting(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, '--with-keys', forgedFile]);
+    const asked = await waitFor(c.out, 'Type yes to go on');
+    // The node's wait, with its minute shortened: index.ts runs the same function through boot-lock.ts.
+    const waiter = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e',
+        `const m = await import(${JSON.stringify(pathToFileURL(path.join(SRC, 'node-running-lock.ts')).href)});
+         m.holdNodeRunningLock(${JSON.stringify(DATA_DIR)}, { retryMs: 50, sayEveryMs: 300, locksMayFailAfterMs: 900 });
+         console.log('HOLDS IT NOW');`], { env: { ...process.env, BEANPOOL_DATA_DIR: DATA_DIR }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let wOut = '';
+    waiter.stdout!.on('data', (d) => { wOut += d; });
+    waiter.stderr!.on('data', (d) => { wOut += d; });
+    const wExited = new Promise<void>((resolve) => waiter.on('exit', () => resolve()));
+    const late = await waitFor(() => wOut, 'where BeanPool cannot run', 60_000);
+    c.answer('no\n');
+    await c.done;
+    const holds = await waitFor(() => wOut, 'HOLDS IT NOW', 60_000);
+    await Promise.race([wExited, sleep(10_000)]);
+    if (waiter.exitCode === null && waiter.signalCode === null) waiter.kill('SIGKILL');
+    const lines = wOut.split('\n').filter((l) => l.includes('is held: a beanpool restore or another node is using this data folder'));
+    assert(asked && lines.length >= 2 && lines.every((l) => l.includes(WAY_OUT)),
+        `1d. every waiting line names the way out: "${WAY_OUT}" (${lines.length} lines: ${lines[0]?.slice(0, 260)})`);
+    assert(late && !lines[0].includes(NO_LOCKS) && lines[lines.length - 1].includes(`using this data folder, ${NO_LOCKS}. This node waits`),
+        `1d. the first lines name a restore or another node; after the wait's minute, also a file system without working locks (${lines[lines.length - 1]?.slice(0, 300)})`);
+    assert(holds && wOut.includes('data/.node-running.lock was let go: this node starts.'), '1d. the command ends → the waiting node holds the lock');
 }
 
 // ── 2. Never a code on the command line ──
@@ -371,12 +469,58 @@ console.log('\n— 5b. another community —');
     assert(both.code === 2 && state() === before, `5b. --accept-signer --with-keys on it → exit 2 (exit ${both.code})`);
     const no = cli(['restore', '--code-file', codeFile, otherFile], 'no\n');
     const serverAt = no.stdout.indexOf('This server:');
-    const n = JSON.parse(people())[0].length;
+    const n = peopleCount();
+    const rows = JSON.parse(people())[0].length;
     assert(no.code === 1 && no.out.includes('This backup is from a DIFFERENT community') && no.stdout.includes('opens with the phones of @Ostrander')
         && serverAt > 0 && no.stdout.indexOf(`"Riverbend Commons", ${n} members, owners @Olive`) > serverAt
         && no.stdout.includes(`replaces the community on this server ("Riverbend Commons", ${n} members, owners @Olive), and everyone in it`),
         `5b. without them: DIFFERENT, with this server's name, member count and owners beside its IDs, before "yes" (exit ${no.code}: ${no.stdout.trim().slice(-420)})`);
     assert(state() === before, '5b. "no" → nothing changed');
+
+    // N9: the count is people. Each account that is not one, added, changes nothing; one person added counts one. The
+    // node stopped and every connection closed, state.db alone is the database: put back as it was afterwards.
+    const saved = path.join(work, 'state.db.before-n9');
+    fs.copyFileSync(STATE, saved);
+    const w = new Database(STATE);
+    const added: string[] = [];
+    const put = (key: string, callsign: string, treasury = 0) => {
+        const r = w.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, is_treasury)
+            VALUES (?, ?, ?, 'genesis', 'TEST', ?)`).run(key, callsign, new Date().toISOString(), treasury);
+        if (r.changes) added.push(key);
+    };
+    const system = !!w.prepare("SELECT 1 FROM members WHERE public_key = 'SYSTEM'").get();
+    put('genesis', 'Genesis Row'); put('COMMONS_POOL', 'Commons Pot'); put('escrow_n9', 'Escrow N9');
+    put('a9'.repeat(32), 'Daily Pulse N9', 1); put('b9'.repeat(32), 'Village Oven', 1);
+    w.close();
+    const sys = cli(['restore', '--code-file', codeFile, otherFile], 'no\n');
+    const w2 = new Database(STATE);
+    w2.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Newcomer N9', ?, 'genesis', 'TEST')`)
+        .run('c9'.repeat(32), new Date().toISOString());
+    added.push('c9'.repeat(32));
+    w2.close();
+    const one = cli(['restore', '--code-file', codeFile, otherFile], 'no\n');
+    fs.copyFileSync(saved, STATE);
+    for (const sidecar of ['-wal', '-shm']) fs.rmSync(STATE + sidecar, { force: true });
+    assert(system && n < rows && added.length === 6 && sys.code === 1 && sys.stdout.includes(`("Riverbend Commons", ${n} members, owners @Olive)`),
+        `5b. the count leaves out SYSTEM, the genesis row, the Commons pot, escrow, the Daily Pulse and a project (${n} of ${rows} rows; ${sys.stdout.match(/\(("Riverbend[^)]*)\)/)?.[1]})`);
+    assert(one.code === 1 && one.stdout.includes(`("Riverbend Commons", ${n + 1} members, owners @Olive)`), `5b. one person more → ${n + 1} members`);
+    assert(state() === before, '5b. those rows gone again → as before');
+
+    // B2: a file's own text never drives the terminal, and a file no node makes is refused before anything is shown.
+    const evil = cli(['restore', '--code-file', codeFile, evilFile], 'no\n');
+    const out = evil.stdout.split('\n');
+    const at = out.findIndex((l) => l.includes('opens with the phones of @X'));
+    assert(evil.code === 1 && controlsIn(evil.out).length === 0, `5b. B2: an owner callsign with ESC sequences, CR, LF and a bidi override → no control character reaches the terminal (${JSON.stringify(controlsIn(evil.out))})`);
+    assert(at > 0 && out[at + 1]?.startsWith('              locked by ') && [...out[at]].length <= '              opens with the phones of @'.length + 80
+        && evil.out.includes('This backup is from a DIFFERENT community. Restoring it replaces the community on this server')
+        && evil.out.includes('You did not type yes. Nothing was changed.') && state() === before,
+        `5b. B2: the callsign stays on its own line, at most 80 characters, and the DIFFERENT warning is there; "no" → nothing changed (${out[at]})`);
+    for (const [what, file] of [['a community ID that is not 16 hex', notHexFile], ['a signer that is not a PeerId', notPeerFile]] as const) {
+        const r = cli(['restore', '--code-file', codeFile, file], 'yes\n');
+        assert(r.code === 1 && r.out.includes('This is not a BeanPool backup file (.bpsealed)') && !r.out.includes('Type yes')
+            && !r.out.includes('The backup:') && controlsIn(r.out).length === 0 && state() === before,
+            `5b. B2: ${what} → "not a BeanPool backup", nothing shown or asked, nothing changed (exit ${r.code}: ${r.out.trim().slice(-200)})`);
+    }
     // A standby: the same community's file locked by another machine names the main server it copies.
     fs.writeFileSync(path.join(DATA_DIR, 'connectors.json'), JSON.stringify([{ trustLevel: 'mirror', address: `/ip4/127.0.0.1/tcp/4001/p2p/${ownPeer}` }]));
     const standby = cli(['restore', '--code-file', codeFile, forgedFile], '', { NODE_ROLE: 'backup' });
@@ -512,8 +656,8 @@ console.log('\n— 9. the real node (index.ts) waits while the lock is held —'
         const a = await startNode();
         const waited = await waitFor(a.seen, HELD);
         await sleep(1_000);
-        assert(asked && waited && !a.out().includes('BeanPool Node starting') && a.child.exitCode === null,
-            `9. a node started while the command waits at "Type yes" waits, says why, and starts nothing (${tail(a)})`);
+        assert(asked && waited && !a.out().includes('BeanPool Node starting') && a.child.exitCode === null && a.out().includes(WAY_OUT),
+            `9. a node started while the command waits at "Type yes" waits, says why and the way out, and starts nothing (${tail(a)})`);
         c.answer('no\n');
         const r = await c.done;
         const live = await waitFor(a.seen, 'BeanPool Node is live', 150_000) && a.out().includes('BeanPool Node is live');

@@ -89,13 +89,25 @@ function sleepMs(ms: number): void {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+/** The way out, said with each waiting line (#2017 confirmation review N7): a restore whose session was dropped at a
+ *  question keeps its container, and the lock, until it is ended. */
+export const WAITING_WAY_OUT = 'If no restore is running: docker ps shows one left open (a container named …-run-…): finish it, '
+    + 'or end it with docker rm -f NAME.';
+/** After a minute of waiting, the other cause (N8): where file locks fail (some network shares), every lock reads as
+ *  held. BeanPool cannot run there; before the lock, the node stopped at its first state.db open instead. */
+export const NO_WORKING_LOCKS = 'or this folder is on a file system without working file locks (some network shares), where '
+    + 'BeanPool cannot run';
+
 /**
  * In the node, before anything opens state.db (boot-lock.ts), held until the process ends. While another process holds
  * it (a `beanpool restore` replacing this server, or another node on this data folder) the node waits, and says so every
- * 10 s: running beside either breaks the database. It blocks: nothing of the node has started yet, and a stop signal
- * still ends it. Any other failure is logged and the node runs; the shell's state.db probe is then the only check.
+ * 10 s with the way out: running beside either breaks the database. It blocks: nothing of the node has started yet.
+ * Outside Docker a stop signal still ends it at once. In the image the node is PID 1 (su-exec execs it), which gets no
+ * default handler for SIGTERM, and the thread is blocked in Atomics.wait, so `docker stop` ends it with the kill at the
+ * end of its grace period: harmless, as nothing was opened (#2017 confirmation review N10, measured). Any other failure
+ * is logged and the node runs; the shell's state.db probe is then the only check.
  */
-export function holdNodeRunningLock(dir = dataDir(), waits = { retryMs: 1000, sayEveryMs: 10_000 }): void {
+export function holdNodeRunningLock(dir = dataDir(), waits = { retryMs: 1000, sayEveryMs: 10_000, locksMayFailAfterMs: 60_000 }): void {
     const started = Date.now();
     let saidAt: number | null = null;
     // A first start in a folder that is not there yet: db/db.ts would make it a moment later.
@@ -112,8 +124,10 @@ export function holdNodeRunningLock(dir = dataDir(), waits = { retryMs: 1000, sa
         }
         if (saidAt === null || Date.now() - saidAt >= waits.sayEveryMs) {
             saidAt = Date.now();
-            console.warn(`[Boot] ${NODE_RUNNING_LOCK_SHOWN} is held: a beanpool restore or another node is using this data folder. `
-                + `This node waits until it is let go (${Math.round((saidAt - started) / 1000)} s so far).`);
+            const waited = saidAt - started;
+            console.warn(`[Boot] ${NODE_RUNNING_LOCK_SHOWN} is held: a beanpool restore or another node is using this data folder`
+                + `${waited >= waits.locksMayFailAfterMs ? `, ${NO_WORKING_LOCKS}` : ''}. `
+                + `This node waits until it is let go (${Math.round(waited / 1000)} s so far). ${WAITING_WAY_OUT}`);
         }
         sleepMs(waits.retryMs);
     }

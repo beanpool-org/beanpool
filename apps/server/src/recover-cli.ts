@@ -15,9 +15,10 @@
  *
  * Exit codes: 0 done, 1 refused (nothing changed), 2 usage.
  */
+import util from 'node:util';
 import { recoverOwner } from './recover-command.js';
 import { CLAIM_USAGE, runClaim } from './claim-command.js';
-import { RESTORE_USAGE, runRestore } from './restore-command.js';
+import { RESTORE_USAGE, runRestore, shown } from './restore-command.js';
 import { RESTORE_POINT_USAGE, runRestorePoint } from './restore-point-command.js';
 import { terminalAsk } from './shell-prompt.js';
 
@@ -38,8 +39,16 @@ if (sub === 'claim') {
         process.exit(1);
     });
 } else if (sub === 'restore' || sub === 'restore-point') {
+    // Everything this prints reaches the owner's terminal, and some of it is a backup file's own text: the restore's log
+    // lines name what the archive held (a trigger, a photo's key, a bucket). No control character of it reaches the
+    // terminal, and a log line stays one line (#2017 confirmation review B2). The commands' own lines keep their breaks.
+    const lines = (stream: NodeJS.WriteStream) => (l: string) => { stream.write(`${l.split('\n').map((x) => shown(x, null)).join('\n')}\n`); };
+    for (const [name, stream] of [['log', process.stdout], ['info', process.stdout], ['debug', process.stdout],
+        ['warn', process.stderr], ['error', process.stderr]] as const) {
+        console[name] = (...a: unknown[]) => { stream.write(`${shown(util.format(...a), null)}\n`); };
+    }
     const prompt = terminalAsk();
-    const io = { ask: prompt.ask, out: (l: string) => console.log(l), err: (l: string) => console.error(l) };
+    const io = { ask: prompt.ask, out: lines(process.stdout), err: lines(process.stderr) };
     (sub === 'restore' ? runRestore(rest, io) : runRestorePoint(rest, io)).then((code) => {
         prompt.close();
         process.exit(code);

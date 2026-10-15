@@ -114,7 +114,7 @@
   "Pick a time zone from the list": "Escolha um fuso horário na lista",
   "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Visível em um raio de cerca de 1 km. Peça o ponto exato a {name} quando combinarem de se encontrar.",
   "Shown to everyone who can see the event. Put the exact address in the note below.": "Visível para todas as pessoas que podem ver o evento. Coloque o endereço exato na observação abaixo.",
-  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Isso parece um endereço residencial. Todas as pessoas que podem ver o evento poderão ler isso, então é mais seguro colocar na observação abaixo.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Isso parece um endereço de rua. Todas as pessoas que podem ver o evento poderão ler isso, então é mais seguro colocar na observação abaixo.",
   "An earlier message was removed when this chat was locked": "Uma mensagem anterior foi removida quando este bate-papo foi bloqueado",
   "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
     "one": "{n} mensagem anterior removida quando este bate-papo foi bloqueado",

@@ -68,6 +68,7 @@ describe('another member\'s listings on their profile', () => {
         renderKofi();
         expect(await screen.findByText('Pottery lessons on Sundays')).toBeInTheDocument();
         expect(screen.queryByTestId('profile-listing-price')).toBeNull();
+        expect(screen.queryByText('🫘')).toBeNull();
     });
 
     it('Beans live (a local node): the price stays, as before', async () => {

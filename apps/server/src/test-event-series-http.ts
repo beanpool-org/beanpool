@@ -26,6 +26,9 @@
  *     date starts at nobody going, it reads as last week's, no reminder for the next date, and the prune takes it.
  * 12. A DST gap day: Sunday 02:30-03:30 reads 03:30-04:30 that day, and a form re-saving those clocks with the rule
  *     keeps the rule's 02:30, so the next Sunday is 02:30 again.
+ * 13. "Only people I let in" (#1953) on a repeating online event: Going and not let in reads no note, no link and no chat,
+ *     on this date and after the roll; a let-in carries to the next date (the series' note, link and chat, and Going again
+ *     is in at once); the waiting count and "let everyone in" go by this date's Going, as the host's list does.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-event-series-http.ts
  */
@@ -38,7 +41,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, exportSyncState, importRemoteState, setNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { rsvpEvent } from './engine/posts.js';
+import { rsvpEvent, eventWaitingCount } from './engine/posts.js';
 import { runEventReminderSweep, dueEventReminders } from './engine/event-reminders.js';
 import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped, SKIP_HOST_ONLY, SKIP_LAST_DATE, DATE_CANCELLED_PUSH_TITLE } from './engine/event-series-roll.js';
 import { eventThreadReadOnlyReason, loadEventForThread } from './engine/event-thread.js';
@@ -398,6 +401,62 @@ async function main(): Promise<void> {
         `a form re-saving the gap day's clocks with the rule keeps the rule's 02:30 and its hour (got ${resave.status} ${resave.error ?? ''} ${row(gapId).event_repeat})`);
     rollDueSeries(undefined, Date.parse(row(gapId).event_end_at) + 1000);
     assert(row(gapId).event_start_local === '2027-10-10T02:30', `so the next Sunday is 02:30 again (got ${row(gapId).event_start_local})`);
+
+    // ── 13. The host lets people in, on a repeating event ───────────────────────────────────────
+    console.log('\n── 13. "Only people I let in" on a repeating event: the note, the link and the chat wait, across dates ──');
+    const doorHost = makeIdentity('DoorDot');
+    const inAnn = makeIdentity('InAnn');
+    const waitWes = makeIdentity('WaitWes');
+    const lateLu = makeIdentity('LateLu');
+    const NOTE = 'Door code 4711';
+    const LINK = 'https://meet.example.org/door';
+    const door = await create(doorHost, {
+        lat: undefined, lng: undefined, eventOnline: true, eventLink: LINK, eventPrivateNote: NOTE, eventHostLetsIn: true,
+        eventStartLocal: '2028-06-02T19:00', eventEndLocal: '2028-06-02T21:00', eventTz: SYD, eventRepeat: weeklyFri,
+    });
+    const doorId = door.body?.post?.id as string;
+    assert(door.status === 200 && door.body?.post?.eventHostLetsIn === true && door.body?.post?.eventRepeat?.byDay === 'FR',
+        `a weekly online event whose host lets people in is accepted (got ${door.status} ${door.error ?? ''})`);
+    const chatStatus = async (who: Id) => (await signed('GET', `/api/marketplace/posts/${doorId}/chat`, null, who)).status;
+    const letIn = (body: Record<string, unknown>) => signed('POST', `/api/marketplace/posts/${doorId}/let-in`, body, doorHost);
+    rsvpEvent(() => {}, doorId, inAnn.pubKeyHex, 'going');
+    rsvpEvent(() => {}, doorId, waitWes.pubKeyHex, 'going');
+    const letAnn = await letIn({ memberPublicKey: inAnn.pubKeyHex });
+    assert(letAnn.status === 200 && letAnn.body?.changed === 1, `the host lets one of the two in (got ${letAnn.status} ${letAnn.error ?? ''})`);
+    const ann0 = await readEvent(doorId, inAnn);
+    const wes0 = await readEvent(doorId, waitWes);
+    assert(ann0?.eventPrivateNote === NOTE && ann0?.eventLink === LINK && ann0?.myLetIn === true && await chatStatus(inAnn) === 200,
+        `let in: the note, the link and the chat (got ${JSON.stringify({ note: ann0?.eventPrivateNote ?? null, link: ann0?.eventLink ?? null, letIn: ann0?.myLetIn })})`);
+    assert(wes0?.eventPrivateNote === undefined && wes0?.eventLink === undefined && wes0?.myLetIn === false && await chatStatus(waitWes) === 403,
+        `Going and not let in: no note, no link, the chat refused, as on a one-off (got ${JSON.stringify({ note: wes0?.eventPrivateNote ?? null, link: wes0?.eventLink ?? null, letIn: wes0?.myLetIn })})`);
+    rollDueSeries(undefined, Date.parse(row(doorId).event_end_at) + 1000);
+    assert(row(doorId).event_start_local === '2028-06-09T19:00', `it rolls to the next Friday (got ${row(doorId).event_start_local})`);
+    const ann1 = await readEvent(doorId, inAnn);
+    const wes1 = await readEvent(doorId, waitWes);
+    assert(ann1?.myRsvp === null && ann1?.myLastRsvp?.status === 'going' && ann1?.eventPrivateNote === NOTE && ann1?.eventLink === LINK
+        && await chatStatus(inAnn) === 200,
+        `after the roll, last week's let-in still reads the series' note, link and chat (got ${JSON.stringify({ my: ann1?.myRsvp, note: ann1?.eventPrivateNote ?? null })})`);
+    assert(wes1?.eventPrivateNote === undefined && wes1?.eventLink === undefined && await chatStatus(waitWes) === 403,
+        `and last week's Going never let in still gets none of them (got ${JSON.stringify({ note: wes1?.eventPrivateNote ?? null, link: wes1?.eventLink ?? null })})`);
+    assert(eventWaitingCount(loadEventForThread(doorId)) === 0,
+        `nobody waits for this date: last week's Going is not counted (got ${eventWaitingCount(loadEventForThread(doorId))})`);
+    rsvpEvent(() => {}, doorId, lateLu.pubKeyHex, 'going');
+    const host1 = await readEvent(doorId, doorHost);
+    const waitingRows = (host1?.eventRsvps ?? []).filter((v: any) => v.status === 'going' && v.letInAt === null).length;
+    assert(eventWaitingCount(loadEventForThread(doorId)) === 1 && waitingRows === 1,
+        `one taps Going for this date: the count and the host's list both say one waits (got ${eventWaitingCount(loadEventForThread(doorId))}, list ${waitingRows})`);
+    const all = await letIn({ everyone: true });
+    const wesLetIn = (db.prepare('SELECT let_in_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(doorId, waitWes.pubKeyHex) as any)?.let_in_at;
+    assert(all.status === 200 && all.body?.changed === 1 && wesLetIn === null,
+        `"let everyone in" lets in this date's Going, not last week's the host's list no longer shows (got ${all.status} changed ${all.body?.changed}, Wes ${wesLetIn})`);
+    rsvpEvent(() => {}, doorId, inAnn.pubKeyHex, 'going');
+    rsvpEvent(() => {}, doorId, waitWes.pubKeyHex, 'going');
+    const ann2 = await readEvent(doorId, inAnn);
+    const wes2 = await readEvent(doorId, waitWes);
+    assert(ann2?.myRsvp === 'going' && ann2?.myLetIn === true && ann2?.eventPrivateNote === NOTE,
+        `a regular let in once taps Going again and is in at once (got ${JSON.stringify({ my: ann2?.myRsvp, letIn: ann2?.myLetIn })})`);
+    assert(wes2?.myRsvp === 'going' && wes2?.myLetIn === false && wes2?.eventPrivateNote === undefined && eventWaitingCount(loadEventForThread(doorId)) === 1,
+        `one never let in taps Going again and waits, counted now (got ${JSON.stringify({ my: wes2?.myRsvp, letIn: wes2?.myLetIn })}, ${eventWaitingCount(loadEventForThread(doorId))} waiting)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

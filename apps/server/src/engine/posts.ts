@@ -1510,11 +1510,16 @@ export function resetEventWaitingPushes(): void {
     waitingPushSentAt.clear();
 }
 
-/** How many Going members wait for the host to let them in (never the host, never a visitor). */
+/**
+ * How many Going members wait for the host to let them in (never the host, never a visitor). On a repeating event, Going
+ * for the date it has now (RSVP_IS_CURRENT), as the host's list of who is going reads (getPosts): a regular Going last week
+ * and never let in waits again only once they tap Going for this date.
+ */
 export function eventWaitingCount(row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }): number {
     const waiting = db.prepare(`
         SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${postInSightSql('p', 'r.member_pubkey')}
+         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${RSVP_IS_CURRENT('r', 'p')}
+           AND ${postInSightSql('p', 'r.member_pubkey')}
     `).all(row.id) as { member_pubkey: string }[];
     return waiting.filter(w => !isVisitorKey(db, w.member_pubkey) && !isEventHost(db, row, w.member_pubkey)).length;
 }
@@ -1590,7 +1595,10 @@ export function letInEvent(
     ).get(postId, pk));
     let members: string[];
     if (target.everyone === true) {
-        members = (db.prepare(`SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going' AND let_in_at IS ${letIn ? 'NULL' : 'NOT NULL'}`)
+        // Everyone waiting is everyone eventWaitingCount counts: on a repeating event, Going for its current date, never a
+        // regular's RSVP for last week, whom the host's list no longer shows. A take-back reaches everyone let in, any date.
+        members = (db.prepare(`SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
+            WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS ${letIn ? `NULL AND ${RSVP_IS_CURRENT('r', 'p')}` : 'NOT NULL'}`)
             .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey).filter(mayBeLetIn);
     } else {
         const who = target.memberPublicKey;

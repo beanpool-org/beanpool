@@ -358,6 +358,39 @@ async function main(): Promise<void> {
     assert(jdBack.status === 200 && row(jdId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jdBack.body?.skips) === '["2027-10-22"]',
         `(d) after the edit, Bring it back on 15 Oct leaves 22 Oct cancelled (got ${jdBack.status} ${JSON.stringify(jdBack.body?.skips)})`);
 
+    // (e) An edit that moves Starts onto a cancelled date takes it back: the row's own date is never also a cancelled one,
+    // which every member's Next dates would strike through while the card, Your events and the reminder say it is on (the
+    // confirmation 2 of #1993, B1). Back onto the current date the host just cancelled, as the web form sends it (the clocks
+    // and the rule), and as the phone or an older app does (the clocks only); and forward onto a later cancelled date.
+    const editBack = async (withRule: boolean) => {
+        const mover = makeIdentity(withRule ? 'MoverMei' : 'MoverMo');
+        const e = await create(mover, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+        const id = e.body?.post?.id as string;
+        rsvpEvent(() => {}, id, regular.pubKeyHex, 'going');
+        await signed('POST', `/api/events/${id}/skip`, { date: '2027-10-15' }, mover);
+        const moved = await signed('POST', '/api/marketplace/posts/update', {
+            id, authorPublicKey: mover.pubKeyHex, eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', ...(withRule ? { eventRepeat: weeklyFri } : {}),
+        }, mover);
+        return { id, moved, read: await readEvent(id, regular) };
+    };
+    for (const withRule of [true, false]) {
+        const { id, moved, read } = await editBack(withRule);
+        assert(moved.status === 200 && row(id).event_start_local === '2027-10-15T19:00' && row(id).event_repeat_skips === null
+            && nextOf(read?.eventNextDates) === '2027-10-15, 2027-10-22, 2027-10-29, 2027-11-05',
+            `(e) cancel the current 15 Oct, then edit Starts back to it${withRule ? '' : ' (no rule in the edit)'}: it is on, and Next dates don't mark it (got ${moved.status} ${moved.error ?? ''} ${row(id).event_start_local} ${row(id).event_repeat_skips}; ${nextOf(read?.eventNextDates)})`);
+    }
+    const forward = makeIdentity('MoverMax');
+    const jf = await create(forward, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jfId = jf.body?.post?.id as string;
+    await signed('POST', `/api/events/${jfId}/skip`, { date: '2027-10-29' }, forward);
+    const jfMoved = await signed('POST', '/api/marketplace/posts/update', {
+        id: jfId, authorPublicKey: forward.pubKeyHex, eventStartLocal: '2027-10-29T19:00', eventEndLocal: '2027-10-29T21:00', eventRepeat: weeklyFri,
+    }, forward);
+    const jfRead = await readEvent(jfId, regular);
+    assert(jfMoved.status === 200 && row(jfId).event_start_local === '2027-10-29T19:00' && row(jfId).event_repeat_skips === null
+        && nextOf(jfRead?.eventNextDates) === '2027-10-29, 2027-11-05, 2027-11-12, 2027-11-19',
+        `(e) edit Starts forward onto the cancelled 29 Oct: it is on, and Next dates don't mark it (got ${jfMoved.status} ${jfMoved.error ?? ''} ${row(jfId).event_start_local} ${row(jfId).event_repeat_skips}; ${nextOf(jfRead?.eventNextDates)})`);
+
     // ── 6. Reminders ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. Reminders once per date ──');
     const rs = await create(remind, { eventStartLocal: '2028-01-07T20:50', eventTz: SYD, eventRepeat: weeklyFri });

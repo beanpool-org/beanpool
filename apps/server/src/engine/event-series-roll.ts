@@ -130,7 +130,7 @@ export function seriesOnCreate(rawRepeat: unknown, rawUntil: unknown, askedStart
  * An edit's series columns, or undefined when they stay as they are. `askedStart` / `askedEnd` are the clocks this edit
  * set (null when it set none: the rule keeps its own clock and length, which a gap-day's stored clock would not say);
  * `nextStartLocal` / `nextEndLocal` the date the event will have. Cancelled dates no longer on the rule are dropped, and
- * those before the new date once they have ended (keptSkips).
+ * those before the new date once they have ended (keptSkips), and the new date itself.
  */
 export function seriesOnEdit(
     existing: MarketplacePost,
@@ -157,9 +157,11 @@ export function seriesOnEdit(
     const rule = ruleOf(pattern, time, minutes, firstDate);
     const until = untilSent ? cleanUntil(rawUntil, firstDate) : cleanUntil(existing.eventRepeatUntil ?? null, firstDate);
     const walk = { rule, anchorDate: firstDate, tz: next.tz, until };
-    // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back.
+    // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back. So is the
+    // date the edit puts the event on: Starts moved onto a cancelled date takes it back, so the row's own date never reads
+    // cancelled while its card, Your events and reminders say it is on (the confirmation 2 of #1993, B1).
     const final = lastSeriesDate(walk);
-    const skips = keptSkips(existing.eventRepeatSkips ?? [], firstDate, rule, next.tz, Date.now()).filter(d => d !== final && isSeriesDate(walk, d));
+    const skips = keptSkips(existing.eventRepeatSkips ?? [], firstDate, rule, next.tz, Date.now()).filter(d => d !== firstDate && d !== final && isSeriesDate(walk, d));
     return { repeat: repeatRuleCell(rule), until, skips: repeatSkipsCell(skips) };
 }
 

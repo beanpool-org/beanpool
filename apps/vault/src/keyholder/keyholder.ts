@@ -39,6 +39,7 @@ import {
     unlockBind,
     verifyStatement,
     type CustodianShare,
+    type RestorePending,
     type ShareConfirmation,
     type ShareSubmission,
     type UnlockHello,
@@ -271,8 +272,19 @@ export class Keyholder {
         return s ? { generation: s.file.state.generation, custodians: [...s.file.state.custodians], confirmed: [...s.confirmed] } : null;
     }
 
-    private get restorePending(): boolean {
-        return existsSync(path.join(this.opts.stateDir, RESTORE_PENDING_FILE));
+    /**
+     * A restore from backup this vault took and has not finished: the backup, and the custodian key that named it, for
+     * the custodians who unlock to see which file they are about to make the vault's (reshare rotation design §3.3).
+     */
+    private get restorePending(): RestorePending | null {
+        const file = path.join(this.opts.stateDir, RESTORE_PENDING_FILE);
+        if (!existsSync(file)) return null;
+        try {
+            const r = JSON.parse(readFileSync(file, 'utf8')) as { backupName?: unknown; by?: unknown };
+            return { backup: typeof r.backupName === 'string' ? r.backupName : null, by: typeof r.by === 'string' ? r.by : null };
+        } catch {
+            return { backup: null, by: null };
+        }
     }
 
     private requireOpen(): WorkingKeys {
@@ -341,6 +353,7 @@ export class Keyholder {
             releaseHash: this.opts.releaseHash ?? 'unreleased',
             platform: this.attestor.platform,
             evidence: evidence ? vaultB64(evidence) : null,
+            restore: this.restorePending,
         };
     }
 
@@ -521,7 +534,7 @@ export class Keyholder {
         this.pending = null;
         const pendingFile = path.join(this.opts.stateDir, RESTORE_PENDING_FILE);
         // Which backup, before the state: a state on disk always has its backup named beside it.
-        writeFileSync(pendingFile, `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)) })}\n`, { mode: 0o600 });
+        writeFileSync(pendingFile, `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)), by: custodian })}\n`, { mode: 0o600 });
         try {
             writeStateFile(this.opts.stateDir, state);
         } catch (e) {

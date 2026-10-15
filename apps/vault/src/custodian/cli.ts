@@ -292,6 +292,30 @@ function print(result: CustodianCall): void {
     console.log(result.status, JSON.stringify(rest));
 }
 
+/**
+ * After a reshare, or a new custodian's fetch of their share: the lines to paste so the pins list the new keys before
+ * the switch (reshare rotation design §2.4). The new ticket key first, then the one in force (from the public report),
+ * which signs until two new custodians confirm and must stay listed until every app build has the new one.
+ */
+async function printPins(url: string, answer: Record<string, unknown>): Promise<void> {
+    const waiting = (answer.pending as { publicKeys?: { ticket: string[]; deposit: { key: string }[] } } | null)?.publicKeys;
+    if (!waiting) return;
+    let inForce: string | null = null;
+    try {
+        const res = await fetch(`${url.replace(/\/$/, '')}/v1/report`);
+        const ticketKey = ((await res.json()) as { ticketKey?: unknown }).ticketKey;
+        if (res.ok && isVaultKeyHex(ticketKey) && !waiting.ticket.includes(ticketKey)) inForce = ticketKey;
+    } catch {
+        // Said below: the key in force is to be added by hand.
+    }
+    console.log('\nThe new keys, to list before two new custodians confirm (global\'s .env and the registrar take the ticket keys; the app build after the switch takes the new deposit key):');
+    console.log(`BEANPOOL_VAULT_TICKET_KEYS=${[...waiting.ticket, ...(inForce ? [inForce] : [])].join(',')}`);
+    console.log(`EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`);
+    console.log(inForce
+        ? 'The old ticket key (the second) stops signing at the switch; keep it listed until every app build has the new one.'
+        : 'The ticket key in force could not be read from the report: add it after the new one by hand, and keep it listed until every app build has the new one.');
+}
+
 function keyList(text: string, what: string): string[] {
     const keys = text.split(',').map(s => s.trim());
     if (keys.length !== 3 || !keys.every(isVaultKeyHex) || new Set(keys).size !== 3) stop(`${what} is three different custodian keys (64 hex characters each), comma-separated`);
@@ -563,6 +587,7 @@ async function main(): Promise<void> {
     const opts: CallOptions = {
         trust, acceptRelease: arg('--accept-release'), acceptNoHardwareProof: flag('--no-hardware-proof'),
         confirm: async warning => confirmYes(`\n${warning}`),
+        confirmRestore: async r => confirmYes(`\nThis vault is waiting to finish a restore from backup ${r.backup ?? '(unnamed)'}, named by custodian key ${r.by ?? '(not recorded)'}. Your share makes that backup's keys the vault's. Is that the backup you agreed on?`),
     };
     if (trust) {
         // Read the releases once up front, so a broken feed stops us before the vault is contacted at all.
@@ -626,12 +651,14 @@ async function main(): Promise<void> {
         result = await cancelPending(url, key, arg('--pending') as string);
     } else {
         result = await restoreFromBackup(url, key, arg('--backup') as string, opts);
+        if (result.body.code === 'older_generation') console.error(`refused: ${String(result.body.error)}`);
     }
     print(result);
     if (confirmed) {
         process.stdout.write('confirmed: ');
         print(confirmed);
     }
+    if ((command === 'reshare' || command === 'fetch-share') && result.status === 200) await printPins(url, result.body);
     if (result.status !== 200 || (confirmed && confirmed.status !== 200)) process.exit(1);
 }
 

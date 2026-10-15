@@ -67,7 +67,7 @@ describe('the data partition key (for root, on the image)', () => {
         open.push(freshDisk);
         expect((await restoreFromBackup(fresh.baseUrl, fresh.custodians[0], backup, fresh.call())).body.state).toBe('locked');
         await unlockWith(fresh, g.shares, [0, 1]);
-        expect(fresh.keyholder().status()).toMatchObject({ state: 'open', restorePending: true });
+        expect(fresh.keyholder().status()).toMatchObject({ state: 'open', restorePending: { backup, by: fresh.custodians[0].publicKey } });
         expect((await readSocket(path.join(fresh.dir, 'disk', 'disk.sock'))).equals(kDisk)).toBe(true);
         expect((await get(fresh, '/v1/health')).body.state).toBe('locked');
     });
@@ -87,7 +87,7 @@ describe('the data directory must be mounted (requireDataMount)', () => {
 });
 
 describe('a restore from backup on the image: the data partition is mounted over dataDir after the unlock', () => {
-    it('the backup waits off the mount point (root/owner-only); the restore then finishes, restorePending goes false, health says open, and the file goes', async () => {
+    it('the backup waits off the mount point (root/owner-only); the restore then finishes, restorePending clears, health says open, and the file goes', async () => {
         const v = await startVault();
         open.push(v);
         const g = await doGenesis(v);
@@ -105,7 +105,7 @@ describe('a restore from backup on the image: the data partition is mounted over
         expect(existsSync(fresh.dataDir) ? readdirSync(fresh.dataDir) : []).toEqual([]);
 
         await unlockWith(fresh, g.shares, [0, 1]);
-        expect(fresh.keyholder().status()).toMatchObject({ state: 'open', restorePending: true });
+        expect(fresh.keyholder().status()).toMatchObject({ state: 'open', restorePending: { backup, by: fresh.custodians[0].publicKey } });
         expect((await get(fresh, '/v1/health')).body.state).toBe('locked');
 
         // vault-data mounts the (blank) volume over dataDir: whatever the directory held is hidden.
@@ -113,7 +113,7 @@ describe('a restore from backup on the image: the data partition is mounted over
         const deadline = Date.now() + 10_000;
         while ((await get(fresh, '/v1/health')).body.state !== 'open' && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
         expect((await get(fresh, '/v1/health')).body.state).toBe('open');
-        expect(fresh.keyholder().status().restorePending).toBe(false);
+        expect(fresh.keyholder().status().restorePending).toBeNull();
         expect(existsSync(pending)).toBe(false);
         expect(existsSync(path.join(fresh.dataDir, 'vault.db'))).toBe(true);
         // The backup's copy is there: a restore by its sign-in is held (D2), not refused as unknown.
@@ -154,7 +154,7 @@ describe('root\'s monthly step between a restore from backup and the unlock (#13
         const deadline = Date.now() + 10_000;
         while ((await get(fresh, '/v1/health')).body.state !== 'open' && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
         expect((await get(fresh, '/v1/health')).body.state).toBe('open');
-        expect(fresh.keyholder().status().restorePending).toBe(false);
+        expect(fresh.keyholder().status().restorePending).toBeNull();
         expect(existsSync(path.join(fresh.dataDir, 'vault.db'))).toBe(true);
         expect(readdirSync(fresh.restoreDir)).toEqual([]);
         expect((await startRestore(fresh, 'google', 'kept-across-the-restore')).reply).toMatchObject({ status: 200, body: { status: 'held' } });

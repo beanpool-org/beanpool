@@ -29,7 +29,8 @@ import {
 /**
  * A reshare (key vault design §2.4; V2's "Reshare" test): two custodians hand the vault to a new set, the envelopes
  * are re-wrapped, the new shares unlock it and the old ones don't. Backups made before still open with the old
- * shares (for their 30 days); backups made after don't.
+ * shares (for their 30 days), offline: once a backup made after is in the stores, no fresh vault takes one made before
+ * (reshare rotation design §3). Backups made after don't open with the old shares.
  *
  * It is two steps: the vault switches only once two new custodians show they hold their shares. Until then the old
  * shares are the ones in force, so a restart at any step leaves a vault that opens with shares someone holds.
@@ -123,12 +124,12 @@ describe('reshare', () => {
         expect((await get(v, '/v1/health')).body.state).toBe('open');
         await expectCopy(v, 'facebook', '10150000000004040', m2);
 
-        // Backups: the one made before the reshare still opens with the old shares; the one after only with the new.
+        // Backups: the one made before the reshare is not taken by a fresh vault, not even from a genesis key the image
+        // pins, now that one made after is in the store (its state would open with the old shares); the one after opens
+        // only with the new shares.
         const oldRestore = await vault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir });
-        expect((await restoreFromBackup(oldRestore.baseUrl, c1, before, oldRestore.call())).body.state).toBe('locked');
-        await present(oldRestore, c1, g.shares[0]);
-        expect((await present(oldRestore, c3, g.shares[2])).body.state).toBe('open');
-        await expectCopy(oldRestore, 'google', 'reshare-g', m1);
+        expect((await restoreFromBackup(oldRestore.baseUrl, c1, before, oldRestore.call())).body).toMatchObject({ code: 'older_generation', generation: 2 });
+        expect(oldRestore.keyholder().status().state).toBe('fresh');
 
         const newRestore = await vault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir });
         expect((await restoreFromBackup(newRestore.baseUrl, c2, after, newRestore.call())).body.state).toBe('locked');

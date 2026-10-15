@@ -42,6 +42,14 @@ export interface UnlockHello {
     releaseHash: string;
     platform: AttestationPlatform;
     evidence: string | null;
+    /** A restore from backup this vault took and has not finished: an unlock now makes that backup's keys the vault's. */
+    restore?: RestorePending | null;
+}
+
+/** Which backup a fresh vault took, and the custodian key that named it (null where the vault's record lacks it). */
+export interface RestorePending {
+    backup: string | null;
+    by: string | null;
 }
 
 // ─── A share sealed to its custodian (vault → custodian) ────────────────────────────────────

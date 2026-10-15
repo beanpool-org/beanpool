@@ -109,6 +109,21 @@ export function isOwnerWaitingOnRekey(pubkey: string): boolean {
 }
 
 /**
+ * The owner or admin role a member holds, counting one held aside while they are suspended — a suspended
+ * co-owner is still an owner for the purpose of who may prune them. It reads the role rows whatever the member's
+ * status, so an owner whose key waits on a re-key code ({@link isOwnerWaitingOnRekey}) is one too.
+ */
+export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null {
+    const rows = db.prepare(`
+        SELECT role FROM node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+        UNION ALL
+        SELECT role FROM suspended_node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+    `).all(publicKey, publicKey) as { role: 'owner' | 'admin' }[];
+    if (rows.some(r => r.role === 'owner')) return 'owner';
+    return rows.length ? 'admin' : null;
+}
+
+/**
  * Returns whether the given pubkey has node administrative authority (NODE_ROLE_ACTS).
  * By default (`includeOwner = true`), owners have full admin authority.
  */

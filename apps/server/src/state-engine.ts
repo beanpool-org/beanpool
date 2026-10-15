@@ -90,6 +90,7 @@ import {
     NODE_ROLE_ACTS,
     dropNodeRoleRow,
     isOwnerWaitingOnRekey,
+    heldPrivilegedRole,
     type MemberNodeRole,
     type NodeRoleRecord,
     type RoleChangeBy,
@@ -108,6 +109,7 @@ export {
     bumpNodeRoleSessionEpoch,
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
+    heldPrivilegedRole,
     type MemberNodeRole,
     type NodeRoleRecord,
 };
@@ -8069,20 +8071,6 @@ export const COMMUNITY_DECISION_ACTOR = 'system:community-decision';
 export function isOwnerLevelActor(actor: string | null | undefined): boolean {
     if (!actor) return false;
     return actor === 'owner:password' || isNodeOwner(actor);
-}
-
-/**
- * The owner or admin role a member holds, counting one held aside while they are suspended — a suspended
- * co-owner is still an owner for the purpose of who may prune them.
- */
-export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null {
-    const rows = db.prepare(`
-        SELECT role FROM node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
-        UNION ALL
-        SELECT role FROM suspended_node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
-    `).all(publicKey, publicKey) as { role: 'owner' | 'admin' }[];
-    if (rows.some(r => r.role === 'owner')) return 'owner';
-    return rows.length ? 'admin' : null;
 }
 
 /**

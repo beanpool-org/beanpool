@@ -268,6 +268,23 @@ async function run() {
     const byPasswordRekeying = await callRouter(admin, 'POST', `/api/local/admin/disputes/${rekeyingTx}/resolve`, { body: { action: 'release_to_seller' } });
     assert(byPasswordRekeying.status === 403 && /owner is a party/.test(byPasswordRekeying.body?.error || '') && txStatus(rekeyingTx) === 'pending',
         `and when the owner who is a party waits on a re-key code (got ${byPasswordRekeying.status} ${JSON.stringify(byPasswordRekeying.body)})`);
+    // So is one whose owner role a suspension holds aside: 'disabled', the role in suspended_node_roles, still an owner
+    // (heldPrivilegedRole; the confirmation of #1992, NB 1). An admin who is no party still resolves it.
+    const heldOwner = makeMember('Held Owner');
+    grantNodeRole(heldOwner, 'owner', owner);
+    transfer('genesis', heldOwner, 200, 'seed', 'direct', true);
+    createPost('offer', 'services', 'Fencing', 'Fixing garden fences', 20, 'fixed', heldOwner);
+    const honey = createPost('offer', 'goods', 'A jar of honey', 'Honey from the hives behind the hall', 10, 'fixed', stranger)!;
+    const heldTx = acceptPost(honey.id, heldOwner)!.id;
+    const heldSuspend = decisionsEngine.adminEmergencySuspend(heldOwner, owner, 'A reason members can read');
+    assert(heldSuspend.success && statusOf(heldOwner) === 'disabled' && heldRows(heldOwner)[0]?.role === 'owner' && !roleRow(heldOwner),
+        `setup: a co-owner suspended by an owner, the owner role held aside (got ${heldSuspend.success ? 'suspended' : JSON.stringify(heldSuspend)}, ${statusOf(heldOwner)}, ${JSON.stringify(heldRows(heldOwner))})`);
+    const byPasswordHeld = await callRouter(admin, 'POST', `/api/local/admin/disputes/${heldTx}/resolve`, { body: { action: 'refund_to_buyer' } });
+    assert(byPasswordHeld.status === 403 && /owner is a party/.test(byPasswordHeld.body?.error || '') && txStatus(heldTx) === 'pending',
+        `and when the owner who is a party is suspended with the role held aside (got ${byPasswordHeld.status} ${JSON.stringify(byPasswordHeld.body)}, ${txStatus(heldTx)})`);
+    const byAdminHeld = await callRouter(admin, 'POST', `/api/local/admin/disputes/${heldTx}/resolve`, { actor: plainAdmin, body: { action: 'refund_to_buyer' } });
+    assert(byAdminHeld.status === 200 && txStatus(heldTx) === 'cancelled',
+        `an admin who is no party refunds it from their own session (got ${byAdminHeld.status} ${JSON.stringify(byAdminHeld.body)}, ${txStatus(heldTx)})`);
 
     // A dispute with no admin on either side is resolved as before, by a key admin or the password.
     const buyer = makeMember('Buyer');

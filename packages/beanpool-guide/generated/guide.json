@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 133,
-  "hash": "2a138eb1b929af0268d4d8637aa3454ea0b4c6177bc03e50be7416c7296fab15",
+  "version": 134,
+  "hash": "631ffccdce15d14b7dc6cc558aa995e1ad3e1674649ad39b950ce0548ffce370",
   "sections": [
     {
       "id": "about",
@@ -64,7 +64,8 @@
         "people",
         "event-chat",
         "mute",
-        "mentions"
+        "mentions",
+        "key-changed"
       ]
     },
     {
@@ -2942,7 +2943,7 @@
         },
         {
           "type": "p",
-          "text": "Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos."
+          "text": "Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos. Members of the global community see your spot to about a kilometre."
         },
         {
           "type": "h2",
@@ -3385,6 +3386,10 @@
         },
         {
           "type": "p",
+          "text": "On the global community, other members see your listing's pin to about a kilometre; the exact spot is yours to share. In the web app a new pin there starts rounded to about 100 metres: tap **Use the exact spot** to keep the spot you chose."
+        },
+        {
+          "type": "p",
           "text": "**If you post from home and do not want people to know your address, use Drop a pin and put it somewhere nearby instead:** a corner, a park, the shops. You can tell the other person the exact place in a message once you have agreed."
         },
         {
@@ -3397,7 +3402,7 @@
         },
         {
           "type": "p",
-          "text": "When you create an event, place the pin first, then tap **Approximate (~100 m)**. The pin then shows only roughly where it is. If you move the pin afterwards, tap it again."
+          "text": "When you create an event, place the pin first, then tap **Approximate (~100 m)**. The pin then shows only roughly where it is. If you move the pin afterwards, tap it again. On the global community a new pin starts Approximate, and **Use the exact spot** puts it back where you placed it. There, only the hosts and the people who can read the note see the exact spot; other members see it to about a kilometre."
         },
         {
           "type": "p",
@@ -3517,7 +3522,8 @@
         "event-chat",
         "groups",
         "mute",
-        "the-top-bar"
+        "the-top-bar",
+        "key-changed"
       ],
       "blocks": [
         {
@@ -3656,7 +3662,7 @@
             "A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See \"Leaving or deleting your account\".",
-            "An event's chat can also be read by the host and everyone going.",
+            "An event's chat can also be read by the host and everyone going (where the host lets people in, the ones the host has let in).",
             "An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers."
           ]
         },
@@ -3786,7 +3792,7 @@
             "When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.",
             "A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.",
             "A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**",
-            "If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **Removed by a convenor**, though no convenor removed it."
+            "If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**."
           ]
         },
         {
@@ -4159,7 +4165,7 @@
         },
         {
           "type": "p",
-          "text": "Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it."
+          "text": "Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. Where the host lets people in, it is the people going whom the host has let in: until then the chat says **Chat opens when the host lets you in.** If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it."
         },
         {
           "type": "h2",
@@ -4191,7 +4197,7 @@
         {
           "type": "ul",
           "items": [
-            "Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.",
+            "Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.",
             "The host can remove any message. Tap it, then **Remove**. It then says \"removed by the host\".",
             "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.",
             "When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away."
@@ -4302,6 +4308,144 @@
         {
           "type": "p",
           "text": "Only in group chats. Posts, event chats and chats between two people do not use them."
+        }
+      ]
+    },
+    {
+      "slug": "key-changed",
+      "title": "If a chat says the key behind a name changed",
+      "summary": "Why a chat stops sending, how to check the key code with the person, and when to continue.",
+      "section": "talk",
+      "related": [
+        "messages",
+        "your-12-words",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it means"
+        },
+        {
+          "type": "p",
+          "text": "Every message between two people is locked so that only the other person's phone can open it. It is locked to their **key**, not to their name. Your phone remembers which key it has been locking your chat to."
+        },
+        {
+          "type": "p",
+          "text": "If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see **The key behind \"Ben\" changed.** The message box is greyed out and says sending is paused."
+        },
+        {
+          "type": "p",
+          "text": "Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as **couldn't be verified** until you decide."
+        },
+        {
+          "type": "p",
+          "text": "This is on the phone app. The web app doesn't remember keys yet."
+        },
+        {
+          "type": "h2",
+          "text": "Why it can happen"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**They got a new phone and re-keyed.** This is the usual reason. Their old key is gone, so they have a new one.",
+            "**Something is wrong.** A community's server lists who is in each chat. A server that wanted to read your messages could put someone else's key behind your friend's name. The name looks right, but the key doesn't."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your phone can't tell these apart by itself. You can, with the key code."
+        },
+        {
+          "type": "h2",
+          "text": "Check the key code with the person"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The banner shows a code: 20 digits in five groups of four.",
+            "Ask the person to open **Settings**, then **Account Protection**, and read you **My key code**.",
+            "**My key code** is on the phone app only. If the person uses only the web app, they can't read it to you yet: tap **Not now** until they can open the phone app.",
+            "Check it **in person, or on a phone or video call** where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.",
+            "If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one**, then tap **Continue with the new key**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "From then on your messages go to the new key. The banner and the **key changed** tag in your Inbox go away, and your earlier messages still read."
+        },
+        {
+          "type": "p",
+          "text": "The code isn't secret. It's safe to read out."
+        },
+        {
+          "type": "h2",
+          "text": "If the code doesn't match, or you can't check"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Not now**. Nothing is sent and nothing changes. You can come back to the chat later."
+        },
+        {
+          "type": "p",
+          "text": "A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat."
+        },
+        {
+          "type": "p",
+          "text": "If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages."
+        },
+        {
+          "type": "h2",
+          "text": "If the banner offers no key to continue with"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers **Not now**."
+        },
+        {
+          "type": "p",
+          "text": "To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it."
+        },
+        {
+          "type": "h2",
+          "text": "If the banner says your phone is checking the chat from the start"
+        },
+        {
+          "type": "p",
+          "text": "After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above."
+        },
+        {
+          "type": "h2",
+          "text": "If the message box says your phone can't match the chat to one key"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says **This phone can't match this chat to one key, so sending is off.** There is nothing to continue with."
+        },
+        {
+          "type": "p",
+          "text": "Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as **couldn't be verified**. To keep talking, start a new chat with them, and talk to them in person or on a call first."
+        },
+        {
+          "type": "h2",
+          "text": "What your phone can check, and what it can't"
+        },
+        {
+          "type": "p",
+          "text": "Your phone checks a chat against the messages it already holds. A restored phone, or an existing phone at the update, is steered only by a server that holds back or surrounds the oldest part of the chat in what it sends. A phone that already held that oldest part is steered by nothing the server sends after the update."
+        },
+        {
+          "type": "p",
+          "text": "So a phone you have just restored, or just updated, can be misled about a chat's key. A banner can't rule that out. **Confirm a changed key in person**, or on a call where you know it's them."
+        },
+        {
+          "type": "h2",
+          "text": "If the community gives a date"
+        },
+        {
+          "type": "p",
+          "text": "When your community can show that the account was re-keyed, the banner says so, for example: **This community says the account was re-keyed on 3 Oct 2026.** That helps you understand what happened, but it doesn't replace checking the code: a server could say it too."
         }
       ]
     },
@@ -4890,7 +5034,7 @@
         {
           "type": "ul",
           "items": [
-            "you can read the host's **Note for people who are going**;",
+            "you can read the host's **Note for people who are going**, once the host lets you in, where the host chose that;",
             "you can open the **event chat**. See \"Event chat\"."
           ]
         },
@@ -4967,7 +5111,7 @@
             "**Place name**, like \"Town hall\".",
             "Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See \"Where your pin goes\".",
             "A **Description**, and a photo if you like.",
-            "**Note for people who are going:** only they will see it. A good place for the exact address or a gate code.",
+            "**Note for people who are going:** everyone who taps Going sees it, unless you tick **Only people I let in see the note and chat** (ticked to start with on the global community, where anyone can join in a minute): then only the people you let in see it, and the event chat. A good place for the exact address or a gate code; the place name is for everyone.",
             "**Who can see it:** your whole community, or one group.",
             "If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.",
             "Tap **Create**. Your event is in the Market and on the Map."
@@ -4992,7 +5136,7 @@
         {
           "type": "ul",
           "items": [
-            "see **Who's going**;",
+            "see **Who's going**, and let people in: **Let in** beside a name (tap again to take it back), or **Let everyone in**. Your own friends are let in as they tap Going. If you untick **Only people I let in see the note and chat**, everyone going sees the note and the chat so far, and the chat says the host opened it;",
             "**Edit event**. If you change the time or the place, everyone going is told;",
             "**Copy to a new date**, to run it again;",
             "**Cancel event**, then **Cancel event** again to confirm. Everyone going can see it is cancelled, and its chat becomes read-only."
@@ -6324,7 +6468,7 @@
         },
         {
           "type": "p",
-          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
+          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added (the phone leaves your words out when it knows what you reported as a private chat, or can't read which chats here are private, and the **Reported** message says so), and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
         },
         {
           "type": "h2",

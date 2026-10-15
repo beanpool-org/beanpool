@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 124,
-  "hash": "c2dc6813919fe811bb8eb20b42dfcad41a959d8220a01b115ee6df0f499de2bc",
+  "version": 125,
+  "hash": "5c3caea4ee754398a4316a014d04647aed7dcfeb54e55f2b331509f16985078f",
   "sections": [
     {
       "id": "setup",
@@ -3394,7 +3394,7 @@
         },
         {
           "type": "p",
-          "text": "A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data whose name starts with report. and ends in .json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone."
+          "text": "A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data whose name starts with report and ends in .json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone."
         },
         {
           "type": "h2",
@@ -3409,7 +3409,7 @@
           "items": [
             "**Clean Orphaned Media & Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.",
             "Keep fewer snapshots, or copy old ones off the server.",
-            "Things that grow with no limit: the crash and freeze reports in data (names starting report. and ending .json). Archived log lines go after 30 days. Docker's own log is held to two files of 5 MB by the current docker-compose.yml."
+            "Things that grow with no limit: the crash and freeze reports in data (names starting report and ending .json). Archived log lines go after 30 days. Docker's own log is held to two files of 5 MB by the current docker-compose.yml."
           ]
         }
       ]
@@ -3622,11 +3622,34 @@
         },
         {
           "type": "p",
-          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it."
+          "text": "By default your server tells the BeanPool directory about itself every 12 hours, and at once when an owner names or renames the community: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it."
         },
         {
           "type": "p",
           "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
+        },
+        {
+          "type": "h3",
+          "text": "When the directory doesn't list your community"
+        },
+        {
+          "type": "p",
+          "text": "Your server sends the directory nothing while either of these is true. **Node Identity** says which, in a line under **Publish Now**, and so does the server's own settings page:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The community has no name of its own**: its name is blank, or exactly \"BeanPool Community\". Type the community's name in **Community Name** and press **Save**. Your server tells the directory at once, with no restart. First-time setup asks for the name too, and won't go on without one.",
+            "**The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and restart the server. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one."
+        },
+        {
+          "type": "p",
+          "text": "To check the name your server sends, from anywhere, open https://YOUR-ADDRESS/api/directory/info. Its communityName must be your community's name: null means it has none yet."
         },
         {
           "type": "h2",
@@ -3687,7 +3710,7 @@
           "type": "ul",
           "items": [
             "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted here (it has its own limit, below). The two public reads other servers make (/api/community/info and /api/community/health) do not use this allowance either: each internet address has a separate one for them, five times the gateway number (600 a minute at the default). A member's own requests are counted wherever they go, buying from another community included.",
-            "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.",
+            "**Sign-in and recovery attempts**: 15 a minute per internet address, counted separately for each kind: pairing a device; checking a name and looking up an account to recover (one count, as both tell whether a name is taken); restoring with a sign-in; knocking; and the admin password. The admin password, its 2FA codes and a phone approving a computer's sign-in share one count, so someone guessing the password gets no more tries by using several of them. Pairing several phones on one wifi no longer uses up the name check.",
             "**The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.",
             "**New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.",
             "**Settings**: 300 requests a minute per internet address.",
@@ -3735,6 +3758,10 @@
             "**wordsPerHour**, 500, and **wordsPerDay**, 2000: past these many 12-words accounts from one connection, a 12-words join from it is refused, with how long to wait. The sign-in way stays open there.",
             "**signInPerHour**, 1000, and **signInPerDay**, 5000: the same for sign-ins. Each way counts only its own joins."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A busy day: once DOOR_BUSY_NEW_MEMBERS_PER_DAY people have joined through the open door (both ways in) in the last 24 hours, every 12-words join asks for at least level 3, until the count falls below 90% of that number. The default is 300; set it in .env and restart the server, or set it to 0 to switch it off. Nobody is turned away for it: people just wait a little longer for the setting-up work, and the sign-in way is unchanged. A connection's or the community's own steps can still ask for more. The log says when it starts and when it ends, with the count and no names, and your alerts tell you when it starts (the push to your phone at most once a day)."
         },
         {
           "type": "p",
@@ -3830,7 +3857,7 @@
         },
         {
           "type": "p",
-          "text": "A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal."
+          "text": "A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, each kind separately, so a crowd all checking names or pairing at once can hit the 15-a-minute limit for that one thing. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal."
         },
         {
           "type": "p",

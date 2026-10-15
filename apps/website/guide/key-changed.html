@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>If a chat says the key behind a name changed — BeanPool members' guide</title>
+    <meta name="description" content="Why a chat stops sending, how to check the key code with the person, and when to continue.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../help.html">Help</a>
+                <a href="../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#talk">Talk</a></p>
+        <h1>If a chat says the key behind a name changed</h1>
+        <p class="lede">Why a chat stops sending, how to check the key code with the person, and when to continue.</p>
+        <h2>What it means</h2>
+        <p>Every message between two people is locked so that only the other person's phone can open it. It is locked to their <strong>key</strong>, not to their name. Your phone remembers which key it has been locking your chat to.</p>
+        <p>If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see <strong>The key behind &quot;Ben&quot; changed.</strong> The message box is greyed out and says sending is paused.</p>
+        <p>Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as <strong>couldn't be verified</strong> until you decide.</p>
+        <p>This is on the phone app. The web app doesn't remember keys yet.</p>
+        <h2>Why it can happen</h2>
+        <ul>
+            <li><strong>They got a new phone and re-keyed.</strong> This is the usual reason. Their old key is gone, so they have a new one.</li>
+            <li><strong>Something is wrong.</strong> A community's server lists who is in each chat. A server that wanted to read your messages could put someone else's key behind your friend's name. The name looks right, but the key doesn't.</li>
+        </ul>
+        <p>Your phone can't tell these apart by itself. You can, with the key code.</p>
+        <h2>Check the key code with the person</h2>
+        <ul>
+            <li>The banner shows a code: 20 digits in five groups of four.</li>
+            <li>Ask the person to open <strong>Settings</strong>, then <strong>Account Protection</strong>, and read you <strong>My key code</strong>.</li>
+            <li><strong>My key code</strong> is on the phone app only. If the person uses only the web app, they can't read it to you yet: tap <strong>Not now</strong> until they can open the phone app.</li>
+            <li>Check it <strong>in person, or on a phone or video call</strong> where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.</li>
+            <li>If every digit matches, tick <strong>I checked with Ben: the key code in their Settings matches this one</strong>, then tap <strong>Continue with the new key</strong>.</li>
+        </ul>
+        <p>From then on your messages go to the new key. The banner and the <strong>key changed</strong> tag in your Inbox go away, and your earlier messages still read.</p>
+        <p>The code isn't secret. It's safe to read out.</p>
+        <h2>If the code doesn't match, or you can't check</h2>
+        <p>Tap <strong>Not now</strong>. Nothing is sent and nothing changes. You can come back to the chat later.</p>
+        <p>A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat.</p>
+        <p>If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.</p>
+        <h2>If the banner offers no key to continue with</h2>
+        <p>Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers <strong>Not now</strong>.</p>
+        <p>To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it.</p>
+        <h2>If the banner says your phone is checking the chat from the start</h2>
+        <p>After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with <strong>This phone is checking this chat from the start, as it does after you restore it or update the app.</strong> Check the code with the person as above.</p>
+        <h2>If the message box says your phone can't match the chat to one key</h2>
+        <p>Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says <strong>This phone can't match this chat to one key, so sending is off.</strong> There is nothing to continue with.</p>
+        <p>Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as <strong>couldn't be verified</strong>. To keep talking, start a new chat with them, and talk to them in person or on a call first.</p>
+        <h2>What your phone can check, and what it can't</h2>
+        <p>Your phone checks a chat against the messages it already holds. A restored phone, or an existing phone at the update, is steered only by a server that holds back or surrounds the oldest part of the chat in what it sends. A phone that already held that oldest part is steered by nothing the server sends after the update.</p>
+        <p>So a phone you have just restored, or just updated, can be misled about a chat's key. A banner can't rule that out. <strong>Confirm a changed key in person</strong>, or on a call where you know it's them.</p>
+        <h2>If the community gives a date</h2>
+        <p>When your community can show that the account was re-keyed, the banner says so, for example: <strong>This community says the account was re-keyed on 3 Oct 2026.</strong> That helps you understand what happened, but it doesn't replace checking the code: a server could say it too.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, how to keep them safe, and adding a sign-in as a second way back.</span></a></li>
+            <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 134.</p>
+    </main>
+</body>
+</html>

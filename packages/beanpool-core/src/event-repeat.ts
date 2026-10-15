@@ -259,6 +259,24 @@ export function seriesBackOnLine(date: string): string {
     return t('{date} is back on', { date: seriesDateLabel(date) });
 }
 
+/** One of the node's Next dates, as far as the list's timing needs it: a cancelled date the event has passed has its end. */
+export interface SeriesListedDate { date: string; endAt?: string }
+
+/**
+ * The node's Next dates as the detail shows them at `nowMs`: a cancelled date the event has passed (before `current`, its
+ * date now) is left out once it has ended, as the node no longer lists it or takes it back then (confirmation 2 of #1993,
+ * NB2). An older node's list, without ends, as it is.
+ */
+export function seriesDatesShown<T extends SeriesListedDate>(dates: readonly T[] | null | undefined, current: string | null | undefined, nowMs: number): T[] {
+    return (dates ?? []).filter(d => !(current && d.date < current && d.endAt && Date.parse(d.endAt) <= nowMs));
+}
+
+/** When the next passed cancelled date on the list ends (ms), for the detail to drop it then; null when none is listed. */
+export function seriesPassedDateEndMs(dates: readonly SeriesListedDate[] | null | undefined, current: string | null | undefined, nowMs: number): number | null {
+    const ends = (dates ?? []).filter(d => current && d.date < current && d.endAt).map(d => Date.parse(d.endAt!)).filter(ms => ms > nowMs);
+    return ends.length > 0 ? Math.min(...ends) : null;
+}
+
 /** The one line "Change this date only" prefills the copy with: "Moved from the regular Friday". */
 export function seriesMovedFromLine(rule: Partial<RepeatPattern> | null | undefined): string {
     const r = (rule ?? {}) as Record<string, unknown>;

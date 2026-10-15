@@ -6,10 +6,9 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
-import type { RepeatChoiceKey } from '@beanpool/core';
+import { seriesDatesShown, type RepeatChoiceKey } from '@beanpool/core';
 import { EventCard, EventDetail } from './EventCard';
 import { EventRepeatFields, eventRepeatProblem, type KeptRepeat } from './EventRepeatFields';
-import { shownNextDates } from './EventNextDates';
 import * as api from '../lib/api';
 import {
     eventEditForm, eventEditPayload, eventRepeatCreate, movedCopyContext, parseCopyEventContext, withMovedFromLine,
@@ -345,8 +344,8 @@ describe('the detail: Next dates', () => {
 
     it("an older node's list (no ends) shows as it is", () => {
         const old = rolledView.eventNextDates.map(({ endAt: _e, ...d }) => d);
-        expect(shownNextDates(old, '2027-10-29', Date.parse('2030-01-01T00:00:00Z'))).toEqual(old);
-        expect(shownNextDates(rolledView.eventNextDates, '2027-10-29', Date.parse('2027-10-15T10:00:00Z')).map(d => d.date)).toEqual(['2027-10-22', '2027-10-29']);
+        expect(seriesDatesShown(old, '2027-10-29', Date.parse('2030-01-01T00:00:00Z'))).toEqual(old);
+        expect(seriesDatesShown(rolledView.eventNextDates, '2027-10-29', Date.parse('2027-10-15T10:00:00Z')).map(d => d.date)).toEqual(['2027-10-22', '2027-10-29']);
     });
 
     it("the node's refusal shows in its own words", async () => {

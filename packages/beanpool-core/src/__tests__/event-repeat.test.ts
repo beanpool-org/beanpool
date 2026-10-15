@@ -14,7 +14,9 @@ import {
     repeatUntilProblem,
     seriesCancelledLine,
     seriesDateLabel,
+    seriesDatesShown,
     seriesMovedFromLine,
+    seriesPassedDateEndMs,
 } from '../event-repeat.js';
 
 const labels = (date: string) => repeatChoicesFor(date).map((c) => c.label);
@@ -206,6 +208,22 @@ describe('the detail\'s Next dates and the host\'s lines', () => {
 
     it('bringing it back: "Fri 16 Oct is back on", as the node tells those going', () => {
         expect(seriesBackOnLine('2026-10-16')).toBe('Fri 16 Oct is back on');
+    });
+
+    it("Next dates: a passed cancelled date goes at its end; an older node's list as it is (confirmation 2 of #1993, NB2)", () => {
+        const listed = [
+            { date: '2026-10-16', endAt: '2026-10-16T11:50:00.000Z' },
+            { date: '2026-10-23', endAt: '2026-10-23T11:50:00.000Z' },
+            { date: '2026-10-30', endAt: '2026-10-30T11:50:00.000Z' },
+        ];
+        const before = Date.parse('2026-10-16T11:49:00.000Z');
+        expect(seriesDatesShown(listed, '2026-10-30', before).map(d => d.date)).toEqual(['2026-10-16', '2026-10-23', '2026-10-30']);
+        expect(seriesDatesShown(listed, '2026-10-30', Date.parse('2026-10-16T11:50:00.000Z')).map(d => d.date)).toEqual(['2026-10-23', '2026-10-30']);
+        expect(seriesPassedDateEndMs(listed, '2026-10-30', before)).toBe(Date.parse('2026-10-16T11:50:00.000Z'));
+        expect(seriesPassedDateEndMs(listed, '2026-10-16', before)).toBeNull();
+        const old = listed.map(({ date }) => ({ date }));
+        expect(seriesDatesShown(old, '2026-10-30', Date.parse('2030-01-01T00:00:00Z'))).toEqual(old);
+        expect(seriesPassedDateEndMs(old, '2026-10-30', before)).toBeNull();
     });
 
     it('Change this date only: "Moved from the regular Friday"', () => {

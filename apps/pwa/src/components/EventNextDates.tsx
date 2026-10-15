@@ -11,8 +11,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, t } from '@beanpool/core';
-import { setEventDateCancelled, type EventNextDate, type MarketplacePost } from '../lib/api';
+import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t } from '@beanpool/core';
+import { setEventDateCancelled, type MarketplacePost } from '../lib/api';
 
 interface Props {
     post: MarketplacePost;
@@ -28,20 +28,6 @@ const MAX_WAIT_MS = 2_147_483_647;
 
 const LINK = 'inline-flex items-center min-h-[44px] bg-transparent border-0 p-0 text-sm font-bold underline cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm';
 
-/**
- * The node's dates as the page shows them now: a cancelled date the event has passed is left out once it has ended (the
- * node lists it only until then, and takes it back only until then); an older node's list, without ends, as it is.
- */
-export function shownNextDates(dates: EventNextDate[] | undefined, current: string | null, nowMs: number): EventNextDate[] {
-    return (dates ?? []).filter(d => !(current && d.date < current && d.endAt && Date.parse(d.endAt) <= nowMs));
-}
-
-/** When the next passed cancelled date on the list ends, for the page to drop it then; null when none is listed. */
-function nextPassedEndMs(dates: EventNextDate[] | undefined, current: string | null, nowMs: number): number | null {
-    const ends = (dates ?? []).filter(d => current && d.date < current && d.endAt).map(d => Date.parse(d.endAt!)).filter(ms => ms > nowMs);
-    return ends.length > 0 ? Math.min(...ends) : null;
-}
-
 export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }: Props) {
     const [busy, setBusy] = useState<string | null>(null);
     const [line, setLine] = useState<string | null>(null);
@@ -49,13 +35,13 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }
     const current = post.eventStartLocal?.slice(0, 10) ?? null;
     // A cancelled date the event has passed goes from the list at its end: the node no longer takes it back then.
     const [tick, setTick] = useState(0);
-    const passedEnd = nextPassedEndMs(post.eventNextDates, current, Date.now());
+    const passedEnd = seriesPassedDateEndMs(post.eventNextDates, current, Date.now());
     useEffect(() => {
         if (passedEnd == null) return;
         const id = setTimeout(() => setTick(n => n + 1), Math.min(MAX_WAIT_MS, passedEnd - Date.now() + 50));
         return () => clearTimeout(id);
     }, [passedEnd, tick]);
-    const dates = shownNextDates(post.eventNextDates, current, Date.now());
+    const dates = seriesDatesShown(post.eventNextDates, current, Date.now());
     if (!post.eventRepeat || dates.length === 0) return null;
 
     const change = async (date: string, cancel: boolean, thenMove = false) => {

@@ -70,6 +70,7 @@ import { probationRuleSet, probationSummary, type ProbationSummary } from '../en
 import { readMemberArea } from '../engine/member-area.js';
 import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
+import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
 import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor } from '../decisions-engine.js';
@@ -203,11 +204,6 @@ export interface EventItem {
     repeat?: { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number }; repeatUntil?: string;
 }
 
-/** A stored rule as the caption needs it: the pattern's own keys, never the host's clock or each date's length. */
-function repeatPatternOf(rule: { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number }): NonNullable<EventItem['repeat']> {
-    const { freq, interval, byDay, byMonthDay, pos } = rule;
-    return { freq, interval, ...(byDay ? { byDay } : {}), ...(byMonthDay != null ? { byMonthDay } : {}), ...(pos != null ? { pos } : {}) };
-}
 
 export interface HomeCards {
     needs?: { items: NeedsItem[] };
@@ -641,7 +637,7 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
             ...(p.eventStartLocal && p.eventTz ? { startLocal: bounded(p.eventStartLocal, ID_CHARS)!, tz: bounded(p.eventTz, ID_CHARS)! } : {}),
             ...(p.eventOnline ? { online: true as const } : {}),
-            ...(p.eventRepeat ? { repeat: repeatPatternOf(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
+            ...(p.eventRepeat ? { repeat: publicRepeatPattern(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
 }

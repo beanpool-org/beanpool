@@ -71,6 +71,17 @@ export const SKIP_HOST_ONLY = 'Only the host can cancel or restore a date';
 export const SKIP_LAST_DATE = 'This is the last date: change when the event ends, or cancel the event';
 export const SKIPS_TOO_MANY = `At most ${EVENT_REPEAT_SKIPS_MAX} dates can be cancelled`;
 export const DATE_CANCELLED_PUSH_TITLE = 'Date cancelled';
+export const DATE_BACK_ON_PUSH_TITLE = 'Date back on';
+
+/**
+ * A stored rule as a list's ↻ caption needs it (Home's Coming up, Your events): the pattern's own keys, never the host's
+ * clock or each date's length, which only the event's own read carries.
+ */
+export function publicRepeatPattern(rule: EventRepeatRule | EventRepeatPattern): { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number } {
+    const { freq, interval } = rule;
+    const r = rule as { byDay?: string; byMonthDay?: number; pos?: number };
+    return { freq, interval, ...(r.byDay ? { byDay: r.byDay } : {}), ...(r.byMonthDay != null ? { byMonthDay: r.byMonthDay } : {}), ...(r.pos != null ? { pos: r.pos } : {}) };
+}
 
 /** The three series columns, as written. */
 export interface SeriesCells {
@@ -291,8 +302,9 @@ export function rollDueSeries(broadcast?: BroadcastFn, nowMs = Date.now()): numb
 /**
  * "Cancel this date" and its undo (§8): `POST /api/events/:id/skip { date }` and `DELETE` the same, the host only. A
  * cancelled current date rolls the series on at once, and Going for it are told "Fri 16 Oct is cancelled. Next: Fri 23
- * Oct". Restoring a date the roll had passed for its cancelling moves the series back to it. The final date can't be
- * cancelled (SKIP_LAST_DATE): the host moves the end, or cancels the event, which has its own way.
+ * Oct". Restoring a date the roll had passed for its cancelling, while it hasn't ended, moves the series back to it, and
+ * Going for it are told "Fri 16 Oct is back on" (the deciding review of #1993, N2): their RSVPs kept that date. The final
+ * date can't be cancelled (SKIP_LAST_DATE): the host moves the end, or cancels the event, which has its own way.
  */
 export function setSeriesDateSkipped(
     broadcast: BroadcastFn | undefined,
@@ -324,29 +336,33 @@ export function setSeriesDateSkipped(
     const nextSkips = skipped ? [...new Set([...skips, day])].sort() : skips.filter(d => d !== day);
     if (nextSkips.length > EVENT_REPEAT_SKIPS_MAX) throw new Error(SKIPS_TOO_MANY);
 
-    let notify: { going: string[]; body: string } | null = null;
+    let notify: { going: string[]; title: string; body: string } | null = null;
+    const name = (row.title || 'An event').trim() || 'An event';
     db.transaction(() => {
         if (skipped && day === currentDate) {
             const next = nextOccurrence({ ...walk, skips: nextSkips }, nowIso);
             if (!next) throw new Error(SKIP_LAST_DATE);
             const going = eventGoingPubkeys(postId);
             writeCurrentDate(row, next, nextSkips, nowIso);
-            notify = { going, body: `${(row.title || 'An event').trim() || 'An event'}: ${localDateWords(day)} is cancelled. Next: ${localDateWords(next.date)}.` };
+            notify = { going, title: DATE_CANCELLED_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is cancelled. Next: ${localDateWords(next.date)}.` };
         } else if (!skipped && day < currentDate) {
-            // A date the roll passed because it was cancelled, restored: it is the next date again.
-            writeCurrentDate(row, occ, nextSkips, nowIso);
+            // A date the roll passed because it was cancelled, restored: it is the next date again, and those whose RSVP is
+            // for it (stamped with it, so Going again now) hear it is on, as they heard it was off.
+            if (writeCurrentDate(row, occ, nextSkips, nowIso)) {
+                notify = { going: eventGoingPubkeys(postId), title: DATE_BACK_ON_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is back on.` };
+            }
         } else {
             db.prepare(`UPDATE posts SET event_repeat_skips = ?, updated_at = ? WHERE id = ?`).run(repeatSkipsCell(nextSkips), nowIso, postId);
         }
     })();
     bumpPostsVersion();
     broadcastSeries(broadcast, row);
-    const sent = notify as { going: string[]; body: string } | null;
+    const sent = notify as { going: string[]; title: string; body: string } | null;
     if (push && sent && sent.going.length > 0) {
         try {
-            push(sent.going, actorPubkey, DATE_CANCELLED_PUSH_TITLE, sent.body, { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
+            push(sent.going, actorPubkey, sent.title, sent.body, { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
         } catch (e) {
-            console.warn('[Events] date-cancelled notice not sent:', e);
+            console.warn('[Events] date notice not sent:', e);
         }
     }
     const post = getPosts(db, { id: postId, viewerPubkey: actorPubkey, includeAllScopes: true })[0]!;

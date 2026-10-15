@@ -14,8 +14,10 @@
  *  3. Monthly on the 31st skips February; monthly on the last Friday.
  *  4. Until: the last date is the last; after it the series ends as a one-off does and is never rolled again.
  *  5. Cancel a date (POST/DELETE /api/events/:id/skip): host only; a date that is not the series' refused; cancelling the
- *     current date rolls at once and tells Going "… is cancelled. Next: …"; restoring it moves the series back; the final
- *     date can't be cancelled, while earlier dates are left or when it is the only one (a series ends on it).
+ *     current date rolls at once and tells Going "… is cancelled. Next: …"; restoring it moves the series back and tells them
+ *     "… is back on", but not once that date has ended, and a later date restored tells nobody; the final date can't be
+ *     cancelled, while earlier dates are left or when it is the only one (a series ends on it). Your events (GET
+ *     /api/events/mine) carries the pattern and last date, a one-off's neither.
  *  6. Reminders fire once per date: a regular is reminded for this week's date and next week's, once each; an RSVP for
  *     last week's date gets no reminder for this week's; a one-off moved by an edit sends nothing twice.
  *  7. A standby never rolls (nor prunes).
@@ -44,7 +46,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { rsvpEvent, eventWaitingCount } from './engine/posts.js';
 import { runEventReminderSweep, dueEventReminders } from './engine/event-reminders.js';
-import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped, SKIP_HOST_ONLY, SKIP_LAST_DATE, DATE_CANCELLED_PUSH_TITLE } from './engine/event-series-roll.js';
+import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped, SKIP_HOST_ONLY, SKIP_LAST_DATE, DATE_CANCELLED_PUSH_TITLE, DATE_BACK_ON_PUSH_TITLE } from './engine/event-series-roll.js';
 import { eventThreadReadOnlyReason, loadEventForThread } from './engine/event-thread.js';
 import { setMemberPhoto, REPEAT_ERRORS } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
@@ -250,9 +252,32 @@ async function main(): Promise<void> {
     assert(pushes.length === 1 && pushes[0].to.includes(regular.pubKeyHex) && pushes[0].title === DATE_CANCELLED_PUSH_TITLE
         && pushes[0].body === 'Friday dinner: Fri 3 Dec is cancelled. Next: Fri 10 Dec.',
         `Going for it are told (got ${JSON.stringify(pushes)})`);
+    // Brought back while it hasn't ended (the deciding review of #1993, N2): the series moves back to it, and Going for it
+    // are told it is on again, as they were told it was off.
+    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', false);
+    assert(row(skId).event_start_local === '2027-12-03T19:00' && pushes.length === 2 && pushes[1].to.includes(regular.pubKeyHex)
+        && pushes[1].title === DATE_BACK_ON_PUSH_TITLE && pushes[1].body === 'Friday dinner: Fri 3 Dec is back on.',
+        `bringing the current date back tells Going "… is back on" (got ${row(skId).event_start_local} ${JSON.stringify(pushes.slice(1))})`);
+    // After the date's end it can't come back: the node refuses it, and nobody is told anything.
+    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', true);
+    const thirdEnd = Date.parse(row(skId).event_end_at) - 7 * DAY;
+    let lateError = '';
+    try { setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', false, thirdEnd + 1000); } catch (e: any) { lateError = e?.message ?? ''; }
+    assert(lateError === REPEAT_ERRORS.skipDate && row(skId).event_start_local === '2027-12-10T19:00' && pushes.length === 3,
+        `once the cancelled date has ended it can't be brought back (got ${JSON.stringify(lateError)} ${row(skId).event_start_local} ${pushes.length})`);
+    // Restoring a later date (not the current one) tells nobody: nobody can be Going for a date that isn't the event's yet.
+    await signed('DELETE', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
+    assert(pushes.length === 3, `restoring a later date tells nobody (got ${pushes.length})`);
+    await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
     const restore = await signed('DELETE', `/api/events/${skId}/skip`, { date: '2027-12-03' }, skipper);
     assert(restore.status === 200 && row(skId).event_start_local === '2027-12-03T19:00' && !(restore.body?.skips ?? []).includes('2027-12-03'),
         `restoring it moves the series back to Fri 3 Dec (got ${restore.status} ${row(skId).event_start_local} ${JSON.stringify(restore.body?.skips)})`);
+    // "Your events" (the deciding review of #1993, N5): the row says how it repeats and its last date, for the ↻ caption,
+    // as Home's line does: the pattern only, never the host's clock or each date's length.
+    const mine = await signed('GET', '/api/events/mine', null, regular);
+    const mineRow = (mine.body?.events ?? []).find((e: any) => e.postId === skId);
+    assert(mine.status === 200 && JSON.stringify(mineRow?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && mineRow?.repeatUntil === '2027-12-24',
+        `Your events carries the pattern and the last date (got ${mine.status} ${JSON.stringify(mineRow)})`);
     // The 24th is the last date: cancel the 10th and the 24th, then roll to the 24th and try to cancel it.
     await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-10' }, skipper);
     rollDueSeries(undefined, Date.parse(row(skId).event_end_at) + 1000);
@@ -297,6 +322,8 @@ async function main(): Promise<void> {
     runEventReminderSweep(onePush, Date.parse(row(oneId).event_start_at) - DAY + 1000);
     assert(oneSent.length === 1, `its reminder is not sent a second time (got ${oneSent.length})`);
     assert((await readEvent(oneId, remind))?.goingCount === 1, 'and the people going are still going for the moved date');
+    const mineOne = ((await signed('GET', '/api/events/mine', null, regular)).body?.events ?? []).find((e: any) => e.postId === oneId);
+    assert(!!mineOne && !('repeat' in mineOne) && !('repeatUntil' in mineOne), `a one-off's row in Your events says nothing of repeating (got ${JSON.stringify(mineOne)})`);
 
     // ── 7. A standby never rolls ────────────────────────────────────────────────────────────────
     console.log('\n── 7. A standby never rolls ──');

@@ -53,7 +53,7 @@ export async function listTunnelsNamed(env, name, { withDeleted = false } = {}) 
     // and heal at this name would answer 502 for good — an address lost (the #1985 fix-round check, NB 1).
     const perPage = info?.per_page || TUNNELS_PER_PAGE;
     if (info?.total_pages > 1 || (list.length >= perPage && info?.total_pages !== 1)) {
-        throw Object.assign(new Error(`CF GET ${path} → page ${info.page ?? '?'} of ${info.total_pages ?? '?'} (${info.count ?? list.length} of ${info.total_count ?? '?'} tunnels): can't tell`), { status: 502 });
+        throw Object.assign(new Error(`CF GET ${path} → page ${info?.page ?? '?'} of ${info?.total_pages ?? '?'} (${info?.count ?? list.length} of ${info?.total_count ?? '?'} tunnels): can't tell`), { status: 502 });
     }
     return list.filter((t) => t && t.name === name && (withDeleted || !t.deleted_at));
 }

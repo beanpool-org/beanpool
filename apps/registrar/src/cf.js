@@ -7,7 +7,8 @@
 
 const API = 'https://api.cloudflare.com/client/v4';
 
-async function cf(env, method, path, body) {
+// The whole answer ({ result, result_info, … }); cf() below is its result.
+async function cfAnswer(env, method, path, body) {
     const headers = (env.CF_EMAIL && env.CF_API_KEY)
         ? { 'X-Auth-Email': env.CF_EMAIL, 'X-Auth-Key': env.CF_API_KEY, 'Content-Type': 'application/json' }
         : { Authorization: `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' };
@@ -24,8 +25,10 @@ async function cf(env, method, path, body) {
         err.codes = (Array.isArray(data.errors) ? data.errors : []).map((x) => x?.code).filter((c) => c !== undefined);
         throw err;
     }
-    return data.result;
+    return data;
 }
+
+const cf = async (env, method, path, body) => (await cfAnswer(env, method, path, body)).result;
 
 // --- Tunnel mode (Case A) ---
 export const createTunnel = (env, name) =>
@@ -34,10 +37,25 @@ export const createTunnel = (env, name) =>
 // Cloudflare refused createTunnel because a live tunnel already has that name.
 export const tunnelNameTaken = (e) => !!e && (e.codes?.includes(1013) || e.status === 409);
 
-// The live (not deleted) tunnels named `name`: { id, name, created_at, … }.
-export async function listTunnelsNamed(env, name) {
-    const list = await cf(env, 'GET', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`);
-    return (Array.isArray(list) ? list : []).filter((t) => t && t.name === name && !t.deleted_at);
+// The live (not deleted) tunnels named `name`, or every one with `withDeleted`: { id, name, created_at, … }. Cloudflare
+// pages this list (at most 1000 a page, and every rotate, re-made heal and take-back leaves a deleted one): an answer
+// that is one page of several throws, as a failure does (NB-4 of the #1985 review) — a tunnel on the next page must
+// never read as "not there".
+const TUNNELS_PER_PAGE = 1000;
+export async function listTunnelsNamed(env, name, { withDeleted = false } = {}) {
+    // Without is_deleted Cloudflare lists deleted tunnels too (with `deleted_at`).
+    const path = `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}&per_page=${TUNNELS_PER_PAGE}${withDeleted ? '' : '&is_deleted=false'}`;
+    const data = await cfAnswer(env, 'GET', path);
+    const list = Array.isArray(data.result) ? data.result : [];
+    const info = data.result_info;
+    // More pages only when Cloudflare says so, or the page came back full without saying it is the only one. Never from
+    // total_count: if Cloudflare counted it differently from the list (deleted tunnels, the name filter), every retry
+    // and heal at this name would answer 502 for good — an address lost (the #1985 fix-round check, NB 1).
+    const perPage = info?.per_page || TUNNELS_PER_PAGE;
+    if (info?.total_pages > 1 || (list.length >= perPage && info?.total_pages !== 1)) {
+        throw Object.assign(new Error(`CF GET ${path} → page ${info?.page ?? '?'} of ${info?.total_pages ?? '?'} (${info?.count ?? list.length} of ${info?.total_count ?? '?'} tunnels): can't tell`), { status: 502 });
+    }
+    return list.filter((t) => t && t.name === name && (withDeleted || !t.deleted_at));
 }
 
 // The tunnel, or null if Cloudflare no longer has it (404, or deleted — a deleted tunnel is still listed with
@@ -77,11 +95,14 @@ export const deleteTunnel = (env, id) =>
 export const createDnsRecord = (env, label, rec) =>
     cf(env, 'POST', `/zones/${env.CF_ZONE_ID}/dns_records`, { type: rec.type, name: label, content: rec.content, proxied: rec.proxied });
 
-// The routing record at `fqdn` (CNAME, A or AAAA), or null.
-export async function findDnsRecord(env, fqdn) {
+// Every routing record at `fqdn` (CNAME, A or AAAA): A and AAAA may stand side by side.
+export async function findDnsRecords(env, fqdn) {
     const list = await cf(env, 'GET', `/zones/${env.CF_ZONE_ID}/dns_records?name=${encodeURIComponent(fqdn)}`);
-    return (Array.isArray(list) ? list : []).find((r) => ['CNAME', 'A', 'AAAA'].includes(r.type)) || null;
+    return (Array.isArray(list) ? list : []).filter((r) => r && ['CNAME', 'A', 'AAAA'].includes(r.type));
 }
+
+// The routing record at `fqdn`, or null: the first findDnsRecords lists.
+export const findDnsRecord = async (env, fqdn) => (await findDnsRecords(env, fqdn))[0] || null;
 
 // Content and proxied only; ensure() replaces a record whose type must change (Cloudflare won't PATCH a type).
 export const patchDnsRecord = (env, id, rec) =>

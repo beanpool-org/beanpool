@@ -21,6 +21,7 @@
  * from its store; a store that can't be read refuses, and a chat answer that can't be read refuses too (a never-held
  * browser sends readable words only when the chat answer says unlocked).
  */
+import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, type RemovedLineKind } from '@beanpool/core';
 import { detectMentions, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
 import {
     groupKeyring, GroupKeysRequestError, GroupChatKeyError, GROUP_CHAT_NOT_MEMBER_TEXT,
@@ -243,6 +244,8 @@ export interface GroupLineShown {
     mine: boolean;
     /** Nobody's: drawn in the middle with no actions (Unverified, waiting for a key, opening). */
     unattributed: boolean;
+    /** A tombstone's kind (who removed it), for drawing removed lines in a row as one; absent on every other line. */
+    removed?: RemovedLineKind;
 }
 
 /** The words a group chat's tombstone shows: the app's own, by who removed it, never the node's marker (phone chat-actions). */
@@ -254,13 +257,54 @@ function isTombstoneRow(m: { type?: string | null; metadata?: unknown }): boolea
     return m.type === 'removed' || metadataOf(m.metadata).removed === true;
 }
 
-/** Its words: the author's own delete (or an account deleted) or a convenor's removal, told apart by `removedBy`. */
-export function groupTombstoneText(m: { authorPubkey?: string | null; metadata?: unknown }): string {
+/**
+ * Who removed it: the author's own delete (or an account deleted), a convenor's removal, told apart by `removedBy`; or
+ * the node's own, when the chat was locked (core isLockedAwayLine), which no convenor did.
+ */
+export function groupTombstoneKind(m: { authorPubkey?: string | null; metadata?: unknown }): RemovedLineKind {
     const meta = metadataOf(m.metadata);
-    if (meta.accountDeleted === true) return GROUP_LINE_DELETED_TEXT;
+    if (meta.accountDeleted === true) return 'author';
+    if (isLockedAwayLine(meta)) return 'locked';
     const by = meta.removedBy;
-    if (by && m.authorPubkey && by === m.authorPubkey) return GROUP_LINE_DELETED_TEXT;
-    return by ? GROUP_LINE_REMOVED_TEXT : GROUP_LINE_DELETED_TEXT;
+    if (by && m.authorPubkey && by === m.authorPubkey) return 'author';
+    return by ? 'convenor' : 'author';
+}
+
+/** Its words, by who removed it (groupTombstoneKind). */
+export function groupTombstoneText(m: { authorPubkey?: string | null; metadata?: unknown }): string {
+    const kind = groupTombstoneKind(m);
+    if (kind === 'locked') return lockedAwayLineText();
+    return kind === 'convenor' ? GROUP_LINE_REMOVED_TEXT : GROUP_LINE_DELETED_TEXT;
+}
+
+/** Which removal a drawn line is (a tombstone in the app's words), or null for every other line. */
+export function groupRemovedKind(g: GroupLineShown | null | undefined): RemovedLineKind | null {
+    return g?.nodeLine && g.removed ? g.removed : null;
+}
+
+/** A run of two or more removed lines of one kind, drawn as one line by its first line (core removed-line-runs). */
+export interface GroupRemovedRun {
+    kind: RemovedLineKind;
+    ids: string[];
+}
+
+/**
+ * The runs among the lines as drawn, in order (hidden lines are not drawn, so they neither join nor break a run). Each
+ * run's first id maps to the run; every other id in it maps to null (drawn by the first). A line in no run is absent.
+ */
+export function groupRemovedRuns(
+    lines: readonly { id: string }[], shown: ReadonlyMap<string, GroupLineShown> | null,
+): Map<string, GroupRemovedRun | null> {
+    const runs = new Map<string, GroupRemovedRun | null>();
+    if (!shown) return runs;
+    const drawn = lines.filter((m) => !shown.get(m.id)?.hidden);
+    for (const run of removedLineRuns(drawn, (m) => groupRemovedKind(shown.get(m.id)))) {
+        if (!isCollapsedRun(run)) continue;
+        const ids = run.lines.map((m) => m.id);
+        runs.set(ids[0], { kind: run.kind, ids });
+        for (const id of ids.slice(1)) runs.set(id, null);
+    }
+    return runs;
 }
 
 /**
@@ -277,7 +321,10 @@ export function groupLineShown(
     const { locked, thread, me } = opts;
     if (!locked) return null;
     if (isTombstoneRow(m)) {
-        return { hidden: false, nodeLine: true, text: groupTombstoneText(m), name: null, nameHint: null, details: null, signer: '', mine: false, unattributed: false };
+        return {
+            hidden: false, nodeLine: true, text: groupTombstoneText(m), name: null, nameHint: null, details: null, signer: '', mine: false, unattributed: false,
+            removed: groupTombstoneKind(m),
+        };
     }
     if (!isSealedGroupLine(m)) {
         // A node system line: drawn as the node's (centred, no name); a text line carrying a systemType is not one.

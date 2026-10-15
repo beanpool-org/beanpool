@@ -20,6 +20,7 @@ function form(over: Partial<EventFormInput> = {}): EventFormInput {
         privateNote: 'Gate code 1234',
         audienceGroupId: null,
         authorPubkey: 'me',
+        hostLetsIn: false,
         ...over,
     };
 }
@@ -241,7 +242,7 @@ describe('Copy to a new date', () => {
             title: copy.title, description: copy.description, placeName: copy.placeName,
             lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
             audienceGroupId: copy.groupId, authorPubkey: copy.enterprisePubkey ?? 'host',
-            start: new Date(2026, 9, 24, 9, 0), end: null,
+            start: new Date(2026, 9, 24, 9, 0), end: null, hostLetsIn: false,
         }, new Date(2026, 8, 20, 8, 0));
         expect(built.ok).toBe(true);
         if (built.ok) {
@@ -256,7 +257,7 @@ describe('Copy to a new date', () => {
         const built = buildEventDraft({
             title: copy.title, description: copy.description, placeName: copy.placeName,
             lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
-            audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null,
+            audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null, hostLetsIn: false,
         }, new Date(2026, 8, 20, 8, 0));
         expect(built.ok).toBe(false);
     });

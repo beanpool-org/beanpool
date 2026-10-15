@@ -42,7 +42,7 @@
  */
 
 import { postPhotoUrl } from '@beanpool/engine';
-import type { PushNoticeKind } from '@beanpool/core';
+import { eventPlaceTimeText, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 import { postInSightSql } from './post-sight.js';
@@ -192,12 +192,21 @@ export interface MyEvent {
     rsvp: 'going' | 'interested';
     photo: string | null;
     reminderOffsets: number[] | null;
+    /**
+     * The host's clock and its zone (DESIGN-event-times §4), so the list reads as the event's card does ("20:50–22:50" /
+     * "Lagos time · 14:50 your time"), and `online` for an event with no place. Absent on an event from before them.
+     */
+    startLocal?: string;
+    endLocal?: string;
+    tz?: string;
+    online?: true;
 }
 
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
         SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
+               p.event_start_local, p.event_end_local, p.event_tz, p.event_online,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -229,6 +238,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
             ? null
             : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at, r.audience_scope),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
+        ...(r.event_start_local && r.event_tz ? { startLocal: r.event_start_local, tz: r.event_tz } : {}),
+        ...(r.event_end_local && r.event_tz ? { endLocal: r.event_end_local } : {}),
+        ...(r.event_online === 1 ? { online: true as const } : {}),
     }));
 }
 
@@ -248,6 +260,10 @@ export const reminderPushTitle = (eventTitle: string): string =>
  * wherever the process happens to stand, and tapping the push opens the event, which already renders
  * `startAt` in the reader's own local time.
  *
+ * Since event times (DESIGN-event-times §6) an in-person event that holds its own clock and zone adds that clock after
+ * these words, NAMED ("Starts in 1 day · Sat 20:50 Lagos time"): a labelled time cannot be read in the wrong zone, so
+ * the objection above does not reach it. reminderPushBody adds it; online events keep the relative words alone.
+ *
  * The sentence comes from the offset the member chose, not from a day difference computed between two
  * dates, so there is no calendar arithmetic left here to get wrong.
  */
@@ -259,10 +275,14 @@ const REMINDER_BODY: Record<EventReminderOffset, string> = {
     30: 'Starts in 30 minutes',
 };
 
-export function reminderPushBody(offsetMin: number): string {
+export function reminderPushBody(offsetMin: number, placeTime?: string | null): string {
     // The offsets are a closed set (`parseReminderOffsets`), so the lookup always hits; the fallback is
     // for a stored row from some future picker, and stays relative like the rest.
-    return REMINDER_BODY[offsetMin as EventReminderOffset] ?? `Starts in ${offsetMin} minutes`;
+    const relative = REMINDER_BODY[offsetMin as EventReminderOffset] ?? `Starts in ${offsetMin} minutes`;
+    // An in-person event's own clock, labelled with its zone (DESIGN-event-times §6): "Sat 20:50 Lagos time" is right
+    // wherever the node's process clock stands, because it names whose clock it is. Online gets none: the reader's
+    // zone is not known here.
+    return placeTime ? `${relative} · ${placeTime}` : relative;
 }
 
 /** One reminder that has come round and has not been sent. */
@@ -272,6 +292,8 @@ export interface DueReminder {
     startAt: string;
     memberPubkey: string;
     offsetMin: number;
+    /** In person, with a stored clock: "Sat 20:50 Lagos time". Null online or for an event from before zones. */
+    placeTime: string | null;
 }
 
 /**
@@ -293,7 +315,8 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
             `SELECT 1 FROM event_reminders_sent WHERE post_id = ? AND member_pubkey = ? AND offset_min = ?`
         );
         rows = db.prepare(`
-            SELECT p.id, p.title, p.event_start_at, r.member_pubkey, r.reminder_offsets, r.updated_at
+            SELECT p.id, p.title, p.event_start_at, p.event_start_local, p.event_tz, p.event_online,
+                   r.member_pubkey, r.reminder_offsets, r.updated_at
               FROM event_rsvps r
               JOIN posts p ON p.id = r.post_id
              WHERE p.type = 'event'
@@ -343,6 +366,7 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                 startAt: r.event_start_at,
                 memberPubkey: r.member_pubkey,
                 offsetMin,
+                placeTime: r.event_online === 1 ? null : eventPlaceTimeText(r.event_start_local, r.event_tz, r.event_start_at),
             });
         }
     }
@@ -375,14 +399,14 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
 
     // Keyed on the push that would be sent, not on the event: two members of the same event with different
     // offsets get different words and must not be collapsed into one message.
-    const batches = new Map<string, { postId: string; title: string; offsetMin: number; targets: string[] }>();
+    const batches = new Map<string, { postId: string; title: string; offsetMin: number; placeTime: string | null; targets: string[] }>();
     for (const d of due) {
         // The due list already excludes everything marked. This is the atomic re-check on top of it:
         // losing the insert means another process claimed the same reminder between the read and here.
         if (claim.run(d.postId, d.memberPubkey, d.offsetMin, sentAt).changes === 0) continue;
         const key = `${d.postId}|${d.offsetMin}`;
         if (!batches.has(key)) {
-            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, targets: [] });
+            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, targets: [] });
         }
         batches.get(key)!.targets.push(d.memberPubkey);
     }
@@ -395,7 +419,7 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
                 b.targets,
                 'SYSTEM',
                 reminderPushTitle(b.title),
-                reminderPushBody(b.offsetMin),
+                reminderPushBody(b.offsetMin, b.placeTime),
                 { screen: 'post', postId: b.postId },
                 REMINDER_PUSH_CATEGORY,
                 'event.reminder',

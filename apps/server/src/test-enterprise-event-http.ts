@@ -22,6 +22,8 @@
  *     an end before the start, a missing title, a missing pin, and more than 5 photos are all refused.
  *  7. A member's own event still goes through /api/marketplace/posts and has no created_by.
  *  8. A keeper can EDIT what the enterprise hosts, signing with their own key: the other half of "Post as".
+ *  9. A clock the zone skips (a DST gap) is answered as eventTimeAdjusted from this route too, next to the post
+ *     (DESIGN-event-times §3; the marketplace route's own checks are in test-event-times-http).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-event-http.ts
  */
@@ -203,6 +205,14 @@ async function main(): Promise<void> {
     }, stranger);
     assert(strangerEdit.status === 404 || strangerEdit.status === 403,
         `a member who is not a host cannot edit it (got ${strangerEdit.status})`);
+
+    // ── 9. A DST gap is said, from this route too ─────────────────────────────────────────────
+    console.log('\n── 9. A clock the zone skips ──');
+    const gap = await signedFetch('POST', eventPath, event({ eventStartAt: undefined, eventStartLocal: '2027-10-03T02:30', eventTz: 'Australia/Sydney' }), keeper);
+    assert(gap.status === 200 && JSON.stringify(gap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'gap', asked: '2027-10-03T02:30', saved: '2027-10-03T03:30' }, end: null })
+        && !('eventTimeAdjusted' in (gap.body?.post ?? {})),
+        `Sydney 3 Oct 2027 02:30 does not exist: the enterprise route answers eventTimeAdjusted next to the post (got ${gap.status} ${JSON.stringify(gap.body?.eventTimeAdjusted)} ${gap.error ?? ''})`);
+    assert(!('eventTimeAdjusted' in (created.body ?? {})), "an old client's instant-only event answered none");
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

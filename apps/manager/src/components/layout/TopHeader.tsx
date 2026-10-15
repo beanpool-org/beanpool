@@ -23,7 +23,7 @@ export function TopHeader({
             <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 bg-nature-950 border border-nature-800 rounded-xl px-3 py-1.5 text-xs font-mono">
                     <span className="text-nature-400">Target Node:</span>
-                    <span className="text-terra-400 font-bold">{activeNode?.name}</span>
+                    <span className="text-bp-ink-terra font-bold">{activeNode?.name}</span>
                     <span className="text-nature-600">|</span>
                     <code className="text-sky-400">{activeNode?.url}</code>
                 </div>

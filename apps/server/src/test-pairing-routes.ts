@@ -133,6 +133,38 @@ async function main() {
     const pollExpiredBody = (await pollExpiredRes.json()) as any;
     assert(pollExpiredBody.status === 'expired', 'GET /api/pair/poll returns status "expired" after cancellation');
 
+    // ── 5. A real pairing's time (#1950): a held session lives at most its 120 s ─────────────────
+    // The computer polls every 1.5 s (apps/pwa WelcomePage); the phone sends its payload once it is scanned. Timed from
+    // the computer's init to the poll that brings the payload, over the real server.
+    const realStart = Date.now();
+    const real = createPairingSession();
+    const realInit = await fetch(`${BASE}/api/pair/init`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: real.sessionId, desktopPubHex: real.publicKeyHex }),
+    });
+    let collectedAt = 0;
+    let polls = 0;
+    const poller = setInterval(async () => {
+        if (collectedAt) return;
+        polls++;
+        const r = (await (await fetch(`${BASE}/api/pair/poll?session=${real.sessionId}`)).json()) as any;
+        if (r.status === 'transferred' && r.payload && !collectedAt) collectedAt = Date.now();
+    }, 1500);
+    await new Promise((r) => setTimeout(r, 2_000)); // the phone scans the code
+    const realPayload = encryptPairingPayload(samplePayload, real.publicKeyHex, real.sessionId);
+    const transferStart = Date.now();
+    const realTransfer = await fetch(`${BASE}/api/pair/transfer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: real.sessionId, mobilePubHex: realPayload.mobilePubHex, nonceHex: realPayload.nonceHex, ciphertextHex: realPayload.ciphertextHex }),
+    });
+    const transferMs = Date.now() - transferStart;
+    for (let i = 0; i < 100 && !collectedAt; i++) await new Promise((r) => setTimeout(r, 50));
+    clearInterval(poller);
+    const toCollectMs = collectedAt - transferStart;
+    const wholeMs = collectedAt - realStart;
+    assert(realInit.status === 200 && realTransfer.status === 200 && collectedAt > 0 && toCollectMs < 5_000 && wholeMs < 120_000,
+        `a real pairing: transfer answered in ${transferMs} ms, the computer had the payload ${toCollectMs} ms after the phone sent it (${polls} polls), ${wholeMs} ms from init; well inside the 120 s`);
+
     console.log(`\nPairing Routes Test Summary: ${passed}/${run} assertions passed.`);
     if (passed !== run) {
         throw new Error(`${run - passed} check(s) failed`);

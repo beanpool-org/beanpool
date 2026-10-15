@@ -40,6 +40,7 @@ import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplaced
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
+import { languageHeader } from './language-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -1912,6 +1913,8 @@ export async function createPost(post: any) {
             eventEndAt: post.eventEndAt,
             eventPlaceName: post.eventPlaceName,
             ...(post.eventPrivateNote ? { eventPrivateNote: post.eventPrivateNote } : {}),
+            // The host's "Only people I let in" choice, always sent (utils/events.ts buildEventDraft): left out, the node applies its own default.
+            ...(typeof post.eventHostLetsIn === 'boolean' ? { eventHostLetsIn: post.eventHostLetsIn } : {}),
         } : {}),
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
@@ -2583,8 +2586,17 @@ export async function removeEnterpriseThreadMessage(treasury: string, messageId:
 export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error || 'Could not open this event chat.');
+    // The node's code rides on the error: `waiting_for_host` is someone Going whom the host hasn't let in (events.ts isWaitingForHost).
+    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this event chat.'), { code: body?.code });
     return body;
+}
+
+/**
+ * The host lets a Going member in to the note and the chat, or takes it back, or lets everyone waiting in
+ * (DESIGN-global-member-privacy-fable.md §2.2). Answers the event as the host sees it.
+ */
+export async function letInToEvent(postId: string, who: { memberPublicKey: string } | { everyone: true }, letIn = true): Promise<any> {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/let-in`, { ...who, letIn });
 }
 
 export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<any> {
@@ -5454,7 +5466,8 @@ async function _signedRequest(endpoint: string, payload: any) {
     if (!identity) throw new Error('No identity found. You must be logged in.');
 
     const bodyString = JSON.stringify(payload);
-    const headers = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
+    // The language this phone writes in, so the node can answer in it (utils/language-choice.ts; not signed, not stored).
+    const headers = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -5504,7 +5517,7 @@ async function _signedRequest(endpoint: string, payload: any) {
             // still hold a (now broken) node URL.
             const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
             if (healed) {
-                const retryHeaders = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
+                const retryHeaders = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
                     method: 'POST',
                     headers: retryHeaders,
@@ -6538,8 +6551,12 @@ export interface GroupMemberItem {
     formerKeys?: FormerKey[] | null;
 }
 
-/** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
-export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any) {
+/**
+ * Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE). `withStatus`: the thrown error also
+ * carries the answer's `status`, and `unsaid` when the node gave no words of its own, so a screen can tell a refusal
+ * (403, said in the node's words) from a blip. Opt-in: other callers' errors stay exactly as they were.
+ */
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean }) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
@@ -6554,14 +6571,18 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            ...headers
+            ...headers,
+            ...languageHeader(),
         },
         body: payload !== undefined ? bodyString : undefined,
     });
 
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || errJson.message || `Request failed: ${res.status}`);
+        const words = errJson.error || errJson.message;
+        const error = new Error(words || `Request failed: ${res.status}`);
+        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true });
+        throw error;
     }
     return await res.json();
 }
@@ -6722,11 +6743,12 @@ export async function approveGroupMemberApi(groupId: string, memberPubkey: strin
 }
 
 export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
+    // With the status: a refusal (403) is said in the node's words (utils/group-invite-send.ts).
     return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
         memberPubkey,
         role,
         action: 'invite'
-    });
+    }, { withStatus: true });
 }
 
 export async function setGroupMemberRoleApi(groupId: string, memberPubkey: string, role: GroupRole): Promise<any> {

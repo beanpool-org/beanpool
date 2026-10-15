@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { applyPatternPreference } from './lib/usePatternBackground';
 import { captureAuthReturn } from './lib/web-join';
+import { startLanguage } from './lib/language';
 import './index.css';
 
 // A sign-in returning to /app/auth/<provider> carries its token in the fragment: read it and take it out of the
@@ -64,31 +65,42 @@ class ErrorBoundary extends Component<
     }
 }
 
-try {
-    createRoot(document.getElementById('root')!).render(
-        <StrictMode>
-            <ErrorBoundary>
-                <App />
-            </ErrorBoundary>
-        </StrictMode>
-    );
-} catch (err) {
-    console.error('[BeanPool] FATAL:', err);
-    const root = document.getElementById('root');
-    if (root) {
-        // SECURITY (PWA-1): build the DOM with textContent rather than
-        // interpolating the error message into innerHTML. The private key lives
-        // in IndexedDB on this origin, so an unescaped message reaching innerHTML
-        // would be a script-execution → key-exfiltration sink.
-        root.replaceChildren();
-        const wrap = document.createElement('div');
-        wrap.setAttribute('style', 'color: #ef4444; padding: 2rem; font-family: monospace; text-align: center;');
-        const h1 = document.createElement('h1');
-        h1.textContent = '⚠️ BeanPool failed to start';
-        const pre = document.createElement('pre');
-        pre.setAttribute('style', 'color: #ff6b6b; margin-top: 1rem;');
-        pre.textContent = (err as Error)?.message ?? String(err);
-        wrap.append(h1, pre);
-        root.append(wrap);
+function render() {
+    try {
+        createRoot(document.getElementById('root')!).render(
+            <StrictMode>
+                <ErrorBoundary>
+                    <App />
+                </ErrorBoundary>
+            </StrictMode>
+        );
+    } catch (err) {
+        console.error('[BeanPool] FATAL:', err);
+        const root = document.getElementById('root');
+        if (root) {
+            // SECURITY (PWA-1): build the DOM with textContent rather than
+            // interpolating the error message into innerHTML. The private key lives
+            // in IndexedDB on this origin, so an unescaped message reaching innerHTML
+            // would be a script-execution → key-exfiltration sink.
+            root.replaceChildren();
+            const wrap = document.createElement('div');
+            wrap.setAttribute('style', 'color: #ef4444; padding: 2rem; font-family: monospace; text-align: center;');
+            const h1 = document.createElement('h1');
+            h1.textContent = '⚠️ BeanPool failed to start';
+            const pre = document.createElement('pre');
+            pre.setAttribute('style', 'color: #ff6b6b; margin-top: 1rem;');
+            pre.textContent = (err as Error)?.message ?? String(err);
+            wrap.append(h1, pre);
+            root.append(wrap);
+        }
     }
 }
+
+// The first paint in the browser's language where it can be: its words are a chunk of their own, so wait for them a
+// moment (the page shows "Loading BeanPool..." meanwhile), and never longer than LANGUAGE_WAIT_MS. A slow or failed
+// fetch paints in English, and the language follows when it arrives (lib/language.ts): never a blank page.
+const LANGUAGE_WAIT_MS = 1500;
+let rendered = false;
+const renderOnce = () => { if (!rendered) { rendered = true; render(); } };
+startLanguage().finally(renderOnce);
+setTimeout(renderOnce, LANGUAGE_WAIT_MS);

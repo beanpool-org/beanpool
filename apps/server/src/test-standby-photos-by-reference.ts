@@ -552,10 +552,22 @@ async function main(): Promise<void> {
             await closeIfOpened(none);
             const seven = await open('7');
             await closeIfOpened(seven);
+            const nine = await open('9');
+            await closeIfOpened(nine);
+            const ten = await open('10');
+            await closeIfOpened(ten);
             const log = await main.send('access-log');
-            assert(none.status === 426 && seven.status === 426 && /replica format 8/.test(none.text) && /replica format 8/.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
-                `a copy asked for by a standby that doesn't read photos by reference (no format, or 7) is refused, 426, and M's Replication Access log says why `
-                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${JSON.stringify(log?.[0])})`);
+            const needs = /reads replica format 10, and copies from this server need 11; update it/;
+            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 11/.test(none.text)
+                && nine.status === 426 && /reads replica format 9, and copies from this server need 11/.test(nine.text)
+                && ten.status === 426 && needs.test(ten.text) && JSON.parse(ten.text).needsReplicaFormat === 11
+                && needs.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
+                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 11 (no format, 7 before photos by reference, 9 before event times, `
+                + `10 before the let-in) is refused, 426, and M's Replication Access log says why `
+                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status} ${ten.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
+            const current = await open(String(await main.send('replica-format')));
+            await closeIfOpened(current);
+            assert(current.status === 200, `one at this build's REPLICA_FORMAT opens its copy (${current.status} ${current.text.slice(0, 120)})`);
             const before = await standby.send('snapshot', { tables: HASHED });
             px.stripFormat = 1;
             const p5 = await standby.send('pull', {});
@@ -982,6 +994,8 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         const m = /^data:[^;]+;base64,(.*)$/.exec(row?.photo ?? '');
         return m ? sha256(Buffer.from(m[1], 'base64')) : null;
     },
+    /** The importer format this build reads (engine/sync.ts REPLICA_FORMAT), as its own puller sends it. */
+    'replica-format': async () => (await import('./engine/sync.js')).REPLICA_FORMAT,
     'access-log': async () => {
         const { getReplicationAccessLog } = await import('./state-engine.js');
         return getReplicationAccessLog().recent ?? [];

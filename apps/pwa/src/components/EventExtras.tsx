@@ -18,7 +18,7 @@ import {
     formatReminderChoice, icsFileName, normaliseReminderOffsets, parseReminderOffsets, reminderOffsetLabel,
     type ShareableEvent,
 } from '../lib/event-extras';
-import { formatEventWhen } from '../lib/events';
+import { eventShareWhen } from '../lib/events';
 
 /** The community's own address: the node the web app is talking to, or wherever it is being served from. */
 export function nodeOrigin(): string {
@@ -33,6 +33,9 @@ export function shareableEvent(post: MarketplacePost): ShareableEvent {
         endAt: post.eventEndAt || null,
         placeName: post.eventPlaceName || null,
         description: post.description || null,
+        whenText: post.eventStartLocal && post.eventTz ? eventShareWhen(post) : null,
+        tz: post.eventTz || null,
+        online: post.eventOnline === true,
     };
 }
 
@@ -53,7 +56,8 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
     const [note, setNote] = useState<string | null>(null);
     const event = shareableEvent(post);
     const link = eventLink(nodeOrigin(), post.id);
-    const when = formatEventWhen(post);
+    // A shared time is read outside the app, by someone whose zone nobody knows: it names its zone.
+    const when = eventShareWhen(post);
 
     const say = (text: string) => {
         setNote(text);

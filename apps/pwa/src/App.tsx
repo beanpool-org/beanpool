@@ -27,7 +27,6 @@ import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
-import { LedgerPreview } from './components/ShowcasePreviews';
 import { useFeatureMode } from './lib/features';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
@@ -999,9 +998,10 @@ export function App() {
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'ledger' && (beansMode === 'preview'
-                                ? <LedgerPreview onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
-                                : <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />)}
+                            {activeTab === 'ledger' && (
+                                <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'}
+                                    onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
+                            )}
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}

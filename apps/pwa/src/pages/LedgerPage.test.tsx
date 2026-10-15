@@ -322,3 +322,53 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
         expect(getMemberCards).not.toHaveBeenCalled();
     });
 });
+
+describe('the Ledger in preview (a node that previews Beans): Example Valley, and nothing asked of the node', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        info.value = { profile: 'global', features: { beans: false, showcase: true } };
+        vi.mocked(getBalance).mockResolvedValue({ balance: 4321, earnedCredit: 9, floor: -50, commonsBalance: 7, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getTransactions).mockResolvedValue([{ id: 'own-tx', from: 'someone', to: 'viewer-pubkey', amount: 77, memo: 'My own line', timestamp: '2026-10-15T00:00:00.000Z' }]);
+    });
+    afterEach(() => { info.value = { profile: 'local', features: {} }; });
+
+    it("reads no balance, transactions or members, polls nothing and takes up no socket nudge; the reader's own name never shows", async () => {
+        render(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(getBalance).not.toHaveBeenCalled();
+        expect(getTransactions).not.toHaveBeenCalled();
+        expect(getMembers).not.toHaveBeenCalled();
+        expect(getMemberCards).not.toHaveBeenCalled();
+        expect(onSyncActivity).not.toHaveBeenCalled();
+        expect(screen.queryByText('Visitor')).toBeNull();
+        expect(screen.queryByText(/Failed to load/)).toBeNull();
+    });
+
+    it("turns live (BeanID's flip): the sample goes at once, and the member's own balance and rows are read and shown", async () => {
+        const { rerender } = render(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        rerender(<LedgerPage identity={identity} isMember={true} />);
+        // Before the member's own land: never Example Valley's 85 Beans or name as theirs.
+        expect(screen.getByTestId('ledger-balance')).not.toHaveTextContent('85.0');
+        expect(screen.queryByText('an example member')).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        expect(getBalance).toHaveBeenCalledWith('viewer-pubkey');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.getByText('My own line')).toBeInTheDocument();
+        expect(screen.queryByText('A loaf of bread')).toBeNull();
+        expect(screen.queryByTestId('local-community-strip')).toBeNull();
+    });
+
+    it("turns to preview while the member's own are on screen: Example Valley's at once, never the member's own under the marker", async () => {
+        const { rerender } = render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        rerender(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.queryByText('My own line')).toBeNull();
+        expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
+    });
+});

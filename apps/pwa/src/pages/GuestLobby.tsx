@@ -25,9 +25,9 @@ import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { HomePage } from './HomePage';
 import { WelcomePage } from './WelcomePage';
+import { LedgerPage } from './LedgerPage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
-import { LedgerPreview } from '../components/ShowcasePreviews';
 import { modeFor } from '../lib/features';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
@@ -239,7 +239,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         />
                     )}
                     {tab === 'ledger' && (
-                        <LedgerPreview onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />
+                        <LedgerPage identity={null} isMember={false} preview onNavigate={navigate} onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />
                     )}
                     {tab === 'map' && (
                         <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>

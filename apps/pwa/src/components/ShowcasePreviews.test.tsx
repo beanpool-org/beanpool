@@ -2,14 +2,17 @@
  * The web previews (components/ShowcasePreviews.tsx, LocalCommunityMark.tsx; DESIGN-global-showcase-fable.md §2, §6 W2):
  * no number from Example Valley may reach the node. Proven three ways here: every request a preview makes, through every
  * action and the sheet, is the node's info and nothing else, and none is a write; the marker never looks locked; and
- * only ShowcasePreviews.tsx imports the sample.
+ * only ShowcasePreviews.tsx imports the sample. The Ledger in preview is the real LedgerPage drawn from the sample
+ * (design §1 row 3), so it is rendered here whole, both tabs, with the real api module under the fetch spy.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY } from '@beanpool/core';
-import { CommonsPreview, DealsPreviewDialog, LedgerPreview } from './ShowcasePreviews';
+import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
+import { CommonsPreview, DealsPreviewDialog } from './ShowcasePreviews';
+import { LedgerPage } from '../pages/LedgerPage';
+import type { BeanPoolIdentity } from '../lib/identity';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { modeFor } from '../lib/features';
 import type { CommunityInfo } from '../lib/api';
@@ -19,6 +22,10 @@ const GLOBAL_INFO = {
     features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
     startCommunityUrl: 'https://example.org/start',
 } as unknown as CommunityInfo;
+
+/** A member's own key on the worldwide community: in preview the Ledger never asks about it. */
+const MEMBER: BeanPoolIdentity = { publicKey: 'real-member-key', privateKey: 'real-member-private', callsign: 'RealMember', createdAt: '2026-10-01T00:00:00.000Z' };
+const S = SAMPLE_COMMUNITY;
 
 let calls: { url: string; method: string }[] = [];
 
@@ -41,44 +48,65 @@ function onlyInfo() {
 }
 
 describe('preview mode asks the node for its info and nothing else, and writes nothing', () => {
-    it('Ledger: the strip, its ✕ and back, every action, the sheet and its ways forward', async () => {
-        const onNearYou = vi.fn();
-        const onGuide = vi.fn();
-        render(<LedgerPreview onNearYou={onNearYou} onGuide={onGuide} />);
-        expect(screen.getByTestId('sample-balance')).toHaveTextContent(`${SAMPLE_COMMUNITY.balance} Beans`);
-        expect(screen.getByText(LOCAL_COMMUNITY_STRIP.header)).toBeInTheDocument();
-        expect(screen.getByTestId('sample-transactions').querySelectorAll('li')).toHaveLength(SAMPLE_COMMUNITY.transactions.length);
+    for (const [who, identity] of [['a member', MEMBER], ['a visitor with no key (the lobby)', null]] as const) {
+        it(`Ledger, ${who}: the strip, its ✕ and back, both tabs, every action, the sheet and its ways forward`, async () => {
+            const onNearYou = vi.fn();
+            const onGuide = vi.fn();
+            render(<LedgerPage identity={identity} isMember={identity !== null} preview onNearYou={onNearYou} onGuide={onGuide} />);
+            expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${S.balance.toFixed(1)}B`);
+            expect(screen.getByText(LOCAL_COMMUNITY_STRIP.header)).toBeInTheDocument();
+            expect(screen.queryByText('RealMember')).toBeNull();
 
-        for (const name of ['Send Beans', 'Export']) {
-            fireEvent.click(screen.getByRole('button', { name: new RegExp(name) }));
-            const sheet = await screen.findByTestId('local-community-sheet');
-            expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.beans);
-            expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.common);
+            // Levels: Send Beans is the marker's action; then the Wallet: Send Beans and Export mine.
+            const actions = () => screen.getAllByTestId('local-community-action');
+            const press = async (name: RegExp) => {
+                fireEvent.click(screen.getByRole('button', { name }));
+                const sheet = await screen.findByTestId('local-community-sheet');
+                expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.beans);
+                expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.common);
+            };
+            expect(actions()).toHaveLength(1);
+            await press(/^Send Beans/);
             // Start a community opens the in-app Start screen, whose link is the node's own start link.
             fireEvent.click(screen.getByTestId('local-community-start'));
             await waitFor(() => expect(screen.getByTestId('start-community-run-a-node')).toHaveAttribute('href', 'https://example.org/start'));
             fireEvent.click(screen.getByRole('button', { name: 'Back' }));
             expect(screen.queryByTestId('start-community-screen')).toBeNull();
-        }
-        fireEvent.click(screen.getByTestId('local-community-strip-start'));
-        expect(await screen.findByTestId('start-community-screen')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        fireEvent.click(screen.getByRole('button', { name: /Send Beans/ }));
-        fireEvent.click(await screen.findByTestId('local-community-guide'));
-        expect(onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.beans);
-        fireEvent.click(screen.getByRole('button', { name: /Export/ }));
-        fireEvent.click(await screen.findByTestId('local-community-near-you'));
-        expect(onNearYou).toHaveBeenCalled();
 
-        fireEvent.click(screen.getByTestId('local-community-strip-close'));
-        expect(screen.getByTestId('local-community-strip-collapsed')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.collapsed);
-        fireEvent.click(screen.getByText(LOCAL_COMMUNITY_STRIP.collapsed));
-        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+            expect(screen.getByTestId('ledger-wallet')).toBeInTheDocument();
+            expect(actions()).toHaveLength(2);
+            for (const name of [/^Send Beans/, /^Export mine/]) {
+                await press(name);
+                fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            }
+            await press(/^Send Beans/);
+            fireEvent.click(await screen.findByTestId('local-community-guide'));
+            expect(onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.beans);
+            await press(/^Export mine/);
+            fireEvent.click(await screen.findByTestId('local-community-near-you'));
+            expect(onNearYou).toHaveBeenCalled();
+            // No send form, no member picker: the member's own Send never opens here.
+            expect(screen.queryByPlaceholderText('Amount (B)')).toBeNull();
+            expect(screen.queryByText('Select recipient...')).toBeNull();
+            // The explainers stay live: the Commons pool opens its modal with the sample's pool.
+            fireEvent.click(screen.getByRole('button', { name: /Commons Pool/ }));
 
-        expect(calls.length).toBeGreaterThan(0);
-        onlyInfo();
-    });
+            fireEvent.click(screen.getByTestId('local-community-strip-start'));
+            expect(await screen.findByTestId('start-community-screen')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+            fireEvent.click(screen.getByTestId('local-community-strip-close'));
+            expect(screen.getByTestId('local-community-strip-collapsed')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.collapsed);
+            fireEvent.click(screen.getByText(LOCAL_COMMUNITY_STRIP.collapsed));
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+            // Let anything the page started land, then: the node's info only, and nothing about anyone's ledger.
+            await new Promise(r => setTimeout(r, 20));
+            expect(calls.some(c => /\/api\/(ledger|members|community\/me|repay)/.test(c.url))).toBe(false);
+            onlyInfo();
+        });
+    }
 
     it('Commons: pool, enterprise and Decision; Pledge, Pause and Vote open the sheet', async () => {
         render(<CommonsPreview />);
@@ -116,15 +144,73 @@ describe('preview mode asks the node for its info and nothing else, and writes n
     });
 });
 
+describe('the Ledger in preview is the member\'s real screen, drawn from Example Valley', () => {
+    const tier = TIER_LEVELS[S.level - 1];
+    const next = TIER_LEVELS[S.level];
+
+    it('Levels: the example member with their tier chip and balance, the credit bar, level 2 of 4 with the sample\'s trust, the four tiles', () => {
+        render(<LedgerPage identity={MEMBER} preview />);
+        expect(screen.getByTestId('sample-header')).toHaveTextContent(`${S.name} · ${S.member}`);
+        expect(screen.getByRole('heading', { name: S.member })).toBeInTheDocument();
+        expect(screen.getAllByText(tier.name).length).toBeGreaterThanOrEqual(2);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${S.balance.toFixed(1)}B`);
+        // The credit bar, as a member's: zero the sweet spot, the fee-free ceiling above it.
+        expect(screen.getByText('sweet spot')).toBeInTheDocument();
+        expect(screen.getByText('fee-free')).toBeInTheDocument();
+        expect(screen.getByText(`Level ${S.level} of ${S.levels} · ${S.trust} trust`)).toBeInTheDocument();
+        expect(document.body.textContent).toContain(`${next.minCredit - S.trust} more trust to ${next.emoji} ${next.name}`);
+        const tiles = within(screen.getByTestId('levels-shelf')).getAllByRole('button');
+        expect(tiles.map(b => b.textContent)).toEqual(TIER_LEVELS.map((l, i) =>
+            `${l.emoji}${l.name}${i === S.level - 1 ? "You're here" : i < S.level - 1 ? 'Reached' : `${l.minCredit} trust`}`));
+        const builders = screen.getByTestId('trust-builders');
+        expect(builders).toHaveTextContent(String(S.valueTraded));
+        expect(builders).toHaveTextContent(`+${S.trust} trust`);
+        expect(builders).toHaveTextContent(String(S.partners));
+        expect(builders).toHaveTextContent(S.rating.toFixed(1));
+        expect(builders).toHaveTextContent(`${S.reviews} reviews`);
+    });
+
+    it('Wallet: the floor, the Commons pool, and the six recent rows with who each was with and when', () => {
+        render(<LedgerPage identity={MEMBER} preview />);
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        const wallet = screen.getByTestId('ledger-wallet');
+        expect(wallet).toHaveTextContent(`Overdraft Floor${S.floor}`);
+        expect(wallet).toHaveTextContent(S.pool.toFixed(1));
+        for (const tx of S.transactions) {
+            expect(wallet).toHaveTextContent(tx.what);
+            expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${Math.abs(tx.amount).toFixed(1)}`);
+        }
+        expect(wallet).toHaveTextContent('from a neighbour · yesterday');
+        expect(wallet).toHaveTextContent('to the Commons · 7 days ago');
+        expect(wallet).not.toHaveTextContent('No transactions yet');
+    });
+});
+
 describe('the marker never looks locked', () => {
     it('no lock, no greying, no reduced opacity, no tier colour, and Beans never Ʀ', () => {
-        const { container } = render(<><LedgerPreview /><CommonsPreview /><DealsPreviewDialog onClose={() => {}} /></>);
+        const { container } = render(<><CommonsPreview /><DealsPreviewDialog onClose={() => {}} /></>);
         const html = container.innerHTML;
         expect(html).not.toMatch(/🔒|Locked|locked|Ʀ/);
         expect(html).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
         for (const el of Array.from(container.querySelectorAll('[data-testid="local-community-action"]'))) {
             expect(el).not.toBeDisabled();
         }
+    });
+
+    it('the Ledger in preview, both tabs: Send is the marker, never a lock, never disabled; nothing reads tier-locked', () => {
+        const { container } = render(<LedgerPage identity={MEMBER} preview />);
+        const check = () => {
+            const html = container.innerHTML;
+            expect(html).not.toMatch(/🔒|Locked|locked|needs 1st trade|needs \+ve balance|Ʀ/);
+            expect(html).not.toMatch(/grayscale|cursor-not-allowed/);
+            for (const el of Array.from(container.querySelectorAll('button'))) expect(el).not.toBeDisabled();
+            for (const el of Array.from(container.querySelectorAll('[data-testid="local-community-action"]'))) {
+                expect(el.className).not.toMatch(/opacity|amber|red-|grayscale/);
+            }
+        };
+        check();
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        check();
     });
 });
 

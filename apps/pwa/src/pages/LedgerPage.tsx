@@ -3,6 +3,11 @@
  *
  * Fetches real balance and transaction history from the BeanPool Node API.
  * Mirrors the native app's Trust Level and Financials tab layout and visualizations.
+ *
+ * In preview (a node that previews Beans, the showcase: scratch/global-node/DESIGN-global-showcase-fable.md §1 row 3) it is
+ * the same screen drawn from Example Valley (ShowcasePreviews sampleLedger), as the phone's Ledger is: the strip and
+ * "Example Valley · an example member" on top, and every press that would move Beans or export opens the marker's
+ * sheet. It then asks the node nothing about the reader's own ledger: no balance, no transactions, no members.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -21,15 +26,21 @@ import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
+import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
+import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
+import { t } from '@beanpool/core';
 
-interface Props {
-    identity: BeanPoolIdentity;
+interface Props extends LocalCommunityWays {
+    /** Null only in preview: a visitor with no key reads Example Valley's ledger in the lobby (GuestLobby). */
+    identity: BeanPoolIdentity | null;
     onNavigate?: (tab: string, contextId?: string) => void;
     /**
      * False for a guest — a local key the node has no member for. The node answers "Member not found"
      * for its balance, so a guest's balance is not fetched and no error is shown. Omitted means a member.
      */
     isMember?: boolean;
+    /** Beans are previewed on this node: Example Valley's ledger, and the marker's sheet for every action (above). */
+    preview?: boolean;
 }
 
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
@@ -64,13 +75,17 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate, isMember }: Props) {
-    const viewerIsMember = isMember !== false;
+export function LedgerPage({ identity, onNavigate, isMember, preview = false, ...ways }: Props) {
+    const viewerIsMember = isMember !== false && identity !== null;
+    const myKey = identity?.publicKey ?? '';
+    // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
+    const sample = useMemo(() => (preview ? sampleLedger() : null), [preview]);
     // App learns guest status after mount, so a member-style refresh can still be in flight when this
     // flips to false; its failure must not put an error in front of the guest.
     const viewerIsMemberRef = useRef(viewerIsMember);
     viewerIsMemberRef.current = viewerIsMember;
-    const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
+    const [ownBalanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
+    const balanceInfo = sample ? sample.balance : ownBalanceInfo;
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
@@ -141,7 +156,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     }, []);
 
     const refresh = useCallback(async () => {
-        if (!viewerIsMember) {
+        if (!viewerIsMember || preview) {
             // Same approach as the enterprise page: a guest has no balance on the node, so don't ask.
             setError(null);
             setLoading(false);
@@ -152,8 +167,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         const p = (async () => {
             try {
                 const [bal, txn, mem] = await Promise.all([
-                    getBalance(identity.publicKey).catch(() => null),
-                    getTransactions(identity.publicKey).catch(() => []),
+                    getBalance(myKey).catch(() => null),
+                    getTransactions(myKey).catch(() => []),
                     // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
                     // the Send picker keeps who it had and the next refresh reads them again.
                     // Read only once the node has said it reads whole (the effect below reads them when it says so).
@@ -171,7 +186,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
                 setTxns(txn);
-                if (mem) setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                if (mem) setMembers(mem.filter(m => m.publicKey !== myKey));
                 setError(null);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -187,19 +202,21 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [identity.publicKey, viewerIsMember]);
+    }, [myKey, viewerIsMember, preview]);
 
     // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
     useEffect(() => {
-        if (membersOnDemand !== false || !viewerIsMember) return;
+        if (membersOnDemand !== false || !viewerIsMember || preview) return;
         // Asked inside the promise, so a read that throws before it starts waits for the next refresh too.
         Promise.resolve()
             .then(() => getMembersWhole())
-            .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== identity.publicKey)); })
+            .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== myKey)); })
             .catch(() => { /* the next refresh reads them again */ });
-    }, [membersOnDemand]);
+    }, [membersOnDemand, preview]);
 
     useEffect(() => {
+        // In preview nothing is polled and the socket's nudges are not taken up: Example Valley never changes.
+        if (preview) return;
         let interval: ReturnType<typeof setInterval> | null = null;
 
         const startPolling = () => {
@@ -247,7 +264,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
         };
-    }, [refresh]);
+    }, [refresh, preview]);
 
     async function handleSend() {
         if (!sendTo || !sendAmount) return;
@@ -260,7 +277,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         setSending(true);
         setError(null);
         try {
-            await sendTransfer(identity.publicKey, sendTo, Number(sendAmount), sendMemo);
+            await sendTransfer(myKey, sendTo, Number(sendAmount), sendMemo);
             setShowSend(false);
             setSendTo('');
             setSendAmount('');
@@ -316,12 +333,24 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
     const hoursEquivalent = Math.abs(balance) / 40;
 
+    // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
+    const rows: LedgerRowView[] = sample ? sample.rows : txns.map(tx => {
+        const isSent = tx.from === myKey;
+        return {
+            id: tx.id,
+            sent: isSent,
+            note: ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet),
+            when: new Date(tx.timestamp).toLocaleString(),
+            amount: tx.amount,
+        };
+    });
+
     // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
     const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
     const selectedMember = membersMap.get(sendTo) ?? (pickedCard?.publicKey === sendTo ? pickedCard : undefined);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
     const pickable: Array<{ publicKey: string; callsign: string }> = membersOnDemand === true
-        ? (pickerSearch.found ?? []).filter(m => m.publicKey !== identity.publicKey)
+        ? (pickerSearch.found ?? []).filter(m => m.publicKey !== myKey)
         : filteredMembers;
     // Said only once it is so: never "nobody" for a search that failed or hasn't answered yet.
     const pickerNote = membersOnDemand === false ? (filteredMembers.length === 0 ? 'No members found' : null)
@@ -333,7 +362,10 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         : null;
 
     return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24">
+        <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid={preview ? 'ledger-preview' : undefined}>
+            {/* In preview: the strip, then "Example Valley · an example member" (design §1 row 3), as on the phone. */}
+            {preview && <LocalCommunityStrip feature="beans" {...ways} />}
+            {preview && <SampleHeader />}
             {/* Identity & Balance Overview */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-6 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                 <div className="flex items-center gap-3">
@@ -341,7 +373,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <img src="/assets/logo-192x192.png" className="w-[70%] h-[70%] object-contain" alt="Identity" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{identity.callsign}</h2>
+                        <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{sample ? sample.member : identity?.callsign}</h2>
                         <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
                             <span>{tier.name}</span>
@@ -350,7 +382,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 </div>
 
                 <div className="text-right flex flex-col items-center md:items-end">
-                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`}>
+                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`} data-testid="ledger-balance">
                         {balance >= 0 ? '+' : ''}{balance.toFixed(1)}B
                     </span>
                     <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">Beans</span>
@@ -402,7 +434,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
             )}
 
             {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
-            {viewerIsMember && <RepaymentCard onPaid={refresh} />}
+            {viewerIsMember && !preview && <RepaymentCard onPaid={refresh} />}
 
             {/* Tab Bar */}
             <div className="flex bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 rounded-t-2xl shadow-sm overflow-hidden">
@@ -461,14 +493,15 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
                         {/* Capability pills */}
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
-                            <button
+                            {/* In preview Send is the marker's action, as on the Wallet tab: never a lock. */}
+                            {preview ? <LocalCommunityAction feature="beans" label={t('Send Beans')} className="text-xs" {...ways} /> : <button
                                 onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 dark:text-nature-300 cursor-default'}`}
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
                                 <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
-                            </button>
+                            </button>}
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
                                 <span>Invite Members</span>
@@ -613,7 +646,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </span>
                 </div>
             ) : (
-                <div className="flex flex-col gap-4 mt-4 animate-in fade-in duration-300">
+                <div className="flex flex-col gap-4 mt-4 animate-in fade-in duration-300" data-testid="ledger-wallet">
                     {/* Financials overview details */}
                     <div className="flex gap-4">
                         <div className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm">
@@ -645,6 +678,12 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* Send credits */}
+                    {/* In preview the marker's action: it keeps its place, and opens the sheet. */}
+                    {preview ? (
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
+                        <LocalCommunityAction feature="beans" label={t('Send Beans')} className="w-full text-sm sm:text-[15px]" {...ways} />
+                    </div>
+                    ) : (
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                         {!canSend && (
                             <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
@@ -752,6 +791,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             </div>
                         )}
                     </div>
+                    )}
 
                     {/* Community Circulation info */}
                     {balance > 0 && (() => {
@@ -793,9 +833,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     })()}
 
                     {/* Transaction history */}
-                    <div className="flex justify-between items-center mb-1 px-1">
+                    <div className={preview ? 'flex flex-wrap justify-between items-center gap-2 mb-1 px-1' : 'flex justify-between items-center mb-1 px-1'}>
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white">Recent Transactions</h3>
-                        <button
+                        {preview ? <LocalCommunityAction feature="beans" label={t('Export mine')} className="text-[11px]" {...ways} /> : <button
                             onClick={async () => {
                                 try {
                                     // Signed: the node answers with this member's own balance and transactions only (balances and
@@ -827,20 +867,18 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
                         >
                             ⬇️ Export mine
-                        </button>
+                        </button>}
                     </div>
 
-                    {txns.length === 0 ? (
+                    {rows.length === 0 ? (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-8 text-center text-nature-500 dark:text-nature-400 text-[14px] shadow-sm font-medium">
                             No transactions yet. Start trading on the Marketplace!
                         </div>
                     ) : (
                         <div className="flex flex-col gap-2.5">
-                            {txns.map(tx => {
-                                const isSent = tx.from === identity.publicKey;
-                                const note = ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet);
+                            {rows.map(({ id, sent: isSent, note, when, amount }) => {
                                 return (
-                                    <div key={tx.id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
+                                    <div key={id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
                                         <div>
                                             <p className={`text-[14px] font-bold ${isSent ? 'text-nature-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
                                                 {isSent ? '↑ Sent' : '↓ Received'}
@@ -855,11 +893,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                 </p>
                                             )}
                                             <p className="text-[11px] font-bold text-nature-400 mt-1.5 uppercase tracking-wide">
-                                                {new Date(tx.timestamp).toLocaleString()}
+                                                {when}
                                             </p>
                                         </div>
                                         <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
-                                            {isSent ? '−' : '+'}{tx.amount.toFixed(1)}
+                                            {isSent ? '−' : '+'}{amount.toFixed(1)}
                                             <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt="B" />
                                         </p>
                                     </div>
@@ -870,7 +908,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 </div>
             )}
 
-            {error && (
+            {error && !preview && (
                 <div className="animate-in fade-in bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-xl p-3 mt-4 text-red-650 dark:text-red-400 text-sm text-center font-bold shadow-sm">
                     {error}
                 </div>

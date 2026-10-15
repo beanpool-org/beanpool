@@ -583,7 +583,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
             <div className="bg-nature-900/90 border border-nature-800 rounded-3xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <span className="text-xs font-bold uppercase tracking-wider text-terra-400">
+                        <span className="text-xs font-bold uppercase tracking-wider text-bp-ink-terra">
                             First Run Cold-Start Wizard
                         </span>
                         <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
@@ -1077,7 +1077,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         <div className="p-4 rounded-2xl bg-nature-950 border border-nature-800 space-y-3">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-white">First Offer (Offer Covenant)</span>
-                                <span className="text-[10px] text-terra-400 font-mono">Rule 4 Covenant</span>
+                                <span className="text-[10px] text-bp-ink-terra font-mono">Rule 4 Covenant</span>
                             </div>
                             <div>
                                 <label className="block text-[11px] text-nature-400 mb-1">Offer Title</label>
@@ -1324,7 +1324,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                         className="p-5 rounded-2xl bg-nature-950 border-2 border-terra-500/40 text-center space-y-3 flex flex-col justify-between shadow-lg"
                                     >
                                         <div>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-terra-400">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-bp-ink-terra">
                                                 Founding Invite #{idx + 1}
                                             </span>
                                             <h4 className="text-sm font-bold text-white m-0 mt-0.5 truncate">

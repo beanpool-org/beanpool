@@ -237,7 +237,7 @@ export function FleetSidebar({
             <div className="p-5 border-b border-nature-800/80 flex items-center justify-between gap-2 lg:gap-0">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                        className="w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                        className="w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-500 flex items-center justify-center text-xl shadow-lg shadow-terra-600/10 border border-terra-500/20"
                         aria-hidden="true"
                     >
                         🌱
@@ -246,7 +246,7 @@ export function FleetSidebar({
                         <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight truncate max-w-[170px]" title={isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}>
                             {isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}
                         </h1>
-                        <p className="text-[11px] font-semibold text-terra-400 m-0">
+                        <p className="text-[11px] font-semibold text-bp-ink-terra m-0">
                             {isFleetMode ? 'Fleet Manager v1.2' : 'Node Settings'}
                         </p>
                     </div>
@@ -282,7 +282,7 @@ export function FleetSidebar({
                     <div className="my-3 border-t border-nature-800/80 mx-2" />
 
                     {/* Selected Node Operations */}
-                    <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-terra-400 flex items-center justify-between">
+                    <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-bp-ink-terra flex items-center justify-between">
                         <span>Node Controls</span>
                         <span className="text-[9px] font-mono text-sky-400 truncate max-w-[110px]" title={activeNode?.name}>
                             {activeNode?.name || 'Selected'}
@@ -387,9 +387,9 @@ export function FleetSidebar({
                                 onClick={() => onSelectNode(p.id)}
                                 className={`p-3 rounded-xl cursor-grab active:cursor-grabbing transition-all border relative group ${
                                     isDragging
-                                        ? 'opacity-40 scale-[0.98] border-dashed border-terra-500 bg-terra-950/20'
+                                        ? 'opacity-40 scale-[0.98] border-dashed border-terra-500 bg-terra-600/5'
                                         : isDragOver
-                                        ? 'ring-2 ring-terra-400 border-terra-400 bg-terra-950/30 scale-[1.01] shadow-lg'
+                                        ? 'ring-2 ring-terra-500 border-terra-500 bg-terra-600/10 scale-[1.01] shadow-lg'
                                         : health === 'critical' || health === 'alert'
                                         ? 'bg-red-950/20 border-red-800/80 ring-1 ring-red-500/40 shadow-lg'
                                         : health === 'warning'
@@ -522,7 +522,7 @@ export function FleetSidebar({
                     <div className="flex items-center justify-between text-xs px-1">
                         <a
                             href="/settings-legacy"
-                            className={`${inDrawer ? 'min-h-[48px] inline-flex items-center text-sm' : 'text-[11px]'} text-nature-400 hover:text-terra-400 transition-colors underline`}
+                            className={`${inDrawer ? 'min-h-[48px] inline-flex items-center text-sm' : 'text-[11px]'} text-nature-400 hover:text-bp-ink-terra transition-colors underline`}
                         >
                             Legacy Settings
                         </a>
@@ -586,7 +586,7 @@ function CollapseButton({ mode, onCollapse, tip }: {
             aria-controls="settings-sidebar"
             title={tip ? undefined : label}
             {...tip?.(label)}
-            className="hidden lg:flex shrink-0 w-10 h-10 rounded-xl items-center justify-center text-lg text-nature-300 hover:text-white hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
+            className="hidden lg:flex shrink-0 w-10 h-10 rounded-xl items-center justify-center text-lg text-nature-300 hover:text-white hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-500"
         >
             <span aria-hidden="true">«</span>
         </button>
@@ -619,7 +619,7 @@ function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpe
     onCollapse: () => void;
 }) {
     const { tip, bind, hide } = useRailTooltip();
-    const cell = 'relative w-12 h-12 rounded-xl flex items-center justify-center text-lg no-underline transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400';
+    const cell = 'relative w-12 h-12 rounded-xl flex items-center justify-center text-lg no-underline transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-500';
     return (
         <aside
             id="settings-sidebar"
@@ -629,7 +629,7 @@ function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpe
         >
             <div className="py-4 flex flex-col items-center gap-2 border-b border-nature-800/80 w-full">
                 <div
-                    className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                    className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-500 flex items-center justify-center text-xl shadow-lg shadow-terra-600/10 border border-terra-500/20"
                     aria-hidden="true"
                 >
                     🌱

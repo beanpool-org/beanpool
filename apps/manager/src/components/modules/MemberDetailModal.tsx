@@ -245,7 +245,7 @@ export function MemberDetailModal({
                             className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border shrink-0 overflow-hidden shadow-md ${
                                 isFrozen
                                     ? 'bg-red-950/80 text-red-400 border-red-800/80'
-                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
+                                    : 'bg-terra-600/30 text-bp-ink-terra border-terra-500/40'
                             }`}
                             fallbackGlyph={initial}
                         />
@@ -294,7 +294,7 @@ export function MemberDetailModal({
                                 className="text-[11px] font-mono text-nature-400 hover:text-white flex items-center gap-1 mt-0.5 transition-colors max-w-full"
                             >
                                 <span className="truncate">{pubkey ? `${pubkey.slice(0, 24)}...` : 'N/A'}</span>
-                                <span className="text-[10px] text-terra-400 font-sans">{copiedPubkey ? '✓ Copied' : '📋'}</span>
+                                <span className="text-[10px] text-bp-ink-terra font-sans">{copiedPubkey ? '✓ Copied' : '📋'}</span>
                             </button>
                         </div>
                     </div>
@@ -367,7 +367,7 @@ export function MemberDetailModal({
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Last Seen / Active:</span>
-                            <span className="font-mono font-semibold text-terra-300">
+                            <span className="font-mono font-semibold text-bp-ink-terra">
                                 {fmtLastActive(member?.lastActiveAt || member?.last_active_at || member?.last_seen)}
                             </span>
                         </div>

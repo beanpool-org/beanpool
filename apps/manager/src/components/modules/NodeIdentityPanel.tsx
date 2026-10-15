@@ -599,7 +599,7 @@ export function NodeIdentityPanel({
                                         }`}
                                     >
                                         <div className="text-white font-medium">{item.displayName}</div>
-                                        <div className="text-[10px] text-terra-400 font-mono mt-0.5 capitalize">{item.type}</div>
+                                        <div className="text-[10px] text-bp-ink-terra font-mono mt-0.5 capitalize">{item.type}</div>
                                     </div>
                                 ))}
                             </div>
@@ -747,7 +747,7 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishLocation}
                                     onChange={(e) => setPublishLocation(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                 />
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
@@ -763,7 +763,7 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishMembers}
                                     onChange={(e) => setPublishMembers(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                 />
                                 <span>👥 Share Member Count</span>
                             </label>
@@ -779,7 +779,7 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactEmail}
                                     onChange={(e) => setPublishContactEmail(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                 />
                                 <span>📧 Share Email in Directory</span>
                             </label>
@@ -795,7 +795,7 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactPhone}
                                     onChange={(e) => setPublishContactPhone(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                 />
                                 <span>📞 Share Phone in Directory</span>
                             </label>
@@ -811,7 +811,7 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishHealth}
                                     onChange={(e) => setPublishHealth(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                 />
                                 <span>🖥️ Share Node Health &amp; Version</span>
                             </label>
@@ -828,7 +828,7 @@ export function NodeIdentityPanel({
                                         type="checkbox"
                                         checked={acceptKnocks}
                                         onChange={(e) => setAcceptKnocks(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
                                     />
                                     <span>🚪 Take Requests to Join</span>
                                 </label>

@@ -37,7 +37,7 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
                             Cancel
                         </button>
                         <button type="button" onClick={onContinue}
-                            style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: '#2563eb', color: '#fff' }}>
+                            style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' }}>
                             Continue
                         </button>
                     </div>

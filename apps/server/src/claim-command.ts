@@ -24,6 +24,7 @@ import { CLAIM_SCRYPT } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { ADDRESS_REQUEST_FILE, isAddressLabel, writeAddressRequestFile } from './address-request.js';
 import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
+import { NODE_HAS_OWNER_SQL } from './engine/owner-sql.js';
 
 const CODE_SHAPE = /^claim-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 const NAME_WAIT_MS = 3 * 60_000;
@@ -68,8 +69,7 @@ export function readNodeView(dir = dataDir()): NodeView | { missing: string } {
     try {
         conn.pragma('busy_timeout = 10000');
         // As engine/node-roles.ts nodeHasOwner reads it.
-        owner = !!conn.prepare(`SELECT 1 FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-            WHERE nr.role = 'owner' AND m.status = 'active' UNION ALL SELECT 1 FROM suspended_node_roles WHERE role = 'owner' LIMIT 1`).get();
+        owner = !!conn.prepare(NODE_HAS_OWNER_SQL).get();
         const row = conn.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string } | undefined;
         const pa = row ? (JSON.parse(row.value || '{}') as any).publicAddress : null;
         address = pa && typeof pa === 'object' ? pa : null;

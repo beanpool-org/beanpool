@@ -711,6 +711,27 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(bind).rejects.toMatchObject({ message: askPhone, code: 'phone_required', triesLeft: undefined });
     });
 
+    it("removing or suspending an owner, and a shorter span of snapshots, pass the node's own sentence through (#1984 confirmation N-1, N-2)", async () => {
+        const { pruneNodeUser, updateNodeSnapshotSchedule, executeOffboardApi } = await import('./node-client');
+        const askCode = 'Enter a current code from your authenticator app (or a backup code) to remove or suspend an owner';
+        const askPhone = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
+        const stale = 'Press Manage on your phone again, then make this change within 90 seconds.';
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: askCode, totpRequired: true }) });
+        await expect(pruneNodeUser('https://node.example.com', 'pub1', 'adminpass', 'tfa123')).rejects.toThrow(askCode);
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
+        await expect(pruneInviteBranch('https://node.example.com', 'pub1')).rejects.toThrow(askPhone);
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: stale, code: 'step_up_required' }) });
+        await expect(emergencySuspendMember('https://node.example.com', 'pub1', 'A reason members can read')).rejects.toThrow(stale);
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
+        await expect(executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'prune_zero_balance' })).rejects.toMatchObject({ message: askPhone, code: 'phone_required', status: 403 });
+        const fewer = 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or make them cover less time';
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: fewer, totpRequired: true }) });
+        await expect(updateNodeSnapshotSchedule('https://node.example.com', { keep: 3 }, 'adminpass', 'tfa123')).rejects.toThrow(fewer);
+        // A node that answers no sentence still says something.
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error', json: async () => { throw new Error('not json'); } });
+        await expect(pruneNodeUser('https://node.example.com', 'pub1')).rejects.toThrow('HTTP 500: Server Error');
+    });
+
     it('member rekey and offboard helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
         const {
             fetchRekeyStatusApi,

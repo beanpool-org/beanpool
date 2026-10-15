@@ -476,7 +476,8 @@ async function main(): Promise<void> {
         }));
         built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
-        built('its snapshot schedule: one every 6 hours', await A('/api/local/admin/snapshots/config', { enabled: true, intervalHours: 6, keep: 3 }));
+        // Keeping fewer than the default 7 asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
+        built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
         built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
@@ -663,7 +664,8 @@ async function main(): Promise<void> {
         await standby3.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         // Step 7c: S3's admin calls go under an owner's key session S3 makes (in memory, so it holds until S3 restarts).
         const s3Owner: Record<string, string> = await standby3.send('owner-session');
-        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, s3Owner);
+        // Turning them off asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
+        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, await standby3.send('owner-phone-session'));
         require_(s3Off.status === 200 && s3Off.body?.config?.enabled === false, `S3 turns its own snapshots off (${s3Off.status} ${j(s3Off.body)})`);
         const s3Pull = await standby3.send('pull');
         require_(s3Pull.ok === true && s3Pull.envelope === 'stored', `S3's copy lands, with the locked keys (${s3Pull.ok ? `imported; keys ${s3Pull.envelope}` : s3Pull.error})`);

@@ -146,6 +146,8 @@ export function isAutoSnapshotInterval(v: unknown): v is number {
 const timerHours = (h: number): number => Math.min(MAX_AUTOSNAPSHOT_INTERVAL_HOURS, Math.max(1, Math.round(h)));
 
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+/** The next snapshot, while it is due sooner than a whole interval after the arm (arm). */
+let catchUpTimer: ReturnType<typeof setTimeout> | null = null;
 /** The interval the running timer was armed with, in hours. */
 let armedHours: number | null = null;
 let creating = false;
@@ -468,6 +470,10 @@ function arm(): void {
         clearInterval(snapshotTimer);
         snapshotTimer = null;
     }
+    if (catchUpTimer) {
+        clearTimeout(catchUpTimer);
+        catchUpTimer = null;
+    }
     armedHours = null;
     // The main server only (see the note at the top). The schedule row stays as it is: a standby keeps its own, and its
     // main server's in the kept community settings, for the day it takes over.
@@ -483,13 +489,29 @@ function arm(): void {
     }
     const intervalMs = cfg.intervalHours * 60 * 60 * 1000;
     logger.info('SYS', `[Snapshots] Auto-snapshots enabled — every ${cfg.intervalHours}h, keeping ${cfg.keep}, none older than ${SNAPSHOT_MAX_AGE_DAYS} days.`);
-    snapshotTimer = setInterval(() => {
+    const tick = () => {
         // A role that changed without setNodeRole's announcement still stops it here, before a snapshot is taken.
         if (getNodeRole() !== 'primary') { arm(); return; }
         try { createSnapshot('scheduled'); failuresInARow = 0; }
         catch (e) { failuresInARow++; logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
-    }, intervalMs);
+    };
+    snapshotTimer = setInterval(tick, intervalMs);
     armedHours = cfg.intervalHours;
+    // The next snapshot is due one interval after the newest scheduled one, not one interval after this arm. Every save
+    // of the schedule re-arms (updateAutoSnapshotConfig), and so does every start: from "now", a save that asked no proof
+    // pushed the next snapshot back, past the age the newest is kept to, with none left in between (the deciding review
+    // of #1992, NB 1; the route asks the proof on an interval longer than that age, routes/backup.ts snapshotsLessened).
+    // Due already (the server was down, or the interval was shortened): taken now. Then every interval from it.
+    const newest = listSnapshots().find(s => !s.manual)?.createdAt ?? null; // newest first
+    const dueIn = newest === null ? intervalMs : newest + intervalMs - Date.now();
+    if (dueIn < intervalMs) {
+        catchUpTimer = setTimeout(() => {
+            catchUpTimer = null;
+            if (snapshotTimer) clearInterval(snapshotTimer);
+            snapshotTimer = setInterval(tick, intervalMs);
+            tick();
+        }, Math.max(0, dueIn));
+    }
 }
 
 /**

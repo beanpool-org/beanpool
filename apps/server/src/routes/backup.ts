@@ -31,7 +31,7 @@ import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
-    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT, MIN_SNAPSHOTS_KEPT,
+    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT, MIN_SNAPSHOTS_KEPT, SNAPSHOT_MAX_AGE_DAYS, type AutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
@@ -41,7 +41,7 @@ import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
-import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
+import { requireAdminRole, requirePhoneStepUp, requireFreshProof } from '../admin-auth.js';
 import {
     checkRecoveryCode, parseRecoveryCode, RecoveryCodeError, SealedEnvelopeError,
     type CodeStanza, type SealedEnvelopeHeader,
@@ -1014,7 +1014,38 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
     });
 });
 
-// Get (no body) or set (with {enabled,intervalHours,keep}) the auto-snapshot config.
+/**
+ * How far back the kept scheduled snapshots reach once a schedule has run, in hours: one every `intervalHours`, `keep`
+ * of them, none past their {@link SNAPSHOT_MAX_AGE_DAYS}-day age. An interval past that age leaves hours with none in
+ * every interval, less than any schedule without them and less the longer that gap (so it counts as minus those hours);
+ * scheduled snapshots off, none at all.
+ */
+function snapshotSpanHours(cfg: AutoSnapshotConfig): number {
+    const maxAgeHours = SNAPSHOT_MAX_AGE_DAYS * 24;
+    if (!cfg.enabled) return -Infinity;
+    if (cfg.intervalHours > maxAgeHours) return maxAgeHours - cfg.intervalHours;
+    return Math.min(cfg.intervalHours * cfg.keep, maxAgeHours);
+}
+
+/**
+ * Whether this change to the auto-snapshot config shortens the span the scheduled snapshots cover (snapshots/config;
+ * #1992 confirmation NB 2, the director's call, 16 Oct): once the new schedule has run ({@link snapshotSpanHours}: a
+ * shorter interval with the same keep turns the whole history over in `keep` intervals; off; an interval past their
+ * age), or at once: a lower `keep` prunes snapshots already taken, at whatever interval they were taken, so it asks
+ * even when the new schedule would reach as far (24 h → 72 h with keep 7 → 3 prunes four daily ones now). Read against
+ * the config as it stands, through the same reading the scheduler uses; the route has already checked each value.
+ */
+function snapshotsLessened(body: { enabled?: unknown; intervalHours?: unknown; keep?: unknown }): boolean {
+    const now = getAutoSnapshotConfig();
+    const next: AutoSnapshotConfig = {
+        enabled: body.enabled !== undefined ? !!body.enabled : now.enabled,
+        intervalHours: body.intervalHours !== undefined ? Number(body.intervalHours) : now.intervalHours,
+        keep: body.keep !== undefined ? Number(body.keep) : now.keep,
+    };
+    return next.keep < now.keep || snapshotSpanHours(next) < snapshotSpanHours(now);
+}
+
+// Get (no body) or set (with {enabled,intervalHours,keep}) the auto-snapshot config. Fewer snapshots: a `code` too.
 router.post('/api/local/admin/snapshots/config', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
@@ -1035,6 +1066,12 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;
     // Reading it is anyone's here; changing it can prune recovery points (keep), so it is an owner's, like a delete.
     if (hasUpdate && !requireAdminRole(ctx, ['owner'], SNAPSHOTS_OWNER_ONLY)) return;
+    // A shorter span of recovery points: keeping fewer prunes them now, taking them more often with as many kept turns
+    // the history over sooner, turning scheduled ones off lets every one age out, and an interval past their 14-day age
+    // leaves days with none. Each asks the owner's fresh proof, as shortening off-box retention does (#1984
+    // confirmation N-2, #1992 confirmation NB 2; Marty, 15 Oct, card owner-stolen-session). A change that keeps the span
+    // or lengthens it (keeping more, turning them on, a longer interval within their age) asks nothing more.
+    if (hasUpdate && snapshotsLessened(body) && !(await requireFreshProof(ctx, body.code ?? ctx.get('x-fresh-proof'), 'keep fewer snapshots, or make them cover less time'))) return;
     const config = hasUpdate
         ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })
         : getAutoSnapshotConfig();

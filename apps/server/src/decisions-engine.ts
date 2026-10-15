@@ -46,7 +46,7 @@ import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
-import { isNodeOwner, noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
+import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
@@ -66,10 +66,12 @@ import {
     pruneNeedsOwner,
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
+    reportSuspensionTakesRole,
     broadcast,
     dispatchPushNotification,
     isNodeAdmin,
     isSoleOwner,
+    SOLE_OWNER_SUSPEND_REFUSAL,
     persistDecayEvents,
     persistCommonsBalance,
     promoteOrPauseAfterLeadLeft,
@@ -1831,11 +1833,12 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
  * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
  * caller's choosing to that role. No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
- * stepUpIfOwnerOnly). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
+ * stepUpIfOwnerOnly), and an owner's fresh proof on those that remove or suspend an owner (adminActionRemovesOwner). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
  */
 export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;
-    if (action === 'suspend') return isNodeOwner(target);
+    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test).
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
     if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
@@ -1850,6 +1853,25 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (!decision) return false;
     if (action === 'halt') return haltRestoresRole(decision) && !!heldRoleFor([target]);
     return decision.effect === 'remove_member' && !!decision.subject && !!heldPrivilegedRole(decision.subject);
+}
+
+/**
+ * Whether this admin action takes an owner's role away or holds it aside (an owner, or an owner suspended with the role
+ * held aside): emergency-suspending one, suspending one through a report, pruning or offboarding one ('prune'), a branch
+ * with one in it, or cutting short one's removal. Each is one of adminActionNeedsOwner's, on an owner. The routes ask an
+ * owner's fresh proof on exactly these (routes/admin.ts ownerRemovalProof; Marty, 15 Oct, #1984 confirmation N-1), so a
+ * stolen session can't strip the other owners; on an admin or a member they ask what adminActionNeedsOwner asks.
+ */
+export function adminActionRemovesOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    if (!target) return false;
+    const removesOwner = (pk: string) => pruneNeedsOwner(pk, actor) && heldPrivilegedRole(pk) === 'owner';
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
+    if (action === 'prune') return removesOwner(target);
+    if (action === 'prune-branch') return inviteBranchOf(target).some(removesOwner);
+    if (action === 'report-suspend') return reportSuspensionTakesRole(target) === 'owner';
+    if (action !== 'accelerate') return false;
+    const decision = getDecision(target);
+    return !!decision && decision.effect === 'remove_member' && !!decision.subject && heldPrivilegedRole(decision.subject) === 'owner';
 }
 
 /**
@@ -1979,11 +2001,13 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
         return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
     }
-    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
+    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: SOLE_OWNER_SUSPEND_REFUSAL };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
     // who thinks an owner must go asks another owner: no community vote removes an owner (§3.8, NODE_OPERATOR_EFFECTS).
-    if (isNodeOwner(subjectPubkey) && !isOwnerLevelActor(adminActor)) {
+    // An owner whose key waits on a re-key code is one too (heldPrivilegedRole reads their role row): the code made them
+    // 'suspended', not an admin (the deciding review of #1992, BLOCKING 1).
+    if (heldPrivilegedRole(subjectPubkey) === 'owner' && !isOwnerLevelActor(adminActor)) {
         return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
     }
 

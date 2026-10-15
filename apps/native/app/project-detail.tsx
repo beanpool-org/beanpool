@@ -1,3 +1,4 @@
+import { ErrorBoundary } from 'expo-router';
 import TreasuryDetailScreen from './treasury-detail';
 
 /**
@@ -5,4 +6,5 @@ import TreasuryDetailScreen from './treasury-detail';
  * Re-exports TreasuryDetailScreen to preserve backwards compatibility for any links
  * or routes referencing /project-detail.
  */
+export { ErrorBoundary };
 export default TreasuryDetailScreen;

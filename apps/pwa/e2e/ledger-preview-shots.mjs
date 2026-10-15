@@ -5,7 +5,7 @@
  * served by a real node on this machine (e2e/home-node-harness.ts), signed in, in headless Chromium: at 320 px with 1.3x
  * text and at 1280 px, light and dark. Pictures are cut into parts no taller than 1,400 px.
  *
- * Fails on a sideways scroll at 320 px, a marker that looks locked, a showcase control under 44 x 44 px, any request
+ * Fails on a sideways scroll at 320 px or anything cut off past its right edge (fix round 2), a marker that looks locked, a showcase control under 44 x 44 px, any request
  * about the reader's own ledger (balance, transactions, members, export) from the preview, or any write.
  *
  * The Wallet's Community Circulation box (fix round 1): in the preview (85 Beans) a sentence that nothing goes to the
@@ -128,9 +128,29 @@ async function openContext(browser, origin, identity, dark) {
     return { context, page, net, offHost };
 }
 
+/**
+ * No sideways scroll, and (fix round 2) nothing cut off at the right edge: the page itself need not scroll for a tile to
+ * be clipped, since <main> scrolls on its own. Every visible element's right edge stays inside the window, unless it sits
+ * in a strip built to scroll sideways (an element other than <main> whose content is wider than it is).
+ */
 async function noSideScroll(page, where) {
-    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const { over, cut } = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const inSidewaysStrip = (el) => {
+            for (let p = el.parentElement; p && p.tagName !== 'MAIN' && p !== document.body; p = p.parentElement) {
+                if (/auto|scroll/.test(getComputedStyle(p).overflowX) && p.scrollWidth > p.clientWidth + 1) return true;
+            }
+            return false;
+        };
+        const cut = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden')
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ el, r }) => r.width > 0 && r.height > 0 && r.right > width + 1 && r.left < width && !inSidewaysStrip(el))
+            .map(({ el, r }) => `${el.tagName.toLowerCase()} "${(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30)}" ends at ${Math.round(r.right)}px`);
+        return { over: document.documentElement.scrollWidth - width, cut };
+    });
     check(over <= 1, `${where}: no sideways scroll at 320 px with 1.3x text${over > 1 ? ` (it scrolls ${over}px)` : ''}`);
+    check(cut.length === 0, `${where}: nothing ends past the right edge at 320 px with 1.3x text${cut.length ? ` (${cut.length}: ${cut.slice(0, 4).join('; ')})` : ''}`);
 }
 
 async function shot(page, name) {
@@ -281,6 +301,7 @@ async function localMember(browser, root, dark) {
         await wait(3_000);
         check(await page.getByTestId('ledger-preview').count() === 0 && await page.getByTestId('local-community-strip').count() === 0, 'Ledger: the real one, no strip');
         check(/Ana/.test(await page.locator('main').innerText()), 'Ledger: the member\'s own name');
+        if (WHEN === 'after') await noSideScroll(page, 'Local Ledger, Levels');
         await shots(page, `local-levels-320-${scheme}-${WHEN}`, 320);
         await page.getByRole('button', { name: /Wallet/ }).click();
         await wait(800);

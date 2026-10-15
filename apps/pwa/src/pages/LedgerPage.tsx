@@ -648,11 +648,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                 </div>
             ) : (
                 <div className="flex flex-col gap-4 mt-4 animate-in fade-in duration-300" data-testid="ledger-wallet">
-                    {/* Financials overview details */}
-                    <div className="flex gap-4">
-                        <div className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm">
+                    {/* Financials overview details. Two tiles side by side where each gets 9rem, else one above the
+                        other: at 320 px with 1.3x text the pair pushed Commons Pool past the right edge. */}
+                    <div className="flex flex-wrap gap-3" data-testid="ledger-wallet-tiles">
+                        <div className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm">
                             <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">Overdraft Floor</p>
-                            <p className="text-2xl font-black font-mono text-nature-950 dark:text-white flex items-center justify-center gap-1">
+                            <p className="text-2xl font-black font-mono text-nature-950 dark:text-white flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
                                 {floor}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>
@@ -663,12 +664,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
 
                         <button
                             onClick={() => setShowCommonsInfo(true)}
-                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                            className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         >
                             <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
                                 Commons Pool <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
                             </p>
-                            <p className="text-2xl font-black font-mono text-amber-500 flex items-center justify-center gap-1">
+                            <p className="text-2xl font-black font-mono text-amber-500 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
                                 {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>

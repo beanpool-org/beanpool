@@ -107,6 +107,27 @@ describe('LedgerPage at 320px with 1.3x text', () => {
         }
         expect(screen.getByText('PARTNERS')).not.toHaveClass('tracking-wider');
     });
+
+    // PR #2020 fix round 2: side by side, the Wallet's Overdraft Floor and Commons Pool pushed Commons Pool past the right
+    // edge (343 px in a 320 px window). Each tile now asks 9rem, so the pair stacks on a small phone with large text, and
+    // can shrink below its words' width; a long number wraps rather than spilling out. Same tiles in preview.
+    for (const preview of [false, true]) {
+        it(`lets the Wallet's Overdraft Floor and Commons Pool tiles stack rather than run off the edge${preview ? ' (preview)' : ''}`, async () => {
+            render(<LedgerPage identity={identity} isMember={true} preview={preview} />);
+            fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+
+            const row = screen.getByTestId('ledger-wallet-tiles');
+            expect(row).toHaveClass('flex', 'flex-wrap');
+            expect(row.children).toHaveLength(2);
+            expect(row.children[0]).toHaveTextContent('Overdraft Floor');
+            expect(row.children[1]).toHaveTextContent('Commons Pool');
+            for (const tile of Array.from(row.children)) {
+                expect(tile).toHaveClass('flex-1', 'basis-[9rem]', 'min-w-0', 'p-4', 'sm:p-5');
+                expect(tile).not.toHaveClass('p-5');
+                expect(tile.children[1]).toHaveClass('flex-wrap', '[overflow-wrap:anywhere]');
+            }
+        });
+    }
 });
 
 // #1838: levels are merit badges. They gate nothing, so a level not reached yet is something to grow into: no lock, no

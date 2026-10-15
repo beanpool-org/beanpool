@@ -49,6 +49,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { signedPost } from '../node-post';
 import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
+import { restoreRefusalText } from '../community-restore-copy';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { mnemonicToKeypair, seedToKeypair } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
@@ -66,6 +67,7 @@ const LOOKUP = `${NODE}/api/recovery/lookup/`;
 const ANCHOR = 'beanpool_anchor_url';
 const WRONG_ACCOUNT = "The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.";
 const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
+const NO_ACCOUNT = "No account called Marty here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.";
 const TWO_ACCOUNTS = "Two accounts here have this name. Use your 12 words, or ask your community's admin.";
 
 /** Google hands back a token whose `sub` is SUB; the node releases `fragments`. Records every recovery route asked. */
@@ -112,6 +114,11 @@ function restore(callsign = 'Marty', confirmReplace?: (outgoing: BeanPoolIdentit
         callsign, anchorUrl: NODE, provider: 'google',
         ...(confirmReplace ? { confirmReplace } : {}),
     });
+}
+
+/** What the restore screen shows for this restore's refusal: welcome.tsx shows community-restore-copy.ts `restoreRefusalText`. */
+function shown(attempt: Promise<unknown>): Promise<string | undefined> {
+    return attempt.then(() => 'no refusal', restoreRefusalText);
 }
 
 /** Which of the node's recovery routes were asked, in order. */
@@ -168,7 +175,7 @@ describe('a sign-in restore at the community: the key must be the account the co
             ok: false, status: 409, json: async () => ({ error: 'That callsign is ambiguous on this node.' }),
         }) as unknown as Response);
 
-        await expect(restore('marty')).rejects.toThrow(TWO_ACCOUNTS);
+        expect(await shown(restore('marty'))).toBe(TWO_ACCOUNTS);
         expect(routesAsked()).toEqual(['/api/recovery/collect']);
         await expectEmptyPhone();
     });
@@ -184,7 +191,7 @@ describe('a sign-in restore at the community: the key must be the account the co
         listed([{ publicKey: accountPub, callsign: 'Marty' }]);
         mockSignInAndNode(await singleBlob(OTHER_SEED));
 
-        await expect(restore()).rejects.toThrow(WRONG_ACCOUNT);
+        expect(await shown(restore())).toBe(WRONG_ACCOUNT);
 
         await expectEmptyPhone();
     });
@@ -199,7 +206,7 @@ describe('a sign-in restore at the community: the key must be the account the co
             { holderType: 'hub', shareIndex: 1, payload: hub.encryptedShare, payloadIv: hub.shareIv, payloadTag: hub.shareTag, kdfParams: hub.kdfParams },
         ]);
 
-        await expect(restore()).rejects.toThrow(WRONG_ACCOUNT);
+        expect(await shown(restore())).toBe(WRONG_ACCOUNT);
 
         await expectEmptyPhone();
     });
@@ -219,7 +226,7 @@ describe('a sign-in restore at the community: the key must be the account the co
         mockSignInAndNode(await singleBlob(OTHER_SEED));
         const confirmReplace = vi.fn(async () => true);
 
-        await expect(restore('Marty', confirmReplace)).rejects.toThrow(WRONG_ACCOUNT);
+        expect(await shown(restore('Marty', confirmReplace))).toBe(WRONG_ACCOUNT);
 
         expect(confirmReplace).not.toHaveBeenCalled();
         // Not one key in either store changed.
@@ -291,7 +298,7 @@ describe('a sign-in restore at the community: no lookup, no restore', () => {
             lookupAnswers(answer);
             mockSignInAndNode(await singleBlob(SEED));
 
-            await expect(restore()).rejects.toThrow(UNREACHABLE);
+            expect(await shown(restore())).toBe(UNREACHABLE);
 
             expect(signInWithGoogle).not.toHaveBeenCalled();
             expect(routesAsked()).toEqual([]);
@@ -303,9 +310,7 @@ describe('a sign-in restore at the community: no lookup, no restore', () => {
         listed([]);
         mockSignInAndNode(await singleBlob(SEED));
 
-        await expect(restore()).rejects.toThrow(
-            "No account called Marty here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.",
-        );
+        expect(await shown(restore())).toBe(NO_ACCOUNT);
 
         expect(signInWithGoogle).not.toHaveBeenCalled();
         expect(routesAsked()).toEqual([]);
@@ -316,7 +321,7 @@ describe('a sign-in restore at the community: no lookup, no restore', () => {
         listed([{ publicKey: accountPub, callsign: 'Marty', canRecoverBySso: false }]);
         mockSignInAndNode(await singleBlob(SEED));
 
-        await expect(restore()).rejects.toThrow(/No account called Marty here can come back with a sign-in/);
+        expect(await shown(restore())).toBe(NO_ACCOUNT);
 
         expect(routesAsked()).toEqual([]);
         await expectEmptyPhone();

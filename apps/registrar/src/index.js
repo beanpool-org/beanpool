@@ -109,7 +109,7 @@ export function holdsName(env, row, now = nowS()) {
 
 // Is `row` the claimant's own name, to heal or take back? Not once it is abandoned or freed at once, nor once the admin
 // released it from a block or its own pause (held from every key): then the old key is just another claimant.
-const isOwnRow = (row, pubkey) =>
+export const isOwnRow = (row, pubkey) =>
     !!row && row.node_pubkey === pubkey && row.status !== 'abandoned' && !freedAtOnce(row) && !heldFromAll(row);
 
 // A claim still waiting for the admin: pending, on a name that is not auto-approved. (A pending auto name is one
@@ -242,15 +242,17 @@ async function createTunnelFor(env, a, expected) {
 // did hold the name, a tunnel nothing records may be its own leftover, and createTunnelFor already deletes one only
 // when provably stale. A pending tenure being finished (`since`: when it began) also owns what it made itself before
 // it stopped — a Worker that died part way, or a record Cloudflare made but answered an error for: a bp-<name> tunnel
-// made since it began, deleted since or not, and a CNAME to one (only the registrar makes bp- tunnels). Anything else
-// is someone else's: one of our own servers, routed by hand. Null when there is nothing. Throws if Cloudflare can't
-// say: "can't tell" never reads as "nothing there".
+// made since it began, deleted since or not, and a CNAME to one (only the registrar makes bp- tunnels); for a direct
+// tenure, an A record at the public_ip its row declares (NB-1 of the #1985 review: nobody makes a hand record at a
+// pending row's label, README "Hand records"). Anything else is someone else's: one of our own servers, routed by
+// hand. Null when there is nothing. Throws if Cloudflare can't say: "can't tell" never reads as "nothing there".
 async function outsideRegistrar(env, name, row, heldBefore, since = null) {
     const owed = await db.listTeardown(env, name);
     const ours = (kind, id) => id === row?.[kind === 'dns' ? 'dns_record_id' : 'tunnel_id'] || owed.some((t) => t.kind === kind && t.cf_id === id);
     const named = since === null && heldBefore ? [] : await cf.listTunnelsNamed(env, `bp-${name}`, { withDeleted: since !== null });
     const made = new Set(since === null ? [] : named.filter((t) => Date.parse(t.created_at) / 1000 >= since - CF_CLOCK_SLACK_S).map((t) => t.id));
-    const madeTarget = (r) => r.type === 'CNAME' && [...made].some((id) => r.content === `${id}.cfargotunnel.com`);
+    const madeTarget = (r) => (r.type === 'CNAME' && [...made].some((id) => r.content === `${id}.cfargotunnel.com`))
+        || (since !== null && row?.mode === 'direct' && r.type === 'A' && !!row.public_ip && r.content === row.public_ip);
     const dns = (await cf.findDnsRecords(env, `${name}.${env.BASE_DOMAIN}`)).filter((r) => !ours('dns', r.id) && !madeTarget(r));
     const tunnels = heldBefore ? 0 : named.filter((t) => !t.deleted_at && !ours('tunnel', t.id) && !made.has(t.id)).length;
     return dns.length || tunnels ? { dns, tunnels } : null;
@@ -258,6 +260,11 @@ async function outsideRegistrar(env, name, row, heldBefore, since = null) {
 
 // Cloudflare's clock against the Worker's: a tunnel a claim made is never dated before the claim by more than this.
 const CF_CLOCK_SLACK_S = 60;
+
+// What is in the way of finishing pending tenure `a` (a claim whose provisioning failed, or the admin's approve): what
+// it made itself since `requested_at` is its own.
+const outsidePending = async (env, a) =>
+    outsideRegistrar(env, a.name, a, await db.claimedBefore(env, a.name, a.requested_at), a.requested_at);
 
 const aRecord = (r) => `${/^[AEIOU]/.test(r.type) ? 'an' : 'a'} ${r.type} record`;
 
@@ -679,7 +686,7 @@ async function heal(env, cur, b, now, tries = 3) {
     // make, as its claim would not have (NB1 of the #1978 review) — what that claim made before it stopped is its own.
     if (cur.status === 'pending') {
         let found;
-        try { found = await outsideRegistrar(env, cur.name, cur, await db.claimedBefore(env, cur.name, cur.requested_at), cur.requested_at); }
+        try { found = await outsidePending(env, cur); }
         catch (e) { return provisionFailed(e); }
         if (found) {
             if (!(await db.isUnchanged(env, cur.name, cur, { withIds: true }))) return missed();
@@ -964,6 +971,14 @@ async function handleRotate(request, env, bodyText) {
             const wait = ROTATE_EVERY_S - (now - last);
             return json({ error: `this name was given a new tunnel ${now - last} s ago: one rotate every ${ROTATE_EVERY_S / 60} minutes (try again in ${wait} s)`, retry_after: wait }, 429);
         }
+        // A pending row's heal below refuses what the registrar did not make at the name: refused here first, a rotate
+        // that changes nothing logs no `rotated` and leaves the name its rotate (NB-6 of the #1985 review).
+        if (cur.status === 'pending') {
+            let found;
+            try { found = await outsidePending(env, cur); }
+            catch (e) { return provisionFailed(e); }
+            if (found) return (await db.isUnchanged(env, cur.name, cur, { withIds: true })) ? refuseOutside(env, cur.name, pubkey, found, `rotate by key ${key16(pubkey)}`) : null;
+        }
 
         const old = cur.tunnel_id ?? null;
         const dropped = { ...cur, tunnel_id: null, ...decision(cur) };
@@ -1247,9 +1262,10 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
         case 'approve':
             if (a.status !== 'pending') return json({ error: 'not pending' }, 400);
             {
-                // The claim's first ensure(): it takes over nothing the registrar did not make (takeName says why).
+                // The claim's first ensure(): it takes over nothing the registrar did not make (takeName says why), but
+                // what an earlier approve of it made before it stopped is its own (NB-2 of the #1985 review).
                 let found;
-                try { found = await outsideRegistrar(env, name, a, await db.claimedBefore(env, name, a.requested_at)); }
+                try { found = await outsidePending(env, a); }
                 catch (e) { return provisionFailed(e, { admin: true }); }
                 if (found) return refuseOutside(env, name, a.node_pubkey, found, 'approve by the admin');
             }

@@ -58,13 +58,15 @@ export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003
 // refused, as Cloudflare refuses them — so a POST-collision or a second tunnel shows up as a failure here.
 // `during(re, run)`: once, just before Cloudflare answers the first call matching `re` (`${method} ${path}`),
 // `run` runs to completion — an admin action landing between two of a request's Cloudflare calls. `at(n, run)`:
-// the same, just before Cloudflare answers the n-th call from now.
+// the same, just before Cloudflare answers the n-th call from now. `paging.max`: the most tunnels one list answer
+// holds (Cloudflare's per_page cap, 1000); a test lowers it to make a list run over one page.
 export function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
     const fail = { deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
     const hooks = [];
+    const paging = { max: 1000 };
     let seq = 0;
     const ok = (result) => Response.json({ success: true, result });
     const err = (status, code, message) => Response.json({ success: false, errors: [{ code, message }] }, { status });
@@ -83,7 +85,13 @@ export function fakeCloudflare() {
         if (method === 'GET' && p === '/accounts/acct/cfd_tunnel') {
             const name = url.searchParams.get('name');
             const live = url.searchParams.get('is_deleted') === 'false';
-            return ok([...tunnels.values()].filter((t) => (!name || t.name === name) && (!live || !t.deleted_at)));
+            // Paged as Cloudflare pages it: `per_page` up to its cap; without it, a default Cloudflare doesn't document
+            // (20 here, so a request that doesn't ask shows up).
+            const all = [...tunnels.values()].filter((t) => (!name || t.name === name) && (!live || !t.deleted_at));
+            const per = Math.min(Number(url.searchParams.get('per_page')) || 20, paging.max);
+            const page = Number(url.searchParams.get('page')) || 1;
+            const result = all.slice((page - 1) * per, page * per);
+            return Response.json({ success: true, result, result_info: { page, per_page: per, count: result.length, total_count: all.length, total_pages: Math.max(1, Math.ceil(all.length / per)) } });
         }
         if ((m = p.match(/^\/accounts\/acct\/cfd_tunnel\/([^/]+)$/))) {
             const t = tunnels.get(m[1]);
@@ -135,7 +143,7 @@ export function fakeCloudflare() {
     const liveTunnel = (id) => { const t = tunnels.get(id); return t && !t.deleted_at ? t : null; };
     const during = (re, run) => hooks.push({ re, run });
     const at = (n, run) => hooks.push({ n: calls.length + n, run });
-    return { calls, tunnels, dns, fail, hooks, during, at, handle, recordAt, liveTunnel };
+    return { calls, tunnels, dns, fail, paging, hooks, during, at, handle, recordAt, liveTunnel };
 }
 
 export async function makeKey() {
@@ -197,6 +205,7 @@ export async function world({ migrations, env: extra } = {}) {
         events: (name) => all('SELECT event, detail FROM name_events WHERE name=? ORDER BY id', name),
         claim: async (key, body) => call(await signed('POST', '/api/registrar/claim', key, { mode: 'tunnel', ...body })),
         heal: async (key, body = {}) => call(await signed('POST', '/api/registrar/heal', key, body)),
+        rotate: async (key, body = {}) => call(await signed('POST', '/api/registrar/rotate', key, body)),
         release: async (key, body = {}, path = '/api/registrar/release') => call(await signed('POST', path, key, body)),
         status: async (key) => call(await signed('GET', '/api/registrar/status', key)),
         holder: async (key, body) => call(await signed('POST', '/api/registrar/holder', key, body)),

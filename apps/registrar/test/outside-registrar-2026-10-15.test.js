@@ -7,6 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { world, liveName, makeKey, routing } from './harness.js';
 
 const HOST = 'ourthing.beanpool.org';
@@ -249,4 +250,188 @@ test('the refusal alert reads "an A record" and points at a name_policy migratio
         assert.match(told.body, /add a name_policy row \(blocked\) by migration/);
         assert.doesNotMatch(told.body, /reserve the name \(blocked\)/);
     } finally { w.restore(); }
+});
+
+// ---------- Round 1 of the #1985 review (scratch/reviews/opus-1985.md) ----------
+
+const writes = (w) => w.cf.calls.filter((c) => /^(PATCH|DELETE|POST|PUT) /.test(c));
+const recordsAt = (w, name) => [...w.cf.dns.values()].filter((r) => r.name === `${name}.beanpool.org`);
+const tryCall = async (f) => { try { return await f(); } catch (e) { return { status: 'threw', body: String(e.message) }; } };
+// The Worker dies (the node's 5 s abort cancels it) just after Cloudflare made the record, before the row's write.
+function dieAfterDnsPost(w) {
+    w.cf.during(/^POST \/zones\/zone\/dns_records$/, async () => {
+        w.beforeRun(/^UPDATE name_allocations SET/, () => { throw new Error('test: the Worker was cancelled'); });
+    });
+}
+// Cloudflare makes the record but answers an error (a 5xx after the commit, a subrequest that timed out).
+function dnsPostErrsButMakes(w) {
+    const handle = w.cf.handle;
+    let once = true;
+    w.cf.handle = async (method, url, body) => {
+        const res = await handle(method, url, body);
+        if (once && method === 'POST' && url.pathname.endsWith('/zones/zone/dns_records')) {
+            once = false;
+            return Response.json({ success: false, errors: [{ code: 1000, message: 'made, then 504' }] }, { status: 504 });
+        }
+        return res;
+    };
+}
+// Eleven minutes pass: the tenure and every tunnel at the name move back `s` seconds.
+async function age(w, name, s) {
+    await w.backdate(name, { requested_at: (await w.row(name)).requested_at - s });
+    for (const t of w.cf.tunnels.values()) if (t.name === `bp-${name}`) t.created_at = new Date(Date.parse(t.created_at) - s * 1000).toISOString();
+}
+
+// NB-1: a pending DIRECT tenure's own A record — at the IP its row declares — is its own, as a CNAME to its own
+// tunnel is. Its honest retry finishes; a hand A record at another IP is still refused.
+for (const [label, cut] of [['the Worker died after Cloudflare made it', dieAfterDnsPost], ['Cloudflare made it but answered an error', dnsPostErrsButMakes]]) {
+    test(`a pending direct claim whose own A record is left (${label}) is finished by its retry, by claim and by /heal: live`, async () => {
+        for (const retry of ['claim', 'heal']) {
+            const w = await world();
+            try {
+                const key = await makeKey();
+                const body = { name: 'direbox', mode: 'direct', public_ip: '198.51.100.20' };
+                cut(w);
+                await tryCall(() => w.claim(key, body));
+                assert.equal((await w.row('direbox')).status, 'pending');
+                const [left, ...more] = recordsAt(w, 'direbox');
+                assert.deepEqual(more, []);
+                assert.equal(left.type, 'A'); assert.equal(left.content, body.public_ip);
+                const r = await w[retry](key, body);
+                assert.equal(r.status, 200, `${retry}: ${JSON.stringify(r.body)}`);
+                assert.equal(r.body.status, 'live');
+                assert.equal((await w.row('direbox')).dns_record_id, left.id, 'its own record adopted');
+                assert.deepEqual(recordsAt(w, 'direbox'), [left], 'no second record');
+            } finally { w.restore(); }
+        }
+    });
+}
+
+test('a pending direct claim retried after a hand A record at ANOTHER IP appeared is refused (409); the record is untouched', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        const body = { name: 'direhand', mode: 'direct', public_ip: '198.51.100.22' };
+        w.cf.fail.postDns = true;
+        assert.equal((await w.claim(key, body)).status, 502);
+        w.cf.fail.postDns = false;
+        const before = handRecord(w, 'direhand.beanpool.org');   // 203.0.113.7: not the row's public_ip
+        for (const retry of ['claim', 'heal']) {
+            const r = await w[retry](key, body);
+            assert.equal(r.status, 409, `${retry}: ${JSON.stringify(r.body)}`);
+        }
+        assert.deepEqual(w.cf.dns.get(before.id), before);
+        assert.equal((await w.row('direhand')).status, 'pending');
+    } finally { w.restore(); }
+});
+
+// NB-2: the admin's approve is a pending tenure's first ensure() too; what an earlier approve of it made is its own.
+test('an approve that died after Cloudflare made the CNAME is finished by a later approve: live, its own record kept', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        assert.equal((await w.claim(key, { name: 'sydney' })).body.status, 'pending');   // gated
+        dieAfterDnsPost(w);
+        await tryCall(() => w.admin('sydney', 'approve'));
+        assert.equal((await w.row('sydney')).status, 'pending');
+        const [left, ...more] = recordsAt(w, 'sydney');
+        assert.deepEqual(more, []);
+        const again = await w.admin('sydney', 'approve');
+        assert.equal(again.status, 503, `its tunnel may still be a request in flight: ${JSON.stringify(again.body)}`);
+        await age(w, 'sydney', 660);
+        const later = await w.admin('sydney', 'approve');
+        assert.equal(later.status, 200, JSON.stringify(later.body));
+        assert.equal(later.body.status, 'live');
+        const row = await w.row('sydney');
+        assert.equal(row.dns_record_id, left.id, 'its own record adopted');
+        assert.equal(routing(w, 'sydney').dns, `${row.tunnel_id}.cfargotunnel.com`);
+        assert.equal((await w.heal(key, { name: 'sydney' })).body.status, 'live', 'and its owner heals it');
+    } finally { w.restore(); }
+});
+
+// NB-4: Cloudflare pages its tunnel list. The pending check asks for the most one page holds, and an answer that is
+// still one page of several is "can't tell" (502, retried), never "not the claim's".
+async function pendingWithPastTunnels(w, key, n) {
+    w.cf.fail.ingress = true;
+    assert.equal((await w.claim(key, { name: 'halfway' })).status, 502);
+    w.cf.fail.ingress = false;
+    const since = (await w.row('halfway')).requested_at - 700;
+    await w.backdate('halfway', { requested_at: since });
+    // Earlier tenures' tunnels, all deleted (every rotate, re-made heal and take-back leaves one), listed first.
+    for (let i = 0; i < n; i++) w.cf.tunnels.set(`tun-old-${i}`, { id: `tun-old-${i}`, name: 'bp-halfway', created_at: new Date((since - 86400 * (i + 2)) * 1000).toISOString(), deleted_at: new Date((since - 86400) * 1000).toISOString() });
+    // This tenure's own, made after the claim and since deleted, with its CNAME left (Cloudflare made it, answered an error).
+    w.cf.tunnels.set('tun-left', { id: 'tun-left', name: 'bp-halfway', created_at: new Date((since + 5) * 1000).toISOString(), deleted_at: new Date().toISOString() });
+    const rec = { id: 'dns-left', type: 'CNAME', name: 'halfway.beanpool.org', content: 'tun-left.cfargotunnel.com', proxied: true };
+    w.cf.dns.set(rec.id, { ...rec });
+    return rec;
+}
+
+test('a pending claim\'s own CNAME, its tunnel listed after 25 earlier tunnels of the name, is finished by its retry: live', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        const rec = await pendingWithPastTunnels(w, key, 25);
+        const r = await w.claim(key, { name: 'halfway' });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'live');
+        assert.equal((await w.row('halfway')).dns_record_id, rec.id, 'its own record adopted');
+    } finally { w.restore(); }
+});
+
+test('a pending claim\'s retry whose tunnel list is one page of several answers 502 (retried), changing nothing', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        const rec = await pendingWithPastTunnels(w, key, 2);
+        w.cf.paging.max = 2;   // more of the name's tunnels than one answer holds
+        const pending = await w.row('halfway');
+        w.cf.calls.length = 0;
+        for (const retry of ['claim', 'heal']) {
+            const r = await w[retry](key, { name: 'halfway' });
+            assert.equal(r.status, 502, `${retry}: ${JSON.stringify(r.body)}`);
+            assert.equal(r.body.error, 'provisioning failed');
+        }
+        assert.deepEqual(w.cf.dns.get(rec.id), rec);
+        assert.deepEqual(writes(w), []);
+        assert.deepEqual(await w.row('halfway'), pending, 'still pending for its key');
+        assert.ok(!w.events('halfway').some((e) => e.event === 'claim-refused'), 'not refused: can\'t tell');
+    } finally { w.restore(); }
+});
+
+// NB-6: /rotate on a pending row runs its heal, which refuses what the registrar did not make. Refused, it rotated
+// nothing: no `rotated` in the trail, and the name's one rotate per 5 minutes is not used up.
+test('a refused /rotate on a pending row logs no rotate and leaves the name its rotate', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(key, { name: 'rotbox' })).status, 502);
+        w.cf.fail.ingress = false;
+        const before = handRecord(w, 'rotbox.beanpool.org');
+        const r = await w.rotate(key, { name: 'rotbox' });
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        assert.equal(r.body.error, 'name in use outside the registrar');
+        assert.deepEqual(w.cf.dns.get(before.id), before);
+        assert.ok(!w.events('rotbox').some((e) => e.event === 'rotated'), JSON.stringify(w.events('rotbox')));
+        // The hand record goes (it was a mistake); the owner's rotate at once is not held back.
+        w.cf.dns.delete(before.id);
+        const again = await w.rotate(key, { name: 'rotbox' });
+        assert.equal(again.status, 200, JSON.stringify(again.body));
+        assert.equal(again.body.status, 'live');
+        assert.equal(again.body.rotated, true);
+    } finally { w.restore(); }
+});
+
+// NB-5: the restore runbook says what a restore undoes and how to find it, and the bookmark step it relies on is in
+// this README, not only in a rehearsal note.
+test('README: a D1 restore reverts every row changed since; the diff finds them; Deploy takes the bookmark', () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8').replace(/[ \t]*\n[ \t]*(?![#\n])/g, ' ');   // lines unwrapped
+    const section = (heading, next) => { const i = readme.indexOf(heading); assert.ok(i >= 0, heading); const j = readme.indexOf(next, i + heading.length); return readme.slice(i, j < 0 ? undefined : j); };
+    const restore = section('### Hand records, and restoring D1', '\n#');
+    assert.match(restore, /every row changed since the restore point reverts/);
+    assert.doesNotMatch(restore, /created or claimed since the restore point is gone/);
+    assert.match(restore, /compare-registrar-dbs\.mjs rows /);
+    const deploy = section('\n## Deploy', '\n## ');
+    assert.match(deploy, /npx wrangler d1 time-travel info beanpool-registrar/, 'the bookmark is taken before a run that migrates');
+    assert.match(deploy, /npx wrangler d1 time-travel restore beanpool-registrar --bookmark=/);
 });

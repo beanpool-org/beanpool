@@ -450,6 +450,11 @@ export class Keyholder {
     /**
      * A new custodian shows they hold their share: a signed check of its words. At two, the vault switches. Kept on disk,
      * so a restart in between loses no confirmation.
+     *
+     * Not for a reshare whose file has no public keys (written by a keyholder from before they were kept): its new
+     * ticket key is listed nowhere, and the switch would put it in force. Two current custodians cancel it and start
+     * again. A genesis has no key in force to keep listed, and an unlock with the new shares opens the vault on its keys,
+     * which are then read from it: both still switch.
      */
     confirmShare(raw: unknown) {
         const c = raw as ShareConfirmation;
@@ -466,6 +471,9 @@ export class Keyholder {
         if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
         const next = p.file.state;
         this.checkConfirmation(p.file, c);
+        if (p.file.purpose === 'reshare' && !p.file.publicKeys) {
+            fail('keys_unknown', 'This reshare was started by an older image, whose new keys are unknown: the switch would put in force keys nobody has listed. Two current custodians cancel it and start the reshare again.');
+        }
         if (!p.file.confirmed.includes(c.custodian)) {
             const record = { ...p.file, confirmed: [...p.file.confirmed, c.custodian] };
             writePendingFile(this.opts.stateDir, record);

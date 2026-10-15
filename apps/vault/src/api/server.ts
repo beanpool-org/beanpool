@@ -1692,7 +1692,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const map: Record<string, number> = {
                 locked: 503, bad_request: 400, unknown_custodian: 403, bad_signature: 403, bad_share: 400, bad_box: 400,
                 bad_backup: 400, already_set_up: 409, open: 409, fresh: 409, proposal_mismatch: 409, no_custodians: 409,
-                no_pending: 404, bad_confirmation: 400, restore_pending: 409,
+                no_pending: 404, bad_confirmation: 400, restore_pending: 409, keys_unknown: 409,
             };
             const status = map[e.code] ?? 500;
             if (status === 500) counters.counts.errors++;

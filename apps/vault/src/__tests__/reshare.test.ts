@@ -455,7 +455,7 @@ describe('a reshare gives the vault new signing keys', () => {
         writeFileSync(file, JSON.stringify(older));
     }
 
-    it('a reshare left waiting by an older keyholder (no keys in its file) doesn\'t stop the keyholder starting; it shows no keys and still switches', async () => {
+    it('a reshare left waiting by an older keyholder (no keys in its file) doesn\'t stop the keyholder starting; it shows no keys, no confirmation switches it, two current custodians cancel it, and a new reshare switches with its keys known', async () => {
         const v = await vault();
         const g = await doGenesis(v);
         const [c1, c2] = v.custodians;
@@ -468,9 +468,38 @@ describe('a reshare gives the vault new signing keys', () => {
         await present(v, c1, g.shares[0]);
         expect((await present(v, c2, g.shares[1])).body.state).toBe('open');
         expect((await reportOf(v)).text.pending).toEqual({ generation: 2, publicKeys: null });
-        expect((await confirmWith(v, fresh, [0, 2], [c1, c2, c4]))[1].body).toMatchObject({ state: 'locked', switched: true, generation: 2 });
+        // Its new keys are listed nowhere, so no new custodian's confirmation counts: the switch would put them in force.
+        for (const r of await confirmWith(v, fresh, [0, 2], [c1, c2, c4])) {
+            expect(r.status).toBe(409);
+            expect(r.body.code).toBe('keys_unknown');
+            expect(r.body.error).toMatch(/older image.*new keys are unknown.*cancel it and start the reshare again/i);
+        }
+        expect(v.keyholder().status()).toMatchObject({ state: 'open', generation: 1, pending: { generation: 2, confirmed: [] } });
+        expect(JSON.parse(readFileSync(path.join(v.stateDir, PENDING_FILE), 'utf8')).confirmed).toEqual([]);
+        expect(await ticketUnder(v, [g.ticketKey])).toBe('ok');
+
+        const pendingId = v.keyholder().status().pending!.id;
+        expect((await cancelPending(v.baseUrl, c1, pendingId, v.call())).body).toMatchObject({ cancelled: false, cancels: 1 });
+        expect((await cancelPending(v.baseUrl, c2, pendingId, v.call())).body).toMatchObject({ cancelled: true });
+        expect(v.keyholder().status().pending).toBeNull();
+        expect(existsSync(path.join(v.stateDir, PENDING_FILE))).toBe(false);
+
+        // Started again on this image (a minute on: the ceremony calls so far fill this address's limit): the waiting
+        // file names the new keys, and the switch puts those in force.
+        v.clock.advance(60_000);
+        const again = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        expect(again.waiting.ticket).toEqual([expect.any(String)]);
+        expect(again.waiting.ticket[0]).not.toBe(g.ticketKey);
+        expect(v.keyholder().status().pending?.publicKeys).toEqual(again.waiting);
+        expect((await confirmWith(v, again.fresh, [0, 2], [c1, c2, c4]))[1].body).toMatchObject({ state: 'open', switched: true, generation: 2 });
+        expect(v.keyholder().status().publicKeys).toEqual(again.waiting);
+        expect(await ticketUnder(v, again.waiting.ticket)).toBe('ok');
+        // The shares of the reshare that was dropped open nothing.
+        await v.restartKeyholder();
         await present(v, c1, fresh[0]);
-        expect((await present(v, c4, fresh[2])).body.state).toBe('open');
+        expect((await present(v, c4, fresh[2])).body).toMatchObject({ state: 'locked', error: 'wrong_m' });
+        await present(v, c1, again.fresh[0]);
+        expect((await present(v, c4, again.fresh[2])).body.state).toBe('open');
     });
 
     it('a genesis left waiting by an older keyholder doesn\'t stop the keyholder starting; two custodians confirm and their shares open it', async () => {

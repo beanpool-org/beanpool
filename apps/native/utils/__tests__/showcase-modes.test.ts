@@ -92,10 +92,13 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
 
     it("the member's own Ledger reads Example Valley in preview: 85 Beans, floor −200, level 2, six rows, no Ʀ", async () => {
         const { sampleBalance, sampleTransactions } = await import('../../components/showcase/sample-screens');
-        const { memberLevel } = await import('@beanpool/core');
+        const { memberLevel, SAMPLE_COMMUNITY: S } = await import('@beanpool/core');
         const b = sampleBalance();
         expect(b).toMatchObject({ balance: 85, floor: -200, frozen: false, activated: true, commons: 640, liveOffers: 1 });
-        expect(memberLevel(b).index).toBe(1);
+        expect(memberLevel(b)).toEqual({ index: 1, credit: 200 });
+        // The Levels card's figures are the sample's own, the ones the web's Ledger reads (one source in core).
+        expect(b).toMatchObject({ tierCredit: S.trust, earnedCredit: S.trust, qualifiedValue: S.valueTraded,
+            avgRating: S.rating, reviewCount: S.reviews, trustStats: { uniquePartners: S.partners } });
         const rows = sampleTransactions();
         expect(rows).toHaveLength(6);
         for (const r of rows) {

@@ -23,7 +23,7 @@ import { validateMnemonic } from '../lib/mnemonic';
 
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
-    recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
+    recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
@@ -41,7 +41,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, photoStepNote, t, word } from '@beanpool/core';
+import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -700,6 +700,36 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingSession, setPairingSession] = useState<{ sessionId: string; privateKeyHex: string; publicKeyHex: string } | null>(null);
     const [pairingSecondsLeft, setPairingSecondsLeft] = useState(120);
     const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'decrypting' | 'success' | 'expired'>('idle');
+    /** The phone has sent: the relay holds it until this browser types the two digits the phone shows. */
+    const [pairingConfirming, setPairingConfirming] = useState(false);
+    const [pairingDigits, setPairingDigits] = useState('');
+    const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
+
+    /** The relay could not tie this page to its code: the page is open at another address than its community's. */
+    const PAIRING_WRONG_BROWSER = () => t('This page can\'t finish linking from here. Open your community\'s own web address on this computer and make a new code there.');
+
+    async function handleConfirmPairingDigits(e: React.FormEvent) {
+        e.preventDefault();
+        if (!pairingSession) return;
+        const res = await confirmPairingApi(pairingSession.sessionId, pairingDigits.trim()).catch(() => null);
+        if (res?.result === 'released') {
+            setPairingDigitsNote(null);
+        } else if (res?.result === 'wrong') {
+            setPairingDigits('');
+            setPairingDigitsNote(t('Those are not the digits on the phone. Check them and try again.'));
+        } else if (res?.result === 'burned') {
+            setError(t('Too many wrong digits, so nothing was sent. Make a new code and try again.'));
+            setPairingStatus('expired');
+        } else if (res?.result === 'wrong-browser') {
+            setError(PAIRING_WRONG_BROWSER());
+            setPairingStatus('expired');
+        } else if (res?.result === 'expired') {
+            setError(t('That code has expired, so nothing was sent. Make a new code and try again.'));
+            setPairingStatus('expired');
+        } else {
+            setPairingDigitsNote(t('That did not go through. Try again.'));
+        }
+    }
 
     async function handleStartQrPairing() {
         setLoading(true);
@@ -708,6 +738,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             const session = createPairingSession();
             setPairingSession(session);
             setPairingSecondsLeft(120);
+            setPairingConfirming(false);
+            setPairingDigits('');
+            setPairingDigitsNote(null);
             await initPairingApi(session.sessionId, session.publicKeyHex);
             setPairingStatus('waiting');
             setShowQrPairing(true);
@@ -787,12 +820,24 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         setError(decryptErr.message || t('Failed to decrypt paired identity'));
                         setPairingStatus('expired');
                     }
-                } else if (res.status === 'expired') {
+                } else if (res.status === 'confirming') {
+                    setPairingConfirming(true);
+                } else if (res.status === 'expired' || res.status === 'burned') {
                     clearInterval(timer);
                     clearInterval(poller);
+                    if (res.status === 'burned') setError(t('Too many wrong digits, so nothing was sent. Make a new code and try again.'));
                     setPairingStatus('expired');
                 }
             } catch (err: any) {
+                // 403 wrong-browser: the relay can't tie this page to its code (it never got the binding cookie), so no
+                // poll will ever bring the account. Say so now, not after two minutes of a QR that can't work.
+                if ((err as { status?: number } | null)?.status === 403) {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setError(PAIRING_WRONG_BROWSER());
+                    setPairingStatus('expired');
+                    return;
+                }
                 console.error('[Pairing] Error during poll:', err);
             }
         }, 1500);
@@ -2442,11 +2487,42 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     position: 'relative',
                                 }}
                             >
-                                {pairingStatus === 'waiting' && pairingSession ? (
+                                {pairingStatus === 'waiting' && pairingSession && pairingConfirming ? (
+                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 1rem', textAlign: 'center', maxWidth: '16rem' }}>
+                                        <label htmlFor="pair-digits" style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '0.75rem' }}>
+                                            {t('Type the two digits your phone shows')}
+                                        </label>
+                                        <input
+                                            id="pair-digits"
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            pattern="[0-9]{2}"
+                                            maxLength={2}
+                                            required
+                                            autoFocus
+                                            value={pairingDigits}
+                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                                            style={{ width: '5rem', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={pairingDigits.length !== 2}
+                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 2 ? 1 : 0.6 }}
+                                        >
+                                            {t('Confirm')}
+                                        </button>
+                                        {pairingDigitsNote && (
+                                            <div role="alert" style={{ marginTop: '0.6rem', fontSize: '0.85rem', color: '#b91c1c' }}>{pairingDigitsNote}</div>
+                                        )}
+                                        <div style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: '#374151' }}>
+                                            {t('Your account opens here only after the right digits. Three wrong tries and nothing is sent.')}
+                                        </div>
+                                    </form>
+                                ) : pairingStatus === 'waiting' && pairingSession ? (
                                     <>
                                         <div role="img" aria-label={t('QR code to scan with BeanPool mobile app')}>
                                             <QRCodeSVGComponent
-                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(getNodeApiUrl() || window.location.origin)}`}
+                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(nodeOrigin(getNodeApiUrl() || window.location.origin) ?? '')}`}
                                                 size={210}
                                                 level="M"
                                                 marginSize={2}

@@ -473,7 +473,7 @@ async function main() {
         bodyCarriesSampleId(parsed);
         const parses: number[] = [];
         const guards: number[] = [];
-        for (let r = 0; r < 7; r++) {
+        for (let r = 0; r < 15; r++) {
             if (r % 2 === 0) {
                 const t0 = performance.now(); JSON.parse(text); const t1 = performance.now();
                 const t2 = performance.now(); bodyCarriesSampleId(parsed); const t3 = performance.now();
@@ -484,9 +484,13 @@ async function main() {
                 guards.push(t1 - t0); parses.push(t3 - t2);
             }
         }
+        // A bound in proportion to the parse, so it holds on a machine of any speed: measured on Node 22 the guard over 2 MB
+        // of ids costs 2.45× the parse (here and on a CI runner ten times slower, 55.6 against 22.7 ms) and the other bodies
+        // under 0.6×. The 2× + 10 ms it replaced passed only where 10 ms was large beside the parse (on a fast machine it let
+        // the ids through at 6×). A guard ten times as slow fails on the bodies of strings; the 1 ms is the timer's grain.
         const parse = median(parses);
         const guard = median(guards);
-        assert(guard <= 2 * parse + 10, `${label}: the guard ${guard.toFixed(1)} ms against the parse's ${parse.toFixed(1)} ms (at most 2× + 10 ms)`);
+        assert(guard <= 4 * parse + 1, `${label}: the guard ${guard.toFixed(1)} ms against the parse's ${parse.toFixed(1)} ms (at most 4× + 1 ms; median of 15, interleaved)`);
     }
 
     console.log('\n── 7. the Start a community owner route ──');

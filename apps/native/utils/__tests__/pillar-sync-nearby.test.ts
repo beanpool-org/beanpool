@@ -9,11 +9,17 @@
  * The world: the member near Byron Bay, 520 listings within 100 km of them (the node's cap is 500), 30 in London, the
  * member's own listing in London, and on the phone a listing in Perth they have a conversation about.
  *
+ * The global node is one where anyone can join (`openMembership`): every listing but the member's own reaches the phone
+ * at its NEIGHBOURHOOD (core neighbourhoodOf, about 1.1 km across; #1965), and the node measures its set from there.
+ * So the set worked out here (expectedSet) measures each listing from its neighbourhood, a listing's row on the phone
+ * holds its neighbourhood, never the place, and an edit is told to have landed by the row's change time.
+ *
  * Nothing else is contacted: the phone's fetch is held to this node's address, and the node's own fetch refuses every
  * host but this machine.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, onTestFinished } from 'vitest';
+import { neighbourhoodOf } from '@beanpool/core';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -139,12 +145,21 @@ const idReads = () => sent.filter(r => r.url.startsWith('/api/marketplace/posts?
 const heldIds = () => new Set((sql.prepare('SELECT id FROM posts').all() as { id: string }[]).map(r => r.id));
 const sorted = (s: Iterable<string>) => [...s].sort();
 
+/** How far another member's listing is from `area` as the node and the phone measure it: from its neighbourhood. */
+const kmToNeighbourhood = (area: { lat: number; lng: number }, p: { lat: number; lng: number }) => {
+    const cell = neighbourhoodOf(p.lat, p.lng);
+    return nearbyKm(area.lat, area.lng, cell.lat, cell.lng);
+};
+
 /** The node's set for an area, worked out here by brute force: the nearest `max` within 250 km, plus the member's own. */
 function expectedSet(area: { lat: number; lng: number }, places: Place[], own: string[], max = 500): Set<string> {
-    const within = places.map(p => ({ p, d: nearbyKm(area.lat, area.lng, p.lat, p.lng) })).filter(x => x.d <= 250)
+    const within = places.map(p => ({ p, d: kmToNeighbourhood(area, p) })).filter(x => x.d <= 250)
         .sort((a, b) => a.d - b.d).slice(0, max).map(x => x.p.id);
     return new Set([...within, ...own]);
 }
+
+/** A listing's row on the phone: its place, and when it last changed. */
+const rowOf = (id: string) => sql.prepare('SELECT lat, lng, updated_at FROM posts WHERE id = ?').get(id) as { lat: number; lng: number; updated_at: string };
 
 /** A cycle that may fail (a fault above): its result, as performSync answers it. */
 async function syncAllowingFailure() {
@@ -344,6 +359,7 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const before = heldIds();
         // The nearest listing moves 10 m: still in the set, the same ids, a new row.
         const nearest = [...near].sort((a, b) => nearbyKm(BYRON.lat, BYRON.lng, a.lat, a.lng) - nearbyKm(BYRON.lat, BYRON.lng, b.lat, b.lng))[0];
+        const editedAt = new Date().toISOString();
         await control('edit', { post: nearest.id, lat: nearest.lat + 0.0001, lng: nearest.lng });
         await sync();
         const reads = postsReads();
@@ -352,7 +368,9 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(reads[0]).toMatchObject({ status: 200, ifNoneMatch: tag, keys: ['posts', 'setUnchanged'] });
         expect(idReads()).toEqual([]);
         expect(sorted(heldIds())).toEqual(sorted(before));
-        expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(nearest.id) as { lat: number }).lat).toBeCloseTo(nearest.lat + 0.0001, 6);
+        // The new row: changed since the edit, at the moved place's neighbourhood (10 m may not change which).
+        expect(rowOf(nearest.id).updated_at >= editedAt).toBe(true);
+        expect({ lat: rowOf(nearest.id).lat, lng: rowOf(nearest.id).lng }).toEqual(neighbourhoodOf(nearest.lat + 0.0001, nearest.lng));
         expect(sql.prepare("SELECT v FROM nearby_held WHERE k = 'hash'").get()).toEqual({ v: hash });
         // The read landed: the phone holds its tag now, and the next cycle with nothing changed is a 304 again.
         const newTag = (sql.prepare("SELECT v FROM nearby_held WHERE k = 'tag'").get() as { v: string } | undefined)?.v;
@@ -529,7 +547,7 @@ describe('the phone syncs the listings near its member (a real global node)', ()
 
         const held = expectedSet(BYRON, near, []);
         const farthest = near.filter(p => held.has(p.id))
-            .sort((a, b) => nearbyKm(BYRON.lat, BYRON.lng, b.lat, b.lng) - nearbyKm(BYRON.lat, BYRON.lng, a.lat, a.lng))[0];
+            .sort((a, b) => kmToNeighbourhood(BYRON, b) - kmToNeighbourhood(BYRON, a))[0];
         const nearPost = { ...farPost, id: 'push-near', lat: BYRON.lat, lng: BYRON.lng };
         expect(await applyLivePostChange({ kind: 'upsert', post: nearPost as any, created: true }, { anchorUrl: URL_BASE, selfPubkey: self })).toBe(true);
         const now = heldIds();
@@ -651,7 +669,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         // The next clean cycle reads the change from the same cursor.
         await sync();
         expect(mem.async.get(cursorKey)).not.toBe(cursor);
-        expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(edited.id) as { lat: number }).lat).toBeCloseTo(edited.lat + 0.001, 6);
+        expect(rowOf(edited.id).updated_at).not.toBe(before.updated_at);
+        expect({ lat: rowOf(edited.id).lat, lng: rowOf(edited.id).lng }).toEqual(neighbourhoodOf(edited.lat + 0.001, edited.lng));
         near = near.map(p => (p.id === edited.id ? { ...p, lat: p.lat + 0.001 } : p));
     }, START_MS);
 
@@ -675,6 +694,7 @@ describe('the phone syncs the listings near its member (a real global node)', ()
             const cursor = mem.async.get(cursorKey);
             // A listing near the member changes on the node: the answer that carries it has the odd `tied`.
             const edited = near.find(p => heldBefore.has(p.id))!;
+            const was = rowOf(edited.id).updated_at;
             await control('edit', { post: edited.id, lat: edited.lat + 0.001, lng: edited.lng });
             near = near.map(p => (p.id === edited.id ? { ...p, lat: p.lat + 0.001 } : p));
             // No deal row on the phone: only the stored ties keep the far deals past the cap.
@@ -685,7 +705,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
             tamper = null;
             expect(r.success, r.errorMessage).toBe(true);
             expect(mem.async.get(cursorKey)).not.toBe(cursor);
-            expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(edited.id) as { lat: number }).lat).toBeCloseTo(edited.lat + 0.001, 6);
+            expect(rowOf(edited.id).updated_at).not.toBe(was);
+            expect({ lat: rowOf(edited.id).lat, lng: rowOf(edited.id).lng }).toEqual(neighbourhoodOf(edited.lat + 0.001, edited.lng));
             // The phone keeps its stored ties, and nothing goes on their account.
             expect(storedTies()).toEqual(tiesBefore);
             expect(sorted(heldIds())).toEqual(sorted(heldBefore));

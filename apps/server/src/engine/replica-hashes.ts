@@ -45,10 +45,14 @@ export interface TableHashes {
  * force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
  */
 /**
- * 5: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
- * date (REPLICA_FORMAT 11). Raised for the same reason as 4.
+ * 5: posts gains event_host_lets_in, and event_rsvps let_in_at and let_in_by (the host lets people in; REPLICA_FORMAT 11).
+ * Raised for the same reason as 4: a standby updated before its main server hashes both tables over more columns.
  */
-export const TABLE_HASHES_VERSION = 5;
+/**
+ * 6: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
+ * date (REPLICA_FORMAT 12). Raised for the same reason as 4.
+ */
+export const TABLE_HASHES_VERSION = 6;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

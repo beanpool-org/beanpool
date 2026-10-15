@@ -8,7 +8,7 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
+import { ensureEventThread, syncEventThreadMembership, eventUnknownTo, loadEventForThread, writeEventOpenedLine, broadcastEventThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
@@ -280,6 +280,11 @@ function cleanPlaceName(raw: unknown): string | null {
     return v || null;
 }
 
+/** The host's choice, 1 or 0; null when the request made none (the caller decides what that means). */
+function hostLetsInOf(raw: unknown): number | null {
+    return raw === true ? 1 : raw === false ? 0 : null;
+}
+
 function cleanPrivateNote(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('The note for people going must be text');
@@ -454,6 +459,8 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.2): true or false; anything else, the node's default. */
+        eventHostLetsIn?: unknown;
         /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
         eventStartLocal?: unknown;
         eventEndLocal?: unknown;
@@ -559,6 +566,7 @@ export function createPost(
     let eventEndAt: string | null = null;
     let eventPlaceName: string | null = null;
     let eventPrivateNote: string | null = null;
+    let eventHostLetsIn: number | null = null;
     let eventStartLocal: string | null = null;
     let eventEndLocal: string | null = null;
     let eventTz: string | null = null;
@@ -657,6 +665,9 @@ export function createPost(
         eventLink = eventOnline ? cleanEventLink(options?.eventLink) : null;
         eventPlaceName = eventOnline ? null : cleanPlaceName(options?.eventPlaceName);
         eventPrivateNote = cleanPrivateNote(options?.eventPrivateNote);
+        // Left out by the client (an old or third-party app): the node's default, so no app can post an event on a
+        // node anyone can join without the host letting people in (DESIGN-global-member-privacy-fable.md §2.2).
+        eventHostLetsIn = hostLetsInOf(options?.eventHostLetsIn) ?? (getProfileSwitches().openMembership ? 1 : 0);
         validatePostPhotos(photos);
 
         // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
@@ -716,9 +727,9 @@ export function createPost(
         db.prepare(`INSERT INTO posts (
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
-            event_start_local, event_end_local, event_tz, event_online, event_link,
+            event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -734,6 +745,7 @@ export function createPost(
             eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote,
             type === 'event' ? 'scheduled' : null,
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
+            eventHostLetsIn,
             series.repeat, series.until, series.skips
         );
 
@@ -1030,6 +1042,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let occurrenceMove: { from: string; to: string } | null = null;
     // The edit leaves the event repeating: its undated RSVPs (from before occurrence_at) get its date (stampUndatedRsvps).
     let stampSeriesAt: string | null = null;
+    // Set when the host ticked or unticked "Only people I let in": who sits in the chat follows (syncEventThreadMembership).
+    let hostLetsInChanged = false;
+    // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
+    let hostOpenedChat = false;
     if (existingPost.type === 'event') {
         delete updates.credits;
         delete updates.category;
@@ -1117,6 +1133,15 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             eventFields.push('event_link = ?'); eventValues.push(null);
         } else if (raw.eventLink !== undefined) {
             eventFields.push('event_link = ?'); eventValues.push(cleanEventLink(raw.eventLink));
+        }
+        // Silent like the note (no UPDATED, no push: docs/events-on-the-map.md §2.2): who reads the note is the host's to
+        // change. Left out, or not true/false: unchanged.
+        const nextLetsIn = hostLetsInOf(raw.eventHostLetsIn);
+        delete raw.eventHostLetsIn;
+        if (nextLetsIn !== null) {
+            eventFields.push('event_host_lets_in = ?'); eventValues.push(nextLetsIn);
+            hostLetsInChanged = nextLetsIn !== (existingPost.eventHostLetsIn ? 1 : 0);
+            hostOpenedChat = hostLetsInChanged && nextLetsIn === 0;
         }
         const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
         // The clocks are read off the instants only when the time, zone, pin or online flag changed, or the row has none
@@ -1272,10 +1297,19 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         ? storedPhotoColumns(id, updates.photos.slice(0, 5))
         : null;
 
+    let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
         if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);
         if (stampSeriesAt) stampUndatedRsvps(id, stampSeriesAt);
+        if (hostLetsInChanged) {
+            // Ticked: everyone Going whom the host hasn't let in leaves the chat; unticked: everyone Going is in it.
+            const going = db.prepare("SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'").all(id) as { member_pubkey: string }[];
+            for (const g of going) syncEventThreadMembership(id, g.member_pubkey, 'going');
+        }
+        // Everyone Going now reads every line so far, including ones written under the let-in notice: the chat says so
+        // (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1).
+        if (hostOpenedChat) openedLine = writeEventOpenedLine(id);
 
         if (nextPhotoColumns) {
             // Tombstones before caches (storage design §7): the row goes inside the transaction and the
@@ -1301,6 +1335,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
+    if (openedLine) broadcastEventThreadMessage({ broadcast }, id, openedLine);
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
@@ -1327,6 +1362,11 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 /**
  * RSVP to an event: `going`, `interested`, or null for "not going", which deletes the row (§2.2).
  * One tap, no host approval. Modelled on votePoll.
+ *
+ * Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.2), Going is still one tap and still counted;
+ * the note and the chat wait for the host (letInEvent). The host's own friends are let in as they tap Going (the host
+ * already chose them), and the host hears that people are waiting at most once an hour per event (notifyHostWaiting).
+ * Interested → Going keeps a let-in; Not going deletes the row, and the let-in with it.
  */
 export function rsvpEvent(
     broadcast: BroadcastFn,
@@ -1334,6 +1374,7 @@ export function rsvpEvent(
     memberPublicKey: string,
     status: EventRsvpStatus | null,
     signature?: string,
+    push?: PushFn,
 ): { success: boolean; post: MarketplacePost } {
     if (status !== null && status !== 'going' && status !== 'interested') {
         throw new Error("RSVP status must be 'going', 'interested' or null");
@@ -1344,7 +1385,7 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, active, status, event_state, event_start_at, event_end_at, author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
     // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
     // its cancellation or its end can say it exists.
@@ -1419,6 +1460,14 @@ export function rsvpEvent(
                     occurrence_at = excluded.occurrence_at,
                     updated_at = excluded.updated_at
             `).run(postId, memberPublicKey, status, signature || '', occurrenceAt, writeAt);
+            if (status === 'going' && row.event_host_lets_in === 1) {
+                const friendOf = hostFriendOf(row, memberPublicKey);
+                if (friendOf) {
+                    // The same stamp the RSVP above was just written with: one write, as a replica sees it.
+                    db.prepare('UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NULL')
+                        .run(writeAt, friendOf, writeAt, postId, memberPublicKey);
+                }
+            }
         }
         // Chat membership follows the RSVP in the same transaction (§2.2): Going adds you to the event
         // chat, Interested and "not going" take you out of it. The host never leaves.
@@ -1428,7 +1477,170 @@ export function rsvpEvent(
     bumpPostsVersion();
     const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true })[0]!;
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
+    if (status === 'going' && row.event_host_lets_in === 1 && updatedPost.myLetIn === false
+        && !isEventHost(db, row, memberPublicKey)) {
+        notifyHostWaiting(push, row);
+    }
     return { success: true, post: updatedPost };
+}
+
+/**
+ * The host whose own friends list holds this member, or null (DESIGN-global-member-privacy-fable.md §2.2: the one
+ * automatic let-in). The author, and the keeper or convenor who posted it for an enterprise or a group. Nothing else lets
+ * anyone in: on a node anyone can join a host knows nobody, and a direct message is a stranger's one tap.
+ */
+function hostFriendOf(row: { author_pubkey: string; created_by?: string | null }, memberPubkey: string): string | null {
+    for (const host of [row.author_pubkey, row.created_by]) {
+        if (!host || host === memberPubkey) continue;
+        try {
+            if (db.prepare('SELECT 1 FROM friends WHERE owner_pubkey = ? AND friend_pubkey = ?').get(host, memberPubkey)) return host;
+        } catch { /* table absent on an older schema */ }
+    }
+    return null;
+}
+
+export const EVENT_LET_IN_PUSH_TITLE = "You're in";
+export const EVENT_WAITING_PUSH_TITLE = 'People are waiting';
+/** At most one "people are waiting" push per event in this long: a crowd of throwaways tapping Going is one push an hour. */
+export const EVENT_WAITING_PUSH_EVERY_MS = 60 * 60 * 1000;
+const waitingPushSentAt = new Map<string, number>();
+
+/** For a suite: forget when each host was last told, as a restart does. */
+export function resetEventWaitingPushes(): void {
+    waitingPushSentAt.clear();
+}
+
+/** How many Going members wait for the host to let them in (never the host, never a visitor). */
+export function eventWaitingCount(row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }): number {
+    const waiting = db.prepare(`
+        SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
+         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${postInSightSql('p', 'r.member_pubkey')}
+    `).all(row.id) as { member_pubkey: string }[];
+    return waiting.filter(w => !isVisitorKey(db, w.member_pubkey) && !isEventHost(db, row, w.member_pubkey)).length;
+}
+
+/**
+ * "N people are waiting to be let in to <title>", to the host who posted it, at most once an hour per event
+ * (EVENT_WAITING_PUSH_EVERY_MS). Kept in memory: a restart may send one more, never 2,000. Fire-and-forget.
+ */
+function notifyHostWaiting(push: PushFn | undefined, row: { id: string; title?: string; author_pubkey: string; created_by?: string | null; audience_scope?: string | null; target_group_id?: string | null }): void {
+    if (!push) return;
+    const now = Date.now();
+    const last = waitingPushSentAt.get(row.id);
+    if (last !== undefined && now - last < EVENT_WAITING_PUSH_EVERY_MS) return;
+    try {
+        const n = eventWaitingCount(row);
+        if (n === 0) return;
+        const host = row.created_by || row.author_pubkey;
+        waitingPushSentAt.set(row.id, now);
+        const name = (row.title || 'your event').trim() || 'your event';
+        push(
+            [host],
+            '',
+            EVENT_WAITING_PUSH_TITLE,
+            `${n} ${n === 1 ? 'person is' : 'people are'} waiting to be let in to ${name}`,
+            { screen: 'post', postId: row.id },
+            EVENT_PUSH_CATEGORY,
+            'market.listing',
+        );
+    } catch (e) {
+        console.warn('[Events] waiting notification not sent:', e);
+    }
+}
+
+export const LET_IN_NOT_GOING = "They haven't tapped Going";
+export const LET_IN_ONLY_HOST = 'Only the host can let people in';
+export const LET_IN_NOT_ASKED = "This event doesn't wait for the host: everyone going is already in";
+export const LET_IN_OUT_OF_SIGHT = "They can't see this event, so they can't be let in";
+
+/**
+ * The host lets a Going member in to the note and the chat, or takes it back (`letIn` false), on an event whose host lets
+ * people in (DESIGN-global-member-privacy-fable.md §2.2, §2.4). `everyone` lets in every Going member waiting now; people
+ * who tap Going later still wait. A host's write on the member's row, so it bumps the row's updated_at (last-write-wins
+ * on sync) and the post's, so a phone's delta brings the note. The chat's participants follow in the same transaction.
+ * Pushes "<host> let you in to <title>" to each member let in; a take-back is silent.
+ */
+export function letInEvent(
+    postId: string,
+    actorPubkey: string,
+    target: { memberPublicKey?: string; everyone?: boolean },
+    letIn = true,
+    push?: PushFn,
+): { success: true; post: MarketplacePost; changed: number } {
+    let row: ReturnType<typeof loadEventForThread>;
+    try {
+        row = loadEventForThread(postId);
+    } catch {
+        throw new Error('Event not found');
+    }
+    if (eventUnknownTo(row, actorPubkey)) throw new Error('Event not found');
+    if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
+    if (!isEventHost(db, row, actorPubkey)) throw new Error(LET_IN_ONLY_HOST);
+    assertNodeMember(actorPubkey);
+    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error('This event has been cancelled');
+    const nowIso = new Date().toISOString();
+    if (row.event_end_at && row.event_end_at <= nowIso) throw new Error('This event has ended');
+    if (row.event_host_lets_in !== 1) throw new Error(LET_IN_NOT_ASKED);
+
+    // A let-in goes only to someone who can see the event, and never to a visitor, as eventWaitingCount counts them (the
+    // #1953 review's N2): a member removed from an invite-only group keeps their Going row, and a let-in would push them
+    // the title of an event they can no longer see. A take-back goes to anyone let in: it opens nothing.
+    const mayBeLetIn = (pk: string) => !letIn || (!isVisitorKey(db, pk) && !!db.prepare(
+        `SELECT 1 FROM event_rsvps r JOIN posts p ON p.id = r.post_id WHERE r.post_id = ? AND r.member_pubkey = ? AND ${postInSightSql('p', 'r.member_pubkey')}`,
+    ).get(postId, pk));
+    let members: string[];
+    if (target.everyone === true) {
+        members = (db.prepare(`SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going' AND let_in_at IS ${letIn ? 'NULL' : 'NOT NULL'}`)
+            .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey).filter(mayBeLetIn);
+    } else {
+        const who = target.memberPublicKey;
+        if (typeof who !== 'string' || !who) throw new Error('memberPublicKey or everyone is required');
+        const rsvp = db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(postId, who) as { status: string } | undefined;
+        if (rsvp?.status !== 'going') throw new Error(LET_IN_NOT_GOING);
+        if (!mayBeLetIn(who)) throw new Error(LET_IN_OUT_OF_SIGHT);
+        members = [who];
+    }
+
+    const changedMembers: string[] = [];
+    db.transaction(() => {
+        for (const m of members) {
+            const rowKey = `${postId}|${m}`;
+            const prev = db.prepare(`
+                SELECT MAX(ts) AS ts FROM (
+                    SELECT updated_at AS ts FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?
+                    UNION ALL
+                    SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?
+                )`).get(postId, m, rowKey) as { ts: string | null } | undefined;
+            const writeAt = prev?.ts && prev.ts >= nowIso ? new Date(Date.parse(prev.ts) + 1).toISOString() : nowIso;
+            const res = letIn
+                ? db.prepare("UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND status = 'going' AND let_in_at IS NULL")
+                    .run(writeAt, actorPubkey, writeAt, postId, m)
+                : db.prepare("UPDATE event_rsvps SET let_in_at = NULL, let_in_by = NULL, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NOT NULL")
+                    .run(writeAt, postId, m);
+            if (res.changes > 0) {
+                changedMembers.push(m);
+                syncEventThreadMembership(postId, m, 'going');
+            }
+        }
+        if (changedMembers.length > 0) db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(nowIso, postId);
+    })();
+
+    if (changedMembers.length > 0) bumpPostsVersion();
+    if (letIn && push && changedMembers.length > 0) {
+        try {
+            const recipients = changedMembers.filter(pk => !isVisitorKey(db, pk));
+            const hostName = (getMember(db, actorPubkey) as any)?.callsign || 'The host';
+            const name = (row.title || 'an event').trim() || 'an event';
+            if (recipients.length > 0) {
+                push(recipients, actorPubkey, EVENT_LET_IN_PUSH_TITLE, `${hostName} let you in to ${name}`,
+                    { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
+            }
+        } catch (e) {
+            console.warn('[Events] let-in notification not sent:', e);
+        }
+    }
+    const post = getPosts(db, { id: postId, viewerPubkey: actorPubkey, includeAllScopes: true })[0]!;
+    return { success: true, post: forActor(post, actorPubkey), changed: changedMembers.length };
 }
 
 /**

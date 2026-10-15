@@ -1301,11 +1301,11 @@ router.post('/api/local/admin/sync-copy', async (ctx) => {
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
     // A standby whose importer is older than OLDEST_STANDBY_FORMAT (engine/sync.ts) drops a column this server sends: the
-    // listing photos that go by reference (8), an event's clock, zone, online flag and link (10), a repeating event's rule,
-    // last date and cancelled dates, each RSVP's date and the reminder marks keyed on it (11). It would land the copy, or
-    // the delta (the same route, with ?since=), without them, and say nothing. Refused instead, loudly on both servers:
-    // here in the log and the Replication Access panel, there as a pull that failed with this status, every time, in its
-    // report and its owners' notice, until it is updated.
+    // listing photos that go by reference (8), an event's clock, zone, online flag and link (10), the host's let-in (11), a
+    // repeating event's rule, last date and cancelled dates, each RSVP's date and the reminder marks keyed on it (12). It
+    // would land the copy, or the delta (the same route, with ?since=), without them, and say nothing. Refused instead,
+    // loudly on both servers: here in the log and the Replication Access panel, there as a pull that failed with this
+    // status, every time, in its report and its owners' notice, until it is updated.
     const format = Number(ctx.request.header['x-replica-format']);
     if (!Number.isInteger(format) || format < OLDEST_STANDBY_FORMAT) {
         const why = `this standby is older than its main server: it reads replica format ${format || 'none'}, and copies `

@@ -8,6 +8,7 @@ import {
     setGroupMemberRole,
     handOverGroupLead,
     updateGroup,
+    getCommunityMe,
     type Group,
     type GroupMember,
     type GroupRole,
@@ -18,6 +19,9 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
+import { InvitePeopleSheet } from './InvitePeopleSheet';
+import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
+import { t } from '@beanpool/core';
 
 interface Props {
     group: Group | null;
@@ -44,6 +48,10 @@ export function GroupDetailModal({
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [inviteOpen, setInviteOpen] = useState(false);
+    // The signer's moderation mute: the node refuses a muted convenor's invitation (assertNotMuted), so the button
+    // waits for this answer and never shows on a guess (null: not known).
+    const [muted, setMuted] = useState<boolean | null>(null);
 
     const loadCard = useCallback(async () => {
         if (!group?.id) return;
@@ -81,14 +89,26 @@ export function GroupDetailModal({
         }
     }, [isOpen, group, loadDetails]);
 
+    // Asked only of a convenor (nobody else is offered the button), once per opening.
+    const mayLead = groupData?.viewerRole === 'convenor' || members.some(m => m.memberPubkey === myPubkey && m.role === 'convenor');
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || !myPubkey || !mayLead) return;
+        let alive = true;
+        Promise.resolve()
+            .then(() => getCommunityMe())
+            .then(me => { if (alive) setMuted(me?.mute?.muted === true); })
+            .catch(() => { if (alive) setMuted(null); });
+        return () => { alive = false; };
+    }, [isOpen, myPubkey, mayLead]);
+
+    useEffect(() => {
+        if (!isOpen || inviteOpen) return;
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, inviteOpen]);
 
     if (!isOpen || !groupData) return null;
 
@@ -96,7 +116,12 @@ export function GroupDetailModal({
     const isConvenor = groupData.viewerRole === 'convenor' || (myMembership?.role === 'convenor' && myMembership?.status === 'active');
     const isMember = (myMembership && myMembership.status === 'active') || groupData.viewerStatus === 'active';
     const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';
+    // Invited, from the phone or the web (the same row): accepting is a join (engine joinGroup takes an 'invited' row
+    // to active, whatever the join policy), so an invite-only group no longer shows a dead "Invite Only" to its invitee.
+    const isInvited = myMembership ? myMembership.status === 'invited' : groupData.viewerStatus === 'invited';
 
+    // Exactly whom the node lets invite: an active convenor, the group not closed, not muted (lib/group-invite.ts).
+    const canInvite = canInviteToGroup({ group: groupData, members, myPubkey, muted });
     const pendingMembers = members.filter(m => m.status === 'pending_approval');
     // Who leads the group, and what each row may offer (lead convenor, 2026-09-23). One source of truth, shared
     // with the native roster and with the engine that enforces it: a convenor never sees the Role select or ✕ on
@@ -423,6 +448,16 @@ export function GroupDetailModal({
                                 : `Roster (${roster.rows.length || groupData.memberCount || 0})`}
                         </h3>
                         {rosterRefused && <p className="text-sm text-nature-600 dark:text-nature-300">Join the group to see who is here</p>}
+                        {canInvite && !rosterRefused && (
+                            <button
+                                type="button"
+                                data-testid="group-invite-people"
+                                onClick={() => setInviteOpen(true)}
+                                className="w-full mb-2 min-h-[44px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                            >
+                                <span aria-hidden="true">＋</span>{t('Invite people')}
+                            </button>
+                        )}
 
                         {loading ? (
                             <div className="py-4 text-center text-xs text-nature-500">Loading members...</div>
@@ -547,6 +582,16 @@ export function GroupDetailModal({
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Request Pending Approval
                             </div>
+                        ) : isInvited ? (
+                            <button
+                                type="button"
+                                data-testid="group-accept-invite"
+                                onClick={handleJoin}
+                                disabled={actionLoading}
+                                className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            >
+                                {t('Accept invitation')}
+                            </button>
                         ) : groupData.joinPolicy === 'invite_only' ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Invite Only
@@ -564,6 +609,16 @@ export function GroupDetailModal({
                     </div>
                 </div>
             </div>
+            {inviteOpen && canInvite && (
+                <InvitePeopleSheet
+                    groupId={groupData.id}
+                    groupName={groupData.name}
+                    existing={alreadyInGroup(members)}
+                    myPubkey={myPubkey}
+                    onClose={() => setInviteOpen(false)}
+                    onInvited={(sent) => { if (sent > 0) { loadRoster(); onMembershipChanged?.(); } }}
+                />
+            )}
         </div>
     );
 }

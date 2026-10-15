@@ -138,7 +138,7 @@ export interface HelloResult {
  * Steps 1 to 5 above. Throws {@link CustodianRefusal} (having sent nothing but the hello) when any check fails or the
  * custodian doesn't confirm.
  */
-export async function checkedHello(baseUrl: string, key: CustodianKey, path: string, opts: CallOptions): Promise<HelloResult> {
+export async function checkedHello(baseUrl: string, key: CustodianKey, path: string, opts: CallOptions, extra: Record<string, unknown> = {}): Promise<HelloResult> {
     if (!opts.trust) refuse('no_trust', 'No release feed and pinned keys to check the vault against. Nothing was sent.');
     const { chain, newest } = await loadReleases(opts.trust);
     const platform = newest.manifest.hostPolicy.platform;
@@ -146,7 +146,7 @@ export async function checkedHello(baseUrl: string, key: CustodianKey, path: str
         refuse('unknown_platform', `The release names a host platform this tool doesn't know (${platform}). Nothing was sent: update the tool.`);
     }
     const nonce = crypto.randomBytes(32);
-    const res = await signedPost(baseUrl, path, { custodianNonce: vaultB64(nonce) }, key, opts);
+    const res = await signedPost(baseUrl, path, { ...extra, custodianNonce: vaultB64(nonce) }, key, opts);
     if (res.status !== 200) refuse('hello_refused', `The hello was refused (${res.status}): ${String(res.body.error ?? '')}`);
     const hello = res.body as unknown as UnlockHello;
     const helloPub = vaultUnb64(hello.helloPub, 32);
@@ -195,7 +195,8 @@ export async function presentShare(baseUrl: string, key: CustodianKey, share: Cu
 
 /** Point a fresh vault at a backup; two custodians then unlock it with that backup's shares. */
 export async function restoreFromBackup(baseUrl: string, key: CustodianKey, backup: string, opts: CallOptions = {}): Promise<CustodianCall> {
-    const h = await checkedHello(baseUrl, key, '/v1/unlock/hello', opts);
+    // The backup's name rides with the hello: a fresh vault answers a custodian its header lists (V1, server.ts).
+    const h = await checkedHello(baseUrl, key, '/v1/unlock/hello', opts, { backup });
     const sig = signStatement(key.seed, restoreStatement(h.hello.bootId, h.hello.helloPub, backup));
     return send(baseUrl, '/v1/unlock/restore', { backup, sig }, key, opts);
 }

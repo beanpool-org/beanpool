@@ -24,7 +24,7 @@ import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator, createPost, requestPost,
     exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
-import { createPost as createPostEngine, updatePost, removePost, rsvpEvent } from './engine/posts.js';
+import { createPost as createPostEngine, updatePost, removePost, rsvpEvent, letInEvent } from './engine/posts.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { getPosts, getStateHash, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
@@ -395,6 +395,14 @@ async function main(): Promise<void> {
     rsvpEvent(capture, syncEvent.id, maybe, 'interested');
     rsvpEvent(capture, syncEvent.id, host, 'going');
     rsvpEvent(capture, syncEvent.id, host, null);
+    // The let-in rides on the RSVP (DESIGN-global-member-privacy-fable.md §2.4): hashed, exported, imported.
+    db.prepare('UPDATE posts SET event_host_lets_in = 1 WHERE id = ?').run(syncEvent.id);
+    const hashNoLetIn = getStateHash(db);
+    letInEvent(syncEvent.id, stranger, { memberPublicKey: goer });
+    assert(getStateHash(db) !== hashNoLetIn, 'a let-in changes the state hash');
+    const letInAtOf = () => (db.prepare('SELECT let_in_at AS t, let_in_by AS b FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?')
+        .get(syncEvent.id, goer) as any) ?? {};
+    const letInAt = letInAtOf().t as string;
     const hashBefore = getStateHash(db);
 
     const payload = await exportSyncState(nodeId);
@@ -403,13 +411,16 @@ async function main(): Promise<void> {
         'the exported post carries the event fields');
     const exportedRsvps = (payload.eventRsvps ?? []).filter(e => e.postId === syncEvent.id);
     assert(exportedRsvps.length === 2 && exportedRsvps.some(e => e.memberPubkey === goer && e.status === 'going'), 'event_rsvps are exported');
+    assert(exportedRsvps.some(e => e.memberPubkey === goer && e.letInAt === letInAt && e.letInBy === stranger)
+        && exportedRsvps.some(e => e.memberPubkey === maybe && e.letInAt === null) && (exportedPost as any)?.eventHostLetsIn === true,
+        'the let-in and the flag are exported');
     assert((payload.tombstones ?? []).some(t => t.tableName === 'event_rsvps' && t.rowKey === `${syncEvent.id}|${host}`), 'the not-going tombstone is exported');
 
     // Simulate a replica that holds the stale state: the host still Going, the others missing, event fields blank.
     db.prepare(`DELETE FROM event_rsvps WHERE post_id = ?`).run(syncEvent.id);
     db.prepare(`DELETE FROM tombstones WHERE table_name = 'event_rsvps'`).run();
     db.prepare(`INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at) VALUES (?, ?, 'going', '', '2000-01-01T00:00:00.000Z')`).run(syncEvent.id, host);
-    db.prepare(`UPDATE posts SET event_start_at = NULL, event_private_note = NULL, event_state = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`).run(syncEvent.id);
+    db.prepare(`UPDATE posts SET event_start_at = NULL, event_private_note = NULL, event_state = NULL, event_host_lets_in = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`).run(syncEvent.id);
     assert(getStateHash(db) !== hashBefore, 'the state hash sees RSVP divergence');
 
     setNodeRole('backup');
@@ -421,6 +432,9 @@ async function main(): Promise<void> {
     assert(importedRsvps.length === 2 && importedRsvps.some(x => x.member_pubkey === goer && x.status === 'going')
         && importedRsvps.some(x => x.member_pubkey === maybe && x.status === 'interested'), 'import restores the RSVPs');
     assert(!importedRsvps.some(x => x.member_pubkey === host), 'the not-going tombstone removes the stale RSVP on import');
+    assert(letInAtOf().t === letInAt && letInAtOf().b === stranger
+        && (db.prepare('SELECT event_host_lets_in AS f FROM posts WHERE id = ?').get(syncEvent.id) as any)?.f === 1,
+        'import restores the let-in and the flag');
     assert(getStateHash(db) === hashBefore, 'after import the state hash matches the primary');
 
     // A stale row older than the tombstone must not resurrect a not-going.
@@ -457,6 +471,7 @@ async function main(): Promise<void> {
     await importRemoteState(fromOldNode as any);
     assert(offsetsRow() === '[1440,60]',
         'a snapshot from a node that predates reminders does not erase the ones this replica holds');
+    assert(letInAtOf().t === letInAt, 'nor the let-in, which a node older than it does not carry');
 
     const cleared = await signSyncPayload({
         ...unsigned,

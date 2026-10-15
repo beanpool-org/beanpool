@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
 import { useCoversScreen } from '../lib/screen-cover';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_WORDS } from '../lib/reportReasons';
+import { t } from '@beanpool/core';
 
 interface Props {
     isOpen: boolean;
@@ -32,6 +33,8 @@ export function ReportModal({
     const [details, setDetails] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The node took it: the card says so in place of the form, and Done closes (rehearsal 14 Oct N3, was an alert()).
+    const [sent, setSent] = useState(false);
     const modalCardRef = useRef<HTMLDivElement>(null);
 
     // Reset draft state and errors cleanly whenever modal opens, and establish focus
@@ -41,6 +44,7 @@ export function ReportModal({
             setDetails('');
             setSubmitting(false);
             setError(null);
+            setSent(false);
             const timer = setTimeout(() => {
                 modalCardRef.current?.focus();
             }, 50);
@@ -54,14 +58,20 @@ export function ReportModal({
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && !submitting) {
                 e.preventDefault();
-                onClose();
+                close();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, submitting, onClose]);
+    }, [isOpen, submitting, onClose, onReported, sent]);
 
     if (!isOpen) return null;
+
+    /** After a sent report the caller hears of it as the card closes, so it can't unmount the sentence first. */
+    function close() {
+        if (sent) onReported?.();
+        onClose();
+    }
 
     async function handleSubmit() {
         if (!selectedReason || submitting) return;
@@ -73,9 +83,7 @@ export function ReportModal({
                 : selectedReason;
 
             await reportAbuse(reporterPubkey, targetPubkey, finalReason, targetPostId, targetPulseItemId);
-            alert('Report submitted. Thank you for helping keep the community safe.');
-            onReported?.();
-            onClose();
+            setSent(true);
         } catch (e: any) {
             // The choice and the words stay, so the member can send again without retyping.
             setError(e?.message || 'Failed to submit report. Please try again.');
@@ -102,7 +110,7 @@ export function ReportModal({
                     </h3>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={close}
                         disabled={submitting}
                         aria-label="Close report dialog"
                         className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-white bg-transparent border-none text-lg cursor-pointer p-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
@@ -111,6 +119,20 @@ export function ReportModal({
                     </button>
                 </div>
 
+                {sent ? (
+                    <>
+                        <p role="status" data-testid="report-sent" className="m-0 text-sm font-semibold text-bp-ink-success">
+                            {t(REPORT_WORDS.sent)}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={close}
+                            className="w-full min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
+                        >
+                            {t('Done')}
+                        </button>
+                    </>
+                ) : (<>
                 {error && (
                     <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-400 font-medium">
                         {error}
@@ -187,6 +209,7 @@ export function ReportModal({
                         {submitting ? 'Sending…' : 'Submit Report'}
                     </button>
                 </div>
+                </>)}
             </div>
         </div>
     );

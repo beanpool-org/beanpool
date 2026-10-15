@@ -295,6 +295,13 @@ export interface SyncEventRsvp {
      * server from before repeating events sends none; null on an RSVP from before the stamp.
      */
     occurrenceAt?: string | null;
+    /**
+     * When the host let this member in, and which host, on an event whose host lets people in
+     * (DESIGN-global-member-privacy-fable.md §2.4). Optional like reminderOffsets: a node older than the
+     * let-in carries no such field, and the import keeps what it holds rather than erasing it.
+     */
+    letInAt?: string | null;
+    letInBy?: string | null;
     updatedAt: string;
 }
 
@@ -718,10 +725,18 @@ export function getStateHash(db: Db): string {
     // event hashes exactly as it did before events existed and a mixed-version pair does not read as diverged.
     let erKeys: string[] = [];
     try {
-        erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
+        // A let-in (DESIGN-global-member-privacy-fable.md §2.4) is part of the row a replica must hold, so it is hashed;
+        // only where it is set, so every RSVP no host let in hashes as it did before the column existed.
+        erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status || CASE WHEN let_in_at IS NULL THEN '' ELSE '|' || let_in_at END AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
             .all() as any[]).map(r => r.k);
     } catch {
-        // Table absent on older schema.
+        try {
+            // A schema older than the let-in.
+            erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
+                .all() as any[]).map(r => r.k);
+        } catch {
+            // Table absent on older schema.
+        }
     }
     // Groups and their memberships, with role and status — a removal or a promotion that never reached the
     // replica is exactly the divergence this has to show. Added only when there are any, like RSVPs above.
@@ -913,9 +928,10 @@ function groupsWithPictures(db: Db, rows: any[]): SyncGroup[] {
 // column added later travels without anyone listing it; rowToMember leaves most of them out because the member
 // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
 // delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
-// pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
+// pulling with the replication token or the admin password (routes/backup.ts): the database's own trust. Never
+// `callsign_fold`: each server makes its own from the name (the server's db.ts migrateCallsignFold).
 function memberOfRow(row: any, preferencesOf: ReadonlyMap<string, Record<string, string>>): Member {
-    const { public_key: _key, updated_at: _stamp, ...standing } = row;
+    const { public_key: _key, updated_at: _stamp, callsign_fold: _fold, ...standing } = row;
     return {
         ...rowToMember(row),
         moderationMutedUntil: row.moderation_muted_until ?? null,
@@ -1009,6 +1025,7 @@ function postOfRow(row: any): MarketplacePost {
             eventEndAt: row.event_end_at || undefined,
             eventPlaceName: row.event_place_name || undefined,
             eventPrivateNote: row.event_private_note || undefined,
+            ...(row.event_host_lets_in === 1 ? { eventHostLetsIn: true } : row.event_host_lets_in === 0 ? { eventHostLetsIn: false } : {}),
             eventState: row.event_state || undefined,
             // The host's clock, its zone, online and the join link (DESIGN-event-times §2). The link replicates as the note does.
             eventStartLocal: row.event_start_local || undefined,
@@ -1277,6 +1294,8 @@ function eventRsvpOfRow(r: any): SyncEventRsvp {
         // does not know about reminders" from "this person has no per-event choice".
         reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
         occurrenceAt: r.occurrence_at === undefined ? undefined : (r.occurrence_at ?? null),
+        letInAt: r.let_in_at === undefined ? undefined : (r.let_in_at ?? null),
+        letInBy: r.let_in_by === undefined ? undefined : (r.let_in_by ?? null),
         updatedAt: r.updated_at,
     };
 }

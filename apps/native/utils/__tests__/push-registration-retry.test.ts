@@ -166,7 +166,7 @@ describe('a registration that fails is tried again as the app comes back', () =>
         const [registration] = registrations();
         expect(registration.community).toBe(MULLUM);
         expect(registration.body).toEqual({
-            publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android', registeredAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)),
+            publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android', registeredAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)), lang: 'en',
         });
         expect(recorded()).toEqual([MULLUM]);
         expect(mem.async.has(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe(false);

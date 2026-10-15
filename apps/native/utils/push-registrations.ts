@@ -33,6 +33,7 @@ import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity, KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
 import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
+import { languageForNode } from './language-choice';
 import {
     PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
 } from './storage-keys';
@@ -373,7 +374,9 @@ export async function registerPushTokenWithCommunity(
     }
 
     const registeredAt = await nextPushStamp(storage);
-    const body = JSON.stringify({ publicKey: account.publicKey, token, platform, registeredAt });
+    // `lang`: the language this phone writes in, for the node's pushes to it (utils/language-choice.ts; Marty's call M6:
+    // kept on the token's row and erased with it). A node before it reads nothing else of the body and ignores it.
+    const body = JSON.stringify({ publicKey: account.publicKey, token, platform, registeredAt, lang: languageForNode() });
     const url = `${community}${PUSH_TOKENS_PATH}`;
     const headers = await buildSignedHeaders('POST', url, body, account.privateKey, account.publicKey);
     // The last look before the request goes out, with nothing awaited between it and the fetch: a leave that began

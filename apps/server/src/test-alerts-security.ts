@@ -679,7 +679,8 @@ async function main(): Promise<void> {
     assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. one told on the main server is in both (${banner('owner')})`);
 
     // ── 5e. A re-key moves an owner's or admin's role to a new key (the deciding review of #1807, finding 5) ─────────
-    // Through the real routes: an owner issues the code and binds the new key. Told to the owners as sec.keys, under the
+    // Through the real routes: an owner issues the code and binds the new key, from the phone with Manage pressed just now
+    // (an owner's or admin's re-key asks the fresh proof, #1984 confirmation R1). Told to the owners as sec.keys, under the
     // owner's own bound (the re-key drops the old key's push tokens: the owners are pushed); a moderator's re-key tells
     // nothing; nobody named.
     alerts.resetAlertsForTests();
@@ -696,9 +697,9 @@ async function main(): Promise<void> {
     putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
     await settle(300);
     const rekey = async (pk: string) => {
-        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwner);
+        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwnerPhone());
         const fresh = pubkey();
-        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwner);
+        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwnerPhone());
         await settle(300);
         return { issued: issued.status, done: done.status, error: done.json?.error ?? issued.json?.error, fresh };
     };

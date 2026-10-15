@@ -47,6 +47,8 @@ export interface EventRsvpRecord {
     memberCallsign?: string;
     status: EventRsvpStatus;
     updatedAt: string;
+    /** When the host let them in, on an event whose host lets people in (eventHostLetsIn); null while they wait. */
+    letInAt?: string | null;
 }
 
 export interface MarketplacePost {
@@ -118,8 +120,18 @@ export interface MarketplacePost {
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
-    /** Host and `going` only — omitted for every other reader (§2.3). */
+    /**
+     * The host and the people Going who may read it (mayReadEventPrivate): where the host lets people in, only those
+     * they have let in. Omitted for every other reader (§2.3).
+     */
     eventPrivateNote?: string;
+    /**
+     * "Host lets people in" (scratch/global-node/DESIGN-global-member-privacy-fable.md §2): Going is still one tap, and
+     * the note and the event chat open to a Going member once the host has let them in.
+     */
+    eventHostLetsIn?: boolean;
+    /** Where the host lets people in: whether the host has let this viewer in; null when they have no RSVP. */
+    myLetIn?: boolean | null;
     eventState?: EventState;
     /**
      * The clock the host typed, "YYYY-MM-DDTHH:MM", in `eventTz` (a canonical IANA id); the node made the instants above from
@@ -325,6 +337,40 @@ export function isEventHost(
         `).get(row.target_group_id, pubkey);
     }
     return false;
+}
+
+/**
+ * Who may read an event's private note and its chat (scratch/global-node/DESIGN-global-member-privacy-fable.md §2.4):
+ * the host, or someone Going — and, where the host lets people in, Going and let in. The one rule both readers use: the
+ * post read (getPosts) and the chat (apps/server engine/event-thread.ts canReadEventThread). Pure, from what the caller
+ * has already read; mayReadEventPrivate reads it for one member.
+ */
+export function eventPrivateOpenTo(
+    host: boolean,
+    rsvp: { status?: string | null; let_in_at?: string | null } | null | undefined,
+    hostLetsIn: boolean,
+): boolean {
+    if (host) return true;
+    if (rsvp?.status !== 'going') return false;
+    return !hostLetsIn || !!rsvp.let_in_at;
+}
+
+/** eventPrivateOpenTo for one member, reading their RSVP. Visibility (groups, reports, visitors) is the caller's. */
+export function mayReadEventPrivate(
+    db: Db,
+    row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null; event_host_lets_in?: number | null },
+    pubkey: string | undefined,
+): boolean {
+    if (!pubkey) return false;
+    if (isEventHost(db, row, pubkey)) return true;
+    let rsvp: { status: string; let_in_at: string | null } | undefined;
+    try {
+        rsvp = prepared(db, 'SELECT status, let_in_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?')
+            .get(row.id, pubkey) as { status: string; let_in_at: string | null } | undefined;
+    } catch {
+        return false; // table absent on an older schema
+    }
+    return eventPrivateOpenTo(false, rsvp, row.event_host_lets_in === 1);
 }
 
 /**
@@ -540,6 +586,8 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             eventEndLocal: row.event_end_local || undefined,
             eventTz: row.event_tz || undefined,
             eventOnline: row.event_online === 1,
+            // Only where it is on, so an event whose host doesn't let people in reads byte for byte as before.
+            ...(row.event_host_lets_in === 1 ? { eventHostLetsIn: true } : {}),
         } : {}),
         ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
     };
@@ -1731,7 +1779,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     if (eventRows.length > 0) {
         try {
             const rsvps = selectInChunks(db, eventRows.map(r => r.id), ph => `
-                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, m.callsign as member_callsign
+                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, er.let_in_at, m.callsign as member_callsign
                 FROM event_rsvps er
                 LEFT JOIN members m ON er.member_pubkey = m.public_key
                 WHERE er.post_id IN (${ph})
@@ -1817,15 +1865,21 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
-            if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
-            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9).
-            if ((host || going) && r.event_link) post.eventLink = r.event_link;
+            // Where the host lets people in, Going alone opens nothing: the note waits for the host (mayReadEventPrivate).
+            const letsIn = r.event_host_lets_in === 1;
+            if (letsIn && !viewerIsVisitor) post.myLetIn = mine ? !!mine.let_in_at : null;
+            const privateOpen = eventPrivateOpenTo(host, viewerIsVisitor ? undefined : mine, letsIn);
+            if (privateOpen && r.event_private_note) post.eventPrivateNote = r.event_private_note;
+            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9): where the host lets people
+            // in, it too waits for them.
+            if (privateOpen && r.event_link) post.eventLink = r.event_link;
             if (host) {
                 post.eventRsvps = rsvps.map((v: any) => ({
                     memberPubkey: v.member_pubkey,
                     memberCallsign: v.member_callsign || undefined,
                     status: v.status,
                     updatedAt: v.updated_at,
+                    ...(letsIn ? { letInAt: v.let_in_at ?? null } : {}),
                 }));
             }
         }
@@ -1943,6 +1997,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
+    // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.
+    eventHostLetsIn: 'keep',
     // The clock, its zone (the label is read from it) and online: what the time means, not who or where exactly.
     eventStartLocal: 'keep', eventEndLocal: 'keep', eventTz: 'keep', eventOnline: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
@@ -1961,7 +2017,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -1996,7 +2052,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
-    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
+    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLetIn: _letIn, ...rest } = shared;
     return rest;
 }
 

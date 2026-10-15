@@ -58,6 +58,7 @@ import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
@@ -176,6 +177,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [eventEnd, setEventEnd] = useState('');
     const [eventPlaceName, setEventPlaceName] = useState('');
     const [eventNote, setEventNote] = useState('');
+    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): null until the host touches
+    // it, so the node's default (ticked where anyone can join in a minute) holds even when its info arrives late.
+    const [eventHostLetsInChoice, setEventHostLetsIn] = useState<boolean | null>(null);
     const [postApproximate, setPostApproximate] = useState(false);
     // Where and when (DESIGN-event-times §3): at a place or online, the link to join, and the zone the typed times are in
     // with where it came from. The picker's list is the node's, read the first time Change is tapped.
@@ -218,6 +222,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Until the node's info arrives, the local rules stand.
     const nodeInfo = useCommunityInfo(!visitor);
     const postRules = postRulesFor((nodeInfo?.features as { beans?: unknown } | undefined)?.beans !== false);
+    const openMembership = hostLetsInDefault(nodeInfo?.features as { openMembership?: boolean } | undefined);
+    const eventHostLetsIn = eventHostLetsInChoice ?? openMembership;
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -829,6 +835,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setEventEnd('');
         setEventPlaceName('');
         setEventNote('');
+        setEventHostLetsIn(null);
         setEventHost('me');
         setPostApproximate(false);
         setEventIsCopy(false);
@@ -856,6 +863,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
+            hostLetsIn: eventHostLetsIn,
         };
     }
 
@@ -966,6 +974,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 ...(!eventOnline && eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
+                // Always the host's choice, never left to the node's default.
+                eventHostLetsIn,
             };
             // Hosting AS an enterprise goes through the enterprise's own route, with the enterprise in the
             // PATH. Naming it in the body is refused by the node's spoof check before the route runs — every
@@ -1616,6 +1626,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setEventEnd(form.end);
             setEventPlaceName(form.placeName);
             setEventNote(form.privateNote);
+            setEventHostLetsIn(form.hostLetsIn);
             setAudienceScope(source.audienceScope === 'group' ? 'group' : 'public');
             setTargetGroupId(source.audienceScope === 'group' ? (source.targetGroupId ?? '') : '');
             setPostLat(form.lat);
@@ -2502,7 +2513,26 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 rows={2}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all resize-y ${validationErrors.has('event_note') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
-                            <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see this.</p>
+                            <p data-testid="event-note-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">{privateNoteHelper(eventHostLetsIn, openMembership)}</p>
+                            <label className="mt-2 flex items-start gap-2 min-h-[44px] cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    data-testid="event-host-lets-in"
+                                    checked={eventHostLetsIn}
+                                    onChange={e => setEventHostLetsIn(e.target.checked)}
+                                    className="mt-1 h-5 w-5 flex-shrink-0 accent-violet-700"
+                                />
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{hostLetsInLabel()}</span>
+                                    <span className="block text-xs text-nature-500 dark:text-nature-400">{hostLetsInHint()}</span>
+                                </span>
+                            </label>
+                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
+                            {eventEdit && hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn) && (
+                                <p data-testid="event-host-lets-in-off" role="status" className="m-0 mt-1 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">
+                                    {hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn)}
+                                </p>
+                            )}
                         </div>
                         {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
                             <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">

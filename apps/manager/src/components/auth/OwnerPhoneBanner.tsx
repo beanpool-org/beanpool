@@ -27,7 +27,7 @@ export function OwnerPhoneBanner({ nodeUrl }: { nodeUrl: string | undefined }) {
                     href={`${normalizeNodeUrl(nodeUrl)}/settings/`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-h-[44px] inline-flex items-center px-3 rounded-xl bg-white text-terra-600 font-bold"
+                    className="min-h-[44px] inline-flex items-center px-3 rounded-xl bg-white text-bp-cta-fill font-bold"
                 >
                     Sign in with your phone
                 </a>

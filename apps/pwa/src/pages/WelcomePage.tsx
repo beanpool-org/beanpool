@@ -237,7 +237,7 @@ export function OnboardingStepper({ step, firstLabel, area = false }: { step: 1 
                             width: '12px',
                             height: '12px',
                             borderRadius: '6px',
-                            backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
+                            backgroundColor: isCompleted ? '#22c55e' : isActive ? 'var(--bp-ink-info)' : '#d1d5db',
                             marginBottom: '6px',
                             display: 'flex',
                             alignItems: 'center',
@@ -1489,7 +1489,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                             {/* The space between the sentence and its button is JSX text on the same line, not {' '}: a t() beside a string reads as a fragment to words:check. */}
                             {t("Can't reach the community right now. Try again in a minute.")} <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
-                                style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>
+                                style={{ background: 'none', border: 'none', color: 'var(--bp-ink-info)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>
                                 {t('Try again')}
                             </button>
                         </div>
@@ -1539,7 +1539,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                     onClick={() => setShowHeldWords((shown) => !shown)}
                                                     style={{
                                                         width: '100%', padding: '0.75rem 0.5rem', borderRadius: '10px', marginBottom: '0.75rem',
-                                                        border: '1px solid #2563eb', background: 'transparent', color: '#2563eb',
+                                                        border: '1px solid var(--bp-ink-info)', background: 'transparent', color: 'var(--bp-ink-info)',
                                                         fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                                     }}>
                                                     {mine
@@ -1580,7 +1580,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onClick={() => onComplete(heldIdentity)}
                                 style={{
                                     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-                                    background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
                                     cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                 }}
                             >
@@ -1656,8 +1656,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: '#fff', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -1697,7 +1697,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             width: '96px',
                                             height: '96px',
                                             borderRadius: '48px',
-                                            border: '3px solid #2563eb',
+                                            border: '3px solid var(--bp-ink-info)',
                                             objectFit: 'cover',
                                         }}
                                     />
@@ -1825,7 +1825,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 width: '56px',
                                                 height: '56px',
                                                 borderRadius: '28px',
-                                                border: isSelected ? '3px solid #2563eb' : '2px solid transparent',
+                                                border: isSelected ? '3px solid var(--bp-ink-info)' : '2px solid transparent',
                                                 padding: 0,
                                                 overflow: 'hidden',
                                                 cursor: 'pointer',
@@ -1881,9 +1881,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     padding: '0.85rem',
                                     borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
                                     // White on the blue (and on the grey while it sends).
-                                    color: 'var(--bp-commit-on)',
+                                    color: 'var(--bp-info-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
                                     cursor: loading ? 'not-allowed' : 'pointer',
@@ -2059,8 +2059,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2180,7 +2180,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     type="checkbox"
                                     checked={seedConfirmed}
                                     onChange={(e) => setSeedConfirmed(e.target.checked)}
-                                    style={{ accentColor: '#2563eb' }}
+                                    style={{ accentColor: 'var(--bp-ink-info)' }}
                                 />
                                 {t("I've written these words down somewhere safe")}
                             </label>
@@ -2218,8 +2218,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
@@ -2382,8 +2382,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     style={{
                                         width: '100%', padding: '0.85rem', borderRadius: '10px',
                                         border: 'none',
-                                        background: loading ? '#555' : '#2563eb',
-                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        color: 'var(--bp-info-on)', fontSize: '1rem',
                                         fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                         fontFamily: 'inherit', transition: 'background 0.2s',
                                     }}
@@ -2647,7 +2647,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             <button type="button" aria-disabled={sentInvite.busy} onClick={retrySentInvite}
                                 style={{
                                     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-                                    background: sentInvite.busy ? '#555' : '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    background: sentInvite.busy ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
                                     cursor: sentInvite.busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                 }}>
                                 {sentInvite.busy ? t('Checking…') : t('Retry')}
@@ -2734,7 +2734,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             checked={joinConsentTicked}
                                             onChange={(e) => setJoinTickedVersion(e.target.checked ? joinTerms.version : null)}
                                             disabled={loading}
-                                            style={{ accentColor: '#2563eb', width: 20, height: 20 }}
+                                            style={{ accentColor: 'var(--bp-ink-info)', width: 20, height: 20 }}
                                         />
                                         {t('I agree')}
                                     </label>
@@ -2756,8 +2756,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : 'var(--cta-go, #10b981)',
-                                    color: '#fff', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-commit-fill)',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                     marginBottom: '1rem',
@@ -2854,9 +2854,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         width: '100%',
                                         padding: '0.75rem 1rem',
                                         borderRadius: '10px',
-                                        border: '1px solid #2563eb',
+                                        border: '1px solid var(--bp-ink-info)',
                                         background: 'transparent',
-                                        color: 'var(--link, #2563eb)',
+                                        color: 'var(--bp-ink-info)',
                                         fontSize: '0.9rem',
                                         fontWeight: 700,
                                         cursor: 'pointer',
@@ -2894,8 +2894,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         style={{
                                             width: '100%', padding: '1.1rem 1rem', borderRadius: '14px',
                                             border: 'none',
-                                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                                            color: '#fff', fontSize: '1.1rem', fontWeight: 700,
+                                            background: 'linear-gradient(135deg, var(--bp-info-fill), var(--bp-info-hover))',
+                                            color: 'var(--bp-info-on)', fontSize: '1.1rem', fontWeight: 700,
                                             cursor: 'pointer', fontFamily: 'inherit',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                                             marginBottom: '1rem',

@@ -104,14 +104,19 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     five, so a copy it made lacks them and the re-seed brings them. OLDEST_STANDBY_FORMAT is 10 from here: a main server
  *     refuses a copy or a delta to an older standby, loudly, rather than send it one that loses them (an online event
  *     would land as a pinless in-person one with no link).
+ * 11. An event's "host lets people in" and each RSVP's let-in are the main server's (posts.event_host_lets_in,
+ *     event_rsvps.let_in_at and let_in_by; DESIGN-global-member-privacy-fable.md §2.4). An importer before this one drops
+ *     them, under stamps no later copy moves past, and the state hash reads no flag: promoted, such a standby would open an
+ *     event's note and chat to everyone Going. The re-seed brings them. OLDEST_STANDBY_FORMAT is 11 from here, for the same
+ *     reason as 10: a copy or a delta sent to an older standby would lose them.
  */
-export const REPLICA_FORMAT = 10;
+export const REPLICA_FORMAT = 11;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
- * reference, 10 event times; raise it with any format whose older importer drops a column.
+ * reference, 10 event times, 11 the let-in; raise it with any format whose older importer drops a column.
  */
-export const OLDEST_STANDBY_FORMAT = 10;
+export const OLDEST_STANDBY_FORMAT = 11;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -1119,6 +1124,11 @@ function postEventTimes(rp: any): [string | null, string | null, string | null, 
  * update: a restore clears the hide on the replica too. A main server from before G3 sends neither, and never set
  * either, so null is what it holds.
  */
+/** The event's "host lets people in" flag as the main server holds it; null from a peer older than it (the update keeps what is here). */
+function hostLetsInValue(rp: any): number | null {
+    return rp.eventHostLetsIn === true ? 1 : rp.eventHostLetsIn === false ? 0 : null;
+}
+
 function postModeration(rp: any): [string | null, string | null] {
     return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
 }
@@ -1881,10 +1891,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 if (!existing) {
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
-                                event_start_local, event_end_local, event_tz, event_online, event_link,
+                                event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1921,6 +1931,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postEventTimes(rp),
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -1961,6 +1972,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         event_tz = ?,
                         event_online = ?,
                         event_link = ?,
+                        event_host_lets_in = COALESCE(?, event_host_lets_in),
                         audience_scope = ?,
                         target_group_id = ?,
                         target_pubkey = ?,
@@ -2000,6 +2012,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postEventTimes(rp),
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -2628,6 +2641,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         signature = excluded.signature,
                         updated_at = excluded.updated_at
                     ${RSVP_CONFLICT_GUARD}`);
+                // The let-in (DESIGN-global-member-privacy-fable.md §2.4) rides on the same row and the same watermark: written
+                // only onto the row this import just made the main server's (its updated_at), so an older copy never sets
+                // or clears it. `undefined` (a peer older than the let-in) keeps what is here, as for reminders.
+                const importLetIn = db.prepare(`UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?
+                    WHERE post_id = ? AND member_pubkey = ? AND updated_at = ?`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`);
                 for (const er of remote.eventRsvps) {
                     if (er.status !== 'going' && er.status !== 'interested') continue;
@@ -2642,6 +2660,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     } else {
                         importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '',
                             er.reminderOffsets, updatedAt);
+                    }
+                    if (er.letInAt !== undefined) {
+                        importLetIn.run(er.letInAt ?? null, er.letInBy ?? null, er.postId, er.memberPubkey, updatedAt);
                     }
                 }
             }

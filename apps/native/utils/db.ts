@@ -1930,6 +1930,8 @@ export async function createPost(post: any) {
             eventEndAt: post.eventEndAt,
             eventPlaceName: post.eventPlaceName,
             ...(post.eventPrivateNote ? { eventPrivateNote: post.eventPrivateNote } : {}),
+            // The host's "Only people I let in" choice, always sent (utils/events.ts buildEventDraft): left out, the node applies its own default.
+            ...(typeof post.eventHostLetsIn === 'boolean' ? { eventHostLetsIn: post.eventHostLetsIn } : {}),
         } : {}),
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
@@ -2617,8 +2619,17 @@ export async function removeEnterpriseThreadMessage(treasury: string, messageId:
 export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error || 'Could not open this event chat.');
+    // The node's code rides on the error: `waiting_for_host` is someone Going whom the host hasn't let in (events.ts isWaitingForHost).
+    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this event chat.'), { code: body?.code });
     return body;
+}
+
+/**
+ * The host lets a Going member in to the note and the chat, or takes it back, or lets everyone waiting in
+ * (DESIGN-global-member-privacy-fable.md §2.2). Answers the event as the host sees it.
+ */
+export async function letInToEvent(postId: string, who: { memberPublicKey: string } | { everyone: true }, letIn = true): Promise<any> {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/let-in`, { ...who, letIn });
 }
 
 export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<any> {

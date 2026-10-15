@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat, createConversationApi } from '../lib/api';
+import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat, createConversationApi, getConversationMessages } from '../lib/api';
 import { openDmLine } from '../lib/e2e-crypto';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest, lockedGroupsOf } from '../lib/group-chat-lock-store';
@@ -592,10 +592,13 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         render(<MessagesPage identity={me} />);
         fireEvent.click(await screen.findByText('✉️ New DM', {}, { timeout: 5000 }));
         fireEvent.click(await screen.findByText('Eve', {}, { timeout: 5000 }));
+        await waitFor(() => expect(createConversationApi).toHaveBeenCalled(), { timeout: 5000 });
+        extraConvs = [dmWithEve];
         const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await waitFor(() => expect(getConversationMessages).toHaveBeenCalledWith(D), { timeout: 5000 });
         expect(isKnownDmConversation(D)).toBe(false);
         await send(composer, 'C5 hello Eve');
-        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT, {}, { timeout: 5000 })).toBeTruthy();
         expect(sendMessageApi).not.toHaveBeenCalled();
 
         reload();
@@ -603,8 +606,7 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         extraConvs = [dmWithEve];
         render(<MessagesPage identity={me} openConversationId={D} />);
         const again = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
-        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-        expect(isKnownDmConversation(D)).toBe(true);
+        await waitFor(() => expect(isKnownDmConversation(D)).toBe(true), { timeout: 5000 });
         await send(again, 'C5 hello Eve');
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalled(), { timeout: 3000 });
         expect(String(vi.mocked(sendMessageApi).mock.calls[0][3]).startsWith('x25519-xc20p-v2:')).toBe(true);

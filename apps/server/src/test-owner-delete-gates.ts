@@ -459,6 +459,97 @@ async function main(): Promise<void> {
                 `3-NB1. …and the same code still saves it: it was not spent (${short(saved)})`);
         }
 
+        // ── 3-NB2. The same on every other route that asks a code: its own checks first (the proof-order sweep) ──
+        // Each: the mistyped request with a current code → 4xx, nothing changed; then the SAME code (no tfa.code() between,
+        // which forgets spent codes) goes through, so the refusal did not spend it.
+        console.log('\n── 3-NB2. the proof-order sweep: a mistyped request spends no code on any route that asks one ──');
+        {
+            resetAdminAuthTarpit();
+            https.resetAdminRateLimit();
+            const modeNow = async () => (await call('GET', '/api/local/admin/auth/break-glass-status', pwSession())).json?.breakGlassMode;
+            const modeBefore = await modeNow();
+            let code = tfa.code();
+            const notBoolean = await call('POST', '/api/local/admin/auth/break-glass-mode', pwSession(), { enabled: 'off', code });
+            assert(notBoolean.status === 400 && (await modeNow()) === modeBefore,
+                `3-NB2. break-glass mode with enabled not a boolean → 400, unchanged (${short(notBoolean)})`);
+            const modeSet = await call('POST', '/api/local/admin/auth/break-glass-mode', pwSession(), { enabled: false, code });
+            assert(modeSet.status === 200 && modeSet.json?.breakGlassMode === false, `3-NB2. …and the same code still sets it: it was not spent (${short(modeSet)})`);
+
+            const gatewayBefore = JSON.stringify(getGatewayConfig());
+            code = tfa.code();
+            const shutsMeOut = await call('POST', '/api/local/admin/gateway', pwSession(), { adminIpAllowlist: ['203.0.113.9'], code });
+            assert(shutsMeOut.status === 400 && JSON.stringify(getGatewayConfig()) === gatewayBefore,
+                `3-NB2. a gateway allow-list without the caller's own address → 400, unchanged (${short(shutsMeOut)})`);
+            const gatewaySet = await call('POST', '/api/local/admin/gateway', pwSession(), { adminIpAllowlist: [], code });
+            assert(gatewaySet.status === 200, `3-NB2. …and the same code still saves the gateway: it was not spent (${short(gatewaySet)})`);
+
+            code = tfa.code();
+            const nobody = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { code });
+            assert(nobody.status === 400 && /memberPubkey/.test(nobody.json?.error || '') && !nobody.json?.breakGlassCode,
+                `3-NB2. a break-glass code for nobody named → 400, none made (${short(nobody)})`);
+            const misspelt = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { memberPubkey: 'not a key', code });
+            assert(misspelt.status === 400 && !misspelt.json?.breakGlassCode, `3-NB2. a break-glass code for a misspelt key → 400, none made (${short(misspelt)})`);
+            const issued = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { memberPubkey: owner, code });
+            assert(issued.status === 200 && typeof issued.json?.breakGlassCode === 'string',
+                `3-NB2. …and the same code still makes it: it was not spent (${short(issued)})`);
+
+            putDestBack();
+            const offboxBefore = JSON.stringify(readOffboxSettings());
+            const keptDays: number = readOffboxSettings().retentionDays;
+            code = tfa.code();
+            const underFloorDays = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { retentionDays: MIN_OFFBOX_RETENTION_DAYS - 1, code });
+            assert(underFloorDays.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore,
+                `3-NB2. off-box retention under the floor → 400, unchanged (${short(underFloorDays)})`);
+            const unknownDest = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { removeId: 'd-00000000', code });
+            assert(unknownDest.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore && destHeld(),
+                `3-NB2. removing an off-box destination by an unknown id → 400, unchanged (${short(unknownDest)})`);
+            const unusable = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(),
+                { destination: { ...gatesDest, id: storedDest()?.id, endpoint: 'not a url' }, code });
+            assert(unusable.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore && destHeld(),
+                `3-NB2. re-pointing an off-box destination at an unusable endpoint → 400, unchanged (${short(unusable)})`);
+            const shortened = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { retentionDays: keptDays - 1, code });
+            assert(shortened.status === 200 && readOffboxSettings().retentionDays === keptDays - 1,
+                `3-NB2. …and the same code still shortens it: it was not spent (${short(shortened)})`);
+            // Back as it was: §5 reads the retention the rows above left.
+            offbox.updateOffboxSettings({ retentionDays: keptDays, removeId: storedDest().id });
+
+            updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+            const addressBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
+            code = tfa.code();
+            const badLabel = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'not a name!', code });
+            assert(badLabel.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === addressBefore,
+                `3-NB2. releasing a name that is no address label → 400, unchanged (${short(badLabel)})`);
+            const stored = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'oldvale', code });
+            assert(stored.status === 409 && JSON.stringify((getNodeConfig() as any).publicAddress) === addressBefore,
+                `3-NB2. releasing this community's own stored address → 409, unchanged (${short(stored)})`);
+            // Past the proof with the same code: the address service is asked, and the stub holds nothing for this key.
+            const asked = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'sparevale', code });
+            assert(asked.status === 409 && /does not say this community holds/.test(asked.json?.error || ''),
+                `3-NB2. …and the same code still reaches the address service: it was not spent (${short(asked)})`);
+
+            // Enrol with a misspelt role, on a key that already holds admin (so the proof is asked): #2018 review NB2.
+            const heldAdmin = addMember('Misspelt');
+            grantNodeRole(heldAdmin, 'admin', owner);
+            const roleNow = () => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(heldAdmin) as any)?.role ?? null;
+            code = tfa.code();
+            const badRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'Admin', code });
+            assert(badRole.status === 400 && /role must be/i.test(badRole.json?.error || '') && roleNow() === 'admin',
+                `3-NB2. enrol with a misspelt role on an admin's key → 400, still an admin (${short(badRole)})`);
+            const goodRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'moderator', code });
+            assert(goodRole.status !== 401 && goodRole.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodRole)})`);
+
+            // Claim over a different live name with a name that is no address label: #2018 review NB3.
+            updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+            const liveBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
+            code = tfa.code();
+            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'direct', code });
+            assert(badClaim.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === liveBefore,
+                `3-NB2. claiming over the live name with a name that is no address label → 400, unchanged (${short(badClaim)})`);
+            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'direct', code });
+            assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
+            updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+        }
+
         // ── 3a. A standby: a session alone cannot make its own key a pin, so a file that key signed restores nothing ──
         console.log('\n── 3a. a standby: no mirror link from a session alone, so no file signed by an unpinned key ──');
         {
@@ -656,6 +747,17 @@ async function main(): Promise<void> {
             db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(owner);
             const cols = Object.keys(oliveRow);
             db.prepare(`INSERT OR REPLACE INTO node_roles (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => oliveRow[c]));
+        }
+        // A short reason spends no code (#2018 review NB1): it is checked before the proof, and the same code then suspends.
+        {
+            const shortReasonOwner = coOwner('ShortReason');
+            const code = tfa.code();
+            const tooShort = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'stolen', code });
+            assert(tooShort.status === 400 && /at least 10 characters/.test(tooShort.json?.error || '') && intact(shortReasonOwner),
+                `3c-NB1. emergency-suspend an owner with a 6-character reason → 400, still an active owner (${short(tooShort)})`);
+            const longEnough = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'a reason members can read', code });
+            assert(longEnough.status === 200 && statusOf(shortReasonOwner) !== 'active',
+                `3c-NB1. …and the same code still suspends: it was not spent (${short(longEnough)})`);
         }
         /** A branch whose root is a member, with an owner invited by them. */
         const ownerInBranch = (): [string, string] => {

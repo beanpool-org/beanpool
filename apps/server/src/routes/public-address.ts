@@ -269,6 +269,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
+        // The name's shape before the proof (#2018 NB3): the registrar's own NAME_RE, so it refuses nothing the registrar takes.
+        // Folded as the rest of the route keys it (a trailing dot is the same name: #1583 r4176138168).
+        if (!isAddressLabel(foldName(name))) { ctx.status = 400; ctx.body = { error: 'That is not an address name: 3 to 32 letters a–z, digits and hyphens, with no hyphen at either end.' }; return; }
         // Claiming over a different live name changes the community's address: the fresh proof (design case 18, B3, as the
         // director narrowed it). A first claim, or the same name again, stays plain, so setting up has no hard gate.
         const live = (getNodeConfig() as any).publicAddress;
@@ -349,8 +352,6 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
-        // The name goes to anyone after the hold: the fresh proof (design case 18, B2).
-        if (!(await requireFreshProof(ctx, b.code, 'release a name'))) return;
         const name = String(b.name || '').toLowerCase().trim();
         if (!isAddressLabel(name)) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
         if (getNodeRole() !== 'primary') { ctx.status = 409; ctx.body = { error: 'Only the main server releases names.' }; return; }
@@ -361,6 +362,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const since = publicAddressGeneration();
         const before = notReleasable(name);
         if (before || busy()) { ctx.status = 409; ctx.body = { error: before || `${host} is being changed right now; nothing was released.` }; return; }
+        // The name goes to anyone after the hold: the fresh proof (design case 18, B2). After the checks of the request and
+        // of this node's own address, which spend nothing; a current code is spent when it is checked (#2002 NB1). Before
+        // the registrar is asked anything. The checks after /holder below still run, and `since` now spans the proof too.
+        if (!(await requireFreshProof(ctx, b.code, 'release a name'))) return;
         const h = await heldByThisKey(name);
         if (!h.held) {
             ctx.status = 409;

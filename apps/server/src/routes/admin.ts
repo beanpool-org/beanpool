@@ -40,7 +40,7 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
+import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, type OwnerOnlyAdminAction } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -603,6 +603,12 @@ const handleEnrol = async (ctx: any) => {
     const callerRole = (ctx.state as any)?.adminRole;
     const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
     const requestedRole = body.role || 'owner';
+    // The role's value before the proof, as the node-roles route checks it: a misspelt role must not spend a code (#2018 NB2).
+    if (requestedRole !== 'owner' && requestedRole !== 'admin' && requestedRole !== 'moderator') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
+        return;
+    }
 
     // Enrol never bootstraps an owner: an owner key comes from an owner, the password, or break-glass,
     // full stop. The node-roles route DOES bootstrap, and #1006 was the two disagreeing about whether a
@@ -659,8 +665,6 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
-    if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     let target: string;
     if (state.isKeySession) {
         target = state.actor;
@@ -682,6 +686,10 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
             return;
         }
     }
+    // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
+    // Last, after the checks of the request itself: a current code is spent when it is checked (#2002 NB1). Whether the
+    // named key holds the owner role is the engine's answer, after it.
+    if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     try {
         const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
             state.isKeySession ? 'key-session' : 'password');
@@ -711,12 +719,13 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
     // On, the password reaches key enrolment only, so a password-only co-owner is shut out of Settings: the fresh proof
     // every time (design case 18, C5).
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'enabled (boolean) is required' };
         return;
     }
+    // After the check of the request: a current code is spent when it is checked (#2002 NB1).
+    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
     setBreakGlassMode(body.enabled);
     ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
 });
@@ -1722,8 +1731,11 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
-    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const { reason } = (ctx as any).requestBody || {};
+    // The reason before the proof: a code is spent when it is checked, so a short reason must not cost it (#2018 NB1).
+    const reasonProblem = suspendReasonProblem(reason);
+    if (reasonProblem) { ctx.status = 400; ctx.body = { error: reasonProblem }; return; }
+    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -2218,13 +2230,14 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can change its gateway settings')) return;
     const { code, ...body } = (ctx as any).requestBody || {};
-    if (!(await requireFreshProof(ctx, code, 'change the gateway settings'))) return;
     const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
     if (allowlistRefusal) {
         ctx.status = 400;
         ctx.body = allowlistRefusal;
         return;
     }
+    // After the check of the request: a current code is spent when it is checked (#2002 NB1).
+    if (!(await requireFreshProof(ctx, code, 'change the gateway settings'))) return;
     const updated = updateGatewayConfig(body);
     ctx.body = { success: true, gateway: updated };
 });

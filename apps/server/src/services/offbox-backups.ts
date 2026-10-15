@@ -335,9 +335,10 @@ export type SettingsUpdate = {
 
 /**
  * Change what Settings holds. Refuses (`ok: false` and a sentence) anything out of range or unusable, changing nothing.
- * Destinations from .env are not changed here: they are the operator's file.
+ * Destinations from .env are not changed here: they are the operator's file. `checkOnly` answers the same without
+ * writing, so the route can refuse a mistyped request before it checks the fresh proof (#2002 NB1).
  */
-export function updateOffboxSettings(update: SettingsUpdate): { ok: true } | { ok: false; error: string } {
+export function updateOffboxSettings(update: SettingsUpdate, opts: { checkOnly?: boolean } = {}): { ok: true } | { ok: false; error: string } {
     const stored = readStoredSettings();
     const next: StoredSettings = {
         intervalHours: stored.intervalHours ?? null,
@@ -386,7 +387,7 @@ export function updateOffboxSettings(update: SettingsUpdate): { ok: true } | { o
             ? next.destinations!.map((d) => (d?.id === existing.id ? value : d))
             : [...next.destinations!, value];
     }
-    writeStoredSettings(next);
+    if (!opts.checkOnly) writeStoredSettings(next);
     return { ok: true };
 }
 

@@ -56,11 +56,20 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
             || (b.destination !== undefined && b.destination !== null && typeof (b.destination as any).id === 'string' && (b.destination as any).id !== '');
         const shortens = b.retentionDays !== undefined
             && offboxRetention(b.retentionDays === null ? null : b.retentionDays).days < readOffboxSettings().retentionDays;
-        if ((changesExisting || shortens) && !(await requireFreshProof(ctx, b.code, 'remove, change or shorten where backups go off the box'))) return;
-        const result = updateOffboxSettings({
+        const update = {
             intervalHours: b.intervalHours, retentionDays: b.retentionDays,
             destination: b.destination as any, removeId: b.removeId,
-        });
+        };
+        // The proof after the checks of the request itself (a value out of range, an unknown id, an unusable store): a
+        // current code is spent when it is checked, so a typo must not cost the owner their code (#2002 NB1).
+        const checked = updateOffboxSettings(update, { checkOnly: true });
+        if (!checked.ok) {
+            ctx.status = 400;
+            ctx.body = { error: checked.error };
+            return;
+        }
+        if ((changesExisting || shortens) && !(await requireFreshProof(ctx, b.code, 'remove, change or shorten where backups go off the box'))) return;
+        const result = updateOffboxSettings(update);
         if (!result.ok) {
             ctx.status = 400;
             ctx.body = { error: result.error };

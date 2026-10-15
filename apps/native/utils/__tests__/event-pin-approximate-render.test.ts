@@ -16,6 +16,8 @@ import { freshEventPin, approximatePin } from '../events';
 
 const mapPress = vi.hoisted(() => ({ handler: null as null | ((e: any) => void) }));
 const profile = vi.hoisted(() => ({ features: {} as Record<string, unknown> }));
+// Where the form asks the node for a pin's time zone (event times, #1946): the spot each ask names.
+const zoneAsks = vi.hoisted(() => [] as Array<[number, number]>);
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, disabled, testID } = props;
@@ -56,6 +58,8 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'me'.repeat(32) } }) }));
 vi.mock('../db', () => ({
     createPost: vi.fn(), updateEvent: vi.fn(),
+    fetchEventZone: vi.fn(async (lat: number, lng: number) => { zoneAsks.push([lat, lng]); return null; }),
+    fetchEventZones: vi.fn(async () => []), isRouteMissing: () => false,
     fetchGroups: vi.fn(async () => []), getBalance: vi.fn(async () => ({ keeperOf: [] })), getTreasuries: vi.fn(async () => []),
 }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ features: profile.features }) }));
@@ -65,7 +69,7 @@ vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }))
 import { NewEventModal } from '../../components/NewEventModal';
 
 let root: Root; let host: HTMLDivElement;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); mapPress.handler = null; });
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); mapPress.handler = null; zoneAsks.length = 0; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 const draw = async () => {
     await act(async () => {
@@ -93,10 +97,14 @@ describe('the phone event form (drawn)', () => {
         await draw();
         await tapMap(-28.55437, 153.50261);
         expect(host.textContent).toContain('Approximate pin · -28.554, 153.503');
+        // The time-zone ask names the pin as it shows: an Approximate pin never sends the node the exact spot.
+        expect(zoneAsks).toEqual([[-28.554, 153.503]]);
         expect(exactButton()?.textContent).toBe('Use the exact spot');
         await act(async () => { exactButton()!.click(); await new Promise((r) => setTimeout(r, 0)); });
         expect(host.textContent).toContain('Exact pin · -28.55437, 153.50261');
         expect(exactButton()).toBeNull();
+        // The host chose the spot: now it may be asked.
+        expect(zoneAsks).toEqual([[-28.554, 153.503], [-28.55437, 153.50261]]);
     });
     it('on a local node a tap is the spot, as before, with no exact-spot button', async () => {
         profile.features = {};
@@ -104,5 +112,6 @@ describe('the phone event form (drawn)', () => {
         await tapMap(-28.55437, 153.50261);
         expect(host.textContent).toContain('Exact pin · -28.55437, 153.50261');
         expect(exactButton()).toBeNull();
+        expect(zoneAsks).toEqual([[-28.55437, 153.50261]]);
     });
 });

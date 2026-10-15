@@ -32,7 +32,7 @@ import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { ReportReasonBox } from './ReportReasonBox';
 import { reportedAlertBody } from '../utils/reportReasons';
 import {
-    formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
@@ -89,7 +89,14 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
     useEffect(() => { load(); }, [load]);
 
     const p = view ? { ...post, ...view } : post;
-    const when = formatEventWhen(p.eventStartAt ?? p.event_start_at, p.eventEndAt ?? p.event_end_at);
+    // The place's clock, then the reader's own when it differs; online, the reader's, and the host's clock once (§4).
+    const when = formatEventWhenFor(p);
+    const whenParts = eventWhen(p);
+    // Not for a zone that names no place: an online event saved without one is kept as UTC (#1946 review, finding 4).
+    const hostLine = eventHostLine(p);
+    const online = isOnlineEvent(p);
+    // Served like the private note: to the host and to Going only (DESIGN-event-times §9).
+    const joinLink: string | undefined = view?.eventLink;
     const badge = eventBadge(p);
     const cancelled = eventStateOf(p) === 'cancelled';
     const ended = isEventEnded(p);
@@ -262,6 +269,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                     </View>
                 )}
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
+                {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
+                {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
                 <Text style={styles.title}>{p.title}</Text>
                 {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
@@ -305,7 +314,28 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                     </Pressable>
                 )}
 
-                {!!placeName && (
+                {online && (
+                    <View style={styles.placeRow}>
+                        <Text style={styles.place} numberOfLines={2}>{`💻 ${eventPlaceLine(p, null)}`}</Text>
+                        {!!joinLink && !closed && (
+                            <Pressable
+                                onPress={() => Linking.openURL(joinLink).catch(() => Alert.alert(t('Could not open the link'), joinLink))}
+                                style={styles.linkBtn}
+                                accessibilityRole="link"
+                                accessibilityLabel={p.title ? t('Join {title} online', { title: p.title }) : t('Join the event online')}
+                            >
+                                <Text style={styles.link} numberOfLines={1}>{t('Join')}</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
+                {online && !!joinLink && !closed && <Text style={styles.joinLink} selectable numberOfLines={2}>{joinLink}</Text>}
+                {online && !joinLink && !isHost && !closed && (() => {
+                    const words = eventLinkWaitWords(counts.mine, !!view, letInState);
+                    return words ? <Text style={styles.timeNote}>{words}</Text> : null;
+                })()}
+
+                {!online && !!placeName && (
                     <View style={styles.placeRow}>
                         <Text style={styles.place} numberOfLines={2}>📍 {placeName}</Text>
                         {p.lat != null && p.lng != null && (
@@ -462,6 +492,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         badgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
         when: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         whenCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
+        timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 6 },
+        joinLink: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 12 },
         title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
         counts: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },

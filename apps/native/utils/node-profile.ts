@@ -76,6 +76,14 @@ export interface NodeFeatures {
      */
     membersOnDemand?: boolean;
     /**
+     * The node carries an online event to its members (DESIGN-event-times §9 and amendment 2): it has event times, and an
+     * event with no pin reaches every member, not only its host, on a node that syncs by area. The event form offers
+     * "Online" only then. A node that doesn't say (every node before it, and #1937 alone) is off: such a node either
+     * refuses an online event ("An event needs a place on the map") or, on the worldwide one, holds it in its host's set
+     * alone (the #1946 review, finding 1, measured).
+     */
+    onlineEvents?: boolean;
+    /**
      * Anyone can join in a minute (the global node; DESIGN-global-member-privacy-fable.md §1): a new event's "Only people I
      * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
      */
@@ -88,7 +96,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'openMembership',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership',
 ];
 
 export interface NodeProfile {
@@ -278,6 +286,11 @@ export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
 /** Whether this node is in a private preview (an invite from its owner or an admin is the only way in). */
 export function privatePreviewOn(features: NodeFeatures | null | undefined): boolean {
     return features?.privatePreview === true;
+}
+
+/** Whether the event form may offer "Online": only when the node says it carries one (absent = off). */
+export function onlineEventsOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.onlineEvents === true;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { PSEUDO_LANG, setLanguage } from '../words.js';
+import { PSEUDO_LANG, pluralKey, setLanguage } from '../words.js';
 import {
     repeatCaption,
     repeatLengthProblem,
@@ -151,6 +151,20 @@ describe('repeatCaption: the ↻ line on a card, Home and the map popup', () => 
         expect(repeatCaption({ freq: 'monthly', interval: 12, byDay: 'FR', pos: -1 }, '2030-12-27')).toBe('Every 12 months, last Friday · until 27 Dec 2030');
         expect(repeatCaption({ freq: 'weekly', interval: 3, byDay: 'FR' })).toBe('Every 3 weeks on Friday');
         expect(repeatCaption({ freq: 'weekly', interval: 12, byDay: 'FR' })).toBe('Every 12 weeks on Friday');
+    });
+
+    it('says the weekly count with the language\'s plural forms (the confirmation of #1993, NB2: Russian 2–4 and 5–12 differ)', () => {
+        setLanguage('ru', [{ [pluralKey('Every {weekday}', 'Every {n} weeks on {weekday}')]: {
+            one: 'Каждую {n} неделю: {weekday}', few: 'Каждые {n} недели: {weekday}', many: 'Каждые {n} недель: {weekday}', other: 'Каждые {n} недели: {weekday}',
+        } }]);
+        try {
+            expect(repeatCaption({ freq: 'weekly', interval: 2, byDay: 'FR' })).toMatch(/^Каждые 2 недели: /);
+            expect(repeatCaption({ freq: 'weekly', interval: 4, byDay: 'FR' })).toMatch(/^Каждые 4 недели: /);
+            expect(repeatCaption({ freq: 'weekly', interval: 5, byDay: 'FR' })).toMatch(/^Каждые 5 недель: /);
+            expect(repeatCaption({ freq: 'weekly', interval: 12, byDay: 'FR' })).toMatch(/^Каждые 12 недель: /);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('adds the last date when there is one', () => {

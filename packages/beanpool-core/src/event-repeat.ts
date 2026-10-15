@@ -206,9 +206,10 @@ export function repeatCaption(rule: Partial<RepeatPattern> | null | undefined, u
     let caption = '';
     if (r.freq === 'weekly' && byDay) {
         const weekday = weekdayName(byDay);
-        caption = interval === 1
-            ? t('Every {weekday}', { weekday })
-            : t('Every {n} weeks on {weekday}', { n: String(interval), weekday });
+        // The count with its own plural forms, as the monthly ones: Russian says 2–4 weeks and 5–12 weeks differently.
+        caption = interval > 1
+            ? tn(interval, 'Every {weekday}', 'Every {n} weeks on {weekday}', { weekday })
+            : t('Every {weekday}', { weekday });
     } else if (r.freq === 'monthly' && typeof r.byMonthDay === 'number') {
         const day = dayOrdinal(r.byMonthDay);
         caption = interval > 1

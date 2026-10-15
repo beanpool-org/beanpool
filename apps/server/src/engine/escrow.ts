@@ -4,7 +4,7 @@
 
 import { isSyntheticAccount, isBeanAmount, type PushNoticeKind } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
-import { isNodeOwner } from './node-roles.js';
+import { isNodeOwner, isOwnerWaitingOnRekey } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
@@ -1130,7 +1130,8 @@ export type EscrowDisputeAction = 'release_to_seller' | 'refund_to_buyer' | 'spl
 /**
  * An admin may not arbitrate a dispute they are a party to: the buyer, the seller, or a keeper of an
  * enterprise that is either. The password cannot show which owner is acting, so it is refused when an owner
- * is a party — another admin resolves it from their own signed-in session.
+ * is a party — another admin resolves it from their own signed-in session. An owner whose key waits on a re-key code
+ * is one (node-roles isOwnerWaitingOnRekey; the deciding review of #1992): the password may be theirs.
  */
 function assertNotPartyToDispute(row: { buyer_pubkey: string; seller_pubkey: string }, adminSigner: string): void {
     const parties = new Set<string>([row.buyer_pubkey, row.seller_pubkey]);
@@ -1146,7 +1147,7 @@ function assertNotPartyToDispute(row: { buyer_pubkey: string; seller_pubkey: str
     if (parties.has(adminSigner)) {
         refuse('You are a party to this dispute (the buyer, the seller, or a keeper of one of them), so you cannot resolve it. Ask another admin to do this');
     }
-    if (adminSigner === 'owner:password' && [...parties].some(pk => isNodeOwner(pk))) {
+    if (adminSigner === 'owner:password' && [...parties].some(pk => isNodeOwner(pk) || isOwnerWaitingOnRekey(pk))) {
         refuse('An owner is a party to this dispute, and the password cannot show which owner is acting. Another admin must resolve it from their own signed-in session');
     }
 }

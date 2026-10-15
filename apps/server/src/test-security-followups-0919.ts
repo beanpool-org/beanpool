@@ -37,6 +37,7 @@ import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { authRateLimit } from './auth-rate-limit.js';
 import { nodeRoleOf } from './engine/node-roles.js';
+import { issueRekeyCode } from './engine/member-wizards.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedGroupLine } from './group-test-payload.js';
@@ -259,6 +260,14 @@ async function run() {
     const byPassword = await callRouter(admin, 'POST', `/api/local/admin/disputes/${ownerTx}/resolve`, { body: { action: 'refund_to_buyer' } });
     assert(byPassword.status === 403 && /owner is a party/.test(byPassword.body?.error || '') && txStatus(ownerTx) === 'pending',
         `the password is refused when an owner is a party — it cannot show which owner is acting (got ${byPassword.status})`);
+    // So is one whose key waits on a re-key code: suspended by the code alone, still an owner (the deciding review of #1992).
+    const rekeyingOwner = makeMember('Rekeying Owner');
+    grantNodeRole(rekeyingOwner, 'owner', owner);
+    const rekeyingTx = pendingEscrowRow(rekeyingOwner, stranger);
+    issueRekeyCode(rekeyingOwner, owner);
+    const byPasswordRekeying = await callRouter(admin, 'POST', `/api/local/admin/disputes/${rekeyingTx}/resolve`, { body: { action: 'release_to_seller' } });
+    assert(byPasswordRekeying.status === 403 && /owner is a party/.test(byPasswordRekeying.body?.error || '') && txStatus(rekeyingTx) === 'pending',
+        `and when the owner who is a party waits on a re-key code (got ${byPasswordRekeying.status} ${JSON.stringify(byPasswordRekeying.body)})`);
 
     // A dispute with no admin on either side is resolved as before, by a key admin or the password.
     const buyer = makeMember('Buyer');

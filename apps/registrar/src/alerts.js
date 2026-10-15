@@ -94,6 +94,14 @@ export const repaired = (env, name, what) => ({
     body: `Repaired: ${host(env, name)} was live but not routed as its row says; the registrar ${what}.`,
 });
 
+// A claim refused because something the registrar did not make already routes the name (index.js outsideRegistrar):
+// one of our own servers, most likely, whose label name_policy does not reserve. Told once per name; the name_events
+// row says it every time. Hostnames and counts only.
+export const outsideRegistrar = (env, name, what) => ({
+    category: 'names', priority: PRIORITY.high, tag: TAG.warning, name, title: `Claim refused: ${name}`, once: `outside-registrar:${name}`,
+    body: `Claim refused: ${host(env, name)} already has ${what} the registrar did not make. Nothing was changed. If it is ours, reserve the name (blocked).`,
+});
+
 // A4 and A7: conditions the sweep evaluates every tick. `detail` is said while it is active, `clear` once it ends.
 const SUSPENDED = {
     'suspended:canary': (env) => `the canary ${env.CANARY_NAME} did not attest ok`,

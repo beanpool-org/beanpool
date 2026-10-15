@@ -4,6 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { languageHeaders } from './language';
 import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -144,6 +145,8 @@ export async function request<T>(method: string, path: string, body?: any, signa
         cache: 'no-cache',
         headers: {
             'Content-Type': 'application/json',
+            // The member's language, so the node's sentences can come back in it (lib/language.ts; outside the signed bytes).
+            ...languageHeaders(getNodeApiUrl()),
         } as Record<string, string>,
     };
     if (signal) opts.signal = signal;
@@ -181,7 +184,7 @@ export async function request<T>(method: string, path: string, body?: any, signa
  */
 export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...languageHeaders(getNodeApiUrl()) };
     const identity = await loadIdentity();
     if (identity && identity.privateKey) {
         Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
@@ -325,6 +328,11 @@ export interface CommunityInfo {
     primaryAddress?: string | null;
     /** The BeanPool names it had before, still accepted: the web app opened at one says it has moved. */
     formerAddresses?: string[];
+    /**
+     * The node's default language (design M5: an operator setting, global's English), one of core's LANGS. It applies to
+     * a browser with no choice of its own and a language BeanPool doesn't write (lib/language.ts). Absent: English.
+     */
+    language?: string;
 }
 
 export interface Member {

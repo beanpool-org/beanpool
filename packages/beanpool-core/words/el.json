@@ -2,10 +2,10 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "φασόλια",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Τα μέρη προέρχονται από το OpenStreetMap. Ό,τι γράφεις εδώ αποστέλλεται στο OpenStreetMap.",
   "Choose {place}": "Επίλεξε {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Αυτή η κοινότητα ζητά εικόνα προφίλ πριν δημοσιεύσεις κάτι. Μπορείς να την προσθέσεις αργότερα από το προφίλ σου.",
-  "A picture is optional here. You can add one later from your profile.": "Εδώ η εικόνα είναι προαιρετική. Αν θέλεις, μπορείς να προσθέσεις μία αργότερα από το προφίλ σου."
+  "A picture is optional here. You can add one later from your profile.": "Εδώ η εικόνα είναι προαιρετική. Αν θέλεις, μπορείς να προσθέσεις μία αργότερα από το προφίλ σου.",
+  "{n}st\u0004day of the month": "{n}η",
+  "{n}nd\u0004day of the month": "{n}η",
+  "{n}rd\u0004day of the month": "{n}η",
+  "{n}th\u0004day of the month": "{n}η",
+  "Every month on the first {weekday}": "Κάθε μήνα την πρώτη {weekday}",
+  "Every month on the second {weekday}": "Κάθε μήνα τη δεύτερη {weekday}",
+  "Every month on the third {weekday}": "Κάθε μήνα την τρίτη {weekday}",
+  "Every month on the fourth {weekday}": "Κάθε μήνα την τέταρτη {weekday}",
+  "Every month on the last {weekday}": "Κάθε μήνα την τελευταία {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Μηνιαία, την πρώτη {weekday}",
+    "other": "Κάθε {n} μήνες, την πρώτη {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Μηνιαία, τη δεύτερη {weekday}",
+    "other": "Κάθε {n} μήνες, τη δεύτερη {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Μηνιαία, την τρίτη {weekday}",
+    "other": "Κάθε {n} μήνες, την τρίτη {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Μηνιαία, την τέταρτη {weekday}",
+    "other": "Κάθε {n} μήνες, την τέταρτη {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Μηνιαία, την τελευταία {weekday}",
+    "other": "Κάθε {n} μήνες, την τελευταία {weekday}"
+  },
+  "Monthly, first {weekday}": "Μηνιαία, την πρώτη {weekday}",
+  "Monthly, second {weekday}": "Μηνιαία, τη δεύτερη {weekday}",
+  "Monthly, third {weekday}": "Μηνιαία, την τρίτη {weekday}",
+  "Monthly, fourth {weekday}": "Μηνιαία, την τέταρτη {weekday}",
+  "Monthly, last {weekday}": "Μηνιαία, την τελευταία {weekday}",
+  "Does not repeat": "Δεν επαναλαμβάνεται",
+  "Every week on {weekday}": "Κάθε εβδομάδα την {weekday}",
+  "Every 2 weeks on {weekday}": "Κάθε 2 εβδομάδες την {weekday}",
+  "Every month on the {day}": "Κάθε μήνα στις {day}",
+  "An event that repeats must end before its next date starts": "Μια εκδήλωση που επαναλαμβάνεται πρέπει να τελειώνει πριν ξεκινήσει η επόμενη ημερομηνία της",
+  "(months without a {day} are skipped)": "(οι μήνες χωρίς {day} παραλείπονται)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Κάθε {weekday}",
+    "other": "Κάθε {n} εβδομάδες την {weekday}"
+  },
+  "Every {weekday}": "Κάθε {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Μηνιαία στις {day}",
+    "other": "Κάθε {n} μήνες στις {day}"
+  },
+  "Monthly on the {day}": "Μηνιαία στις {day}",
+  "{repeats} · until {date}": "{repeats} · έως {date}",
+  "The last date must be a date on or after the first one": "Η τελευταία ημερομηνία πρέπει να είναι ίδια ή μεταγενέστερη από την πρώτη",
+  "The last date can be at most {n} years after the first one": "Η τελευταία ημερομηνία μπορεί να είναι το πολύ {n} χρόνια μετά την πρώτη",
+  "{date} is cancelled. Next: {next}": "Η ημερομηνία {date} ακυρώθηκε. Επόμενη: {next}",
+  "{date} is cancelled.": "Η ημερομηνία {date} ακυρώθηκε.",
+  "{date} is back on": "Η ημερομηνία {date} ισχύει ξανά",
+  "Moved from the regular {weekday}": "Μεταφέρθηκε από τη συνήθη {weekday}",
+  "Moved from the regular date": "Μεταφέρθηκε από τη συνήθη ημερομηνία",
+  "Choose how the event repeats from the list": "Επιλέξτε πώς επαναλαμβάνεται η εκδήλωση από τη λίστα",
+  "An event can repeat every 1 to 12 weeks or months": "Μια εκδήλωση μπορεί να επαναλαμβάνεται κάθε 1 έως 12 εβδομάδες ή μήνες",
+  "The first date must be one of the repeating dates": "Η πρώτη ημερομηνία πρέπει να είναι μία από τις ημερομηνίες επανάληψης",
+  "The last date can be at most 5 years after the first one": "Η τελευταία ημερομηνία μπορεί να είναι το πολύ 5 χρόνια μετά την πρώτη",
+  "Pick one of the dates this event repeats on": "Επιλέξτε μία από τις ημερομηνίες επανάληψης της εκδήλωσης",
+  "This event does not repeat": "Αυτή η εκδήλωση δεν επαναλαμβάνεται",
+  "Only the host can cancel or restore a date": "Μόνο ο διοργανωτής μπορεί να ακυρώσει ή να επαναφέρει μια ημερομηνία",
+  "This is the last date: change when the event ends, or cancel the event": "Αυτή είναι η τελευταία ημερομηνία: αλλάξτε πότε λήγει η εκδήλωση ή ακυρώστε την εκδήλωση",
+  "At most 100 dates can be cancelled": "Μπορούν να ακυρωθούν το πολύ 100 ημερομηνίες",
+  "This event has been cancelled": "Αυτή η εκδήλωση έχει ακυρωθεί",
+  "Pick a time zone from the list": "Επιλέξτε ζώνη ώρας από τη λίστα",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Εμφανίζεται σε ακτίνα περίπου 1 χλμ. Ρωτήστε το άτομο «{name}» για το ακριβές σημείο όταν κανονίσετε συνάντηση.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Εμφανίζεται σε όποιον μπορεί να δει την εκδήλωση. Βάλτε την ακριβή διεύθυνση στη σημείωση παρακάτω.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Αυτό μοιάζει με διεύθυνση οδού. Όποιος βλέπει την εκδήλωση θα τη διαβάσει, οπότε είναι ασφαλέστερο στη σημείωση παρακάτω.",
+  "An earlier message was removed when this chat was locked": "Ένα προηγούμενο μήνυμα αφαιρέθηκε όταν κλειδώθηκε αυτή η συνομιλία",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} προηγούμενο μήνυμα αφαιρέθηκε όταν κλειδώθηκε αυτή η συνομιλία",
+    "other": "{n} προηγούμενα μηνύματα αφαιρέθηκαν όταν κλειδώθηκε αυτή η συνομιλία"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} μήνυμα αφαιρέθηκε από συντονιστή",
+    "other": "{n} μηνύματα αφαιρέθηκαν από συντονιστή"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} μήνυμα διαγράφηκε",
+    "other": "{n} μηνύματα διαγράφηκαν"
+  }
 }

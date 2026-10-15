@@ -62,6 +62,7 @@ import {
 } from '../utils/sso-recovery';
 import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -263,7 +264,7 @@ export default function WelcomeScreen() {
                 setSsoWaiting(w => (w ? { ...w, until: result.until } : w));
             } else if (result.status === 'stopped') {
                 setSsoWaiting(null);
-                setError(t(VAULT_MESSAGES.stopped));
+                setError(t(VAULT_WORDS.stopped));
             } else {
                 setSsoReleased(result.restored);
                 setError(null);

@@ -90,6 +90,7 @@ import {
     noteVaultCopy, takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
+import { VAULT_WORDS } from '../vault-words';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
 import { protectionFrom } from '../protection-state';
 import { releaseAccountFromPhone, UNREGISTER_TIMEOUT_MS } from '../account-leaves-phone';
@@ -812,10 +813,25 @@ describe('status, disconnect, push token, and the check at app open', () => {
 
     it('no vault words say a computer can answer, stop or get a sign-in restore: only the phone app has a vault client', () => {
         for (const rel of ['../../app/welcome.tsx', '../../components/RecoveryAlertBanner.tsx', '../../components/KeeperProtectionPanel.tsx',
-            '../../components/SsoEnrolSheet.tsx', '../vault.ts', '../sso-recovery.ts']) {
+            '../../components/SsoEnrolSheet.tsx', '../vault.ts', '../vault-words.ts', '../sso-recovery.ts']) {
             const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
             expect(src, rel).not.toMatch(/phone or computer|computer of yours|your devices are told/);
         }
+    });
+
+    // Fix round 1 of #2001 (CI run 38764423120): vault.ts is on the 12 words' key path, so its sentences stay plain English
+    // and the ones a member reads in their language are word() keys in vault-words.ts. The core guard
+    // (recovery-path-files.test.ts) sees a direct import of the words layer; this sees one through vault-words.ts.
+    it('vault.ts never reaches the words layer through vault-words.ts, and the two say the same English', () => {
+        const vault = fs.readFileSync(path.resolve(__dirname, '../vault.ts'), 'utf8');
+        expect(vault).not.toMatch(/from\s+['"]\.\/vault-words['"]|import\(\s*['"]\.\/vault-words['"]|require\(\s*['"]\.\/vault-words['"]/);
+        // The error vault.ts makes for a Stop that came too late, and the banner's translated copy of it.
+        expect(VAULT_WORDS.holdCollected).toBe(VAULT_MESSAGES.holdCollected);
+        expect(VAULT_WORDS.stopped).toBe("This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.");
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        expect(welcome).toMatch(/result\.status === 'stopped'\) \{\s*setSsoWaiting\(null\);\s*setError\(t\(VAULT_WORDS\.stopped\)\);/);
+        const banner = fs.readFileSync(path.resolve(__dirname, '../../components/RecoveryAlertBanner.tsx'), 'utf8');
+        expect(banner.match(/Alert\.alert\(RECOVERY_ALERT_COPY\.finalTitle\(e\), RECOVERY_ALERT_COPY\.finalBody\(e\)\)/g)).toHaveLength(2);
     });
 
     it('the deposit carries this phone\'s push token, and a changed one is given to the vault once', async () => {

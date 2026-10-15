@@ -34,6 +34,7 @@ import {
     vaultStatus,
     type VaultHold,
 } from '../utils/vault';
+import { VAULT_WORDS } from '../utils/vault-words';
 
 export const RECOVERY_ALERT_COPY = {
     /** The title over a final answer to a Stop or "Yes, it's me" (utils/vault.ts `holdAnswerIsFinal`). */
@@ -41,6 +42,8 @@ export const RECOVERY_ALERT_COPY = {
         const code = (e as { code?: string } | null)?.code;
         return code === 'collected' ? 'Already gone through' : code === 'stopped' ? 'Already stopped' : 'No longer waiting';
     },
+    /** The words under it: the error's own, or for `collected` the same sentence in the member's language (vault-words.ts). */
+    finalBody: (e: unknown) => ((e as { code?: string } | null)?.code === 'collected' ? t(VAULT_WORDS.holdCollected) : (e as Error).message),
     /** After Stop It Now, in the community's own count of what is still live (stopEveryRecoverySession). */
     stoppedTitle: (left: number) => (left === 0 ? '✅ Recovery Stopped' : 'Not all stopped'),
     stoppedBody: (left: number) => (left === 0
@@ -244,7 +247,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             Alert.alert('Stopped', `The restore with ${name} won't go through. To be safe, check that your ${name} account's password is one only you know.`);
                         } catch (e) {
                             // Too late (collected), already stopped, or gone: a final answer, never "try again".
-                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), (e as Error).message);
+                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
                             else Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {
@@ -275,7 +278,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             setApproved(a => [...a, hold.holdId]);
                             Alert.alert('Let through', t('Your other phone gets your account the next time it checks, in about a minute.'));
                         } catch (e) {
-                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), (e as Error).message);
+                            if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
                             else Alert.alert('Not let through', `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {

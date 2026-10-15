@@ -237,6 +237,6 @@ const REPEAT_REFUSALS: readonly WordKey[] = [
 /** A node's refusal of a series write, in the reader's language when it is one of the node's repeat sentences; else as sent. */
 export function repeatRefusalText(message: string | null | undefined): string {
     const m = typeof message === 'string' ? message.trim() : '';
-    const key = REPEAT_REFUSALS.find((k) => k === m);
-    return key ? t(key) : m;
+    const i = REPEAT_REFUSALS.indexOf(m as WordKey);
+    return i >= 0 ? t(REPEAT_REFUSALS[i]) : m;
 }

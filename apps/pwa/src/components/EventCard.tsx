@@ -26,6 +26,7 @@ import {
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { EventNextDates } from './EventNextDates';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 
@@ -344,9 +345,11 @@ interface EventDetailProps {
      * whole of repeats in v1 — there are no repeat rules (§5).
      */
     onCopyToNewDate?: (post: MarketplacePost) => void;
+    /** Host only, a repeating event: "Change this date only" cancelled `date`; open the copy form with the moved-from line. */
+    onChangeThisDateOnly?: (post: MarketplacePost, date: string) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
@@ -416,6 +419,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>
                 <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
+                <EventNextDates
+                    post={p}
+                    isHost={isHost && open}
+                    onChanged={(next) => { rsvp.setLivePost(next); onChange?.(next); }}
+                    onChangeThisDateOnly={onChangeThisDateOnly}
+                />
 
                 {p.eventOnline && (
                     <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">

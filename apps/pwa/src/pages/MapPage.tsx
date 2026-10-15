@@ -30,7 +30,8 @@ import {
     approxInstantMs, deviceZone, deviceZoneId, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptions,
     type EventZoneSource,
 } from '../lib/event-zone';
-import { offsetMinutesOf, t, zoneLabelFor } from '@beanpool/core';
+import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFor, type RepeatChoiceKey } from '@beanpool/core';
+import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
@@ -57,6 +58,7 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
+    eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
     eventInWindow, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
@@ -175,6 +177,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
     const [eventStart, setEventStart] = useState('');
     const [eventEnd, setEventEnd] = useState('');
+    // How it repeats, a choice computed from the first date, and its last date ('' = until cancelled; DESIGN-event-times §8).
+    const [eventRepeat, setEventRepeat] = useState<RepeatChoiceKey>('never');
+    const [eventRepeatUntil, setEventRepeatUntil] = useState('');
     const [eventPlaceName, setEventPlaceName] = useState('');
     const [eventNote, setEventNote] = useState('');
     // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): null until the host touches
@@ -257,7 +262,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     function showPostError(e: any, fallback: string) {
         const refusal = nodeRefusal(e);
         if (refusal) setPostRefusal(refusal);
-        else alert(e?.message || fallback);
+        // A repeating event's refusals are the node's own sentences, shown in the member's language (DESIGN-event-times §8).
+        else alert(repeatRefusalText(e?.message) || fallback);
     }
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
     const [postLat, setPostLat] = useState<number | null>(null);
@@ -838,6 +844,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     function resetEventForm() {
         setEventStart('');
         setEventEnd('');
+        setEventRepeat('never');
+        setEventRepeatUntil('');
         setEventPlaceName('');
         setEventNote('');
         setEventHostLetsIn(null);
@@ -868,7 +876,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
-            hostLetsIn: eventHostLetsIn,
+            hostLetsIn: eventHostLetsIn, repeat: eventRepeat, repeatUntil: eventRepeatUntil,
         };
     }
 
@@ -907,6 +915,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
+        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil)) errors.add('event_repeat');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -955,6 +964,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
+        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil)) errors.add('event_repeat');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -976,6 +986,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 audienceScope: eventAudienceScope,
                 ...(eventAudienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 ...eventClockBody(eventStart, eventEnd, eventOnline, zone),
+                ...eventRepeatCreate(eventRepeat, eventStart, eventRepeatUntil),
                 ...(!eventOnline && eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
@@ -1557,8 +1568,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const handledCopyId = useRef<string | null>(null);
     useEffect(() => {
         if (!copyEventPostId || handledCopyId.current === copyEventPostId) return;
-        const id = copyEventPostId;
-        handledCopyId.current = id;
+        handledCopyId.current = copyEventPostId;
+        // "Change this date only" asks for the copy with the moved-from line on top (DESIGN-event-times §8).
+        const { id, moved } = parseCopyEventContext(copyEventPostId);
         (async () => {
             let source: MarketplacePost | undefined;
             try {
@@ -1574,10 +1586,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             const copy = buildEventCopy(source, identity?.publicKey);
             setNewPostType('event');
             setNewPostTitle(copy.title);
-            setNewPostDescription(copy.description);
+            setNewPostDescription(moved ? withMovedFromLine(seriesMovedFromLine(source.eventRepeat), copy.description) : copy.description);
             setNewPostPhotos([]);
             setEventStart('');
             setEventEnd('');
+            // A copy is a one-off until its host says otherwise.
+            setEventRepeat('never');
+            setEventRepeatUntil('');
             setEventPlaceName(copy.placeName);
             setEventNote(copy.privateNote);
             setEventHost(copy.enterprisePubkey ? `ent:${copy.enterprisePubkey}` : copy.groupId ? `group:${copy.groupId}` : 'me');
@@ -1644,6 +1659,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setNewPostPhotos(form.photos);
             setEventStart(form.start);
             setEventEnd(form.end);
+            setEventRepeat(form.repeat ?? 'never');
+            setEventRepeatUntil(form.repeatUntil ?? '');
             setEventPlaceName(form.placeName);
             setEventNote(form.privateNote);
             setEventHostLetsIn(form.hostLetsIn);
@@ -2435,6 +2452,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 );
                             })()}
                         </div>
+
+                        <EventRepeatFields
+                            start={eventStart}
+                            repeat={eventRepeat}
+                            until={eventRepeatUntil}
+                            onRepeatChange={key => { setEventRepeat(key); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_repeat'); return n; }); }}
+                            onUntilChange={date => { setEventRepeatUntil(date); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_repeat'); return n; }); }}
+                        />
 
                         {/* Online only where the node carries it (features.onlineEvents), or for an event that already is one. */}
                         {(nodeInfo?.features?.onlineEvents === true || eventOnline) && (

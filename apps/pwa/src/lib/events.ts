@@ -394,6 +394,23 @@ export function eventRepeatCreate(choice: RepeatChoiceKey, start: string, until:
     return { eventRepeat: pattern, ...(until ? { eventRepeatUntil: until } : {}) };
 }
 
+/**
+ * "Change this date only" opens Copy to a new date with one line on top (DESIGN-event-times §8). The copy is asked for by
+ * the event's id through the app's navigation; this mark rides on it, and parseCopyEventContext reads it back.
+ */
+const MOVED_MARK = '#moved';
+export function movedCopyContext(postId: string): string {
+    return `${postId}${MOVED_MARK}`;
+}
+export function parseCopyEventContext(context: string): { id: string; moved: boolean } {
+    return context.endsWith(MOVED_MARK) ? { id: context.slice(0, -MOVED_MARK.length), moved: true } : { id: context, moved: false };
+}
+
+/** The copy's description with the moved-from line on top. */
+export function withMovedFromLine(line: string, description: string): string {
+    return description.trim() ? `${line}\n\n${description}` : line;
+}
+
 /** The ↻ caption beside a repeating event's date ("Every Friday · until 18 Dec"); '' for a one-off. */
 export function eventRepeatCaption(post: Pick<MarketplacePost, 'eventRepeat' | 'eventRepeatUntil'>): string {
     return repeatCaption(post.eventRepeat ?? null, post.eventRepeatUntil ?? null);

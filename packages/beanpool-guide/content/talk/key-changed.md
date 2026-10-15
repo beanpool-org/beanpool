@@ -66,7 +66,7 @@ This is on the phone app. The web app has no chat memory.
 
 ## If the banner says your phone can't match the chat to one key
 
-Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Under the message box it says **This phone can't match this chat to one key, so sending is off.** and the banner shows the code of the key your community now lists for the person.
+Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Above the message box it says **This phone can't match this chat to one key, so sending is off.** and the banner shows the code of the key your community now lists for the person.
 
 Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that read **This message couldn't be verified, so it isn't shown.** Those stay that way, even after you continue.
 

@@ -152,6 +152,17 @@ describe("the phone's own servers: reached at exactly their saved origin", () =>
         expect(decide(`beanpool://pair?session=${SESSION}&pub=${PUB}`)).toBe('https://mullum.example/api/pair/transfer');
     });
 
+    it('https only: an http server, the phone\'s own or saved, is never a target (the screen keeps no cleartext check)', () => {
+        expect(transferTarget('', 'http://10.0.2.2:3000', [])).toEqual({ kind: 'no-node' });
+        expect(transferTarget('', 'http://localhost:3000', ['http://192.168.1.5:3000'])).toEqual({ kind: 'no-node' });
+        expect(decide(qr('http://10.0.2.2:3000'), 'http://10.0.2.2:3000', ['http://10.0.2.2:3000'])).toBe('refused');
+        expect(transferTarget('https://10.0.2.2:3000', 'http://10.0.2.2:3000', ['http://10.0.2.2:3000']).kind).toBe('foreign');
+        for (const own of [OWN, 'https://lan.example:8443', 'https://[2001:db8::1]:8443']) {
+            const target = transferTarget('', own, SAVED);
+            expect(target.kind === 'ok' && target.nodeUrl.startsWith('https://')).toBe(true);
+        }
+    });
+
     it('a saved address that is not plain is never a target', () => {
         expect(decide(qr('https://evil.test'), 'https://mullum.example\\@evil.test', ['https://x@evil.test'])).toBe('refused');
     });

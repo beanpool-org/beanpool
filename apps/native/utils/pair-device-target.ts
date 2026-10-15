@@ -16,6 +16,11 @@
  *     escape, whitespace, control character, path, query or fragment. Anything else is refused outright.
  *  2. The account goes to the matched SAVED address, rebuilt from its canonical origin (plainOriginOf): never the
  *     scanned text. The QR only chooses among the phone's own servers; it never spells the address that is used.
+ *
+ * https only. The QR's `node` must be https and only https saved addresses are targets, so a phone on an http server
+ * (the emulator's `http://10.0.2.2:3000`, a LAN dev node) can't use this flow: a dev page's QR is refused as
+ * unreadable, and one naming no server says "Connect to your community first.". Every live node is https; the 12
+ * words still work anywhere. The screen relies on this: it keeps no cleartext check of its own.
  */
 import { plainOriginOf } from './node-url';
 

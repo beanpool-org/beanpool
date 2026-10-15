@@ -32,7 +32,6 @@ import { palette } from '../constants/colors';
 import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
-import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -363,12 +362,8 @@ export default function PairDeviceScreen() {
 
         try {
             // The phone's own saved address for the server the QR names (transferTarget), in its canonical origin: never
-            // the QR's text. Every request below is built from it (pairingRequestUrls).
-            const targetNode = target.nodeUrl;
-
-            if (shouldBlockCleartextNodeUrl(targetNode)) {
-                throw new Error('Insecure pairing relay URL. HTTPS required for public host.');
-            }
+            // the QR's text, and always https (knownOrigin keeps no other). Every request below is built from it
+            // (pairingRequestUrls).
             const urls = pairingRequestUrls(target, scanned.sessionId);
 
             // Before the words are read: a relay that can't hold the account for the digits answers a poll from a phone

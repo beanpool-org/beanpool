@@ -6188,13 +6188,18 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                     postCredits
                 ]
             );
-            // The key asked for is pinned now, unchecked, as first sight would pin it with no line to check (the history rule
-            // still judges the thread's lines at the first send): a listing that names another key before then only offers it,
-            // the key-change banner, never a silent seal to the node's key. A pin kept already, or a rule-5 record, stands.
+            // The key asked for is pinned now: a listing that names another key before the first send only offers it, the
+            // key-change banner, never a silent seal to the node's key. A pin kept already, or a rule-5 record, stands. It is
+            // pinned checked when this phone holds no line of the chat (a brand-new chat: nothing for the history rule to judge,
+            // and the member's own request is the evidence), so a line the node plants before the first send can't re-pin it
+            // (confirmation 11, finding 1: one PUPPET line and a listing naming PUPPET made it rule 2, PUPPET checked, sealed
+            // to silently). With lines held (an existing chat the node answered with), or a read that fails, it stays
+            // unchecked and the history rule judges it at the first send.
             const others = participants.filter((k) => typeof k === 'string' && k.toLowerCase() !== identity.publicKey.toLowerCase());
             if (convType === 'dm' && others.length === 1) {
                 const now = new Date().toISOString();
-                await dmPins.update(identity.publicKey, database, (pins) => pinAtFirstSight(pins, conv.id, others[0], now));
+                const heldLine = await database.getFirstAsync<any>('SELECT 1 AS y FROM messages WHERE conversation_id = ? LIMIT 1', [conv.id]).catch(() => ({ y: 1 }));
+                await dmPins.update(identity.publicKey, database, (pins) => pinAtFirstSight(pins, conv.id, others[0], now, undefined, !heldLine));
             }
             const partList: string[] = participants;
             for (const pub of partList) {

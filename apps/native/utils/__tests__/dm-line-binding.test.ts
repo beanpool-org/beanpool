@@ -5064,7 +5064,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
                 expect(made.conv).toBeNull();
                 return;
             }
-            expect(made.result).toEqual({ err: null, row: 'dm', people: ['Ana', 'Ben'], pin: { peer: 'Ben', by: 'first-seen', checked: false, offered: null } });
+            expect(made.result).toEqual({ err: null, row: 'dm', people: ['Ana', 'Ben'], pin: { peer: 'Ben', by: 'first-seen', checked: true, offered: null } });
             expect(await sent(made.id, 'The code is 4821')).toEqual(sealedToBen);
             expect(storedPins(ana)[made.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, checked: true });
         }, 120_000);
@@ -5074,7 +5074,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
         node.convs = [];
         await phoneOf(ana);
         const made = await askedForBen([ana.publicKey, ben.publicKey]);
-        expect(made.result.pin).toEqual({ peer: 'Ben', by: 'first-seen', checked: false, offered: null });
+        expect(made.result.pin).toEqual({ peer: 'Ben', by: 'first-seen', checked: true, offered: null });
         const listed = node.convs.find((c) => c.id === made.id)!;
         listed.participants = [ana.publicKey, puppet.publicKey];
         await syncMessages(ana.publicKey);
@@ -5083,6 +5083,44 @@ describe('the DM guard list: one bounded list per community file, never read as 
         expect(await isDmKeyChangePending(made.id)).toBe(true);
         expect(storedPins(ana)[made.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
     }, 120_000);
+
+    // SEC2b (confirmation 11, finding 1): the creation pin was unchecked, so the history rule judged it again at the first
+    // send. The node answers honestly, then before the first send serves one line from PUPPET in the new chat and lists
+    // [Ana, PUPPET]: rule 2 pinned PUPPET checked, with nothing on offer, and the first line was sealed to PUPPET, silently. A
+    // brand-new chat holds no line for the history rule to judge, and the member's own request is the evidence: the key asked
+    // for is pinned checked, so a planted line can't re-pin it and a listing only offers.
+    for (const [plant, expected] of [
+        ['a line from Puppet, and the listing names Puppet', 'paused'],
+        ['a line from Puppet, the listing still Ben', 'sealed to Ben'],
+        ['the listing names Puppet, no line', 'paused'],
+        ['nothing (control)', 'sealed to Ben'],
+    ] as const) {
+        it(`SEC2b (${plant}) an honest answer [Ana, Ben], then the node plants before the first send: ${expected}; the pin stays Ben, Puppet reads nothing`, async () => {
+            node.convs = [];
+            await phoneOf(ana);
+            const made = await askedForBen([ana.publicKey, ben.publicKey]);
+            expect(made.result.pin).toEqual({ peer: 'Ben', by: 'first-seen', checked: true, offered: null });
+            const conv = node.convs.find((c) => c.id === made.id)!;
+            if (plant.startsWith('a line from Puppet')) sealedLine(puppet, ana, conv, 'Hi Ana, it is Ben on my new phone');
+            if (plant.includes('names Puppet')) conv.participants = [ana.publicKey, puppet.publicKey];
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await syncMessages(ana.publicKey);
+            const pending = await isDmKeyChangePending(made.id);
+            const first = await sent(made.id, 'The code is 4821');
+            warn.mockRestore();
+            const pin = storedPins(ana)[made.id.toLowerCase()];
+            if (expected === 'paused') {
+                expect(pending).toBe(true);
+                expect(first).toMatchObject({ err: 'DmKeyChangedError', posts: 0, plaintext: [], readBy: [] });
+                expect(pin).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+            } else {
+                expect(pending).toBe(false);
+                expect(first).toEqual(sealedToBen);
+                expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+                expect(pin.offered).toBeUndefined();
+            }
+        }, 120_000);
+    }
 
     // ── §3.4 amendment 8 (DESIGN-dm-guard-reset-fable.md + the director's amendment): the member's way out of a list that
     // can't be read is the same Chat memory reset as the pins', never the phone's own. The list goes first, in the pins'

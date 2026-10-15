@@ -597,9 +597,11 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     return { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1, lifecycle };
 }
 
-/** The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas). */
+/** The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas).
+ *  Where anyone can join in a minute, a member's read is the neighbourhood read (engine PostFilter.neighbourhood). */
 function postsFor(c: Ctx, filter: Parameters<typeof getPosts>[0]): MarketplacePost[] {
-    const posts = getPosts({ ...filter, viewerPubkey: c.member ? c.me! : undefined, coarse: c.member ? undefined : true });
+    const posts = getPosts({ ...filter, viewerPubkey: c.member ? c.me! : undefined, coarse: c.member ? undefined : true,
+        neighbourhood: c.member && getProfileSwitches().openMembership ? true : undefined });
     return c.member ? posts : posts.map(guestPost);
 }
 
@@ -701,7 +703,7 @@ function decideCard(c: Ctx): HomeCards['decide'] | undefined {
             .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
         : [];
     const soonest = open.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
-    const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1 })
+    const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined })
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
     return { open: open.length, soonestClosesAt: soonest, polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL };

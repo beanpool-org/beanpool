@@ -1434,7 +1434,9 @@ export function rsvpEvent(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true })[0]!;
+    // Read for the member as their own reads are (where anyone can join, the neighbourhood: engine PostFilter.neighbourhood);
+    // the broadcast puts each socket's own place in (state-engine.ts broadcast).
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
     if (status === 'going' && row.event_host_lets_in === 1 && updatedPost.myLetIn === false
         && !isEventHost(db, row, memberPublicKey)) {
@@ -1749,7 +1751,7 @@ export function votePoll(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true, includeVoters: true })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true, includeVoters: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
     let recipients: string[] | undefined;
     if (updatedPost.audienceScope === 'group' && updatedPost.targetGroupId) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updatedPost.targetGroupId) as any[];

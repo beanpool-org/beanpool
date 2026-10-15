@@ -387,6 +387,8 @@ export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: numb
             ? `Too many wrong admin passwords from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`
             : `This node is getting a lot of wrong admin passwords from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network, or sign in with your key.`,
         retryAfter: wait,
+        // Which rule held it: this source's own count, or the node-wide one (design case 18 §9 S2 reads it).
+        reason: refusal.reason,
         passwordBackoff: true,
     };
 }

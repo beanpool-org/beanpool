@@ -31,6 +31,7 @@
 //   SERVER_SUITES_TIMEOUT   seconds per run, default 300.
 //   SERVER_SUITES_SUMMARY   file to write the short timing summary to (test-all.sh prints it in its report).
 //   TEST_ALL_LOG_DIR        when set (CI), the logs of failing runs are copied to $TEST_ALL_LOG_DIR/server-suites/.
+//   SERVER_SUITES_KEEP_LOGS a folder: every run's log, passing or not, is copied there as <run id>.log (a lane's counts).
 
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -247,6 +248,10 @@ async function runAll(runs, jobs, root, results) {
             const why = r.status === 'timeout' ? ` TIMEOUT after ${TIMEOUT_S}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
                 : r.status === 'nocount' ? ' exit 0 with no closing count (NO-COUNT)' : '';
             console.log(`${mark} ${r.id}${why}  ${fmt(r.seconds)}  [${results.length}/${total}]`);
+            if (process.env.SERVER_SUITES_KEEP_LOGS) {
+                fs.mkdirSync(process.env.SERVER_SUITES_KEEP_LOGS, { recursive: true });
+                fs.copyFileSync(r.log, path.join(process.env.SERVER_SUITES_KEEP_LOGS, `${r.id}.log`));
+            }
             if (r.status === 'pass') fs.rmSync(workDir, { recursive: true, force: true });
         }
     };

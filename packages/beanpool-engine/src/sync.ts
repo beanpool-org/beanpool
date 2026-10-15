@@ -290,6 +290,13 @@ export interface SyncEventRsvp {
      * older than reminders carries no such field — the import COALESCEs rather than erasing what it holds.
      */
     reminderOffsets?: string | null;
+    /**
+     * When the host let this member in, and which host, on an event whose host lets people in
+     * (DESIGN-global-member-privacy-fable.md §2.4). Optional like reminderOffsets: a node older than the
+     * let-in carries no such field, and the import keeps what it holds rather than erasing it.
+     */
+    letInAt?: string | null;
+    letInBy?: string | null;
     updatedAt: string;
 }
 
@@ -713,10 +720,18 @@ export function getStateHash(db: Db): string {
     // event hashes exactly as it did before events existed and a mixed-version pair does not read as diverged.
     let erKeys: string[] = [];
     try {
-        erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
+        // A let-in (DESIGN-global-member-privacy-fable.md §2.4) is part of the row a replica must hold, so it is hashed;
+        // only where it is set, so every RSVP no host let in hashes as it did before the column existed.
+        erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status || CASE WHEN let_in_at IS NULL THEN '' ELSE '|' || let_in_at END AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
             .all() as any[]).map(r => r.k);
     } catch {
-        // Table absent on older schema.
+        try {
+            // A schema older than the let-in.
+            erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
+                .all() as any[]).map(r => r.k);
+        } catch {
+            // Table absent on older schema.
+        }
     }
     // Groups and their memberships, with role and status — a removal or a promotion that never reached the
     // replica is exactly the divergence this has to show. Added only when there are any, like RSVPs above.
@@ -1005,6 +1020,7 @@ function postOfRow(row: any): MarketplacePost {
             eventEndAt: row.event_end_at || undefined,
             eventPlaceName: row.event_place_name || undefined,
             eventPrivateNote: row.event_private_note || undefined,
+            ...(row.event_host_lets_in === 1 ? { eventHostLetsIn: true } : row.event_host_lets_in === 0 ? { eventHostLetsIn: false } : {}),
             eventState: row.event_state || undefined,
             // The host's clock, its zone, online and the join link (DESIGN-event-times §2). The link replicates as the note does.
             eventStartLocal: row.event_start_local || undefined,
@@ -1270,6 +1286,8 @@ function eventRsvpOfRow(r: any): SyncEventRsvp {
         // Undefined rather than null on a schema without the column, so the import can tell "this node
         // does not know about reminders" from "this person has no per-event choice".
         reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
+        letInAt: r.let_in_at === undefined ? undefined : (r.let_in_at ?? null),
+        letInBy: r.let_in_by === undefined ? undefined : (r.let_in_by ?? null),
         updatedAt: r.updated_at,
     };
 }

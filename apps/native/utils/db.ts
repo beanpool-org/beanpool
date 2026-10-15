@@ -50,6 +50,7 @@ import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplaced
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
+import { languageHeader } from './language-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -6527,7 +6528,8 @@ async function _signedRequest(endpoint: string, payload: any) {
     if (!identity) throw new Error('No identity found. You must be logged in.');
 
     const bodyString = JSON.stringify(payload);
-    const headers = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
+    // The language this phone writes in, so the node can answer in it (utils/language-choice.ts; not signed, not stored).
+    const headers = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -6577,7 +6579,7 @@ async function _signedRequest(endpoint: string, payload: any) {
             // still hold a (now broken) node URL.
             const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
             if (healed) {
-                const retryHeaders = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
+                const retryHeaders = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
                     method: 'POST',
                     headers: retryHeaders,
@@ -7658,7 +7660,8 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            ...headers
+            ...headers,
+            ...languageHeader(),
         },
         body: payload !== undefined ? bodyString : undefined,
     });

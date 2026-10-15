@@ -92,7 +92,7 @@ vi.mock('../identity', async (original) => ({
 
 import { draftIdentity } from '../identity';
 import { buildSignedHeaders } from '../crypto';
-import { getDb } from '../db';
+import { clearDB, getDb } from '../db';
 import { fetchNodeProfile } from '../node-profile';
 import { writeMemberArea } from '../member-area';
 import { nearbyAreaKeyOf, noAreaLineHere, readNearbyAreaCopy } from '../nearby-area';
@@ -725,5 +725,43 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(sent.filter(r => r.url === '/api/community/me')).toEqual([]);
         expect(idReads()).toEqual([]);
         expect(mem.async.has(nearbyAreaKeyOf(URL_BASE))).toBe(true);
+    }, START_MS);
+
+    // REPORT-1792-first-sync-2026-10-16.md, result 3: a phone with no copy of the node's profile read a by-area community
+    // whole (50 pages of 1,000, 10,000 listings, 2.16 MB gz on the 20k world). It now asks for the profile first.
+    it('a fresh install with no copy of the profile asks the node for it once, first, then reads by area exactly as with one', async () => {
+        await control('profileSwitch', { name: 'nearbyListings', value: 'true' });
+        expect((await fetchNodeProfile(URL_BASE))?.features.nearbyListings).toEqual({ radiusKm: 250, max: 500 });
+        await control('limiters');
+        // A restore on a fresh install: an empty copy, no cursors and no platform cache; the key and the community kept,
+        // and the copy of the profile kept or not.
+        const freshInstall = async (keepProfile: boolean) => {
+            await clearDB();
+            for (const k of [...mem.async.keys()]) {
+                if (k !== 'beanpool_anchor_url' && (k !== 'beanpool_node_profiles' || !keepProfile)) mem.async.delete(k);
+            }
+            httpCache.clear();
+            resetSyncFingerprints();
+        };
+        await freshInstall(true);
+        await sync();
+        const withCopy = sent.map(r => `${r.method} ${r.url} ${r.status}`);
+        const heldWithCopy = sorted(heldIds());
+        expect(postsReads().length).toBeGreaterThanOrEqual(1);
+        expect(postsReads().every(r => r.url.includes('nearby=1') && r.url.includes('limit=200'))).toBe(true);
+        // The member's set (the nearest 500, their own and the ones they are tied to), named on the read's last page.
+        expect(postsReads().at(-1)?.keys).toContain('set');
+        await control('limiters');
+
+        await freshInstall(false);
+        expect(mem.async.has('beanpool_node_profiles')).toBe(false);
+        await sync();
+        // One more request, the profile, before anything else is read; then the same requests, the same answers, the same
+        // listings held: never `limit=1000` without `nearby=1`, the old whole read.
+        expect(sent.map(r => `${r.method} ${r.url} ${r.status}`)).toEqual([`GET /api/community/info 200`, ...withCopy]);
+        expect(postsReads().every(r => r.url.includes('nearby=1'))).toBe(true);
+        expect(sorted(heldIds())).toEqual(heldWithCopy);
+        expect(mem.async.has('beanpool_node_profiles')).toBe(true);
+        await control('limiters');
     }, START_MS);
 });

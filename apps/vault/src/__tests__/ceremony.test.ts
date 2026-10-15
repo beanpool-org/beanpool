@@ -53,11 +53,11 @@ describe('the hello', () => {
             'addb5ac1516b935b79d2eb18503d99be2ed98410831d73fb4df110c95eee0aac738f820c77b8dd694cb11b58b227fef94b1de0cd5c333887a5efb830765044c2');
     });
 
-    it('answers {bootId, helloPub, releaseHash, platform: none, evidence: null}, and the tool refuses to send until the warning is accepted', async () => {
+    it('answers {bootId, helloPub, releaseHash, platform: none, evidence: null, restore: null}, and the tool refuses to send until the warning is accepted', async () => {
         v = await startVault();
         const h = await checkedHello(v.baseUrl, v.custodians[0], '/v1/unlock/hello', v.call());
-        expect(Object.keys(h.hello).sort()).toEqual(['bootId', 'evidence', 'helloPub', 'platform', 'releaseHash']);
-        expect(h.hello).toMatchObject({ platform: 'none', evidence: null, releaseHash: v.release.manifest.imageHash });
+        expect(Object.keys(h.hello).sort()).toEqual(['bootId', 'evidence', 'helloPub', 'platform', 'releaseHash', 'restore']);
+        expect(h.hello).toMatchObject({ platform: 'none', evidence: null, releaseHash: v.release.manifest.imageHash, restore: null });
         expect(h.bind).toHaveLength(64);
         expect(h.warning).toBe(NO_HARDWARE_PROOF);
         await expect(genesis(v.baseUrl, v.custodians[0], { ...v.call(), acceptNoHardwareProof: false })).rejects.toThrow(/no hardware proof/);

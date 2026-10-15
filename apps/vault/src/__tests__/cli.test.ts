@@ -156,6 +156,69 @@ describe('vault-custodian', () => {
         expect(v.keyholder().status().sharesPresent).toBe(1);
     });
 
+    it('reshare and a new custodian\'s fetch-share print the pin lines: the new ticket key first, the one in force second, and the new deposit key (reshare rotation design §2.4)', async () => {
+        const { vault, feed } = await realTimeVault();
+        v = vault;
+        const keys = v.custodians.map((c, i) => keyFile(`p${i}.json`, c));
+        const out0 = path.join(dir, 'p-out-0');
+        const out1 = path.join(dir, 'p-out-1');
+        expect((await cli(['genesis', '--url', v.baseUrl, '--key', keys[0], '--out', out0, '--no-hardware-proof', ...feed])).code).toBe(0);
+        expect((await cli(['fetch-share', '--url', v.baseUrl, '--key', keys[1], '--out', out1])).out).not.toContain('BEANPOOL_VAULT_TICKET_KEYS');
+        const oldTicket = (await get(v, '/v1/report')).body.ticketKey as string;
+        const share0 = path.join(out0, readdirSync(out0).find(n => n.includes(v!.custodians[0].publicKey.slice(0, 8)))!);
+        const share1 = path.join(out1, readdirSync(out1)[0]);
+        const n2 = custodianKey(crypto.randomBytes(32));
+        const newSet = [v.custodians[0].publicKey, v.custodians[1].publicKey, n2.publicKey].join(',');
+
+        const first = await cli(['reshare', '--url', v.baseUrl, '--key', keys[0], '--share', share0, '--new-custodians', newSet, '--out', path.join(dir, 'p-rs-0'), '--no-hardware-proof', ...feed]);
+        expect(first.code).toBe(0);
+        expect(first.out).not.toContain('BEANPOOL_VAULT_TICKET_KEYS');
+        const second = await cli(['reshare', '--url', v.baseUrl, '--key', keys[1], '--share', share1, '--new-custodians', newSet, '--out', path.join(dir, 'p-rs-1'), '--no-hardware-proof', ...feed]);
+        expect(second.code).toBe(0);
+        const waiting = v.keyholder().status().pending!.publicKeys!;
+        expect(waiting.ticket[0]).not.toBe(oldTicket);
+        const lines = [`BEANPOOL_VAULT_TICKET_KEYS=${waiting.ticket[0]},${oldTicket}`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`];
+        for (const line of lines) expect(second.out).toContain(`\n${line}\n`);
+        expect(second.out).toContain('stops signing at the switch');
+        // Listed before any new custodian fetches: fetch-share confirms, and the second confirmation is the switch.
+        expect(second.out).toContain('now, before any new custodian runs fetch-share: fetch-share also confirms');
+
+        // The new custodian sees the same, read before their confirmation switches the vault.
+        const fetched = await cli(['fetch-share', '--url', v.baseUrl, '--key', keyFile('p-n2.json', n2), '--out', path.join(dir, 'p-n2')]);
+        expect(fetched.code).toBe(0);
+        expect(fetched.out).toMatch(/confirmed: 200 .*"switched":true/);
+        for (const line of lines) expect(fetched.out).toContain(`\n${line}\n`);
+        expect(fetched.out).toContain('had to list before this: your share is confirmed above, and the second new custodian\'s confirmation is the switch');
+        expect((await get(v, '/v1/report')).body.ticketKey).toBe(waiting.ticket[0]);
+    });
+
+    it('an unlock of a vault waiting to finish a restore from backup shows the backup and the key that named it, and sends the share only on yes', async () => {
+        const { vault, feed } = await realTimeVault();
+        v = vault;
+        const g = await doGenesis(v);
+        const name = await v.api.runBackup();
+        const b = await startVault({ clock: { now: () => Date.now(), advance: () => undefined }, custodians: v.custodians, storeDir: v.storeDir, stub: v.stub });
+        try {
+            const bFeed = ['--feed-dir', b.feedDir, '--root-keys', rootKeysFile(`root-b-${crypto.randomBytes(4).toString('hex')}.json`, b.custodians)];
+            const keys = b.custodians.map((c, i) => keyFile(`r${i}.json`, c));
+            const restored = await cli(['restore', '--url', b.baseUrl, '--key', keys[0], '--backup', name, '--no-hardware-proof', ...bFeed]);
+            expect(restored.code).toBe(0);
+            const shareFile = path.join(dir, 'r-share-1.json');
+            writeFileSync(shareFile, JSON.stringify(g.shares[1]));
+
+            const no = await cli(['unlock', '--url', b.baseUrl, '--key', keys[1], '--share', shareFile, '--no-hardware-proof', ...bFeed], { input: 'no\n' });
+            expect(no.code).toBe(1);
+            expect(no.out).toContain(`waiting to finish a restore from backup ${name}, named by custodian key ${b.custodians[0].publicKey}`);
+            expect(no.out).toContain('Nothing was sent');
+            expect(b.keyholder().status().sharesPresent).toBe(0);
+            const yes = await cli(['unlock', '--url', b.baseUrl, '--key', keys[1], '--share', shareFile, '--no-hardware-proof', ...bFeed], { input: 'yes\n' });
+            expect(yes.code).toBe(0);
+            expect(b.keyholder().status().sharesPresent).toBe(1);
+        } finally {
+            await b.close();
+        }
+    });
+
     it('a release naming tdx, and a vault with no evidence: refused, and the vault receives only the hello', async () => {
         const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
         const h = (bytes: number) => 'cd'.repeat(bytes);

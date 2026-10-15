@@ -8715,11 +8715,7 @@ export function createProject(proposerPubkey: string, title: string, description
     // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
     // A Commons project proposal IS an enterprise with lifecycle = 'bounded'.
     const now = new Date().toISOString();
-    const baseCallsign = (project.title || 'Project').trim().slice(0, 40) || 'Project';
-    const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-    ).get(engine.foldName(baseCallsign), project.id) as any;
-    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
+    const callsign = engine.projectRowName(db, project.title, project.id);
 
     db.transaction(() => {
         db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
@@ -8768,6 +8764,8 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
     projects[index].requestedAmount = Math.round(requestedAmount * 100) / 100;
     
     const now = new Date().toISOString();
+    // The enterprise row's name, by the one name rule, as at the create (engine projectRowName): the title is kept as typed.
+    const rowName = engine.projectRowName(db, projects[index].title, projectId);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`
@@ -8775,7 +8773,7 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
             SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
             WHERE public_key = ?
         `).run(
-            projects[index].title,
+            rowName,
             projects[index].description || projects[index].title,
             projects[index].description,
             projects[index].requestedAmount,

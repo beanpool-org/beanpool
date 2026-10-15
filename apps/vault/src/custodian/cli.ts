@@ -594,10 +594,11 @@ async function main(): Promise<void> {
     if (command === 'backups') {
         result = await listBackups(url, key);
         if (result.status === 200) {
-            const b = result.body as { local: string[]; offsite: string[] | null; offsiteError: string | null };
+            const b = result.body as { local: string[]; offsite: string[] | null; offsiteError: string | null; restoreWaiting?: string | null };
             console.log(`on the vault (${b.local.length}): ${b.local.slice(-5).join(' ') || 'none'}${b.local.length > 5 ? ' …' : ''}`);
             console.log(b.offsite ? `off the box (${b.offsite.length}): ${b.offsite.slice(-5).join(' ') || 'none'}${b.offsite.length > 5 ? ' …' : ''}`
                 : `off the box: ${b.offsiteError ? `can't be listed (${b.offsiteError})` : 'no store set'}`);
+            if (b.restoreWaiting) console.log(`The restore from backup is waiting: ${b.restoreWaiting}`);
             return;
         }
         print(result);

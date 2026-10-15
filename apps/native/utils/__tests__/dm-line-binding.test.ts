@@ -1001,8 +1001,14 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         // For each of three spellings (lower case, capitals, mixed): no row, a dm row or a group's row; a sealed line or
         // none; in the DM list or not. 1,728 states, each written in a fixed shuffled order (the DM list's order and
         // SQLite's ties follow it), each asked in all three spellings (#1863 confirmation 1, E6).
-        const u = randomUUID();
-        const spellings = [u, u.toUpperCase(), [...u].map((c, i) => (i % 2 ? c.toLowerCase() : c.toUpperCase())).join('')];
+        // The mixed spelling alternates case letter by letter, not position by position: by position it was the capitals
+        // whenever every odd place held a digit or a hyphen (1 id in ~775), and two of the three rows took one id (UNIQUE).
+        // An id with fewer than two letters has no mixed spelling, so another is drawn.
+        let u = randomUUID();
+        while ((u.match(/[a-f]/g) ?? []).length < 2) u = randomUUID();
+        let letter = 0;
+        const spellings = [u, u.toUpperCase(), [...u].map((c) => (/[a-f]/.test(c) ? (letter++ % 2 ? c : c.toUpperCase()) : c)).join('')];
+        expect(new Set(spellings).size).toBe(3);
         const opts: Array<{ row: string | null; line: boolean; listed: boolean }> = [];
         for (const row of [null, 'dm', 'group_thread']) for (const line of [false, true]) for (const listed of [false, true]) opts.push({ row, line, listed });
         let seed = 1863;

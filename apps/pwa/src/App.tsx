@@ -161,6 +161,9 @@ export function App() {
     const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
+    // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
+    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
     const [openMarketReviewTxId, setOpenMarketReviewTxId] = useState<string | null>(null);
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
@@ -351,7 +354,7 @@ export function App() {
         }
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
-        if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
+        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
     }
 
     // `/app#profile=<key>` (node Settings' "View my profile"): read once on load, opened once the identity has loaded.
@@ -376,11 +379,13 @@ export function App() {
         const kept = takeKeptLinkedPost();
         if (!kept) return;
         setActiveTab('marketplace');
+        setOpenMarketPostSaysWhy(false);
         setOpenMarketPostId(kept);
     }, [identity]);
     useEffect(() => {
         if (!identity || !linkedPost) return;
         setActiveTab('marketplace');
+        setOpenMarketPostSaysWhy(false);
         setOpenMarketPostId(linkedPost);
         setLinkedPost(null);
     }, [identity, linkedPost]);
@@ -969,6 +974,7 @@ export function App() {
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
                                     onPostOpened={() => setOpenMarketPostId(null)}
+                                    sayWhenPostUnopened={openMarketPostSaysWhy}
                                     openReviewTxId={openMarketReviewTxId}
                                     onReviewOpened={() => setOpenMarketReviewTxId(null)}
                                     openSearch={openMarketSearch}

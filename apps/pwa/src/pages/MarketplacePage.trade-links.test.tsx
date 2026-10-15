@@ -83,9 +83,19 @@ describe('Market: a chat\'s View Post opens the post, even a finished one', () =
 
     it('a post the node won\'t give this member says so in one sentence, instead of the bare market', async () => {
         const onPostOpened = vi.fn();
-        render(<MarketplacePage identity={identity} openPostId="post-gone" onPostOpened={onPostOpened} />);
+        render(<MarketplacePage identity={identity} openPostId="post-gone" onPostOpened={onPostOpened} sayWhenPostUnopened />);
         await screen.findByText('That listing can no longer be opened. It may have been taken down.');
         expect(onPostOpened).toHaveBeenCalled();
+    });
+
+    // A link the app arrived on (a shared /?post=, the lobby's kept listing) lands quietly, as decided before #1980
+    // (GuestLobby.test "a listing that has gone"); only a member's own tap is told why.
+    it('a shared link to a post that has gone (no sayWhenPostUnopened): the Market, quietly', async () => {
+        const onPostOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openPostId="post-gone" onPostOpened={onPostOpened} />);
+        await waitFor(() => expect(onPostOpened).toHaveBeenCalled());
+        expect(screen.getByText('Bicycle Repair')).toBeInTheDocument();
+        expect(screen.queryByText(/no longer be opened|couldn't be loaded/)).toBeNull();
     });
 
     // Review #1980 N1: a dropped connection is not an answer; it never says the listing was taken down.
@@ -95,7 +105,7 @@ describe('Market: a chat\'s View Post opens the post, even a finished one', () =
             return [...feed] as any;
         });
         const onPostOpened = vi.fn();
-        render(<MarketplacePage identity={identity} openPostId="post-done" onPostOpened={onPostOpened} />);
+        render(<MarketplacePage identity={identity} openPostId="post-done" onPostOpened={onPostOpened} sayWhenPostUnopened />);
         await screen.findByText("That listing couldn't be loaded. Check your connection and try again.");
         expect(screen.queryByText(/taken down/)).toBeNull();
         expect(onPostOpened).toHaveBeenCalled();

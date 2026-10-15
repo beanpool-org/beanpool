@@ -90,6 +90,12 @@ interface Props {
     marketClickCount?: number;
     openPostId?: string | null;
     onPostOpened?: () => void;
+    /**
+     * A member's own tap named `openPostId` (a chat's View Post, a Home card, a map pin): if it can't be opened, say so in
+     * one sentence. Off (the default) for a link the app arrived on — a shared `/?post=`, the lobby's kept listing — where
+     * a listing that has gone lands quietly on the Market (GuestLobby.test "a listing that has gone").
+     */
+    sayWhenPostUnopened?: boolean;
     /** A finished trade to rate (a chat's "Rate your partner"): its rating form opens here; taken once, then `onReviewOpened`. */
     openReviewTxId?: string | null;
     onReviewOpened?: () => void;
@@ -172,7 +178,7 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openReviewTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -436,18 +442,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const id = openPostId;
                 deepLinkFetched.current = id;
                 // The node's own read rules decide: a listing taken down, or one this member may not read, comes back empty.
-                const notReadable = () => { setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.')); onPostOpened?.(); };
+                const notReadable = () => {
+                    if (sayWhenPostUnopened) setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.'));
+                    onPostOpened?.();
+                };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
                     .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); onPostOpened?.(); } else notReadable(); })
                     // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
                     .catch(() => {
                         deepLinkFetched.current = null;
-                        setPostLinkNotice(t("That listing couldn't be loaded. Check your connection and try again."));
+                        if (sayWhenPostUnopened) setPostLinkNotice(t("That listing couldn't be loaded. Check your connection and try again."));
                         onPostOpened?.();
                     });
             }
         }
-    }, [openPostId, posts, loading, onPostOpened]);
+    }, [openPostId, posts, loading, onPostOpened, sayWhenPostUnopened]);
 
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else

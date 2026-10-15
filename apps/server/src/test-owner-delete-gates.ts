@@ -526,6 +526,28 @@ async function main(): Promise<void> {
             const asked = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'sparevale', code });
             assert(asked.status === 409 && /does not say this community holds/.test(asked.json?.error || ''),
                 `3-NB2. …and the same code still reaches the address service: it was not spent (${short(asked)})`);
+
+            // Enrol with a misspelt role, on a key that already holds admin (so the proof is asked): #2018 review NB2.
+            const heldAdmin = addMember('Misspelt');
+            grantNodeRole(heldAdmin, 'admin', owner);
+            const roleNow = () => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(heldAdmin) as any)?.role ?? null;
+            code = tfa.code();
+            const badRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'Admin', code });
+            assert(badRole.status === 400 && /role must be/i.test(badRole.json?.error || '') && roleNow() === 'admin',
+                `3-NB2. enrol with a misspelt role on an admin's key → 400, still an admin (${short(badRole)})`);
+            const goodRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'moderator', code });
+            assert(goodRole.status !== 401 && goodRole.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodRole)})`);
+
+            // Claim over a different live name with a name that is no address label: #2018 review NB3.
+            updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+            const liveBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
+            code = tfa.code();
+            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'direct', code });
+            assert(badClaim.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === liveBefore,
+                `3-NB2. claiming over the live name with a name that is no address label → 400, unchanged (${short(badClaim)})`);
+            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'direct', code });
+            assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
+            updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
         }
 
         // ── 3a. A standby: a session alone cannot make its own key a pin, so a file that key signed restores nothing ──
@@ -725,6 +747,17 @@ async function main(): Promise<void> {
             db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(owner);
             const cols = Object.keys(oliveRow);
             db.prepare(`INSERT OR REPLACE INTO node_roles (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => oliveRow[c]));
+        }
+        // A short reason spends no code (#2018 review NB1): it is checked before the proof, and the same code then suspends.
+        {
+            const shortReasonOwner = coOwner('ShortReason');
+            const code = tfa.code();
+            const tooShort = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'stolen', code });
+            assert(tooShort.status === 400 && /at least 10 characters/.test(tooShort.json?.error || '') && intact(shortReasonOwner),
+                `3c-NB1. emergency-suspend an owner with a 6-character reason → 400, still an active owner (${short(tooShort)})`);
+            const longEnough = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'a reason members can read', code });
+            assert(longEnough.status === 200 && statusOf(shortReasonOwner) !== 'active',
+                `3c-NB1. …and the same code still suspends: it was not spent (${short(longEnough)})`);
         }
         /** A branch whose root is a member, with an owner invited by them. */
         const ownerInBranch = (): [string, string] => {

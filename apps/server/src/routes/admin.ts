@@ -40,7 +40,7 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
+import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, type OwnerOnlyAdminAction } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -603,6 +603,12 @@ const handleEnrol = async (ctx: any) => {
     const callerRole = (ctx.state as any)?.adminRole;
     const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
     const requestedRole = body.role || 'owner';
+    // The role's value before the proof, as the node-roles route checks it: a misspelt role must not spend a code (#2018 NB2).
+    if (requestedRole !== 'owner' && requestedRole !== 'admin' && requestedRole !== 'moderator') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
+        return;
+    }
 
     // Enrol never bootstraps an owner: an owner key comes from an owner, the password, or break-glass,
     // full stop. The node-roles route DOES bootstrap, and #1006 was the two disagreeing about whether a
@@ -1725,8 +1731,11 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
-    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const { reason } = (ctx as any).requestBody || {};
+    // The reason before the proof: a code is spent when it is checked, so a short reason must not cost it (#2018 NB1).
+    const reasonProblem = suspendReasonProblem(reason);
+    if (reasonProblem) { ctx.status = 400; ctx.body = { error: reasonProblem }; return; }
+    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
         ctx.status = result.status || 400;

@@ -269,6 +269,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
+        // The name's shape before the proof (#2018 NB3): the registrar's own NAME_RE, so it refuses nothing the registrar takes.
+        // Folded as the rest of the route keys it (a trailing dot is the same name: #1583 r4176138168).
+        if (!isAddressLabel(foldName(name))) { ctx.status = 400; ctx.body = { error: 'That is not an address name: 3 to 32 letters a–z, digits and hyphens, with no hyphen at either end.' }; return; }
         // Claiming over a different live name changes the community's address: the fresh proof (design case 18, B3, as the
         // director narrowed it). A first claim, or the same name again, stays plain, so setting up has no hard gate.
         const live = (getNodeConfig() as any).publicAddress;

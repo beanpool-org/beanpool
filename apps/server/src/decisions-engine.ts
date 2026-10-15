@@ -1969,6 +1969,17 @@ export interface EmergencySuspendResult {
 }
 
 /**
+ * What is wrong with an emergency suspension's reason, in the words an owner reads, or null. The route asks it before the
+ * fresh proof, so a short reason does not spend a 2FA code (#2018 review NB1); adminEmergencySuspend asks it again.
+ */
+export function suspendReasonProblem(reason: unknown): string | null {
+    const clean = String(typeof reason === 'string' ? reason : '').trim();
+    if (clean.length < 10) return 'A reason members can read (at least 10 characters) is required to suspend someone';
+    if (clean.length > 1000) return 'Reason is too long (1000 characters at most)';
+    return null;
+}
+
+/**
  * An admin suspends a member at once (answer L). In the same transaction the node opens a 7-day
  * "Keep this suspension?" Decision — member-touching rules: one member one vote, the usual quorum, 60%.
  * If it does not pass, or misses quorum, the suspension lifts by itself on the tick.
@@ -1990,10 +2001,8 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     // Guards first, outside any transaction.
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can suspend a member' };
     const cleanReason = String(reason || '').trim();
-    if (cleanReason.length < 10) {
-        return { success: false, status: 400, error: 'A reason members can read (at least 10 characters) is required to suspend someone' };
-    }
-    if (cleanReason.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
+    const reasonProblem = suspendReasonProblem(cleanReason);
+    if (reasonProblem) return { success: false, status: 400, error: reasonProblem };
     if (!subjectPubkey || subjectPubkey === SYSTEM_AUTHOR) return { success: false, status: 400, error: 'Member not found' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };

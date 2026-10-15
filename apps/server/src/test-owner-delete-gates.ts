@@ -350,7 +350,10 @@ async function main(): Promise<void> {
             const computer = await send(asComputer, { code: tfa.code() });
             assert(computer.status === 403 && computer.json?.code === 'phone_required', `${row.what}: a computer's session is sent to the phone → 403 phone_required (${short(computer)})`);
             const byAdmin = await send(asAdmin, { code: tfa.code() });
-            assert(byAdmin.status === 403, `${row.what}: an admin → 403 (${short(byAdmin)})`);
+            // A role change by an admin goes to the engine as it always has, which refuses it (it grants only on a node with
+            // no acting owner): 400 "Only an owner may grant …". Every other row: 403.
+            assert(byAdmin.status === 403 || (byAdmin.status === 400 && /only an owner/i.test(byAdmin.json?.error || '')),
+                `${row.what}: an admin is refused (${short(byAdmin)})`);
             const byToken = await send(asToken, { code: tfa.code() });
             assert(byToken.status === 403 && (byToken.json?.code === 'token_not_allowed' || row.keyOnly === true),
                 `${row.what}: an admin token → 403 token_not_allowed (${short(byToken)})`);

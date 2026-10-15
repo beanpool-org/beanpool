@@ -378,13 +378,20 @@ async function main() {
         assert(grantAgain.status === 200, `after Manage again, the owner grant works (got ${grantAgain.status})`);
         revokeNodeRole(target.pub, 'owner', owner.pub);
 
-        // A computer's session (the QR pairing; any sign-in that is not the phone's own hand-off) is not a phone left open.
+        // A computer's session (the QR pairing; any sign-in that is not the phone's own hand-off) is not a phone left open:
+        // its owner-only changes are not asked for an unlock six minutes on. But it has no unlock of its own, so the rare
+        // changes that ask an owner's fresh proof every time, an owner grant among them, are sent to the phone (design
+        // case 18 §5, D2: phone only), and nothing is granted.
         const computer = consumeHandshakeToken((await requestLink(owner)).body.handshakeToken);
         assert(computer.ok === true, 'a computer session opens');
         backdateAdminSessionForTests(computer.sessionId!, 6 * 60_000);
-        const grantComputer = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, { Cookie: `admin_session=${computer.sessionId}`, 'X-CSRF-Token': computer.csrfToken! });
-        assert(grantComputer.status === 200, `a computer's session six minutes on is not asked (got ${grantComputer.status} ${JSON.stringify(grantComputer.body)})`);
-        revokeNodeRole(target.pub, 'owner', owner.pub);
+        const asComputer = { Cookie: `admin_session=${computer.sessionId}`, 'X-CSRF-Token': computer.csrfToken! };
+        const tfaComputer = await postJson('/api/local/admin/2fa/setup', {}, asComputer);
+        assert(tfaComputer.status === 200, `a computer's session six minutes on is not asked for an owner-only change, e.g. 2FA setup (got ${tfaComputer.status} ${JSON.stringify(tfaComputer.body).slice(0, 120)})`);
+        const grantComputer = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, asComputer);
+        assert(grantComputer.status === 403 && grantComputer.body?.code === 'phone_required'
+            && !db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").get(target.pub),
+            `an owner grant from a computer is sent to the phone, and grants nothing (got ${grantComputer.status} ${JSON.stringify(grantComputer.body)})`);
     }
 
     // ── 6. Every change that needs an owner is asked, not only the ones that name 'owner' (review 4172055076) ──

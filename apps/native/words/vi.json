@@ -75,5 +75,11 @@
   "Your Photo": "Ảnh của bạn",
   "Safety Backup": "Sao lưu",
   "How it Works": "Cách hoạt động",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 từ của bạn là chìa khóa chính để vào tài khoản trên mọi thiết bị. Không ai có thể đặt lại chúng: không phải chúng tôi, cũng không phải cộng đồng này."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 từ của bạn là chìa khóa chính để vào tài khoản trên mọi thiết bị. Không ai có thể đặt lại chúng: không phải chúng tôi, cũng không phải cộng đồng này.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Ở đây có hai tài khoản trùng tên này. Hãy dùng 12 từ của bạn, hoặc hỏi quản trị viên cộng đồng của bạn.",
+  "Can't reach the community right now. Try again in a minute.": "Hiện không kết nối được với cộng đồng. Hãy thử lại sau một phút.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Không có tài khoản nào tên {name} ở đây có thể khôi phục bằng cách đăng nhập. Hãy kiểm tra bạn đã nhập đủ tên chưa, hoặc dùng 12 từ của bạn.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Tài khoản vừa khôi phục không phải {name}, nên chưa lưu gì trên điện thoại này. Hãy thử lại, hoặc dùng 12 từ của bạn.",
+  "Vault Copy Not Removed": "Chưa xóa được bản sao trong kho",
+  "Convenor: {name}": "Điều phối viên: {name}"
 }

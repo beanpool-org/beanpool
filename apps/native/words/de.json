@@ -75,5 +75,11 @@
   "Your Photo": "Dein Foto",
   "Safety Backup": "Sicheres Backup",
   "How it Works": "So geht’s",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Deine 12 Wörter sind dein Hauptschlüssel zu deinem Konto auf allen Geräten. Niemand kann sie zurücksetzen: weder wir noch diese Community."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Deine 12 Wörter sind dein Hauptschlüssel zu deinem Konto auf allen Geräten. Niemand kann sie zurücksetzen: weder wir noch diese Community.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Hier gibt es zwei Konten mit diesem Namen. Nutze deine 12 Wörter oder frag bei den Admins deiner Community nach.",
+  "Can't reach the community right now. Try again in a minute.": "Die Community ist gerade nicht erreichbar. Versuche es in einer Minute noch einmal.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Kein Konto namens {name} kann hier mit einer Anmeldung wiederhergestellt werden. Prüfe, ob du deinen ganzen Namen eingegeben hast, oder nutze deine 12 Wörter.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Das wiederhergestellte Konto ist nicht {name}, deshalb wurde nichts auf diesem Handy gespeichert. Versuche es noch einmal oder nutze deine 12 Wörter.",
+  "Vault Copy Not Removed": "Tresorkopie nicht entfernt",
+  "Convenor: {name}": "Koordination: {name}"
 }

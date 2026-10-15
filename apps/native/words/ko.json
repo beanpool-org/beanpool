@@ -75,5 +75,11 @@
   "Your Photo": "사진",
   "Safety Backup": "백업",
   "How it Works": "사용법",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12개의 단어는 어떤 기기에서든 내 계정으로 들어오는 기본 열쇠예요. 아무도 재설정할 수 없어요: 저희도, 이 커뮤니티도 마찬가지예요."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12개의 단어는 어떤 기기에서든 내 계정으로 들어오는 기본 열쇠예요. 아무도 재설정할 수 없어요: 저희도, 이 커뮤니티도 마찬가지예요.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "여기에 이 이름의 계정이 두 개 있어요. 12개의 단어를 사용하거나 커뮤니티 관리자에게 문의하세요.",
+  "Can't reach the community right now. Try again in a minute.": "지금은 커뮤니티에 연결할 수 없어요. 1분 뒤에 다시 시도해 주세요.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "이름이 {name}인 계정은 여기서 로그인으로 복원할 수 없어요. 이름을 전부 입력했는지 확인하거나 12개의 단어를 사용하세요.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "복원된 계정이 {name} 계정이 아니라서 이 휴대폰에는 아무것도 저장되지 않았어요. 다시 시도하거나 12개의 단어를 사용하세요.",
+  "Vault Copy Not Removed": "금고의 사본을 삭제하지 못했어요",
+  "Convenor: {name}": "담당자: {name}"
 }

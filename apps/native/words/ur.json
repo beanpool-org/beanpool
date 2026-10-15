@@ -75,5 +75,11 @@
   "Your Photo": "تصویر",
   "Safety Backup": "بیک اپ",
   "How it Works": "طریقہ کار",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "آپ کے 12 الفاظ تمام ڈیوائسز پر آپ کے اکاؤنٹ کی بنیادی کنجی ہیں۔ انہیں کوئی ری سیٹ نہیں کر سکتا: نہ ہم، نہ یہ کمیونٹی۔"
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "آپ کے 12 الفاظ تمام ڈیوائسز پر آپ کے اکاؤنٹ کی بنیادی کنجی ہیں۔ انہیں کوئی ری سیٹ نہیں کر سکتا: نہ ہم، نہ یہ کمیونٹی۔",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "یہاں اس نام کے دو اکاؤنٹ ہیں۔ اپنے 12 الفاظ استعمال کریں، یا اپنی کمیونٹی کے ایڈمن سے پوچھیں۔",
+  "Can't reach the community right now. Try again in a minute.": "ابھی کمیونٹی سے رابطہ نہیں ہو پا رہا۔ ایک منٹ بعد دوبارہ کوشش کریں۔",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "یہاں {name} نام کا کوئی اکاؤنٹ سائن ان کے ذریعے بحال نہیں ہو سکتا۔ دیکھ لیں کہ پورا نام لکھا گیا ہے، یا اپنے 12 الفاظ استعمال کریں۔",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "بحال ہونے والا اکاؤنٹ {name} نہیں ہے، اس لیے اس فون پر کچھ محفوظ نہیں ہوا۔ دوبارہ کوشش کریں، یا اپنے 12 الفاظ استعمال کریں۔",
+  "Vault Copy Not Removed": "والٹ کی کاپی نہیں ہٹائی گئی",
+  "Convenor: {name}": "کنوینر: {name}"
 }

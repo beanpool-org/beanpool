@@ -75,5 +75,11 @@
   "Your Photo": "ഫോട്ടോ",
   "Safety Backup": "ബാക്കപ്പ്",
   "How it Works": "വഴികാട്ടി",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "നിങ്ങളുടെ 12 വാക്കുകളാണ് എല്ലാ ഉപകരണങ്ങളിലും നിങ്ങളുടെ അക്കൗണ്ടിലേക്കുള്ള പ്രധാന താക്കോൽ. അവ റീസെറ്റ് ചെയ്യാൻ ആർക്കും കഴിയില്ല: ഞങ്ങൾക്കും ഇല്ല, ഈ കമ്മ്യൂണിറ്റിക്കും ഇല്ല."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "നിങ്ങളുടെ 12 വാക്കുകളാണ് എല്ലാ ഉപകരണങ്ങളിലും നിങ്ങളുടെ അക്കൗണ്ടിലേക്കുള്ള പ്രധാന താക്കോൽ. അവ റീസെറ്റ് ചെയ്യാൻ ആർക്കും കഴിയില്ല: ഞങ്ങൾക്കും ഇല്ല, ഈ കമ്മ്യൂണിറ്റിക്കും ഇല്ല.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "ഇവിടെ ഈ പേരിൽ രണ്ട് അക്കൗണ്ടുകൾ ഉണ്ട്. നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ അഡ്മിനോട് ചോദിക്കുക.",
+  "Can't reach the community right now. Try again in a minute.": "ഇപ്പോൾ കമ്മ്യൂണിറ്റിയുമായി ബന്ധപ്പെടാനാകുന്നില്ല. ഒരു മിനിറ്റ് കഴിഞ്ഞ് വീണ്ടും ശ്രമിക്കുക.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} എന്ന പേരുള്ള ഒരു അക്കൗണ്ടും ഇവിടെ സൈൻ-ഇൻ വഴി വീണ്ടെടുക്കാനാകില്ല. നിങ്ങളുടെ മുഴുവൻ പേരും ടൈപ്പ് ചെയ്തോ എന്ന് പരിശോധിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "വീണ്ടെടുത്ത അക്കൗണ്ട് {name} അല്ല, അതുകൊണ്ട് ഈ ഫോണിൽ ഒന്നും സംരക്ഷിച്ചിട്ടില്ല. വീണ്ടും ശ്രമിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
+  "Vault Copy Not Removed": "വോൾട്ട് പകർപ്പ് നീക്കം ചെയ്തില്ല",
+  "Convenor: {name}": "കൺവീനർ: {name}"
 }

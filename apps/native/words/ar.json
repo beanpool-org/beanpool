@@ -75,5 +75,11 @@
   "Your Photo": "صورتك",
   "Safety Backup": "نسخة احتياطية",
   "How it Works": "كيف يعمل",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "كلماتك الـ 12 هي مفتاحك الرئيسي إلى حسابك على أي جهاز. لا أحد يستطيع إعادة تعيينها: لا نحن ولا هذا المجتمع."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "كلماتك الـ 12 هي مفتاحك الرئيسي إلى حسابك على أي جهاز. لا أحد يستطيع إعادة تعيينها: لا نحن ولا هذا المجتمع.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "يوجد هنا حسابان بهذا الاسم. استخدم كلماتك الـ 12، أو اسأل مشرف مجتمعك.",
+  "Can't reach the community right now. Try again in a minute.": "تعذّر الوصول إلى المجتمع الآن. حاول مرة أخرى بعد دقيقة.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "لا يمكن استعادة أي حساب باسم {name} هنا عن طريق تسجيل الدخول. تأكد من أنك كتبت اسمك كاملًا، أو استخدم كلماتك الـ 12.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "الحساب الذي تمت استعادته ليس {name}، لذلك لم يُحفظ أي شيء على هذا الهاتف. حاول مرة أخرى، أو استخدم كلماتك الـ 12.",
+  "Vault Copy Not Removed": "لم تتم إزالة نسخة الخزنة",
+  "Convenor: {name}": "التنسيق: {name}"
 }

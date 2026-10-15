@@ -75,5 +75,11 @@
   "Your Photo": "Picha yako",
   "Safety Backup": "Hifadhi salama",
   "How it Works": "Mwongozo",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Maneno yako 12 ni ufunguo wako mkuu wa kuingia kwenye akaunti yako kutoka kifaa chochote. Hakuna anayeweza kuyaweka upya: si sisi, wala jumuiya hii."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Maneno yako 12 ni ufunguo wako mkuu wa kuingia kwenye akaunti yako kutoka kifaa chochote. Hakuna anayeweza kuyaweka upya: si sisi, wala jumuiya hii.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Kuna akaunti mbili hapa zenye jina hili. Tumia maneno yako 12, au muulize msimamizi wa jumuiya yako.",
+  "Can't reach the community right now. Try again in a minute.": "Jumuiya haipatikani kwa sasa. Jaribu tena baada ya dakika moja.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Hakuna akaunti iitwayo {name} hapa inayoweza kurejeshwa kwa kuingia. Hakikisha umeandika jina lako lote, au tumia maneno yako 12.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Akaunti iliyorejeshwa si {name}, kwa hiyo hakuna kilichohifadhiwa kwenye simu hii. Jaribu tena, au tumia maneno yako 12.",
+  "Vault Copy Not Removed": "Nakala ya hifadhi salama haijaondolewa",
+  "Convenor: {name}": "Mratibu: {name}"
 }

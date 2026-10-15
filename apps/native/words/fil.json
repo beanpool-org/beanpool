@@ -75,5 +75,11 @@
   "Your Photo": "Larawan",
   "Safety Backup": "Backup",
   "How it Works": "Paano gumagana",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ang 12 salita mo ang pangunahing susi sa account mo sa lahat ng device. Walang makakapag-reset sa mga ito: hindi kami, at hindi rin ang komunidad na ito."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ang 12 salita mo ang pangunahing susi sa account mo sa lahat ng device. Walang makakapag-reset sa mga ito: hindi kami, at hindi rin ang komunidad na ito.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "May dalawang account dito na may ganitong pangalan. Gamitin ang 12 salita mo, o magtanong sa admin ng komunidad mo.",
+  "Can't reach the community right now. Try again in a minute.": "Hindi maabot ang komunidad ngayon. Subukan ulit pagkalipas ng isang minuto.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Walang account na nagngangalang {name} dito na maibabalik gamit ang sign-in. Tiyaking nai-type mo ang buong pangalan mo, o gamitin ang 12 salita mo.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Hindi kay {name} ang account na bumalik, kaya walang nai-save sa teleponong ito. Subukan ulit, o gamitin ang 12 salita mo.",
+  "Vault Copy Not Removed": "Hindi natanggal ang kopya sa vault",
+  "Convenor: {name}": "Tagapag-ugnay: {name}"
 }

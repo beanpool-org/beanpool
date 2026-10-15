@@ -75,5 +75,11 @@
   "Your Photo": "Фото",
   "Safety Backup": "Резервна копія",
   "How it Works": "Як це працює",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ваші 12 слів — це головний ключ до вашого облікового запису на всіх пристроях. Скинути їх не може ніхто: ні ми, ні ця спільнота."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ваші 12 слів — це головний ключ до вашого облікового запису на всіх пристроях. Скинути їх не може ніхто: ні ми, ні ця спільнота.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Тут є два облікові записи з таким іменем. Скористайтеся своїми 12 словами або запитайте в адміністрації вашої спільноти.",
+  "Can't reach the community right now. Try again in a minute.": "Зараз не вдається зв’язатися зі спільнотою. Спробуйте ще раз за хвилину.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Жоден обліковий запис з іменем {name} не можна відновити тут через вхід. Перевірте, чи ім’я введено повністю, або скористайтеся своїми 12 словами.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Відновлений обліковий запис не має імені {name}, тому на цьому телефоні нічого не збережено. Спробуйте ще раз або скористайтеся своїми 12 словами.",
+  "Vault Copy Not Removed": "Копію в сховищі не видалено",
+  "Convenor: {name}": "Координує: {name}"
 }

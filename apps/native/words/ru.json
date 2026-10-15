@@ -76,5 +76,10 @@
   "Safety Backup": "Запасная копия",
   "How it Works": "Как это работает",
   "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ваши 12 слов — главный ключ к вашему аккаунту на любых устройствах. Никто не может их сбросить: ни мы, ни это сообщество.",
-  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Здесь два аккаунта с таким именем. Используйте свои 12 слов или обратитесь к администрации сообщества."
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Здесь два аккаунта с таким именем. Используйте свои 12 слов или обратитесь к администрации сообщества.",
+  "Can't reach the community right now. Try again in a minute.": "Сейчас не удаётся связаться с сообществом. Попробуйте ещё раз через минуту.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Аккаунт с именем {name} здесь нельзя восстановить через вход. Проверьте, что вы ввели имя полностью, или используйте свои 12 слов.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Восстановленный аккаунт — не {name}, поэтому на этом телефоне ничего не сохранено. Попробуйте ещё раз или используйте свои 12 слов.",
+  "Vault Copy Not Removed": "Копия в хранилище не удалена",
+  "Convenor: {name}": "Координирует: {name}"
 }

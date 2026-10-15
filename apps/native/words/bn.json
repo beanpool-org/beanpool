@@ -75,5 +75,11 @@
   "Your Photo": "আপনার ছবি",
   "Safety Backup": "নিরাপদ ব্যাকআপ",
   "How it Works": "কীভাবে কাজ করে",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "আপনার 12টি শব্দ সব ডিভাইসে আপনার অ্যাকাউন্টে ঢোকার প্রধান চাবি। এগুলো কেউ রিসেট করতে পারে না: আমরাও না, এই কমিউনিটিও না।"
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "আপনার 12টি শব্দ সব ডিভাইসে আপনার অ্যাকাউন্টে ঢোকার প্রধান চাবি। এগুলো কেউ রিসেট করতে পারে না: আমরাও না, এই কমিউনিটিও না।",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "এখানে এই নামে দুটি অ্যাকাউন্ট আছে। আপনার 12টি শব্দ ব্যবহার করুন, অথবা আপনার কমিউনিটির অ্যাডমিনকে জিজ্ঞেস করুন।",
+  "Can't reach the community right now. Try again in a minute.": "এখন কমিউনিটির সঙ্গে যোগাযোগ করা যাচ্ছে না। এক মিনিট পরে আবার চেষ্টা করুন।",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} নামের কোনো অ্যাকাউন্ট এখানে সাইন-ইন দিয়ে ফিরিয়ে আনা যাবে না। আপনি পুরো নাম লিখেছেন কি না দেখে নিন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "যে অ্যাকাউন্টটি ফিরে এসেছে সেটি {name} নয়, তাই এই ফোনে কিছুই সংরক্ষণ করা হয়নি। আবার চেষ্টা করুন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
+  "Vault Copy Not Removed": "ভল্টের কপি সরানো হয়নি",
+  "Convenor: {name}": "সমন্বয়কারী: {name}"
 }

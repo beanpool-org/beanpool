@@ -75,5 +75,11 @@
   "Your Photo": "写真",
   "Safety Backup": "バックアップ",
   "How it Works": "使い方",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "あなたの12個の単語は、どの端末からでも自分のアカウントに入るためのメインのカギです。だれにもリセットできません：私たちにも、このコミュニティにもできません。"
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "あなたの12個の単語は、どの端末からでも自分のアカウントに入るためのメインのカギです。だれにもリセットできません：私たちにも、このコミュニティにもできません。",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "ここには、この名前のアカウントが2つあります。12個の単語を使うか、コミュニティの管理者に聞いてください。",
+  "Can't reach the community right now. Try again in a minute.": "いまコミュニティに接続できません。1分ほど待ってから、もう一度お試しください。",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} という名前のアカウントは、ここではサインインで復元できません。名前をすべて入力したか確認するか、12個の単語を使ってください。",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "復元されたアカウントが {name} ではないため、この端末には何も保存されていません。もう一度お試しいただくか、12個の単語を使ってください。",
+  "Vault Copy Not Removed": "金庫のコピーを削除できませんでした",
+  "Convenor: {name}": "まとめ役：{name}"
 }

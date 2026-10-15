@@ -75,5 +75,11 @@
   "Your Photo": "你的照片",
   "Safety Backup": "安全备份",
   "How it Works": "运作方式",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "你的 12 个助记词是你在任何设备上登录账户的主密钥。任何人都无法重置它们：我们不能，这个社区也不能。"
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "你的 12 个助记词是你在任何设备上登录账户的主密钥。任何人都无法重置它们：我们不能，这个社区也不能。",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "这里有两个账户同名。请使用你的 12 个助记词，或询问你所在社区的管理员。",
+  "Can't reach the community right now. Try again in a minute.": "暂时无法连接到社区。请过一分钟再试。",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "名为 {name} 的账户在这里无法通过登录恢复。请检查是否输入了完整的名称，或使用你的 12 个助记词。",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "恢复的账户不是 {name}，所以这部手机上没有保存任何内容。请再试一次，或使用你的 12 个助记词。",
+  "Vault Copy Not Removed": "保险库副本未移除",
+  "Convenor: {name}": "协调人：{name}"
 }

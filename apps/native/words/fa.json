@@ -75,5 +75,11 @@
   "Your Photo": "عکس",
   "Safety Backup": "پشتیبان",
   "How it Works": "راهنما",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 کلمه شما کلید اصلی ورود به حساب شما در همه دستگاه‌هاست. هیچ‌کس نمی‌تواند آن‌ها را بازنشانی کند: نه ما، نه این جامعه."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 کلمه شما کلید اصلی ورود به حساب شما در همه دستگاه‌هاست. هیچ‌کس نمی‌تواند آن‌ها را بازنشانی کند: نه ما، نه این جامعه.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "اینجا دو حساب با این نام وجود دارد. از 12 کلمه‌تان استفاده کنید یا از مدیر جامعه‌تان بپرسید.",
+  "Can't reach the community right now. Try again in a minute.": "اکنون ارتباط با جامعه برقرار نمی‌شود. یک دقیقه دیگر دوباره تلاش کنید.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "هیچ حسابی به نام {name} در اینجا با ورود قابل بازیابی نیست. بررسی کنید که نام کامل‌تان را نوشته باشید، یا از 12 کلمه‌تان استفاده کنید.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "حسابی که بازیابی شد {name} نیست، پس چیزی روی این گوشی ذخیره نشد. دوباره تلاش کنید، یا از 12 کلمه‌تان استفاده کنید.",
+  "Vault Copy Not Removed": "نسخه صندوق امن حذف نشد",
+  "Convenor: {name}": "هماهنگ‌کننده: {name}"
 }

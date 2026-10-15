@@ -75,5 +75,11 @@
   "Your Photo": "Fotoğraf",
   "Safety Backup": "Yedek",
   "How it Works": "Nasıl işler",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 sözcüğün, hesabına her cihazdan girmenin ana anahtarıdır. Onları kimse sıfırlayamaz: ne biz ne de bu topluluk."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 sözcüğün, hesabına her cihazdan girmenin ana anahtarıdır. Onları kimse sıfırlayamaz: ne biz ne de bu topluluk.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Burada bu adı taşıyan iki hesap var. 12 sözcüğünü kullan ya da topluluğunun yöneticisine sor.",
+  "Can't reach the community right now. Try again in a minute.": "Şu an topluluğa ulaşılamıyor. Bir dakika sonra tekrar dene.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Burada {name} adlı hiçbir hesap, oturum açılarak geri yüklenemez. Adının tamamını yazıp yazmadığını kontrol et ya da 12 sözcüğünü kullan.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Geri yüklenen hesap {name} değil, bu yüzden bu telefona hiçbir şey kaydedilmedi. Tekrar dene ya da 12 sözcüğünü kullan.",
+  "Vault Copy Not Removed": "Kasadaki kopya kaldırılamadı",
+  "Convenor: {name}": "Koordinatör: {name}"
 }

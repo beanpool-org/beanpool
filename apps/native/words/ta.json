@@ -75,5 +75,11 @@
   "Your Photo": "படம்",
   "Safety Backup": "காப்புப் பிரதி",
   "How it Works": "வழிகாட்டி",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "உங்கள் 12 சொற்கள்தான் எல்லாச் சாதனங்களிலும் உங்கள் கணக்கிற்குள் நுழைவதற்கான முதன்மை விசை. அவற்றை யாராலும் மீட்டமைக்க முடியாது: எங்களாலும் முடியாது, இந்தச் சமூகத்தாலும் முடியாது."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "உங்கள் 12 சொற்கள்தான் எல்லாச் சாதனங்களிலும் உங்கள் கணக்கிற்குள் நுழைவதற்கான முதன்மை விசை. அவற்றை யாராலும் மீட்டமைக்க முடியாது: எங்களாலும் முடியாது, இந்தச் சமூகத்தாலும் முடியாது.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "இங்கே இந்தப் பெயரில் இரண்டு கணக்குகள் உள்ளன. உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள், அல்லது உங்கள் சமூகத்தின் நிர்வாகியிடம் கேளுங்கள்.",
+  "Can't reach the community right now. Try again in a minute.": "இப்போது சமூகத்தை அடைய முடியவில்லை. ஒரு நிமிடம் கழித்து மீண்டும் முயலுங்கள்.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} என்ற பெயரில் உள்ள எந்தக் கணக்கையும் இங்கே உள்நுழைவு மூலம் மீட்டெடுக்க முடியாது. உங்கள் முழுப் பெயரையும் தட்டச்சு செய்தீர்களா என்று சரிபாருங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "மீட்டெடுக்கப்பட்ட கணக்கு {name} அல்ல, அதனால் இந்தப் போனில் எதுவும் சேமிக்கப்படவில்லை. மீண்டும் முயலுங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்.",
+  "Vault Copy Not Removed": "வால்ட் நகல் நீக்கப்படவில்லை",
+  "Convenor: {name}": "ஒருங்கிணைப்பாளர்: {name}"
 }

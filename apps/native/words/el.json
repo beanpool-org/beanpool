@@ -75,5 +75,11 @@
   "Your Photo": "Εικόνα",
   "Safety Backup": "Ασφάλεια",
   "How it Works": "Πώς δουλεύει",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Οι 12 λέξεις σου είναι το βασικό κλειδί για τον λογαριασμό σου σε όλες τις συσκευές. Κανείς δεν μπορεί να τις επαναφέρει ή να τις αντικαταστήσει: ούτε εμείς, ούτε αυτή η κοινότητα."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Οι 12 λέξεις σου είναι το βασικό κλειδί για τον λογαριασμό σου σε όλες τις συσκευές. Κανείς δεν μπορεί να τις επαναφέρει ή να τις αντικαταστήσει: ούτε εμείς, ούτε αυτή η κοινότητα.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Υπάρχουν δύο λογαριασμοί εδώ με αυτό το όνομα. Χρησιμοποίησε τις 12 λέξεις σου ή ρώτα τη διαχείριση της κοινότητάς σου.",
+  "Can't reach the community right now. Try again in a minute.": "Δεν είναι δυνατή η σύνδεση με την κοινότητα αυτή τη στιγμή. Δοκίμασε ξανά σε ένα λεπτό.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Δεν υπάρχει λογαριασμός με όνομα {name} που να μπορεί να επαναφερθεί εδώ μέσω σύνδεσης. Έλεγξε ότι έγραψες ολόκληρο το όνομά σου ή χρησιμοποίησε τις 12 λέξεις σου.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Ο λογαριασμός που επαναφέρθηκε δεν έχει το όνομα {name}, οπότε δεν αποθηκεύτηκε τίποτα σε αυτό το τηλέφωνο. Δοκίμασε ξανά ή χρησιμοποίησε τις 12 λέξεις σου.",
+  "Vault Copy Not Removed": "Δεν αφαιρέθηκε το αντίγραφο στο θησαυροφυλάκιο",
+  "Convenor: {name}": "Συντονισμός: {name}"
 }

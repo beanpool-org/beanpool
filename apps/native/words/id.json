@@ -75,5 +75,11 @@
   "Your Photo": "Fotomu",
   "Safety Backup": "Cadangan aman",
   "How it Works": "Cara kerja",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 katamu adalah kunci utama untuk masuk ke akunmu di semua perangkat. Tidak ada yang bisa meresetnya: bukan kami, bukan juga komunitas ini."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "12 katamu adalah kunci utama untuk masuk ke akunmu di semua perangkat. Tidak ada yang bisa meresetnya: bukan kami, bukan juga komunitas ini.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Ada dua akun di sini dengan nama ini. Pakai 12 katamu, atau tanya admin komunitasmu.",
+  "Can't reach the community right now. Try again in a minute.": "Tidak bisa terhubung ke komunitas saat ini. Coba lagi satu menit lagi.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Tidak ada akun bernama {name} di sini yang bisa dipulihkan lewat login. Pastikan kamu mengetik nama lengkapmu, atau pakai 12 katamu.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Akun yang dipulihkan bukan {name}, jadi tidak ada yang disimpan di ponsel ini. Coba lagi, atau pakai 12 katamu.",
+  "Vault Copy Not Removed": "Salinan brankas belum dihapus",
+  "Convenor: {name}": "Koordinator: {name}"
 }

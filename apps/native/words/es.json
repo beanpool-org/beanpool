@@ -76,5 +76,10 @@
   "Safety Backup": "Respaldo seguro",
   "How it Works": "Cómo funciona",
   "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Tus 12 palabras son tu llave principal para entrar a tu cuenta desde cualquier dispositivo. Nadie puede restablecerlas: ni nosotros, ni esta comunidad.",
-  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Aquí hay dos cuentas con este nombre. Usa tus 12 palabras o pregunta a quien administra tu comunidad."
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Aquí hay dos cuentas con este nombre. Usa tus 12 palabras o pregunta a quien administra tu comunidad.",
+  "Can't reach the community right now. Try again in a minute.": "No se pudo conectar con la comunidad en este momento. Inténtalo de nuevo en un minuto.",
+  "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Ninguna cuenta llamada {name} se puede restaurar aquí con un inicio de sesión. Revisa que hayas escrito tu nombre completo o usa tus 12 palabras.",
+  "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "La cuenta restaurada no es {name}, así que no se guardó nada en este celular. Inténtalo de nuevo o usa tus 12 palabras.",
+  "Vault Copy Not Removed": "Copia de la bóveda no eliminada",
+  "Convenor: {name}": "Coordina: {name}"
 }

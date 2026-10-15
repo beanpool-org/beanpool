@@ -135,7 +135,10 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
     const app = src('../App.tsx');
     const lobby = src('../pages/GuestLobby.tsx');
     const join = src('./WebJoin.tsx');
-    const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ');
+    // The words as a member reads them in English: the emoji beside its words, and a sentence through the words layer
+    // ({t('…')}, translated for other languages) as its English.
+    const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ')
+        .replace(/\{t\('((?:[^'\\]|\\.)*)'\)\}/g, '$1');
     const between = (text: string, from: string, to: string) => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from)));
     const named = KIT_WEB_RESTORE_STEPS.join('\n').match(/“[^”]+”/g)!.map((q) => q.slice(1, -1));
 

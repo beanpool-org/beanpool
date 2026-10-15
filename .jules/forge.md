@@ -47,6 +47,8 @@ const { id } = req.body; // could be undefined, crashes downstream
 
 ## ✅ Resolved — do NOT re-file
 
+### 2026-10-16 — "400 on a failed test alert" (#2007) — CLOSED. The 200 with `ok: false` is what the manager's Alerts panel reads; see POLICY.md.
+
 ### 2026-10-12 — "safe JSON parsing for commons projects" (#1728, #1802) — CLOSED TWICE, WOULD LOSE DATA.
 Returning `[]` for a corrupt `commons_projects` value in state-engine.ts lets `createProject` save a one-item list over every stored
 project. A loud failure loses nothing; a silent fallback on a path that then writes loses the community's projects. See POLICY.md

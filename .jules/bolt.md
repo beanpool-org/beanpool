@@ -19,6 +19,8 @@ lookups/counts → O(1)" fix). Before opening a PR:
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 
+### 2026-10-16 — "Map for user groups in the native Market" (#2011) — merged in error; rule 11 stands (#1968). No more Map-for-find swaps without a profile.
+
 ### 2026-10-01 — "batch pre-fetch keepers and pledges in listTreasuriesHandler" (#1364) — CLOSED, NO MEANINGFUL GAIN.
 Measured on the handler: about 1 ms saved at 30 enterprises (8.8-9.4 → 7.8 ms) and 10% at 600. The cost was a second,
 hand-kept copy of `treasuryKeepers()` / `getEnterprisePledges()` row shaping inside a treasury route, plus keepers with

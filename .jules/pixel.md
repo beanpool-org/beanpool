@@ -54,6 +54,8 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-10-16 — "accessibilityLabel on Save Profile" (#2009) — CLOSED: English outside t() plus a words-lint raise. Labels go through t(); never add a `raises` entry. See POLICY.md.
 ### 2026-09-24 — Labels on a Pressable that wraps a whole card. Closed #1087.
 A card Pressable with no label is read from all its child text (status, amount, title, member). An
 `accessibilityLabel` on the wrapper replaces every word of it with your label, so the screen reader loses the

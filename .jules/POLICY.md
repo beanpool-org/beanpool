@@ -845,3 +845,23 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** CLAIM FALSE (rule 11; see #1703, #1723, #1754)
 - **Claim:** `.find()` over keepers is O(n) per decision row; a Map makes it O(1).
 - **Why not to re-file:** an enterprise has a handful of keepers and `nameOf` runs about twice a row: measured 4.4 µs vs 1.6 µs per render at 10 keepers × 20 decisions. A Map also keeps the LAST of a repeated key where `.find()` keeps the first (the #1754 reason). Bolt: re-file only with a profile of a real screen showing a perceptible cost.
+
+### 2026-10-16 — Forge: HTTP 400 on a failed test alert (#2007) — CLOSED, DELIBERATE DECISION
+- **Category:** DELIBERATE DECISION
+- **Claim:** `POST /api/local/admin/alerts/test` answers 200 with `{ ok: false, error }` when the test does not go, so it should be 400.
+- **Why not to re-file:** the 200 is how the manager's Alerts panel works: `sendTestAlert` goes through `offboxPost`, which throws on any non-2xx, so with a 400 the panel skips `setStatus(r.status)` (last tried, failures in a row stay stale) and loses its "The test did not go: …" sentence. A test that could not be delivered is an answer about the channel, not a bad request. Forge: re-file only together with the manager change that reads the status from a 4xx body, and a test of the panel.
+
+### 2026-10-16 — Flow: `catch (err: unknown)` in OffboardMemberWizard (#2006) — CLOSED, REGRESSION
+- **Category:** REGRESSION (not a suppression of the idea, only of this shape)
+- **Claim:** typed catches and a submit spinner in `apps/manager/src/components/modules/OffboardMemberWizard.tsx`.
+- **Why not to re-file as is:** `err instanceof Error ? err.message : String(err) || 'Failed …'` never reaches its fallback: `String(err)` of a non-Error is "[object Object]" or "undefined", never empty, and an Error with an empty message now shows a blank where the old code showed the fallback. Flow: re-file once as `err instanceof Error && err.message ? err.message : 'Failed …'`, with a test that throws `{}` and one that throws `new Error('')`.
+
+### 2026-10-16 — Pixel: English accessibilityLabel on Settings' Save Profile, with a words-lint raise (#2009) — CLOSED, BREAKS THE WORDS LAYER
+- **Category:** REGRESSION
+- **Claim:** the Save Profile button needs a dynamic `accessibilityLabel`, hint and busy state.
+- **Why not to re-file as is:** the labels were English literals outside `t()`, and the PR raised `scripts/words/lint-baseline.json` ("raises") to let them through. Every sentence a member reads, screen-reader labels included, goes through `t()` (translation design, 25 languages); the ratchet only goes down. Pixel: never add a `raises` entry; re-file with `t('Saving your profile…')`-style whole sentences and no baseline change.
+
+### 2026-10-16 — Bolt: Map for user groups in the native Market (#2011) and Expo: ErrorBoundary in project-detail.tsx (#2012) — MERGED IN ERROR, HARMLESS
+- **Category:** NOTE (the rules stand)
+- **What happened:** both were merged before this register was checked. #2011 is rule 11's shape (see #1968): harmless only because group ids are unique. #2012 is redundant: `apps/native/app/_layout.tsx` already exports `ErrorBoundary` for every route (see #1704, #1823, #1959).
+- **Why not to re-file more:** neither is a precedent. Bolt: no more Map-for-find swaps without a profile of a real screen. Expo: no more per-screen `ErrorBoundary` exports.

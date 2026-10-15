@@ -34,6 +34,8 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-10-16 — "ErrorBoundary in project-detail.tsx" (#2012) — merged in error; redundant with _layout.tsx. No more per-screen ErrorBoundary exports.
 ### 2026-09-09 — Navigation param typing and Talk tab view state sync LANDED in #679.
 Typed optional `view?: string` in `apps/native/app/(tabs)/people.tsx` and added `useEffect` in `apps/native/app/(tabs)/chats.tsx` to keep `talkView` synchronized with navigation param updates. Do not re-file.
 Before filing navigation or screen parameter PRs, always type `useLocalSearchParams` query parameters as optional (`param?: string`) unless strictly enforced by static routing, and use a synchronization `useEffect` if sub-view state can change after the screen is already mounted.

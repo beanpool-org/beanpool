@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "language": "zh-Hant",
+    "name": "Chinese (Traditional)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "剛剛",
+  "{n} day ago|{n} days ago": {
+    "other": "{n} 天前"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n} 小時前"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n} 分鐘前"
+  }
+}

@@ -46,8 +46,11 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { forgetOldJoinAddresses, openJoinAddressHash, readOpenJoinRecord } from './engine/open-join.js';
 import {
     DOOR_NUMBERS, REMOVED_NEWCOMER_KEEP_MS, _resetWordsJoinsForTests, doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin,
+    DOOR_BUSY_DEFAULT, DOOR_BUSY_ENV, DOOR_BUSY_LEVEL, _resetDoorBusyForTests, doorBusyFallLine, doorBusyThreshold, newMembersToday,
+    noteRemovedNewcomer,
 } from './engine/door-signal.js';
 import { solveOffLoop } from './door-work-test-solver.js';
+import { getAlertsStatus } from './services/alerts.js';
 import { getFunnel } from './engine/funnel.js';
 import { limiterKeyForIp } from './client-ip.js';
 
@@ -159,6 +162,9 @@ async function main(): Promise<void> {
     _clearNoncesForTests();
     _resetWordsJoinsForTests();
     process.env.NODE_PROFILE = 'global';
+    // Sections 1 to 8 measure each address's steps and ceilings, which seed thousands of joins: the node's own day line
+    // (section 9) is off for them, so each level they assert is the address's alone.
+    process.env[DOOR_BUSY_ENV] = '0';
     const N = DOOR_NUMBERS.global;
 
     // ── 1. levels at the numbers ─────────────────────────────────────────────────────────────────
@@ -359,6 +365,126 @@ async function main(): Promise<void> {
     for (let i = 0; i < 16; i++) if ((await call('GET', someone, `/api/members/callsign-available/Local${i}`, LOCAL)).status === 429) refused++;
     holdLimiters = false;
     assert(refused === 1, `the name check, signed by a key that is no member, keeps the auth limiter's 15 a minute here (${refused} of 16 refused)`);
+
+    // ── 9. the node's day line (the privacy review's S4) ─────────────────────────────────────────
+    console.log('\n── 9. the node\'s day line: new members in 24 hours raise the work, never refuse ──');
+    process.env.NODE_PROFILE = 'global';
+    assert(doorBusyThreshold({}) === DOOR_BUSY_DEFAULT && DOOR_BUSY_DEFAULT === 300 && doorBusyThreshold({ [DOOR_BUSY_ENV]: 'lots' }) === 300
+        && doorBusyThreshold({ [DOOR_BUSY_ENV]: '0' }) === 0 && doorBusyThreshold({ [DOOR_BUSY_ENV]: '12' }) === 12,
+        `${DOOR_BUSY_ENV}: 300 when unset or not a whole number, 0 and 12 as given`);
+    assert(doorBusyFallLine(40) === 36 && doorBusyFallLine(300) === 270 && doorBusyFallLine(1) === 1 && DOOR_BUSY_LEVEL === 3,
+        'once busy, back to usual only under 90% of the line (36 of 40, 270 of 300, and at least 1); a busy day asks at least level 3');
+    // A fake clock three days on: none of the rows above is in its day, so the count is this section's alone.
+    const LINE = 40;
+    process.env[DOOR_BUSY_ENV] = String(LINE);
+    _resetDoorBusyForTests();
+    _resetWordsJoinsForTests();
+    const t0 = Date.now() + 3 * 24 * 3600_000;
+    const MIN = 60_000;
+    const FRESH = '198.51.100.99';
+    const freshHash = hashOf(FRESH);
+    const logged: string[] = [];
+    const realLog = console.log;
+    console.log = (...a: unknown[]) => { const line = a.map(String).join(' '); if (line.includes('Sign-ups are')) logged.push(line); realLog(...a); };
+    // One join from each of LINE - 1 addresses, so no address reaches a step of its own: 1 that leaves the day at t0 + 30
+    // minutes, 3 at t0 + 60, 1 at t0 + 90, and the rest an hour before t0.
+    addJoins('198.51.100.0', 1, new Date(t0 - 23 * 3600_000 - 30 * MIN), 'words');
+    for (let i = 1; i <= 3; i++) addJoins(`198.51.100.${i}`, 1, new Date(t0 - 23 * 3600_000), 'words');
+    addJoins('198.51.100.4', 1, new Date(t0 - 22 * 3600_000 - 30 * MIN), 'words');
+    for (let i = 5; i < LINE - 1; i++) addJoins(`198.51.100.${i}`, 1, new Date(t0 - 3600_000), 'words');
+    const under = doorLevel('words', freshHash, t0);
+    assert(newMembersToday(t0) === LINE - 1 && under.level === 0 && !under.nodeBusy,
+        `${LINE - 1} new members in the day, the line ${LINE}: a 12-words join asks level 0 (${JSON.stringify(under)})`);
+    addJoins('198.51.100.200', 1, new Date(t0 - 3600_000), 'words');
+    const t1 = t0 + 61_000; // past the minute the count is kept for
+    const at = doorLevel('words', freshHash, t1);
+    assert(newMembersToday(t1) === LINE && at.level === 3 && at.nodeBusy && at.networkSteps === 0 && at.nodeSteps === 0,
+        `the ${LINE}th new member of the day: a 12-words join from an address with no joins asks level 3, not the top (${JSON.stringify(at)})`);
+    assert(doorLevel('sign-in', freshHash, t1).level === null, 'the sign-in door is unchanged: no work at ordinary rates');
+    assert(doorCeilingReached('words', freshHash, t1) === null, 'and nobody is refused for it: no ceiling is reached');
+    const removedPk = (db.prepare('SELECT member_pubkey FROM open_joins WHERE ip_hash = ?').get(hashOf('198.51.100.5')) as any).member_pubkey as string;
+    const removedOnBusyDay = noteRemovedNewcomer(removedPk, t1) && doorLevel('words', hashOf('198.51.100.5'), t1);
+    assert(!!removedOnBusyDay && removedOnBusyDay.level === N.removedNetworkLevel && N.removedNetworkLevel > 3 && removedOnBusyDay.nodeBusy,
+        `on a busy day a level above 3 is kept: a removed newcomer's network still asks ${N.removedNetworkLevel} (${JSON.stringify(removedOnBusyDay)})`);
+    let busyAlerts: { kind: string; detail: string }[] = [];
+    for (let i = 0; i < 40 && busyAlerts.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        busyAlerts = getAlertsStatus().history.filter((e) => e.key === 'door.busy');
+    }
+    assert(busyAlerts.length === 1 && busyAlerts[0].kind === 'raised' && /^\d+ new members joined in the last 24 hours \(the line is \d+\)/.test(busyAlerts[0].detail),
+        `one alert to the owners when it rises, counts only (${JSON.stringify(busyAlerts)})`);
+    const stays = doorLevel('words', freshHash, t0 + 31 * MIN);
+    assert(newMembersToday(t0 + 31 * MIN) === LINE - 1 && stays.level === 3 && stays.nodeBusy,
+        `at the line less one (${LINE - 1}) it stays busy: level 3 (${JSON.stringify(stays)})`);
+    const atFallLine = doorLevel('words', freshHash, t0 + 61 * MIN);
+    assert(newMembersToday(t0 + 61 * MIN) === 36 && atFallLine.level === 3 && atFallLine.nodeBusy,
+        `at 36, 90% of the line, still busy (${JSON.stringify(atFallLine)})`);
+    const fell = doorLevel('words', freshHash, t0 + 91 * MIN);
+    assert(newMembersToday(t0 + 91 * MIN) === 35 && fell.level === 0 && !fell.nodeBusy,
+        `under 90% of the line (35) it falls: level 0 again (${JSON.stringify(fell)})`);
+    console.log = realLog;
+    assert(logged.length === 2 && logged[0].includes('Sign-ups are busy') && logged[0].includes(`${LINE} new members`) && logged[1].includes('back to usual') && logged[1].includes('35 new members'),
+        `one line when it rises and one when it falls, counts only (${JSON.stringify(logged)})`);
+    process.env[DOOR_BUSY_ENV] = '0';
+    _resetDoorBusyForTests();
+    const off = doorLevel('words', freshHash, t1);
+    assert(off.level === 0 && !off.nodeBusy, `${DOOR_BUSY_ENV}=0 turns it off: the same day asks level 0 (${JSON.stringify(off)})`);
+    // Through the real middleware, on the real clock: the line set at today's count, then one above it.
+    const newToday = (() => { _resetDoorBusyForTests(); return newMembersToday(); })();
+    process.env[DOOR_BUSY_ENV] = String(newToday);
+    _resetDoorBusyForTests();
+    const busyAsk = await askWork('words', '198.51.100.250');
+    process.env[DOOR_BUSY_ENV] = String(newToday + 1);
+    _resetDoorBusyForTests();
+    const quietAsk = await askWork('words', '198.51.100.251');
+    assert(busyAsk.status === 200 && busyAsk.level === 3 && quietAsk.status === 200 && quietAsk.level === 0,
+        `POST /api/join/work: 200 at level 3 with ${newToday} new members today and the line at ${newToday}; 200 at level 0 with the line at ${newToday + 1} (${busyAsk.status}/${busyAsk.level}, ${quietAsk.status}/${quietAsk.level})`);
+    process.env[DOOR_BUSY_ENV] = '0';
+    _resetDoorBusyForTests();
+
+    // ── 10. a day that hovers at the line (the deciding review of #1950, N1) ─────────────────────
+    console.log('\n── 10. a steady 300 a day for 3 days, on a fake clock: the line rises once or twice, not with every crossing ──');
+    process.env[DOOR_BUSY_ENV] = '300';
+    _resetDoorBusyForTests();
+    _resetWordsJoinsForTests();
+    // Seven days on, so no row above is in any of its days. Arrivals at random (exponential gaps, a seeded generator so
+    // the run is the same every time), each from its own address; a day to fill the window, then one 12-words ask a minute
+    // for 3 days, 4,320 asks.
+    const s0 = Date.now() + 7 * 24 * 3600_000;
+    let seed = 1950;
+    const random = () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+    const MEAN_GAP_MS = 24 * 3600_000 / 300;
+    const gap = () => -Math.log(1 - random()) * MEAN_GAP_MS;
+    let nextArrival = s0 + gap();
+    let arrivals = 0, asks = 0, rises = 0, falls = 0, oldRises = 0, at3 = 0, at0 = 0;
+    let wasBusy = false, oldOn = false;
+    for (let m = 0; m < 4 * 24 * 60; m++) {
+        const t = s0 + m * MIN;
+        for (; nextArrival <= t; nextArrival += gap(), arrivals++) {
+            addJoins(`10.${(arrivals >> 16) & 255}.${(arrivals >> 8) & 255}.${arrivals & 255}`, 1, new Date(nextArrival), 'words');
+        }
+        if (m < 24 * 60) continue;
+        const asked = doorLevel('words', freshHash, t);
+        const count = newMembersToday(t);
+        asks++;
+        if (asked.nodeBusy && !wasBusy) rises++;
+        if (!asked.nodeBusy && wasBusy) falls++;
+        wasBusy = asked.nodeBusy;
+        if (asked.level === 3) at3++;
+        if (asked.level === 0) at0++;
+        // The rule before this fix, on the same counts: busy at the line, back to usual under it.
+        if (count >= 300 && !oldOn) oldRises++;
+        oldOn = count >= 300;
+    }
+    assert(asks === 4320 && rises >= 1 && rises <= 2 && falls <= rises && oldRises > rises,
+        `${arrivals} arrivals, ${asks} asks: the line rose ${rises} times and fell ${falls} (the rule before, on the same counts: ${oldRises} rises); ${at3} asks at level 3, ${at0} at level 0`);
+    process.env[DOOR_BUSY_ENV] = '0';
+    _resetDoorBusyForTests();
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

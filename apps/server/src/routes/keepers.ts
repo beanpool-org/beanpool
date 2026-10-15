@@ -283,7 +283,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         if (!owner) return unauthenticated(ctx);
         // Rate-limited even though it is signed: issuing is cheap but unbounded issuing grows the
         // in-memory nonce map, and the sweep that bounds it is throttled to once a minute.
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         ctx.status = 200;
         ctx.body = {
@@ -349,7 +349,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
         // Rate-limited because this reaches the provider's JWKS and runs an scrypt on success.
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const body = (ctx as any).requestBody || {};
         let shares: KeeperShareInput[];

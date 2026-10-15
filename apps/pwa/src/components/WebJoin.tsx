@@ -1669,7 +1669,9 @@ export function WebJoin({
                             {showWords && (
                                 // As the Safety Backup step lays them out: as many columns as whole words fit (one on a
                                 // 320px phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
-                                <ol id={wordsId} data-testid="join-taken-words" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                // The words are English in every language: the browser's page translation may not rewrite
+                                // them (translate="no" + notranslate; #1947 confirmation N-B).
+                                <ol id={wordsId} data-testid="join-taken-words" translate="no" className="notranslate" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
                                     listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                     gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                 }}>

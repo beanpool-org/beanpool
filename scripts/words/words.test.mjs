@@ -96,7 +96,8 @@ test('the repository passes words:check and is at or under the words:lint baseli
     const extracted = extractRepo(ROOT);
     const { problems, catalogCount } = await checkRepo({ extracted });
     assert.deepEqual(problems, []);
-    assert.equal(catalogCount, 16);
+    // native and server: es, fr, pt, ru (4 + 4); the web app and core: all 24 languages but English (S2: 24 + 24).
+    assert.equal(catalogCount, 56);
     const baseline = JSON.parse(fs.readFileSync(path.join(ROOT, BASELINE), 'utf8')).counts;
     assert.deepEqual(compareToBaseline(lintCounts(extracted), baseline).rises, []);
     // Every package is scanned (an empty row would mean a moved folder silently dropped out of the count).

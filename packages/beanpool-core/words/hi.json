@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "language": "hi",
+    "name": "Hindi",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "अभी-अभी",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} दिन पहले",
+    "other": "{n} दिन पहले"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} घंटा पहले",
+    "other": "{n} घंटे पहले"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} मिनट पहले",
+    "other": "{n} मिनट पहले"
+  }
+}

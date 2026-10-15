@@ -32,7 +32,8 @@ import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
-import { createEventFromBody } from './event-post.js';
+import { createEventFromBody, eventTimeAnswer } from './event-post.js';
+import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
@@ -686,8 +687,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
         const underDailyPosts = () => assertMayPostToday(authorPublicKey);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
+        const timeOut: EventTimeOut = {};
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
@@ -712,7 +714,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Synchronize Daily Pulse marketplace gate (< 2 threshold)
         syncPulseMarketplaceGate();
 
-        ctx.body = { success: true, post };
+        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
@@ -807,13 +809,14 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
-        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor);
+        const timeOut: EventTimeOut = {};
+        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };
             return;
         }
-        ctx.body = { success: true, post };
+        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.

@@ -294,6 +294,14 @@ CREATE TABLE IF NOT EXISTS posts (
     event_private_note TEXT,
     event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled')),
     event_conversation_id TEXT,
+    -- Event times (DESIGN-event-times §2): the clock the host typed, "YYYY-MM-DDTHH:MM", in event_tz (a canonical IANA id).
+    -- The node turns the pair into event_start_at/event_end_at. NULL on an event from before them.
+    event_start_local TEXT,
+    event_end_local TEXT,
+    event_tz TEXT,
+    -- 1 for an online event: no pin (lat/lng NULL). Its join link is shown, like the private note, to the host and Going only.
+    event_online INTEGER,
+    event_link TEXT,
     -- Moderation (global profile G3, engine/auto-moderation.ts). On every node, NULL where unused.
     -- hidden_by_reports_at: enough established members reported it, so it is out of every listing and search for
     -- everyone but its author and the moderators until a moderator looks. Not a removal: active/status are untouched.

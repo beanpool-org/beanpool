@@ -94,6 +94,16 @@ const series = {
     ],
 };
 const hostView = { ...series, eventRsvps: [] };
+// The node's answer once the current 15 Oct is cancelled: the event rolls past the cancelled 22 Oct to 29 Oct, and the node
+// lists both cancelled dates it has passed first, each with its end, until then (confirmation 2 of #1993, NB2).
+const rolledView = {
+    ...hostView, eventStartLocal: '2027-10-29T18:50', eventEndLocal: '2027-10-29T20:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z',
+    eventNextDates: [
+        { date: '2027-10-15', startLocal: '2027-10-15T18:50', startAt: '2027-10-15T07:50:00.000Z', endAt: '2027-10-15T09:50:00.000Z', cancelled: true },
+        { date: '2027-10-22', startLocal: '2027-10-22T18:50', startAt: '2027-10-22T07:50:00.000Z', endAt: '2027-10-22T09:50:00.000Z', cancelled: true },
+        { date: '2027-10-29', startLocal: '2027-10-29T18:50', startAt: '2027-10-29T07:50:00.000Z', endAt: '2027-10-29T09:50:00.000Z', cancelled: false },
+    ],
+};
 /** Every control's accessible name starts with the words it shows (WCAG 2.5.3, label in name). */
 const expectLabelInName = (els: HTMLElement[]) => {
     expect(els.length).toBeGreaterThan(0);
@@ -120,7 +130,7 @@ describe('the detail, drawn at 320 dp and 1.3×', () => {
     });
 
     it('the host cancels the current date: POST, then the line the node tells those going', async () => {
-        node.after = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventNextDates: hostView.eventNextDates.slice(2) };
+        node.after = rolledView;
         await draw(hostView);
         await click(byTestId('event-date-cancel')[0]);
         expect(alerts.at(-1)!.msg).toBe('Cancel Fri 15 Oct? Everyone going that day is told.');
@@ -143,34 +153,54 @@ describe('the detail, drawn at 320 dp and 1.3×', () => {
         expect(byTestId('event-date-restore')[0].getAttribute('aria-label')).toBe('Bring it back: Fri 22 Oct');
     });
 
-    it('the cancelled current date can be brought back until it ends: DELETE, then "… is back on" (review of #1993, N2)', async () => {
-        node.after = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
+    it('the cancelled current date can be brought back from the node\'s list: DELETE, then "… is back on" (review of #1993, N2)', async () => {
+        node.after = rolledView;
         await draw(hostView);
         await click(byTestId('event-date-cancel')[0]);
         await yes();
-        const back = byTestId('event-date-restore-current');
+        expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
+        // One Bring it back per date, on the list: the line only says what happened.
+        const back = byTestId('event-date-restore').filter(el => el.getAttribute('aria-label') === 'Bring it back: Fri 15 Oct');
         expect(back).toHaveLength(1);
+        expect(byTestId('event-date-restore-current')).toHaveLength(0);
         expectLabelInName(back);
-        expect(back[0].getAttribute('aria-label')).toBe('Bring it back: Fri 15 Oct');
         node.after = hostView;
         await click(back[0]);
         expect(node.sent.at(-1)).toEqual(['ev-s', '2027-10-15', false]);
         expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is back on');
-        expect(byTestId('event-date-restore-current')).toHaveLength(0);
+        expect(byTestId('event-date-restore').map(el => el.getAttribute('aria-label'))).toEqual(['Bring it back: Fri 22 Oct']);
     });
 
-    it('once the cancelled current date has ended, its line has no Bring it back', async () => {
-        const end = Date.parse(hostView.eventEndAt);
+    it('after a reload Bring it back is still there, from the node\'s list alone (confirmation 2 of #1993, NB2)', async () => {
+        await draw(rolledView);
+        expect(byTestId('event-next-date').map(d => d.textContent)).toEqual([
+            'Fri 15 OctCancelledBring it back', 'Fri 22 OctCancelledBring it back', 'Fri 29 OctCancel this dateChange this date only',
+        ]);
+        node.after = hostView;
+        await click(byTestId('event-date-restore')[0]);
+        expect(node.sent).toEqual([['ev-s', '2027-10-15', false]]);
+        expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is back on');
+    });
+
+    it('a member sees the passed cancelled date marked, with no control', async () => {
+        me.key = 'me'.repeat(32);
+        await draw({ ...rolledView, eventRsvps: undefined });
+        expect(byTestId('event-next-date').map(d => d.textContent)).toEqual(['Fri 15 OctCancelled', 'Fri 22 OctCancelled', 'Fri 29 Oct']);
+        expect(byTestId('event-date-restore')).toHaveLength(0);
+    });
+
+    it('a passed cancelled date leaves the list at its end; the line stays', async () => {
+        const end = Date.parse(rolledView.eventNextDates[0].endAt);
         const now = vi.spyOn(Date, 'now').mockReturnValue(end - 200);
         try {
-            node.after = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventNextDates: hostView.eventNextDates.slice(2) };
+            node.after = rolledView;
             await draw(hostView);
             await click(byTestId('event-date-cancel')[0]);
             await yes();
-            expect(byTestId('event-date-restore-current')).toHaveLength(1);
+            expect(byTestId('event-date-restore')).toHaveLength(2);
             now.mockReturnValue(end + 1000);
             await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
-            expect(byTestId('event-date-restore-current')).toHaveLength(0);
+            expect(byTestId('event-next-date').map(d => (d.textContent ?? '').slice(0, 10))).toEqual(['Fri 22 Oct', 'Fri 29 Oct']);
             expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
         } finally {
             now.mockRestore();

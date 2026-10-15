@@ -33,12 +33,14 @@
  *
  * ── Never twice ───────────────────────────────────────────────────────────────────────────────────────
  *
- * `event_reminders_sent` is keyed on exactly (post_id, member_pubkey, offset_min), and nothing about
+ * `event_reminders_sent` is keyed on exactly (post_id, member_pubkey, offset_min, occurrence_at), and nothing about
  * "already sent" lives in this process — which is what makes a restart a non-event. `dueEventReminders`
  * drops anything the table already holds, and the sweep then CLAIMS each one with `INSERT OR IGNORE` and
  * sends only if the insert changed a row. The claim is not the ordinary gate (the filter is): it is the
  * atomic one, for the case the filter cannot see — two processes on the same `state.db`. One push per
- * (event, member, offset), for the life of the event.
+ * (event, member, offset), for the life of each date: a repeating event reminds its regulars once per date (DESIGN-event-
+ * times §8), and only the members whose RSVP is for the date it has now (engine/event-series-roll.ts RSVP_IS_CURRENT).
+ * An edit that moves the date moves its marks with it (moveOccurrence), so a time change sends nothing twice.
  */
 
 import { postPhotoUrl } from '@beanpool/engine';
@@ -46,6 +48,7 @@ import { eventPlaceTimeText, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 import { postInSightSql } from './post-sight.js';
+import { RSVP_IS_CURRENT } from './event-series-roll.js';
 
 /** The five offsets the picker offers, in minutes before the start. Nothing else is storable. */
 export const EVENT_REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
@@ -169,7 +172,8 @@ export function setEventReminderOffsets(
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
           WHERE post_id = ? AND member_pubkey = ?
             AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)
-            AND EXISTS (SELECT 1 FROM posts p WHERE p.id = event_rsvps.post_id AND ${postInSightSql('p', 'event_rsvps.member_pubkey')})`
+            AND EXISTS (SELECT 1 FROM posts p WHERE p.id = event_rsvps.post_id AND ${RSVP_IS_CURRENT('event_rsvps', 'p')}
+                        AND ${postInSightSql('p', 'event_rsvps.member_pubkey')})`
     ).run(stored, postId, memberPubkey);
     if (res.changes === 0) throw new Error(NO_RSVP_MESSAGE);
     return { offsets };
@@ -192,12 +196,21 @@ export interface MyEvent {
     rsvp: 'going' | 'interested';
     photo: string | null;
     reminderOffsets: number[] | null;
+    /**
+     * The host's clock and its zone (DESIGN-event-times §4), so the list reads as the event's card does ("20:50–22:50" /
+     * "Lagos time · 14:50 your time"), and `online` for an event with no place. Absent on an event from before them.
+     */
+    startLocal?: string;
+    endLocal?: string;
+    tz?: string;
+    online?: true;
 }
 
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
         SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
+               p.event_start_local, p.event_end_local, p.event_tz, p.event_online,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -212,6 +225,8 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
            AND COALESCE(p.event_state, '') != 'cancelled'
            AND p.event_end_at > ?
            AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
+           -- For the date the event has now: a regular's RSVP for last week's date is not one for this week's.
+           AND ${RSVP_IS_CURRENT('r', 'p')}
            -- A group's event after its member was removed, left or was banned: the RSVP is kept, the event is gone from
            -- their feed (getPosts), and from here (engine/event-thread.ts canReadEventThread).
            AND ${postInSightSql('p', 'r.member_pubkey')}
@@ -229,6 +244,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
             ? null
             : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at, r.audience_scope),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
+        ...(r.event_start_local && r.event_tz ? { startLocal: r.event_start_local, tz: r.event_tz } : {}),
+        ...(r.event_end_local && r.event_tz ? { endLocal: r.event_end_local } : {}),
+        ...(r.event_online === 1 ? { online: true as const } : {}),
     }));
 }
 
@@ -280,6 +298,8 @@ export interface DueReminder {
     startAt: string;
     memberPubkey: string;
     offsetMin: number;
+    /** The date it is for: the event's start (a repeating event's current date), part of the sent mark's key. */
+    occurrenceAt: string;
     /** In person, with a stored clock: "Sat 20:50 Lagos time". Null online or for an event from before zones. */
     placeTime: string | null;
 }
@@ -300,7 +320,7 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
     let alreadySent: { get: (...params: any[]) => unknown };
     try {
         alreadySent = db.prepare(
-            `SELECT 1 FROM event_reminders_sent WHERE post_id = ? AND member_pubkey = ? AND offset_min = ?`
+            `SELECT 1 FROM event_reminders_sent WHERE post_id = ? AND member_pubkey = ? AND offset_min = ? AND occurrence_at = ?`
         );
         rows = db.prepare(`
             SELECT p.id, p.title, p.event_start_at, p.event_start_local, p.event_tz, p.event_online,
@@ -314,6 +334,8 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                AND p.hidden_by_reports_at IS NULL
                AND p.event_start_at > ?
                AND p.event_start_at <= ?
+               -- Only the RSVPs for the date the event has now (a repeating event's next date starts at nobody going).
+               AND ${RSVP_IS_CURRENT('r', 'p')}
                -- A visitor's row has no RSVP here (setEventReminderOffsets), whatever row it holds from before visitors
                -- were refused one: its push token gets what is sent to it, its messages and Beans.
                AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = r.member_pubkey AND m.is_visitor = 1)
@@ -347,13 +369,14 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
             if (dueMs > nowMs) continue;                              // not yet
             if (nowMs - dueMs > EVENT_REMINDER_GRACE_MS) continue;    // gone by; never sent late
             if (Number.isFinite(armedMs) && dueMs < armedMs) continue; // already past when they chose it
-            if (alreadySent.get(r.id, r.member_pubkey, offsetMin)) continue;
+            if (alreadySent.get(r.id, r.member_pubkey, offsetMin, r.event_start_at)) continue;
             due.push({
                 postId: r.id,
                 title: r.title,
                 startAt: r.event_start_at,
                 memberPubkey: r.member_pubkey,
                 offsetMin,
+                occurrenceAt: r.event_start_at,
                 placeTime: r.event_online === 1 ? null : eventPlaceTimeText(r.event_start_local, r.event_tz, r.event_start_at),
             });
         }
@@ -380,8 +403,8 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
     if (due.length === 0) return 0;
 
     const claim = db.prepare(
-        `INSERT OR IGNORE INTO event_reminders_sent (post_id, member_pubkey, offset_min, sent_at)
-         VALUES (?, ?, ?, ?)`
+        `INSERT OR IGNORE INTO event_reminders_sent (post_id, member_pubkey, offset_min, occurrence_at, sent_at)
+         VALUES (?, ?, ?, ?, ?)`
     );
     const sentAt = new Date(nowMs).toISOString();
 
@@ -391,7 +414,7 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
     for (const d of due) {
         // The due list already excludes everything marked. This is the atomic re-check on top of it:
         // losing the insert means another process claimed the same reminder between the read and here.
-        if (claim.run(d.postId, d.memberPubkey, d.offsetMin, sentAt).changes === 0) continue;
+        if (claim.run(d.postId, d.memberPubkey, d.offsetMin, d.occurrenceAt, sentAt).changes === 0) continue;
         const key = `${d.postId}|${d.offsetMin}`;
         if (!batches.has(key)) {
             batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, targets: [] });

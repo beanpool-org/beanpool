@@ -17,7 +17,7 @@ import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { featureModeFor, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
+import { featureModeFor, normaliseLang, type FeatureMode, type Lang, type ShowcaseFeature } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -83,6 +83,11 @@ export interface NodeFeatures {
      * alone (the #1946 review, finding 1, measured).
      */
     onlineEvents?: boolean;
+    /**
+     * Anyone can join in a minute (the global node; DESIGN-global-member-privacy-fable.md §1): a new event's "Only people I
+     * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
+     */
+    openMembership?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -91,7 +96,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership',
 ];
 
 export interface NodeProfile {
@@ -104,6 +109,11 @@ export interface NodeProfile {
      * names an address an app may open for a stranger. Absent: beanpool.org's (utils/start-community.ts runANodeUrl).
      */
     startCommunityUrl?: string;
+    /**
+     * The community's default language (`language` in its info; design §1, Marty's call M5), when it is one of the 25:
+     * what this phone writes in when the member has chosen none and the phone's own language is not one of them.
+     */
+    language?: Lang;
 }
 
 /** The server's own rule (config/start-community.ts cleanStartCommunityUrl): https, a host, no user name or password, at most 300 characters, no spaces. */
@@ -133,7 +143,7 @@ function cacheKey(url: string): string {
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { profile?: unknown; features?: unknown; startCommunityUrl?: unknown };
+    const b = body as { profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown };
     const features: NodeFeatures = {};
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
@@ -147,7 +157,12 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         }
     }
     const startCommunityUrl = openableStartUrl(b.startCommunityUrl);
-    return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(), ...(startCommunityUrl ? { startCommunityUrl } : {}) };
+    const language = typeof b.language === 'string' ? normaliseLang(b.language) : null;
+    return {
+        profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(),
+        ...(startCommunityUrl ? { startCommunityUrl } : {}),
+        ...(language ? { language } : {}),
+    };
 }
 
 async function readCache(): Promise<Record<string, NodeProfile>> {

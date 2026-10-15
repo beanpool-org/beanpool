@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
+import { sendGroupInvitations } from '../utils/group-invite-send';
+import { t } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { lookUpMembers, searchPath } from '../utils/members-lookup';
 import { pickerEmpty } from '../utils/community-list-note';
@@ -138,19 +140,16 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         setSending(true);
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
         const keys = [...picked];
-        // Four at a time, not one round trip after another: ten invitations on a slow link took ten waits.
-        const failed: string[] = [];
-        for (let i = 0; i < keys.length; i += 4) {
-            const batch = keys.slice(i, i + 4);
-            const results = await Promise.allSettled(batch.map(pk => inviteGroupMemberApi(groupId, pk)));
-            batch.forEach((pk, j) => { if (results[j].status === 'rejected') failed.push(pk); });
-        }
+        const { failed, refusal } = await sendGroupInvitations(keys, pk => inviteGroupMemberApi(groupId, pk));
         setSending(false);
         const sent = keys.length - failed.length;
         if (sent > 0) hapticSuccess();
         if (failed.length) {
             const names = (members || []).filter(m => failed.includes(m.publicKey)).map(m => m.callsign).join(', ');
-            Alert.alert('Some invitations were not sent', `${sent} sent. Not sent: ${names}. Try again when you have signal.`);
+            // A refusal is said in the node's words (it won't pass when the signal comes back); anything else is the signal.
+            Alert.alert(t('Some invitations were not sent'), refusal
+                ? t('{sent} sent. Not sent: {names}. {reason}', { sent: String(sent), names, reason: refusal })
+                : t('{sent} sent. Not sent: {names}. Try again when you have signal.', { sent: String(sent), names }));
         }
         onInvited?.(sent);
         if (!failed.length) onClose();

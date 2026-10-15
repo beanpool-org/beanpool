@@ -95,7 +95,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
-import { chargeNearestPeopleRead } from '../nearest-people-budget.js';
+import { chargeNearestPeopleRead, chargePeopleSearch } from '../nearest-people-budget.js';
 import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
@@ -360,7 +360,7 @@ router.get('/api/local/community-info', async (ctx) => {
 const CLIENT_FUNNEL_EVENTS = ['protection_shown', 'protection_choice', 'guide_complete'] as const;
 
 router.post('/api/funnel-event', async (ctx) => {
-    if (!rateLimit(ctx)) return;
+    if (!rateLimit(ctx, 'funnel-event')) return;
     const { event, variant } = (ctx as any).requestBody || {};
 
     // Allowlisted rather than passed through. The counted events include the invite
@@ -2311,8 +2311,8 @@ router.post('/api/friends/remove', async (ctx) => {
 
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
-    if (!rateLimit(ctx)) return; // SRV-4: throttle callsign enumeration
-    const callsign = ctx.params.callsign.trim().toLowerCase();
+    if (!rateLimit(ctx, 'names')) return; // SRV-4: throttle callsign enumeration
+    const callsign = ctx.params.callsign.trim(); // folded by the one name rule (engine names.ts), not lower-cased first
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
     // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
@@ -2332,11 +2332,12 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    // Throttle enumeration, same as recovery lookup. A key joining through the open door, signing its own name check,
-    // counts against the door's limiter instead (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the
-    // auth limiter's 15 a minute per address on names alone.
+    // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
+    // joining through the open door, signing its own name check, counts against the door's limiter instead
+    // (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the auth limiter's 15 a minute per address on
+    // names alone.
     const joining = joiningAtOpenDoor(ctx);
-    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx))) return;
+    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx, 'names'))) return;
     const raw = (ctx.params.callsign || '').trim();
     const exclude = (ctx.query.exclude as string | undefined) || undefined;
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
@@ -2428,7 +2429,20 @@ function answerMembersOnDemand(ctx: any, point: Point | null): void {
         const n = wholeUpTo(limit, MEMBERS_SEARCH_MAX, MEMBERS_SEARCH_MAX);
         if (typed.length < MEMBERS_SEARCH_MIN_CHARS) return refuse(400, `q is at least ${MEMBERS_SEARCH_MIN_CHARS} characters of a name`);
         if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_SEARCH_MAX}`);
-        const rows = MEMBER_KEY_ANY_CASE.test(typed)
+        const byKey = MEMBER_KEY_ANY_CASE.test(typed);
+        // Where anyone can join in a minute, a day's budget of searches by name per member too (READ_LIMITS
+        // .peopleSearchesPerDay), so two letters after two letters never walks the whole community. A key is one member,
+        // never counted. Elsewhere none.
+        if (!byKey && getProfileSwitches().openMembership) {
+            const spent = chargePeopleSearch(ctx.state.actor as string);
+            if (spent) {
+                ctx.status = 429;
+                ctx.set('Retry-After', String(spent.retryAfterSec));
+                ctx.body = spent.body;
+                return;
+            }
+        }
+        const rows = byKey
             ? getMemberDirectoryRowsByKeys([typed.toLowerCase()])
             : searchMemberDirectoryRows(typed, n);
         body = directoryMembers(directoryPeople(rows));

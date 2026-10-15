@@ -296,7 +296,8 @@ describe('request() with no IndexedDB', () => {
         const calls = stubNode(GLOBAL);
         await expect(request('GET', '/api/community/info')).resolves.toMatchObject({ profile: 'global' });
         expect(calls).toHaveLength(1);
-        expect(Object.keys(calls[0].headers).map(k => k.toLowerCase())).toEqual(['content-type']);
+        // No signature header: only the body's type and the member's language (lib/language.ts), which signs nothing.
+        expect(Object.keys(calls[0].headers).map(k => k.toLowerCase())).toEqual(['content-type', 'x-language']);
     });
 
     it('refuses a write that needs a key, plainly, and sends nothing for the key', async () => {

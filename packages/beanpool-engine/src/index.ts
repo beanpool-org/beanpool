@@ -20,6 +20,7 @@ export * from './sync.js';
 export * from './archetypes.js';
 export * from './groups.js';
 export * from './geo.js';
+export * from './names.js';
 export * from './like.js';
 
 
@@ -29,3 +30,4 @@ export * from './like.js';
 
 export * from './known-floor.js';
 export * from './event-time.js';
+export * from './event-series.js';

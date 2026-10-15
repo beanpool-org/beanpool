@@ -107,6 +107,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind, isKnownDmConversation, leaveGroupApi } from '../db';
+import { dmConversationsSeenStoreKey } from '../storage-keys';
 import {
     unlockGroupHistoryWithWords, checkScannedNewPhone, confirmScannedNewPhone, newPhoneHandOvers, newPhoneConfirmedNotes,
 } from '../db';
@@ -165,6 +166,8 @@ const writes = (from: number) => received.slice(from).filter((r) => r.method ===
 /** This phone held a key of `g`: the highest epoch it verified is 2 (group_chat_key_state, kept per identity). */
 const held = (g: string) => store.keyState.set(`${who.me.publicKey}/${g}`, { highest: 2, after: 2 });
 const seen = async (g: string) => (await groupKeyringFor(g)).seenLocked();
+/** The DM guard's list for this account in the community file open (§3.4 amendment 7 §3: one per file). */
+const DM_SEEN = () => dmConversationsSeenStoreKey(who.me.publicKey, store.openFile);
 const tryIt = async (f: () => Promise<unknown>) => { try { await f(); return 'went'; } catch (e: any) { return `refused: ${e?.message}`; } };
 
 describe('group chats: a held group is locked whatever its row says', () => {
@@ -372,7 +375,7 @@ describe('group chats: a key store that can\'t be read never counts as "never he
         } finally {
             store.failGroupReads = false;
         }
-        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        const remembered = (JSON.parse(store.asyncStore.get(DM_SEEN()) ?? '[]') as string[]).includes(g);
         const knownDm = await isKnownDmConversation(g);
         const heldAfter = await isHeldGroupChat(g);
         const route = chatRouteView({ held: heldAfter, knownDm, isEventChat: false, threadKind: null });
@@ -391,7 +394,7 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         forgetGroupKeys(); chatAnswer = 'unlocked';
         const g = groups[14];
         held(g);
-        store.asyncStore.set('beanpool_dm_conversations_seen', JSON.stringify([g]));
+        store.asyncStore.set(DM_SEEN(), JSON.stringify([g]));
         store.conversations.set(g, { id: g, type: 'dm', created_by: null });
         partsOf(g).add(who.me.publicKey); partsOf(g).add(OTHER);
         const from = received.length;
@@ -400,7 +403,7 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
             a = await tryIt(() => insertMessage(g, who.me.publicKey, 'words typed where the group was'));
             await waitFor(() => writes(from).length > 0, 300);
         } finally {
-            store.asyncStore.delete('beanpool_dm_conversations_seen');
+            store.asyncStore.delete(DM_SEEN());
         }
         console.log(`held + known DM: ${a}; writes ${JSON.stringify(writes(from))}`);
         expect(a).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
@@ -414,7 +417,7 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         store.nodeType.set(g, 'dm');
         const from = received.length;
         const a = await tryIt(() => sendImageMessage(g, 'data:image/jpeg;base64,/9j/AAAA', 'a caption'));
-        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        const remembered = (JSON.parse(store.asyncStore.get(DM_SEEN()) ?? '[]') as string[]).includes(g);
         console.log(`node says dm: photo ${a}; row ${store.conversations.get(g)?.type}; remembered as a DM ${remembered}`);
         expect(store.conversations.get(g)?.type).toBe('group_thread');
         expect(remembered).toBe(false);
@@ -428,7 +431,7 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         store.nodeType.set(g, 'dm');
         const kind = await getConversationKind(g, { askNode: true });
         const row = store.conversations.get(g)?.type ?? null;
-        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        const remembered = (JSON.parse(store.asyncStore.get(DM_SEEN()) ?? '[]') as string[]).includes(g);
         console.log(`node says dm of a held group, asked by the route: kind ${kind}; row ${row}; remembered as a DM ${remembered}`);
         expect({ kind, row, remembered }).toEqual({ kind: 'group_thread', row: 'group_thread', remembered: false });
     });
@@ -613,7 +616,7 @@ describe('group chats: the photo guard and an edit with the key on the phone (co
         const upper = await groupKeyringFor(G);
         const highestUpper = await upper.highestEpoch();
         const kind = await getConversationKind(G, { askNode: true });
-        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).some((x) => x.toLowerCase() === g);
+        const remembered = (JSON.parse(store.asyncStore.get(DM_SEEN()) ?? '[]') as string[]).some((x) => x.toLowerCase() === g);
         console.log(`capitals: one keyring ${upper === lower}; highest under G ${highestUpper}; kind ${kind}; row ${store.conversations.get(G)?.type}; remembered as a DM ${remembered}`);
         expect(upper).toBe(lower);
         expect(highestUpper).toBe(2);

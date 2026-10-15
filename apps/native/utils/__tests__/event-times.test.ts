@@ -184,7 +184,7 @@ const now = new Date(2026, 9, 1, 8, 0);
 function form(over: Partial<EventFormInput> = {}): EventFormInput {
     return {
         title: 'Working bee', description: '', start: new Date(2026, 9, 17, 20, 50), end: new Date(2026, 9, 17, 22, 50),
-        placeName: 'Bindarrabi Hall', lat: 6.45, lng: 3.39, privateNote: '', audienceGroupId: null, authorPubkey: 'me', ...over,
+        placeName: 'Bindarrabi Hall', lat: 6.45, lng: 3.39, privateNote: '', audienceGroupId: null, authorPubkey: 'me', hostLetsIn: false, ...over,
     };
 }
 
@@ -315,6 +315,13 @@ describe('fix round 1: where the join link would be (finding 7, the web\'s sente
         expect(eventLinkWaitWords('interested', false)).toBe('The link to join shows here once you tap Going.');
         expect(eventLinkWaitWords('going', false)).toBe('The link shows when you have signal.');
         expect(eventLinkWaitWords('going', true)).toBeNull();
+    });
+    it('where the host lets people in (#1953), the link waits for them like the note: never "tap Going" alone', () => {
+        expect(eventLinkWaitWords(null, true, 'before')).toBe('The link to join shows here once the host lets you in.');
+        expect(eventLinkWaitWords('going', true, 'waiting')).toBe('The link to join shows here once the host lets you in.');
+        expect(eventLinkWaitWords('going', true, 'in')).toBeNull();
+        expect(eventLinkWaitWords(null, true, 'open')).toBe('The link to join shows here once you tap Going.');
+        expect(String(EVENT_TIME_WORDS.linkHintLetIn)).toBe('Link to join · only the people you let in see it');
     });
 });
 

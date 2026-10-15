@@ -166,6 +166,7 @@ export const TABLES: Record<string, TableEntry> = {
             board_standing_changed_at`),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
+            callsign_fold: { reason: "each server makes its own from callsign: db.ts migrateCallsignFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },
         },
     },
     // Holiday, notification settings and reminder defaults, in each member's row (`preferences`, G2b): every writer stamps
@@ -201,7 +202,7 @@ export const TABLES: Record<string, TableEntry> = {
     // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state event_start_local event_end_local event_tz event_online event_link hidden_by_reports_at removed_by_moderator_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -309,7 +310,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',
-        columns: cols('post_id member_pubkey status signature reminder_offsets updated_at'),
+        columns: cols('post_id member_pubkey status signature reminder_offsets let_in_at let_in_by updated_at occurrence_at'),
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
@@ -469,7 +470,7 @@ export const TABLES: Record<string, TableEntry> = {
     group_key_epochs: plain('group_id epoch created_by reason subject_pubkey created_at key_commit members_digest wraps_digest sig stored_at stale_since updated_at'),
     group_key_wraps: plain('group_id epoch recipient_pubkey wrapper_pubkey eph_pub nonce wrapped sig created_at updated_at rejected_at'),
     // Every event reminder the main server sent, so one is never sent twice (engine/event-reminders.ts).
-    event_reminders_sent: plain('post_id member_pubkey offset_min sent_at updated_at'),
+    event_reminders_sent: plain('post_id member_pubkey offset_min occurrence_at sent_at updated_at'),
     // The activity list, ids included: a server that takes over numbers its next line after the last one it copied. Its
     // lines a month old go without tombstones, on each server (db/activity-feed-db.ts pruneOldActivity; the age rule).
     activity_feed: plain('id event_type actor_pubkey target_pubkey metadata created_at updated_at', { agedOut: { column: 'created_at', days: 30 } }),
@@ -576,6 +577,7 @@ export function isInternalTable(name: string, type: string): boolean {
 export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
     updated_at: { reason: 'the stamp itself' },
     last_active_at: { reason: 'travels only with another change of the row, by design' },
+    callsign_fold: { reason: "made from callsign on each server (db.ts migrateCallsignFold), so a change of callsign, which the trigger lists, carries it" },
     board_standing_changed_at: { reason: 'every change of standing moves updated_at in the same statement (paused and status are in the trigger; setHolidayMode stamps both), so a delta carries it; listed, the trigger would restamp a copied row' },
 };
 

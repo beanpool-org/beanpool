@@ -234,7 +234,8 @@ describe('the welcome screen', () => {
 
     it('draws the Explore button only inside the offer, and nowhere else on the screen', () => {
         const [before, offer, after] = aroundOffer();
-        expect(offer).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>🌍 Explore BeanPool worldwide</);
+        // Through t() since S1, with a second line for a longer language (utils/__tests__/language-switch-render.test.ts).
+        expect(offer).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🌍 Explore BeanPool worldwide'\)\}</);
         for (const rest of [before, after]) {
             expect(rest).not.toMatch(/openGlobalDoor/);
             expect(rest).not.toMatch(/Explore BeanPool worldwide/);
@@ -248,7 +249,7 @@ describe('the welcome screen', () => {
         expect(before).not.toMatch(/Explore|worldwide|global community/i);
         expect(after).not.toMatch(/Explore|worldwide|global community/i);
         // What the screen says with no offer: the invite, and where to find one, as before the door existed.
-        expect(before).toMatch(/No invite yet\? Ask a friend on BeanPool, or find a community near you at\{' '\}/);
+        expect(before).toMatch(/No invite yet\? Ask a friend on BeanPool, or find a community near you at \{link\}\./);
         expect(before).toMatch(/openLink\('https:\/\/beanpool\.org'\)/);
     });
 

@@ -1,0 +1,46 @@
+{
+  "_meta": {
+    "language": "tr",
+    "name": "Turkish",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "fasulye",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "just now": "az önce",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} gün önce",
+    "other": "{n} gün önce"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} saat önce",
+    "other": "{n} saat önce"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} dakika önce",
+    "other": "{n} dakika önce"
+  },
+  "Roughly where are you?": "Yaklaşık olarak neredesin?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Bölgeni yaklaşık 10 km'lik bir alan olarak tutarız, tam konumunu asla. Diğer üyeler senin ne kadar uzakta olduğunu görür; oluşturduğun anket de bölgende gösterilir.",
+  "Use my location": "Konumumu kullan",
+  "Type a town or suburb": "Bir kasaba veya semt yaz",
+  "Skip for now": "Şimdilik atla",
+  "You can change or clear this any time in Settings → Your area.": "Bunu istediğin zaman Ayarlar → Bölgen bölümünden değiştirebilir veya temizleyebilirsin.",
+  "Your area": "Bölgen",
+  "Not set": "Ayarlanmadı",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Dünya çapındaki topluluk sana yakınındaki teklifleri gösterir: {km} km içindeki en yakın {max} ilan.",
+  "About 10 km around {place}": "{place} çevresinde yaklaşık 10 km",
+  "Find your town or suburb": "Kasabanı veya semtini bul",
+  "Town or suburb": "Kasaba veya semt",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Kasaba araması şu anda çalışmıyor. Bunun yerine konumumu kullan ya da şimdilik atla.",
+  "No matches. Try the name of a town or suburb nearby.": "Eşleşme yok. Yakındaki bir kasaba veya semt adını dene.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Yerler OpenStreetMap'ten gelir. Buraya yazdıkların OpenStreetMap'e gönderilir.",
+  "Choose {place}": "Seç: {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Bu topluluk, paylaşım yapmadan önce bir profil fotoğrafı ister. Sonradan profilinden ekleyebilirsin.",
+  "A picture is optional here. You can add one later from your profile.": "Burada fotoğraf eklemek isteğe bağlıdır. İstersen sonradan profilinden ekleyebilirsin."
+}

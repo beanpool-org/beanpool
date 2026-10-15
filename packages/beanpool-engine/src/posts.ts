@@ -14,9 +14,10 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlOf, tierForCredit } from '@beanpool/core';
-import { areaBox, boundingBox, roundToArea } from './geo.js';
+import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
+import { readRepeatRule, readRepeatSkips, upcoming, type EventRepeatRule } from './event-series.js';
 
 type Db = Database.Database;
 
@@ -47,6 +48,20 @@ export interface EventRsvpRecord {
     memberCallsign?: string;
     status: EventRsvpStatus;
     updatedAt: string;
+    /** When the host let them in, on an event whose host lets people in (eventHostLetsIn); null while they wait. */
+    letInAt?: string | null;
+}
+
+/** How many of a repeating event's dates a by-id read lists (DESIGN-event-times §4, "Next dates"). */
+export const EVENT_NEXT_DATES = 6;
+
+/** One of a repeating event's next dates, as the detail lists them; a cancelled one is marked, so its host can undo it. */
+export interface EventNextDate {
+    /** "YYYY-MM-DD" in the event's zone. */
+    date: string;
+    startLocal: string;
+    startAt: string;
+    cancelled: boolean;
 }
 
 export interface MarketplacePost {
@@ -118,8 +133,18 @@ export interface MarketplacePost {
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
-    /** Host and `going` only — omitted for every other reader (§2.3). */
+    /**
+     * The host and the people Going who may read it (mayReadEventPrivate): where the host lets people in, only those
+     * they have let in. Omitted for every other reader (§2.3).
+     */
     eventPrivateNote?: string;
+    /**
+     * "Host lets people in" (scratch/global-node/DESIGN-global-member-privacy-fable.md §2): Going is still one tap, and
+     * the note and the event chat open to a Going member once the host has let them in.
+     */
+    eventHostLetsIn?: boolean;
+    /** Where the host lets people in: whether the host has let this viewer in; null when they have no RSVP. */
+    myLetIn?: boolean | null;
     eventState?: EventState;
     /**
      * The clock the host typed, "YYYY-MM-DDTHH:MM", in `eventTz` (a canonical IANA id); the node made the instants above from
@@ -132,6 +157,20 @@ export interface MarketplacePost {
     eventOnline?: boolean;
     /** Where to join an online event. Host and `going` only, exactly like `eventPrivateNote`. */
     eventLink?: string;
+    /**
+     * A repeating event (DESIGN-event-times §8): its rule, its last date ("YYYY-MM-DD", absent = until cancelled) and its
+     * cancelled dates. The times above are its NEXT date, which the node moves on by itself. Absent on a one-off.
+     */
+    eventRepeat?: EventRepeatRule;
+    eventRepeatUntil?: string;
+    eventRepeatSkips?: string[];
+    /** A repeating event read by its id: its next dates, the current one first. */
+    eventNextDates?: EventNextDate[];
+    /**
+     * The viewer's RSVP when it is for one of the event's earlier dates ("You went on 16 Oct"): it no longer counts, and
+     * `myRsvp` is null for the date the event has now. Until the 30-day prune takes it.
+     */
+    myLastRsvp?: { status: EventRsvpStatus; occurrenceAt: string };
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
@@ -198,6 +237,11 @@ export interface PostFilter {
      */
     excludeEvents?: boolean;
     /**
+     * Online events only (DESIGN-event-times §9): events with no pin, which a read near a point never meets. Home's "Coming
+     * up" and a member's set on a node that syncs by area add them wherever the reader is (director amendment 2).
+     */
+    eventOnline?: boolean;
+    /**
      * The viewer is a moderator (an owner, admin or moderator of this node): posts hidden by reports stay in,
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
      */
@@ -227,6 +271,15 @@ export interface PostFilter {
      * place a post better than its area. Each post carries its area as `lat`/`lng`, and `distanceKm` in whole km.
      */
     coarse?: boolean;
+    /**
+     * Every place read as its neighbourhood (geo.ts neighbourhoodOf, about 1.1 km across both ways) but the ones the reader
+     * (`viewerPubkey`) may have exactly (exactPlacesFor): a member's read where anyone can join in a minute (the node's
+     * `openMembership`, scratch/global-node/DESIGN-global-member-privacy-fable.md §4). Inside the query as `coarse` is:
+     * the distance, the order, the radius and the paging of each other post are worked out from its neighbourhood, so no
+     * number of reads from different points places it better than that. Each such post carries its neighbourhood as
+     * `lat`/`lng` and `distanceKm` in whole km; the reader's own carry the place, as without it. `coarse` wins over it.
+     */
+    neighbourhood?: boolean;
     /**
      * The reader gets each post as guestPost gives it (a visitor on a node that shows them the listings but not the
      * people, apps/server routes/marketplace.ts). guestPost puts a neutral value in place of the author's name, face,
@@ -320,6 +373,116 @@ export function isEventHost(
         `).get(row.target_group_id, pubkey);
     }
     return false;
+}
+
+/**
+ * Who may read an event's private note and its chat (scratch/global-node/DESIGN-global-member-privacy-fable.md §2.4):
+ * the host, or someone Going — and, where the host lets people in, Going and let in. The one rule both readers use: the
+ * post read (getPosts) and the chat (apps/server engine/event-thread.ts canReadEventThread). Pure, from what the caller
+ * has already read; mayReadEventPrivate reads it for one member.
+ */
+export function eventPrivateOpenTo(
+    host: boolean,
+    rsvp: { status?: string | null; let_in_at?: string | null } | null | undefined,
+    hostLetsIn: boolean,
+): boolean {
+    if (host) return true;
+    if (rsvp?.status !== 'going') return false;
+    return !hostLetsIn || !!rsvp.let_in_at;
+}
+
+/** eventPrivateOpenTo for one member, reading their RSVP. Visibility (groups, reports, visitors) is the caller's. */
+export function mayReadEventPrivate(
+    db: Db,
+    row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null; event_host_lets_in?: number | null },
+    pubkey: string | undefined,
+): boolean {
+    if (!pubkey) return false;
+    if (isEventHost(db, row, pubkey)) return true;
+    let rsvp: { status: string; let_in_at: string | null } | undefined;
+    try {
+        rsvp = prepared(db, 'SELECT status, let_in_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?')
+            .get(row.id, pubkey) as { status: string; let_in_at: string | null } | undefined;
+    } catch {
+        return false; // table absent on an older schema
+    }
+    return eventPrivateOpenTo(false, rsvp, row.event_host_lets_in === 1);
+}
+
+/**
+ * The places a reader has exactly on a neighbourhood read (PostFilter.neighbourhood): every listing whose author is the
+ * reader or an enterprise they keep (whoever may edit it, so an edit never loads a rounded pin), and every event whose
+ * note they may read (mayReadEventPrivate: its host, or Going and let in where the host lets people in). Everyone else's
+ * places are read to their neighbourhood. Both the SQL and the rows read it, so the distance and the pin always agree.
+ * A visitor's row hosts nothing and is let in to nothing here (rowToPost's `viewerIsVisitor`).
+ */
+export interface ExactPlaces { authors: string[]; posts: string[] }
+export function exactPlacesFor(db: Db, viewer: string | undefined): ExactPlaces {
+    if (!viewer) return { authors: [], posts: [] };
+    if (isVisitorKey(db, viewer)) return { authors: [viewer], posts: [] };
+    const authors = [viewer, ...enterprisesKeptBy(db, viewer)];
+    const posts: string[] = [];
+    // Hosted as an active convenor of the event's group (isEventHost's third branch).
+    for (const r of prepared(db, `
+        SELECT p.id FROM group_members gm
+        JOIN members m ON m.public_key = gm.member_pubkey
+        JOIN posts p ON p.target_group_id = gm.group_id AND p.audience_scope = 'group' AND p.type = 'event'
+        WHERE gm.member_pubkey = ? AND gm.role = 'convenor' AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+    `).all(viewer) as Array<{ id: string }>) posts.push(r.id);
+    // Going, and let in where the host lets people in (eventPrivateOpenTo).
+    try {
+        for (const r of prepared(db, `
+            SELECT r.post_id AS id FROM event_rsvps r JOIN posts p ON p.id = r.post_id AND p.type = 'event'
+            WHERE r.member_pubkey = ? AND r.status = 'going' AND (p.event_host_lets_in IS NOT 1 OR COALESCE(r.let_in_at, '') != '')
+        `).all(viewer) as Array<{ id: string }>) posts.push(r.id);
+    } catch {
+        // No event_rsvps table: an engine-only database.
+    }
+    return { authors, posts: [...new Set(posts)] };
+}
+
+/** Whether a row's place is exact for the reader whose places these are (exactPlacesFor). */
+export function placeIsExact(places: ExactPlaces, row: { id: string; author_pubkey: string }): boolean {
+    return places.authors.includes(row.author_pubkey) || places.posts.includes(row.id);
+}
+
+/**
+ * Who has a post's place exactly (exactPlacesFor, from the post's side): its author, the keepers of an enterprise
+ * author, and for an event its convenor hosts and the people Going who may read its note. For a copy sent to many
+ * (apps/server state-engine.ts broadcast), every other socket's copy carries the neighbourhood.
+ */
+export function exactPlaceReaders(db: Db, row: { id: string; author_pubkey: string; type?: string | null; audience_scope?: string | null; target_group_id?: string | null; event_host_lets_in?: number | null }): Set<string> {
+    const readers = new Set<string>([row.author_pubkey]);
+    for (const r of prepared(db, `
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0`).all(row.author_pubkey) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    if (row.type !== 'event') return readers;
+    if (row.audience_scope === 'group' && row.target_group_id) {
+        for (const r of prepared(db, `
+            SELECT gm.member_pubkey FROM group_members gm
+            JOIN members m ON m.public_key = gm.member_pubkey
+            WHERE gm.group_id = ? AND gm.role = 'convenor' AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0`)
+            .all(row.target_group_id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    }
+    try {
+        const letsIn = row.event_host_lets_in === 1;
+        for (const r of prepared(db, `
+            SELECT r.member_pubkey FROM event_rsvps r JOIN members m ON m.public_key = r.member_pubkey
+            WHERE r.post_id = ? AND r.status = 'going' AND m.is_visitor = 0${letsIn ? " AND COALESCE(r.let_in_at, '') != ''" : ''}`)
+            .all(row.id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    } catch {
+        // No event_rsvps table: an engine-only database.
+    }
+    return readers;
+}
+
+/** The exact places of one read, worked out once for its rank and its rows (getPostsRankedBy, postRowsNear). */
+const exactPlacesOfRead = new WeakMap<PostFilter, ExactPlaces>();
+function exactPlacesOf(db: Db, filter: PostFilter): ExactPlaces {
+    let places = exactPlacesOfRead.get(filter);
+    if (!places) { places = exactPlacesFor(db, filter.viewerPubkey); exactPlacesOfRead.set(filter, places); }
+    return places;
 }
 
 /**
@@ -535,9 +698,32 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             eventEndLocal: row.event_end_local || undefined,
             eventTz: row.event_tz || undefined,
             eventOnline: row.event_online === 1,
+            // Only where it is on, so an event whose host doesn't let people in reads byte for byte as before.
+            ...(row.event_host_lets_in === 1 ? { eventHostLetsIn: true } : {}),
+            ...seriesFieldsOf(row),
         } : {}),
         ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
     };
+}
+
+/** A repeating event's rule, last date and cancelled dates from its row; nothing for a one-off. */
+export function seriesFieldsOf(row: any): Pick<MarketplacePost, 'eventRepeat' | 'eventRepeatUntil' | 'eventRepeatSkips'> {
+    const rule = readRepeatRule(row.event_repeat);
+    if (!rule) return {};
+    const skips = readRepeatSkips(row.event_repeat_skips);
+    return {
+        eventRepeat: rule,
+        ...(row.event_repeat_until ? { eventRepeatUntil: row.event_repeat_until as string } : {}),
+        ...(skips.length > 0 ? { eventRepeatSkips: skips } : {}),
+    };
+}
+
+/**
+ * Whether an RSVP is for the date its event has now (DESIGN-event-times §7.10, §8): stamped with that date, or from before
+ * the stamp. One for an earlier date of a repeating event counts for nothing, until the 30-day prune takes it.
+ */
+export function rsvpIsCurrent(rsvpOccurrenceAt: string | null | undefined, eventStartAt: string | null | undefined): boolean {
+    return rsvpOccurrenceAt == null || rsvpOccurrenceAt === eventStartAt;
 }
 
 /**
@@ -945,11 +1131,14 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     category: f => f.category === 'all',
     // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
     coarse: () => true,
+    // The same for the neighbourhood.
+    neighbourhood: () => true,
     // What is read of each post, not which posts.
     guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
+    eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
@@ -980,14 +1169,27 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // How far a post is from the reader's point (the two `?`): from its place, or for a coarse read from its area
     // (geo.ts area_km, haversine_km from the roundToArea of each). Every distance, radius and order below reads it through
     // this, so a coarse read is worked out from the area alone.
-    const km = (t: string) => filter.coarse ? `area_km(?, ?, ${t}.lat, ${t}.lng)` : `haversine_km(?, ?, ${t}.lat, ${t}.lng)`;
+    // A neighbourhood read measures each post from its neighbourhood but the reader's exact ones (exactPlacesFor), so its
+    // distance carries the reader's places as two parameters after the point (kmParams).
+    const neighbourhood = !filter.coarse && !!filter.neighbourhood;
+    const km = (t: string) => filter.coarse ? `area_km(?, ?, ${t}.lat, ${t}.lng)`
+        : neighbourhood ? `neighbourhood_km(?, ?, ${t}.lat, ${t}.lng, ${t}.author_pubkey IN (SELECT value FROM json_each(?)) OR ${t}.id IN (SELECT value FROM json_each(?)))`
+        : `haversine_km(?, ?, ${t}.lat, ${t}.lng)`;
+    const places = neighbourhood ? exactPlacesOf(db, filter) : null;
+    const kmParams: unknown[] = places
+        ? [near.lat, near.lng, JSON.stringify(places.authors), JSON.stringify(places.posts)]
+        : [near.lat, near.lng];
+    // The box on the true columns: for a coarse read every post whose area is in the circle's box (geo.ts areaBox), for a
+    // neighbourhood read every post in it or whose neighbourhood is (neighbourhoodBox).
+    const boxFor = (exact: ReturnType<typeof boundingBox>) => filter.coarse ? areaBox(exact)
+        : neighbourhood ? neighbourhoodBox(exact) : exact;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
         let sql = `
         SELECT p.id, ${km('p')} AS distance_km`;
-        const params: unknown[] = [near.lat, near.lng];
+        const params: unknown[] = [...kmParams];
         if (withinKm === undefined) {
             sql += `
         FROM posts p
@@ -1003,8 +1205,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             // pass (a radius, or everything) is left to the planner.
             // For a coarse read the box holds every post whose AREA is in the circle's box: still the true columns, so
             // the index still answers it (geo.ts areaBox).
-            const exact = boundingBox(near.lat, near.lng, withinKm);
-            const box = filter.coarse ? areaBox(exact) : exact;
+            const box = boxFor(boundingBox(near.lat, near.lng, withinKm));
             const t = circle ? 'b' : 'p';
             sql += circle ? `
         FROM posts b
@@ -1016,7 +1217,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
           AND ${km(t)} <= ?${circle ? `
           AND p.id = b.id` : ''}`;
-            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
+            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), ...kmParams, withinKm);
         }
         sql += where;
         params.push(...whereParams);
@@ -1035,15 +1236,14 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // `cap`; with a radius or a filter it takes the box's or the filter's index and sorts every match before the LIMIT,
     // so only the distance calls are bounded there (F5 still open for those reads, see PostFilter.measureAtMost).
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
-        const params: unknown[] = [near.lat, near.lng];
+        const params: unknown[] = [...kmParams];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
         if (withinKm !== undefined) {
-            const exact = boundingBox(near.lat, near.lng, withinKm);
-            const box = filter.coarse ? areaBox(exact) : exact;
+            const box = boxFor(boundingBox(near.lat, near.lng, withinKm));
             inner += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
             params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
         }
@@ -1181,6 +1381,12 @@ export function authorsBlockedBy(db: Db, member: string): string[] {
     }
 }
 
+/**
+ * The most online events a member's set holds (getNearbySet, DESIGN-event-times §9): they come first, soonest first, and
+ * the near listings give way to them, so the set stays within the node's `max`.
+ */
+export const NEARBY_SET_ONLINE_EVENTS = 50;
+
 /** What a member's set is worked out from (getNearbySet). */
 export interface NearbySetQuery {
     /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
@@ -1195,6 +1401,8 @@ export interface NearbySetQuery {
     excludeEvents?: boolean;
     /** A moderator's read keeps posts hidden by reports (PostFilter.includeHidden). */
     includeHidden?: boolean;
+    /** Each other member's listing measured from its neighbourhood, and its rows read so (PostFilter.neighbourhood). */
+    neighbourhood?: boolean;
     /** The DoS bound of the one pass (PostFilter.measureAtMost). */
     measureAtMost?: number;
 }
@@ -1252,7 +1460,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         // No conversations table: an engine-only database.
     }
     const blocked = authorsBlockedBy(db, member);
-    const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
+    const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden,
+        ...(q.neighbourhood ? { neighbourhood: true } : {}) };
+    // Which listings are in the set is worked out from their neighbourhoods too, all but the member's exact ones, so the
+    // set's edge places nobody's listing better than its rows do (exactPlacesFor).
+    const places = q.neighbourhood ? exactPlacesFor(db, member) : null;
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
     // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
@@ -1269,7 +1481,12 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         WHERE 1=1${where} ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?`).all(...whereParams, q.newestWithoutArea) as typeof ranked;
             return [];
         }
-        const box = boundingBox(near.lat, near.lng, q.radiusKm);
+        const exactBox = boundingBox(near.lat, near.lng, q.radiusKm);
+        const box = places ? neighbourhoodBox(exactBox) : exactBox;
+        const km = places
+            ? 'neighbourhood_km(?, ?, q.lat, q.lng, q.author_pubkey IN (SELECT value FROM json_each(?)) OR q.id IN (SELECT value FROM json_each(?)))'
+            : 'haversine_km(?, ?, q.lat, q.lng)';
+        const kmParams = places ? [near.lat, near.lng, JSON.stringify(places.authors), JSON.stringify(places.posts)] : [near.lat, near.lng];
         // The bound (measureAtMost): at most `cap` of the matching posts are measured, the newest when more match. First
         // in the index's order, stopping at cap + 1, and the statement says how many it measured: when that is not over
         // `cap`, every matching post was measured, which is what the newest `cap` are then, without sorting them first
@@ -1278,7 +1495,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
         const pass = (newestFirst: boolean) => prepared(d, `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (
+            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, ${km} AS distance_km FROM (
                 SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
@@ -1290,7 +1507,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             SELECT p.id, p.updated_at, p.created_at, p.author_pubkey, p.distance_km FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?
         )
         SELECT c.n, p.id, p.updated_at, p.author_pubkey FROM (SELECT count(*) AS n FROM measured) c LEFT JOIN nearest p ON 1${NEAREST_ORDER}`)
-            .all(near.lat, near.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
+            .all(...kmParams, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
             Array<{ n: number; id: string | null; updated_at: string | null; author_pubkey: string }>;
         let rows = pass(false);
         if (cap > 0 && rows[0].n > cap) rows = pass(true);
@@ -1298,6 +1515,33 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
+
+    // Online events (DESIGN-event-times §9, director amendment 2): no pin, so near nobody, and an event is never put at its
+    // author's area (placelessListingArea). Without this an online event on a node that syncs by area reaches only its
+    // host. The soonest NEARBY_SET_ONLINE_EVENTS open ones are in every member's set, under the listing's own rules for
+    // this reader (open, not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever
+    // the member is. The author's half of the board rule is tested on the key, as rankNear's is.
+    let online: typeof ranked = [];
+    const onlineMax = Math.min(NEARBY_SET_ONLINE_EVENTS, Math.max(0, Math.floor(q.max)));
+    if (onlineMax > 0 && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
+        const pickOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
+            const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+                + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+            online = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where} ORDER BY p.event_start_at, p.id LIMIT ?`)
+                .all(...listingParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), onlineMax) as typeof online;
+            return [];
+        };
+        getPostsRankedBy(db, { ...base, eventOnline: true, near: { lat: 0, lng: 0 } }, pickOnline);
+    }
+    // The set never holds more than `max`: a phone keeps at most that many and drops a listing with no place first
+    // (apps/native/utils/posts-nearby.ts nearbyPrune), so a set past it would lose every online event on the phone. The
+    // online events go in first, and the near list gives way to them from its far end.
+    const onlineIds = new Set(online.map(r => r.id));
+    ranked = ranked.filter(r => !onlineIds.has(r.id)).slice(0, Math.max(0, Math.floor(q.max) - online.length));
+    ranked.push(...online);
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.
@@ -1469,6 +1713,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.eventOnline) { where += " AND p.type = 'event' AND p.event_online = 1"; }
     if (filter?.upcomingUntil) {
         // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
         where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"
@@ -1691,7 +1936,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     if (eventRows.length > 0) {
         try {
             const rsvps = selectInChunks(db, eventRows.map(r => r.id), ph => `
-                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, m.callsign as member_callsign
+                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, er.occurrence_at, er.let_in_at, m.callsign as member_callsign
                 FROM event_rsvps er
                 LEFT JOIN members m ON er.member_pubkey = m.public_key
                 WHERE er.post_id IN (${ph})
@@ -1732,18 +1977,34 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        // A neighbourhood read's post that isn't the reader's to have exactly (exactPlacesFor).
+        const toNeighbourhood = !filter?.coarse && !!filter?.neighbourhood && !placeIsExact(exactPlacesOf(db, filter), r);
         if (filter?.coarse) {
             // The area, never the place: the rounding the query measured from (geo.ts area_km).
             post.lat = typeof r.lat === 'number' ? roundToArea(r.lat) : r.lat;
             post.lng = typeof r.lng === 'number' ? roundToArea(r.lng) : r.lng;
+        } else if (toNeighbourhood) {
+            // The neighbourhood, never the place: the rounding the query measured from (geo.ts neighbourhood_km). Half a
+            // place is no place (placeForOthers).
+            const shown = placeForOthers(r.lat, r.lng);
+            if (shown) {
+                post.lat = shown.lat as number;
+                post.lng = shown.lng as number;
+            }
         }
         if (near) {
             post.distanceKm = typeof r.distance_km !== 'number' ? null
-                : filter?.coarse ? Math.round(r.distance_km) : Math.round(r.distance_km * 10) / 10;
+                : filter?.coarse || toNeighbourhood ? Math.round(r.distance_km) : Math.round(r.distance_km * 10) / 10;
         }
 
         if (post.type === 'event') {
-            const rsvps = rsvpsByPost.get(post.id) || [];
+            // Only the RSVPs for the date the event has now count (DESIGN-event-times §8): a repeating event's next date
+            // starts at nobody going, and a regular's RSVP for last week is theirs alone to read.
+            const allRsvps = rsvpsByPost.get(post.id) || [];
+            const rsvps = allRsvps.filter(v => rsvpIsCurrent(v.occurrence_at, r.event_start_at));
+            const myStale = viewer && !viewerIsVisitor
+                ? allRsvps.find(v => v.member_pubkey === viewer && !rsvpIsCurrent(v.occurrence_at, r.event_start_at))
+                : undefined;
             // ⚡ Bolt: single-pass RSVP loop to compute going/interested counts and locate viewer's RSVP without extra .find() array scan
             let goingCount = 0;
             let interestedCount = 0;
@@ -1756,7 +2017,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
             // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
             const host = !viewerIsVisitor && isEventHost(db, r, viewer);
-            const going = !viewerIsVisitor && mine?.status === 'going';
+            // Going for any of a series' dates: the note and the link are the series', like its chat, until the prune (§8).
+            const going = !viewerIsVisitor && (mine?.status === 'going' || myStale?.status === 'going');
             // An ended event is readable by id to its host and Going only, and to nobody once the 30-day
             // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
             // A cancelled event read by id follows the same rule: host and Going only.
@@ -1777,15 +2039,30 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
-            if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
-            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9).
-            if ((host || going) && r.event_link) post.eventLink = r.event_link;
+            if (myStale) post.myLastRsvp = { status: myStale.status as EventRsvpStatus, occurrenceAt: myStale.occurrence_at };
+            if (filter?.id && post.eventRepeat && post.eventTz && post.eventStartLocal) {
+                post.eventNextDates = upcoming({
+                    rule: post.eventRepeat, anchorDate: post.eventStartLocal.slice(0, 10), tz: post.eventTz,
+                    skips: post.eventRepeatSkips, until: post.eventRepeatUntil ?? null,
+                }, EVENT_NEXT_DATES, nowIso).map(o => ({ date: o.date, startLocal: o.startLocal, startAt: o.startAt, cancelled: o.skipped }));
+            }
+            // Where the host lets people in, Going alone opens nothing: the note waits for the host (mayReadEventPrivate).
+            // On a repeating event that is the viewer's one RSVP row, for this date or an earlier one (`going` above): a
+            // regular let in once stays let in, and one never let in waits, whichever date they said Going to.
+            const letsIn = r.event_host_lets_in === 1;
+            if (letsIn && !viewerIsVisitor) post.myLetIn = mine ? !!mine.let_in_at : null;
+            const privateOpen = eventPrivateOpenTo(host, viewerIsVisitor ? undefined : (mine ?? myStale), letsIn);
+            if (privateOpen && r.event_private_note) post.eventPrivateNote = r.event_private_note;
+            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9): where the host lets people
+            // in, it too waits for them.
+            if (privateOpen && r.event_link) post.eventLink = r.event_link;
             if (host) {
                 post.eventRsvps = rsvps.map((v: any) => ({
                     memberPubkey: v.member_pubkey,
                     memberCallsign: v.member_callsign || undefined,
                     status: v.status,
                     updatedAt: v.updated_at,
+                    ...(letsIn ? { letInAt: v.let_in_at ?? null } : {}),
                 }));
             }
         }
@@ -1903,8 +2180,12 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
+    // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.
+    eventHostLetsIn: 'keep',
     // The clock, its zone (the label is read from it) and online: what the time means, not who or where exactly.
     eventStartLocal: 'keep', eventEndLocal: 'keep', eventTz: 'keep', eventOnline: 'keep',
+    // When it repeats, and which dates are off: what the event is, not who goes.
+    eventRepeat: 'keep', eventRepeatUntil: 'keep', eventRepeatSkips: 'keep', eventNextDates: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
     authorPublicKey: () => HIDDEN_AUTHOR,
@@ -1921,7 +2202,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -1956,7 +2237,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
-    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
+    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLastRsvp: _last, myLetIn: _letIn, ...rest } = shared;
     return rest;
 }
 

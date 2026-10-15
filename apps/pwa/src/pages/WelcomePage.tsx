@@ -9,6 +9,9 @@
  * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
+import { LanguageSwitch } from '../components/LanguageSwitch';
+import { BoldWords } from '../components/BoldWords';
+import { useLanguage } from '../lib/useLanguage';
 import React, { useState, useRef, useEffect, useId } from 'react';
 import {
     checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
@@ -20,7 +23,7 @@ import { validateMnemonic } from '../lib/mnemonic';
 
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
-    recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
+    recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
@@ -38,7 +41,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -132,53 +135,53 @@ function inviteHash(code: string): string {
 function keptAnotherName(asked: string, kept: string, earlier = false): string | null {
     const sent = asked.trim();
     if (!sent || kept === sent) return null;
-    if (earlier) return `You joined as ${kept} on an earlier try. Tap ← Back to change it.`;
+    if (earlier) return t('You joined as {name} on an earlier try. Tap ← Back to change it.', { name: kept });
     return sent.length > MAX_JOIN_CALLSIGN
-        ? `You're ${kept} here: a name here keeps ${MAX_JOIN_CALLSIGN} characters. Tap ← Back to change it.`
-        : `You're ${kept} here: ${sent} was taken. Tap ← Back to change it.`;
+        ? t("You're {name} here: a name here keeps {max} characters. Tap ← Back to change it.", { name: kept, max: MAX_JOIN_CALLSIGN })
+        : t("You're {name} here: {asked} was taken. Tap ← Back to change it.", { name: kept, asked: sent });
 }
 
-/** A rename the node took, whose copy in this browser could not be written (handleRename). */
-const RENAME_NOT_KEPT = "Your new name is saved on the community, but this browser couldn't keep it. Try again.";
+/** A rename the node took, whose copy in this browser could not be written (handleRename). Read when it is shown, in the language then. */
+const RENAME_NOT_KEPT = () => t("Your new name is saved on the community, but this browser couldn't keep it. Try again.");
 
 // ===================== FAQ DATA =====================
 
 const FAQ_ITEMS = [
     {
-        q: 'What is BeanPool?',
-        a: 'BeanPool is a mutual credit marketplace for local communities. Members can post offers and needs, trade using community credits, and build local economic resilience — all without banks or corporations.',
+        q: word('What is BeanPool?'),
+        a: word('BeanPool is a mutual credit marketplace for local communities. Members can post offers and needs, trade using community credits, and build local economic resilience — all without banks or corporations.'),
     },
     {
-        q: 'How do I get an invite?',
-        a: 'Ask an existing community member to generate an invite code for you. They can share it as a link, QR code, or text. Each invite code works once.',
+        q: word('How do I get an invite?'),
+        a: word('Ask an existing community member to generate an invite code for you. They can share it as a link, QR code, or text. Each invite code works once.'),
     },
     {
-        q: 'Is my data private?',
-        a: "Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and trades are not: a trade shows only its two people. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody.",
+        q: word('Is my data private?'),
+        a: word("Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and trades are not: a trade shows only its two people. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody."),
     },
     {
-        q: 'What are community credits?',
-        a: 'Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.',
+        q: word('What are community credits?'),
+        a: word('Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.'),
     },
     {
-        q: 'Can I use this on my phone?',
-        a: 'Yes! BeanPool is a Progressive Web App. Open the app link in your browser, then "Add to Home Screen" for the full native-like experience — works on Android, iOS, and desktop.',
+        q: word('Can I use this on my phone?'),
+        a: word('Yes! BeanPool is a Progressive Web App. Open the app link in your browser, then "Add to Home Screen" for the full native-like experience — works on Android, iOS, and desktop.'),
     },
 ];
 
 // ===================== BUNDLED AVATARS & STEPPER =====================
 
 const BUNDLED_AVATARS = [
-    { id: 'bean-green',   label: 'Green Bean' },
-    { id: 'bean-purple',  label: 'Purple Bean' },
-    { id: 'leaf',         label: 'Leaf' },
-    { id: 'sprout',       label: 'Sprout' },
-    { id: 'sun',          label: 'Sun' },
-    { id: 'moon',         label: 'Moon' },
-    { id: 'wave',         label: 'Wave' },
-    { id: 'mountain',     label: 'Mountain' },
-    { id: 'fire',         label: 'Fire' },
-    { id: 'crystal',      label: 'Crystal' },
+    { id: 'bean-green',   label: word('Green Bean') },
+    { id: 'bean-purple',  label: word('Purple Bean') },
+    { id: 'leaf',         label: word('Leaf') },
+    { id: 'sprout',       label: word('Sprout') },
+    { id: 'sun',          label: word('Sun') },
+    { id: 'moon',         label: word('Moon') },
+    { id: 'wave',         label: word('Wave') },
+    { id: 'mountain',     label: word('Mountain') },
+    { id: 'fire',         label: word('Fire') },
+    { id: 'crystal',      label: word('Crystal') },
 ];
 
 /**
@@ -193,10 +196,11 @@ const BUNDLED_AVATARS = [
  * five columns are 29px and four 36px, which broke "Phot/o" and "Back/up" (deciding review of #1766, N5). There each
  * column keeps only its dot, and the current step is named whole under them.
  */
-export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean }) {
+export function OnboardingStepper({ step, firstLabel, area = false }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean }) {
+    const first = firstLabel ?? t('Your Name');
     const steps = area
-        ? [firstLabel, 'Your Photo', 'Your Area', 'Safety Backup', 'How it Works']
-        : [firstLabel, 'Your Photo', 'Safety Backup', 'How it Works'];
+        ? [first, t('Your Photo'), t('Your Area'), t('Safety Backup'), t('How it Works')]
+        : [first, t('Your Photo'), t('Safety Backup'), t('How it Works')];
     const position = step === 'area' ? 3 : area && step >= 3 ? step + 1 : step;
     return (
         <div style={{ marginBottom: '1.5rem', width: '100%' }}>
@@ -233,7 +237,7 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
                             width: '12px',
                             height: '12px',
                             borderRadius: '6px',
-                            backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
+                            backgroundColor: isCompleted ? '#22c55e' : isActive ? 'var(--bp-ink-info)' : '#d1d5db',
                             marginBottom: '6px',
                             display: 'flex',
                             alignItems: 'center',
@@ -270,7 +274,7 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
             color: 'var(--text-primary)',
         }}>
             {/* The space stays outside the span: a line too narrow for both breaks before the dot, never inside the count (review N10). */}
-            {steps[position - 1]}{' '}<span style={{ fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· Step {position} of {steps.length}</span>
+            {steps[position - 1]}{' '}<span style={{ fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('· Step {step} of {total}', { step: position, total: steps.length })}</span>
         </p>
         </div>
     );
@@ -284,7 +288,7 @@ function BackToListings({ onBack }: { onBack: () => void }) {
                 background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem',
                 cursor: 'pointer', marginTop: '0.75rem', fontFamily: 'inherit',
             }}>
-                ← Back to the listings
+                {t('← Back to the listings')}
             </button>
         </div>
     );
@@ -311,18 +315,19 @@ const LEAVE_WAIT_MS = 5_000;
  * How it works where the node has Beans off (`features.beans` false: the worldwide community). Rehearsal 14 Oct 2026,
  * B3: the step sold a credit line to -2000 Beans, the Commons fee, the Trust Wallet and Ledger sends, none of which exist
  * there, in a 350 px scroll box about 140 px wide at 320 px with 130 % text. This says what is on, in a few short lines
- * that fit the step without a box of their own.
+ * that fit the step without a box of their own. Marked with word() and translated by t() where shown: the worldwide
+ * community is where strangers land (#1947 confirmation N-A). A title keeps its full stop, so a language picks its own.
  */
 export const HOW_IT_WORKS_WITHOUT_BEANS = {
-    intro: 'Here is what you can do here.',
+    intro: word('Here is what you can do here.'),
     things: [
-        { icon: '📦', title: 'Offers and needs', line: 'List what you can give, ask for what you need, and find people near you. You agree the details between you.' },
-        { icon: '📅', title: 'Events', line: "See what's on near you, and say you're going." },
-        { icon: '👥', title: 'Groups', line: 'Find people around a place or an interest, and talk together.' },
-        { icon: '💬', title: 'Messages', line: 'Tap Message on any post to talk with the person who posted it.' },
+        { icon: '📦', title: word('Offers and needs.'), line: word('List what you can give, ask for what you need, and find people near you. You agree the details between you.') },
+        { icon: '📅', title: word('Events.'), line: word("See what's on near you, and say you're going.") },
+        { icon: '👥', title: word('Groups.'), line: word('Find people around a place or an interest, and talk together.') },
+        { icon: '💬', title: word('Messages.'), line: word('Tap Message on any post to talk with the person who posted it.') },
     ],
-    local: 'A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.',
-    words: 'Your 12 words are always in Settings → Recovery Phrase.',
+    local: word('A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.'),
+    words: word('Your 12 words are always in Settings → Recovery Phrase.'),
 } as const;
 
 function HowItWorksWithoutBeans() {
@@ -334,20 +339,36 @@ function HowItWorksWithoutBeans() {
                     <li key={thing.title} className="flex gap-2 items-start">
                         <span aria-hidden="true" className="shrink-0 text-lg leading-6">{thing.icon}</span>
                         <p className="m-0 min-w-0 break-words text-sm leading-relaxed text-nature-900 dark:text-nature-100">
-                            <strong className="text-nature-950 dark:text-oat-50">{thing.title}.</strong> {thing.line}
+                            <strong className="text-nature-950 dark:text-oat-50">{t(thing.title)}</strong> {t(thing.line)}
                         </p>
                     </li>
                 ))}
             </ul>
             <p className="m-0 pt-3 border-t border-nature-200 dark:border-nature-700 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">
-                {copy.local}
+                {t(copy.local)}
             </p>
-            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 {copy.words}</p>
+            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 <>{t(copy.words)}</></p>
         </div>
     );
 }
 
+/**
+ * The 12 words stay English in every language: the account key is derived from those exact words (design amendment 1;
+ * #1947 review N1), so a member reading another language is told to write and type them as shown. Not shown in English,
+ * where it says nothing new.
+ */
+function WordsAreEnglish() {
+    if (currentLanguage() === 'en') return null;
+    return (
+        <p data-testid="words-are-english" style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, margin: '0 0 0.75rem', textAlign: 'left' }}>
+            {t('These 12 words are English in every language: write them and type them exactly as shown.')}
+        </p>
+    );
+}
+
 export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
+    // Its words change the moment the language does, also where it is shown on its own (lib/language.ts).
+    useLanguage();
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
     const [door, setDoor] = useState<Door>(() => (initialInfo ? doorOf(initialInfo) : 'checking'));
@@ -679,6 +700,36 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingSession, setPairingSession] = useState<{ sessionId: string; privateKeyHex: string; publicKeyHex: string } | null>(null);
     const [pairingSecondsLeft, setPairingSecondsLeft] = useState(120);
     const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'decrypting' | 'success' | 'expired'>('idle');
+    /** The phone has sent: the relay holds it until this browser types the two digits the phone shows. */
+    const [pairingConfirming, setPairingConfirming] = useState(false);
+    const [pairingDigits, setPairingDigits] = useState('');
+    const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
+
+    /** The relay could not tie this page to its code: the page is open at another address than its community's. */
+    const PAIRING_WRONG_BROWSER = () => t('This page can\'t finish linking from here. Open your community\'s own web address on this computer and make a new code there.');
+
+    async function handleConfirmPairingDigits(e: React.FormEvent) {
+        e.preventDefault();
+        if (!pairingSession) return;
+        const res = await confirmPairingApi(pairingSession.sessionId, pairingDigits.trim()).catch(() => null);
+        if (res?.result === 'released') {
+            setPairingDigitsNote(null);
+        } else if (res?.result === 'wrong') {
+            setPairingDigits('');
+            setPairingDigitsNote(t('Those are not the digits on the phone. Check them and try again.'));
+        } else if (res?.result === 'burned') {
+            setError(t('Too many wrong digits, so nothing was sent. Make a new code and try again.'));
+            setPairingStatus('expired');
+        } else if (res?.result === 'wrong-browser') {
+            setError(PAIRING_WRONG_BROWSER());
+            setPairingStatus('expired');
+        } else if (res?.result === 'expired') {
+            setError(t('That code has expired, so nothing was sent. Make a new code and try again.'));
+            setPairingStatus('expired');
+        } else {
+            setPairingDigitsNote(t('That did not go through. Try again.'));
+        }
+    }
 
     async function handleStartQrPairing() {
         setLoading(true);
@@ -687,12 +738,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             const session = createPairingSession();
             setPairingSession(session);
             setPairingSecondsLeft(120);
+            setPairingConfirming(false);
+            setPairingDigits('');
+            setPairingDigitsNote(null);
             await initPairingApi(session.sessionId, session.publicKeyHex);
             setPairingStatus('waiting');
             setShowQrPairing(true);
         } catch (err: any) {
             console.error('[Pairing] Init error:', err);
-            setError(err.message || 'Failed to initialize device pairing on node relay');
+            setError(err.message || t('Failed to initialize device pairing on node relay'));
             setPairingStatus('idle');
             setShowQrPairing(false);
             setPairingSession(null);
@@ -736,7 +790,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         );
 
                         if (!decrypted.publicKey || !decrypted.privateKey || !decrypted.callsign) {
-                            throw new Error('Received incomplete identity payload');
+                            throw new Error(t('Received incomplete identity payload'));
                         }
 
                         if (doorOpen) {
@@ -763,15 +817,27 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             return;
                         }
                         console.error('[Pairing] Decryption/import failure:', decryptErr);
-                        setError(decryptErr.message || 'Failed to decrypt paired identity');
+                        setError(decryptErr.message || t('Failed to decrypt paired identity'));
                         setPairingStatus('expired');
                     }
-                } else if (res.status === 'expired') {
+                } else if (res.status === 'confirming') {
+                    setPairingConfirming(true);
+                } else if (res.status === 'expired' || res.status === 'burned') {
                     clearInterval(timer);
                     clearInterval(poller);
+                    if (res.status === 'burned') setError(t('Too many wrong digits, so nothing was sent. Make a new code and try again.'));
                     setPairingStatus('expired');
                 }
             } catch (err: any) {
+                // 403 wrong-browser: the relay can't tie this page to its code (it never got the binding cookie), so no
+                // poll will ever bring the account. Say so now, not after two minutes of a QR that can't work.
+                if ((err as { status?: number } | null)?.status === 403) {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setError(PAIRING_WRONG_BROWSER());
+                    setPairingStatus('expired');
+                    return;
+                }
                 console.error('[Pairing] Error during poll:', err);
             }
         }, 1500);
@@ -824,7 +890,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
     useEffect(() => {
         let cancelled = false;
-        void fetchConsentTerms().then((t) => { if (!cancelled) setJoinTerms(t); });
+        void fetchConsentTerms().then((terms) => { if (!cancelled) setJoinTerms(terms); });
         return () => { cancelled = true; };
     }, []);
 
@@ -833,12 +899,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         const trimmedCode = normaliseInviteCode(inviteCode);
 
         if (!trimmedCode) {
-            setError('An invite code is required to join this node.');
+            setError(t('An invite code is required to join this node.'));
             return;
         }
 
         if (trimmedCallsign.length < 2) {
-            setError('Callsign must be at least 2 characters.');
+            setError(t('Callsign must be at least 2 characters.'));
             return;
         }
 
@@ -869,12 +935,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             const usedMaybeByThisKey = check?.reason === 'used' && inviteKey.current !== null;
             if (check && !check.valid && !usedMaybeByThisKey) {
                 setError(check.reason === 'used'
-                    ? 'This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.'
+                    ? t('This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.')
                     : check.reason === 'expired'
-                        ? 'This invite has expired — invites last 30 days. Ask whoever invited you for a fresh one.'
+                        ? t('This invite has expired — invites last 30 days. Ask whoever invited you for a fresh one.')
                         : check.reason === 'admins_only'
                             ? MEMBER_TICKET_REFUSED_TEXT
-                            : "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.");
+                            : t("That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one."));
                 setLoading(false);
                 return;
             }
@@ -936,7 +1002,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         }
                         setError(typeof status === 'number' && status < 500 && redeemErr.message
                             ? redeemErr.message
-                            : "Can't reach the community right now. Try again in a minute.");
+                            : t("Can't reach the community right now. Try again in a minute."));
                         setLoading(false);
                         return;
                     }
@@ -981,11 +1047,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             if (err instanceof IdentityStoreUnavailableError) {
                 // The node has the member (the invite was taken) but this browser could not keep the key: said so, with
                 // the way on; the key is still in memory and in the invite-sent slot if that was written.
-                if (taken) setError("You're in, but this browser couldn't save your account. Reload the page to finish joining.");
+                if (taken) setError(t("You're in, but this browser couldn't save your account. Reload the page to finish joining."));
                 else setError(err.message);
                 return;
             }
-            setError('Failed to generate identity. Please try again.');
+            setError(t('Failed to generate identity. Please try again.'));
             console.error(err);
         }
     }
@@ -1033,11 +1099,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         if (!member || loading) return;
         const name = callsign.trim();
         if (name.length < 2) {
-            setError('Callsign must be at least 2 characters.');
+            setError(t('Callsign must be at least 2 characters.'));
             return;
         }
         if (name.length > MAX_JOIN_CALLSIGN) {
-            setError(`Callsign must be at most ${MAX_JOIN_CALLSIGN} characters.`);
+            setError(t('Callsign must be at most {max} characters.', { max: MAX_JOIN_CALLSIGN }));
             return;
         }
         setError(null);
@@ -1064,7 +1130,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 res = await signedFetchWithKey('POST', '/api/profile/update', { publicKey: member.publicKey, callsign: name }, member.privateKey, member.publicKey);
             } catch {
                 renameMayHaveLanded.current = true;
-                setError("Can't reach the community right now. Try again in a minute.");
+                setError(t("Can't reach the community right now. Try again in a minute."));
                 return;
             }
             const body = await res.json().catch(() => ({}));
@@ -1072,14 +1138,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 const suggestions = await suggestCallsigns(name, member.publicKey, 3, MAX_JOIN_CALLSIGN);
                 setNameSuggestions(suggestions);
                 setError(suggestions.length
-                    ? `"${name}" is already taken in this community. Pick one of the suggestions below, or choose another name.`
-                    : `"${name}" is already taken in this community. Choose another name.`);
+                    ? t('"{name}" is already taken in this community. Pick one of the suggestions below, or choose another name.', { name })
+                    : t('"{name}" is already taken in this community. Choose another name.', { name }));
                 return;
             }
             if (!res.ok) {
                 if (res.status >= 500) renameMayHaveLanded.current = true;
                 const said = typeof body?.message === 'string' && body.message ? body.message : typeof body?.error === 'string' ? body.error : null;
-                setError(res.status < 500 && said ? said : "Can't reach the community right now. Try again in a minute.");
+                setError(res.status < 500 && said ? said : t("Can't reach the community right now. Try again in a minute."));
                 return;
             }
             renameMayHaveLanded.current = false;
@@ -1104,7 +1170,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 console.warn('[Welcome] the new name not saved in this browser:', e);
                 setRenameUnsaved(renamed);
                 setCallsign(renamed);
-                setError(RENAME_NOT_KEPT);
+                setError(RENAME_NOT_KEPT());
                 return;
             }
         }
@@ -1142,13 +1208,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 setLoading(false);
             };
             img.onerror = () => {
-                setError('Failed to load image.');
+                setError(t('Failed to load image.'));
                 setLoading(false);
             };
             img.src = event.target?.result as string;
         };
         reader.onerror = () => {
-            setError('Failed to read file.');
+            setError(t('Failed to read file.'));
             setLoading(false);
         };
         reader.readAsDataURL(file);
@@ -1207,7 +1273,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         const alreadyIn = err?.message?.includes('already a member')
                             || err?.message?.includes('already been used');
                         if (!alreadyIn) {
-                            setError(err.message || 'Invalid invite code');
+                            setError(err.message || t('Invalid invite code'));
                             setLoading(false);
                             return false;
                         }
@@ -1216,7 +1282,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     try {
                         await registerMember(pendingIdentity.publicKey, pendingIdentity.callsign);
                     } catch (err: any) {
-                        setError(err.message || 'Registration failed.');
+                        setError(err.message || t('Registration failed.'));
                         setLoading(false);
                         return false;
                     }
@@ -1275,9 +1341,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
             // A key was brought here, but the join this browser sent earlier had landed: that one is the account.
-            ? `This browser had already joined as ${joined.identity.callsign}, so that's your account here, not the one you brought. Its 12 words come next.`
+            ? t("This browser had already joined as {name}, so that's your account here, not the one you brought. Its 12 words come next.", { name: joined.identity.callsign })
             : joined.requestedCallsign
-                ? `You're ${joined.identity.callsign} here: ${joined.requestedCallsign} was taken. You can change it in Settings.`
+                ? t("You're {name} here: {asked} was taken. You can change it in Settings.", { name: joined.identity.callsign, asked: joined.requestedCallsign })
                 : null);
         setPendingIdentity(joined.identity);
         setShowAvatarSetup(true);
@@ -1297,7 +1363,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             membership = await checkMembershipWithKey(identity);
         } catch {
             setShowQrPairing(false);
-            setError("Can't reach the community right now. Try again in a minute.");
+            setError(t("Can't reach the community right now. Try again in a minute."));
             return false;
         }
         if (membership.isMember) {
@@ -1360,9 +1426,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     }
 
     async function handleRecover() {
-        const words = recoveryWords.map(w => w.toLowerCase().trim());
+        const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         if (!validateMnemonic(words)) {
-            setError('One or more words are not valid. Check your spelling.');
+            setError(t('One or more words are not valid. Check your spelling.'));
             return;
         }
         setLoading(true);
@@ -1371,7 +1437,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             try {
                 await finishRestoreAtDoor(await identityFromMnemonic(words, ''));
             } catch {
-                setError('Recovery failed. Check your words and try again.');
+                setError(t('Recovery failed. Check your words and try again.'));
             } finally {
                 setLoading(false);
             }
@@ -1406,7 +1472,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 setHeldIdentity(e.held);
                 return;
             }
-            setError('Recovery failed. Check your words and try again.');
+            setError(t('Recovery failed. Check your words and try again.'));
         } finally {
             setLoading(false);
         }
@@ -1449,13 +1515,16 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 width: '100%',
                 textAlign: 'center',
             }}>
-                <img src="/assets/logo-192x192.png" alt="BeanPool Logo" style={{ width: '4rem', height: '4rem', objectFit: 'contain', margin: '0 auto 1rem' }} />
+                {/* The language, before anything else: a switch at the top, never a step (director amendment 2). */}
+                <div className="flex justify-end mb-2">
+                    <LanguageSwitch />
+                </div>
+                <img src="/assets/logo-192x192.png" alt={t('BeanPool Logo')} style={{ width: '4rem', height: '4rem', objectFit: 'contain', margin: '0 auto 1rem' }} />
                 <h2 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                    Welcome to BeanPool
+                    {t('Welcome to BeanPool')}
                 </h2>
                 <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', lineHeight: 1.6 }}>
-                    Your identity is yours. It lives on this device,
-                    backed by cryptography — no passwords, no central accounts.
+                    {t('Your identity is yours. It lives on this device, backed by cryptography — no passwords, no central accounts.')}
                 </p>
 
                 <div data-testid="welcome-card" className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm p-8 max-[359px]:px-4" style={{
@@ -1463,10 +1532,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 }}>
                     {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && !finishJoining && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                            Can't reach the community right now. Try again in a minute.{' '}
-                            <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
-                                style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>
-                                Try again
+                            {/* The space between the sentence and its button is JSX text on the same line, not {' '}: a t() beside a string reads as a fragment to words:check. */}
+                            {t("Can't reach the community right now. Try again in a minute.")} <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
+                                style={{ background: 'none', border: 'none', color: 'var(--bp-ink-info)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>
+                                {t('Try again')}
                             </button>
                         </div>
                     )}
@@ -1475,28 +1544,37 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         /* ===== ANOTHER TAB SAVED AN ACCOUNT HERE: never replaced (review 4106962020) ===== */
                         <>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                This browser already has an account
+                                {t('This browser already has an account')}
                             </h3>
                             <p role="alert" data-testid="welcome-held" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
-                                {heldIdentity.callsign.trim() || 'An account'} was saved in this browser from another tab or window,
-                                so nothing here replaced it. A browser holds one account.
+                                {heldIdentity.callsign.trim()
+                                    ? t('{name} was saved in this browser from another tab or window, so nothing here replaced it. A browser holds one account.', { name: heldIdentity.callsign.trim() })
+                                    : t('An account was saved in this browser from another tab or window, so nothing here replaced it. A browser holds one account.')}
                             </p>
                             {heldSentKey ? (() => {
                                 // The key this page's invite went with (4111871903): kept on disk, and its words one tap away.
-                                const heldName = heldIdentity.callsign.trim() || 'the account saved from the other tab';
+                                const heldName = heldIdentity.callsign.trim() || t('the account saved from the other tab');
                                 const mine = heldSentKey.identity.callsign.trim() || null;
-                                const it = mine ?? 'that account';
-                                const its = mine ? `${mine}'s` : 'its';
                                 const words = heldSentKey.identity.mnemonic?.length ? heldSentKey.identity.mnemonic : null;
+                                // Whole sentences, one per case: a translator never glues an English possessive.
+                                const whatHappened = heldSentKey.joined
+                                    ? (mine
+                                        ? t('The community took {name} too, so you have two accounts there now.', { name: mine })
+                                        : t('The community took that account too, so you have two accounts there now.'))
+                                    : (mine
+                                        ? t('The invite from this page, as {name}, may have gone through too.', { name: mine })
+                                        : t('The invite from this page may have gone through too.'));
+                                const keeps = t('This browser keeps {name} as its account.', { name: heldName });
+                                const keepWords = mine
+                                    ? t("{name}'s key is kept on this device too: write down {name}'s 12 words to keep {name}.", { name: mine })
+                                    : t('Its key is kept on this device too: write down its 12 words to keep that account.');
+                                const useHere = mine
+                                    ? t('To use {name} here instead, sign out of {heldName} in Settings, then restore {name} with those words.', { name: mine, heldName })
+                                    : t('To use that account here instead, sign out of {heldName} in Settings, then restore that account with those words.', { heldName });
                                 return (
                                     <>
                                         <p data-testid="welcome-held-sent" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
-                                            {heldSentKey.joined
-                                                ? `The community took ${it} too, so you have two accounts there now.`
-                                                : `The invite from this page${mine ? `, as ${mine},` : ''} may have gone through too.`}
-                                            {` This browser keeps ${heldName} as its account. ${mine ? `${mine}'s` : 'Its'} key is kept on this device too:`}
-                                            {` write down ${its} 12 words to keep ${it}. To use ${it} here instead, sign out of ${heldName} in`}
-                                            {` Settings, then restore ${it} with those words.`}
+                                            {whatHappened} {keeps} {keepWords} {useHere}
                                         </p>
                                         {words && (
                                             <>
@@ -1506,15 +1584,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                     onClick={() => setShowHeldWords((shown) => !shown)}
                                                     style={{
                                                         width: '100%', padding: '0.75rem 0.5rem', borderRadius: '10px', marginBottom: '0.75rem',
-                                                        border: '1px solid #2563eb', background: 'transparent', color: '#2563eb',
+                                                        border: '1px solid var(--bp-ink-info)', background: 'transparent', color: 'var(--bp-ink-info)',
                                                         fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                                     }}>
-                                                    {`${showHeldWords ? 'Hide' : 'Show'} ${its} 12 words`}
+                                                    {mine
+                                                        ? (showHeldWords ? t("Hide {name}'s 12 words", { name: mine }) : t("Show {name}'s 12 words", { name: mine }))
+                                                        : (showHeldWords ? t('Hide its 12 words') : t('Show its 12 words'))}
                                                 </button>
-                                                {showHeldWords && (
-                                                    // As the Safety Backup step lays them out: as many columns as whole words
-                                                    // fit, and a word copied onto paper is never broken across lines.
-                                                    <ol id={heldWordsId} data-testid="welcome-held-words" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                                {showHeldWords && (<>
+                                                    {/* As the Safety Backup step lays them out: as many columns as whole words
+                                                        fit, and a word copied onto paper is never broken across lines. Never
+                                                        translated, by us or by the browser (translate="no"). */}
+                                                    <ol id={heldWordsId} data-testid="welcome-held-words" translate="no" className="notranslate" aria-label={mine ? t("{name}'s 12 words", { name: mine }) : t('Its 12 words')} style={{
                                                         listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                                         gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                                     }}>
@@ -1528,14 +1609,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                             </li>
                                                         ))}
                                                     </ol>
-                                                )}
+                                                    <WordsAreEnglish />
+                                                </>)}
                                             </>
                                         )}
                                     </>
                                 );
                             })() : (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
-                                    To use a different account here, sign out of this one in Settings, then restore the other one.
+                                    {t('To use a different account here, sign out of this one in Settings, then restore the other one.')}
                                 </p>
                             )}
                             <button
@@ -1543,11 +1625,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onClick={() => onComplete(heldIdentity)}
                                 style={{
                                     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-                                    background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
                                     cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                 }}
                             >
-                                {heldIdentity.callsign.trim() ? `Open ${heldIdentity.callsign.trim()}` : 'Open it'}
+                                {heldIdentity.callsign.trim() ? t('Open {name}', { name: heldIdentity.callsign.trim() }) : t('Open it')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) && renaming ? (
@@ -1557,10 +1639,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         <>
                             <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                                ✏️ Your name
+                                {t('✏️ Your name')}
                             </h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                                You've joined. This is the name people here see: change it, or keep it and carry on.
+                                {t("You've joined. This is the name people here see: change it, or keep it and carry on.")}
                             </p>
 
                             <label htmlFor="callsign" style={{
@@ -1568,7 +1650,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 fontSize: '0.85rem', fontWeight: 600,
                                 color: 'var(--text-secondary)', marginBottom: '0.5rem',
                             }}>
-                                Your Callsign (Name)
+                                {t('Your Callsign (Name)')}
                             </label>
                             <input
                                 id="callsign"
@@ -1596,7 +1678,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         <button
                                             key={s}
                                             type="button"
-                                            aria-label={`Use the name ${s}`}
+                                            aria-label={t('Use the name {name}', { name: s })}
                                             onClick={() => { setCallsign(s); setNameSuggestions([]); setError(null); }}
                                             disabled={loading}
                                             style={{
@@ -1619,25 +1701,25 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: '#fff', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
                                 {/* After RENAME_NOT_KEPT, with the node's name still in the field: write it here again. */}
-                                {loading ? 'Saving…' : renameUnsaved !== null && callsign.trim() === renameUnsaved ? 'Try again' : 'Next →'}
+                                {loading ? t('Saving…') : renameUnsaved !== null && callsign.trim() === renameUnsaved ? t('Try again') : t('Next →')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={2} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <OnboardingStepper area={byArea} step={2} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                📸 Choose your look
+                                {t('📸 Choose your look')}
                             </h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                                Pick a profile picture so your community knows you.
+                                {t('Pick a profile picture so your community knows you.')}
                             </p>
                             {joinedAsNote && (
                                 <p role="status" data-testid="joined-as-note" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
@@ -1655,12 +1737,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {pendingAvatar ? (
                                     <img
                                         src={resolveAvatarUrl(pendingAvatar) || ''}
-                                        alt="Avatar Preview"
+                                        alt={t('Avatar Preview')}
                                         style={{
                                             width: '96px',
                                             height: '96px',
                                             borderRadius: '48px',
-                                            border: '3px solid #2563eb',
+                                            border: '3px solid var(--bp-ink-info)',
                                             objectFit: 'cover',
                                         }}
                                     />
@@ -1711,7 +1793,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     }}
                                 >
                                     <span style={{ fontSize: '1.5rem' }}>📸</span>
-                                    Camera
+                                    {t('Camera')}
                                 </button>
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
@@ -1733,7 +1815,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     }}
                                 >
                                     <span style={{ fontSize: '1.5rem' }}>🖼️</span>
-                                    Gallery
+                                    {t('Gallery')}
                                 </button>
                             </div>
 
@@ -1761,7 +1843,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 textAlign: 'left',
                                 marginBottom: '0.75rem',
                             }}>
-                                Or choose an avatar:
+                                {t('Or choose an avatar:')}
                             </h4>
 
                             {/* Horizontal scroll grid of BUNDLED_AVATARS */}
@@ -1778,6 +1860,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {BUNDLED_AVATARS.map((avatar) => {
                                     const isSelected = pendingAvatar === `bundled://${avatar.id}`;
                                     const resolvedUrl = resolveAvatarUrl(`bundled://${avatar.id}`) || '';
+                                    const label = t(avatar.label);
                                     return (
                                         <button
                                             key={avatar.id}
@@ -1787,7 +1870,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 width: '56px',
                                                 height: '56px',
                                                 borderRadius: '28px',
-                                                border: isSelected ? '3px solid #2563eb' : '2px solid transparent',
+                                                border: isSelected ? '3px solid var(--bp-ink-info)' : '2px solid transparent',
                                                 padding: 0,
                                                 overflow: 'hidden',
                                                 cursor: 'pointer',
@@ -1795,11 +1878,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 transition: 'all 0.2s',
                                                 transform: isSelected ? 'scale(1.05)' : 'none',
                                             }}
-                                            title={avatar.label}
+                                            title={label}
                                         >
                                             <img
                                                 src={resolvedUrl}
-                                                alt={avatar.label}
+                                                alt={label}
                                                 style={{
                                                     width: '100%',
                                                     height: '100%',
@@ -1813,7 +1896,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
                             {loading && (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
-                                    Processing photo...
+                                    {t('Processing photo...')}
                                 </p>
                             )}
 
@@ -1823,31 +1906,37 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </p>
                             )}
 
+                            {/* No picture yet: Next still works (rehearsal 14 Oct S9, never a gate), and this says whether
+                                the node asks for one before a first post (core postRulesFor). */}
+                            {!pendingAvatar && (
+                                <p data-testid="photo-step-note" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {photoStepNote(!beansOff)}
+                                </p>
+                            )}
+
                             <button
                                 onClick={() => {
-                                    if (pendingAvatar) {
-                                        setShowAvatarSetup(false);
-                                        if (byArea) setShowAreaStep(true);
-                                        setError(null);
-                                    }
+                                    setShowAvatarSetup(false);
+                                    if (byArea) setShowAreaStep(true);
+                                    setError(null);
                                 }}
-                                disabled={!pendingAvatar || loading}
+                                disabled={loading}
                                 style={{
                                     width: '100%',
                                     padding: '0.85rem',
                                     borderRadius: '10px',
                                     border: 'none',
-                                    background: !pendingAvatar ? 'var(--border-primary, #334155)' : loading ? '#555' : '#2563eb',
-                                    // White on the blue (and on the grey while it sends); the page's ink on the pale disabled fill.
-                                    color: !pendingAvatar ? 'var(--text-primary)' : 'var(--bp-commit-on)',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    // White on the blue (and on the grey while it sends).
+                                    color: 'var(--bp-info-on)',
                                     fontSize: '1rem',
                                     fontWeight: 600,
-                                    cursor: !pendingAvatar || loading ? 'not-allowed' : 'pointer',
+                                    cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit',
                                     transition: 'background 0.2s',
                                 }}
                             >
-                                Next →
+                                {t('Next →')}
                             </button>
 
                             {/* After an invite: back to the name, on the same account (backFromPhotoStep). Not after the
@@ -1866,14 +1955,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back
+                                {t('← Back')}
                             </button>
                             )}
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAreaStep ? (
                         /* ===== YOUR AREA (a community that syncs by area) ===== */
                         <>
-                            <OnboardingStepper step="area" area firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <OnboardingStepper step="area" area firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
                             <AreaStep
                                 send={senderForKey(pendingIdentity.privateKey, pendingIdentity.publicKey)}
                                 limits={nearbyLimits}
@@ -1885,44 +1974,45 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onClick={() => { setShowAreaStep(false); setShowAvatarSetup(true); }}
                                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem', minHeight: '44px', fontFamily: 'inherit' }}
                             >
-                                ← Back
+                                {t('← Back')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
-                            <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
+                            <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">{t('🫘 Welcome to BeanPool')}</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: beansOff ? '1rem' : '1.5rem', lineHeight: 1.5 }}>
-                                {beansOff ? HOW_IT_WORKS_WITHOUT_BEANS.intro : "Let's look at how this community economy works."}
+                                {beansOff ? t(HOW_IT_WORKS_WITHOUT_BEANS.intro) : t("Let's look at how this community economy works.")}
                             </p>
 
                             {beansOff ? <HowItWorksWithoutBeans /> : (
                             <div className="text-left space-y-4 mb-6" style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '0.5rem', textAlign: 'left' }}>
                                 {/* Card 1: Energy Exchange */}
+                                {/* A whole sentence beside an emoji or a bold one sits in a fragment of its own: words:check reads a t() beside text as a fragment. */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50">
-                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">⚡ Energy Exchange Marketplace</h4>
+                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">{t('⚡ Energy Exchange Marketplace')}</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.
+                                        {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
                                     </p>
                                     <div className="mt-3 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-xs leading-normal">
-                                        🟢 <strong>The best place to be is zero (0 Beans).</strong> This means you have given as much value to your community as you have received from it.
+                                        🟢 <strong>{t('The best place to be is zero (0 Beans).')}</strong> <>{t('This means you have given as much value to your community as you have received from it.')}</>
                                     </div>
                                     <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                                        🫘 <strong>Contributions First.</strong> In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
+                                        🫘 <strong>{t('Contributions First.')}</strong> <>{t('In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.')}</>
                                     </div>
                                 </div>
 
                                 {/* Card 2: The Ledger Rules */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-4">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🪙 The Mutual Credit Ledger</h4>
-                                    
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🪙 The Mutual Credit Ledger')}</h4>
+
                                     <div className="flex gap-3 items-start">
                                         <span className="text-lg leading-none">🤝</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Trust-Backed Credit</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Trust-Backed Credit')}</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
+                                                {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
                                             </p>
                                         </div>
                                     </div>
@@ -1930,9 +2020,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">🌾</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Community Commons Pool</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Community Commons Pool')}</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
+                                                {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
                                             </p>
                                         </div>
                                     </div>
@@ -1940,9 +2030,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">⏱️</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Reference Rate</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Reference Rate')}</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
+                                                {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
                                             </p>
                                         </div>
                                     </div>
@@ -1950,9 +2040,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
                                 {/* Card 3: Safe Handshake Held in Trust */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50">
-                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">🔒 Held in Trust</h4>
+                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">{t('🔒 Held in Trust')}</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
+                                        {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
                                     </p>
                                 </div>
 
@@ -1968,37 +2058,35 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                   the keeper wording in Phase B when the keepers are real.
                                 */}
                                 <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🔑 Your 12 Words Are Everything')}</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Your 12 words are your primary key to your account across devices.
+                                        {t('Your 12 words are your primary key to your account across devices.')}
                                         {signInRecovery
-                                            ? <> Signing in with {providerLabel(signInRecovery)} also brings it back.</>
-                                            : <> Without them, account recovery requires operator-assisted re-enrolment.</>}
+                                            ? <> {t('Signing in with {provider} also brings it back.', { provider: providerLabel(signInRecovery) })}</>
+                                            : <> <span>{t('Nobody can reset them: not us, not this community.')}</span></>}
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
-                                        7 days of inactivity, so keeping your 12 words safe ensures seamless access.
+                                        ⚠️ <strong>{t('Browser storage can be wiped without warning.')}</strong> <>{t('Safari clears site data after 7 days of inactivity, so keeping your 12 words safe ensures seamless access.')}</>
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
-                                        Write them down on paper — it's the only backup that can't be wiped.
+                                        📝 <BoldWords text={t('Find them any time under **Settings → Recovery Phrase**.')} /> <>{t("Write them down on paper — it's the only backup that can't be wiped.")}</>
                                     </p>
                                 </div>
 
                                 {/* Card 5: Where to Start */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🚀 Where to Start?</h4>
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🚀 Where to Start?')}</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📍 Explore the <strong>Map</strong> to find offers (blue) and needs (orange) near you.
+                                        📍 <BoldWords text={t('Explore the **Map** to find offers (green) and needs (orange) near you.')} />
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        💬 Tap <strong>Message</strong> on any post to chat securely (E2E encrypted) with neighbors.
+                                        💬 <BoldWords text={t('Tap **Message** on any post to chat securely (E2E encrypted) with neighbors.')} />
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        ➕ Click <strong>Post</strong> to list what you need or what you can offer to the community.
+                                        ➕ <BoldWords text={t('Click **Post** to list what you need or what you can offer to the community.')} />
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        💳 Use the <strong>Ledger</strong> tab to send credits to neighbors instantly.
+                                        💳 <BoldWords text={t('Use the **Ledger** tab to send credits to neighbors instantly.')} />
                                     </p>
                                 </div>
                             </div>
@@ -2016,13 +2104,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
-                                {loading ? 'Entering...' : "Let's Begin! 🚀"}
+                                {loading ? t('Entering...') : t("Let's Begin! 🚀")}
                             </button>
 
                             {/* Chosen at Safety Backup: the sign-in, now that nothing of onboarding is left to lose. The
@@ -2030,11 +2118,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             {addSignInAfterTour && joinedByWords && !signInRecovery && pendingIdentity && (
                                 <section data-testid="tour-add-sign-in" aria-labelledby="tour-add-sign-in-title" style={{ marginTop: '1rem', textAlign: 'left' }}>
                                     <h4 id="tour-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                        Add a sign-in as a second way back
+                                        {t('Add a sign-in as a second way back')}
                                     </h4>
                                     <AddSignIn
                                         identity={pendingIdentity}
-                                        label="Add a sign-in as a second way back"
+                                        label={t('Add a sign-in as a second way back')}
                                         autoStart
                                         onLeaving={() => finishOnboarding({ leaving: true })}
                                     />
@@ -2049,33 +2137,32 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back to Backup
+                                {t('← Back to Backup')}
                             </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={3} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
+                            <OnboardingStepper area={byArea} step={3} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>{t('🔑 Your Safety Backup')}</h3>
                             {joinedByWords && !signInRecovery ? (
                                 /* Joined with 12 words alone (two-doors design §2.5): said first and plainly, never a gate.
                                    The tickbox below stays as it is, and adding a sign-in is offered, both skippable. */
                                 <p data-testid="backup-words-only" style={{ fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-                                    These 12 words <strong>are</strong> your account. Nobody can reset them: not us, not this
-                                    community. If you lose them and this device, the account is gone for good.
+                                    <BoldWords text={t('These 12 words **are** your account.')} /> <>{t('Nobody can reset them: not us, not this community. If you lose them and this device, the account is gone for good.')}</>
                                 </p>
                             ) : (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                    Write these 12 words down on paper and keep them safe.
+                                    {t('Write these 12 words down on paper and keep them safe.')}
                                     {signInRecovery
-                                        ? <> They bring your identity back if you lose this device.</>
-                                        : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
+                                        ? <> {t('They bring your identity back if you lose this device.')}</>
+                                        : <> <BoldWords text={t('This is the **only** way to recover your identity if you lose this device.')} /></>}
                                 </p>
                             )}
                             {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
                             {signInRecovery && (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                    Signing in with {providerLabel(signInRecovery)} also brings this account back.
+                                    {t('Signing in with {provider} also brings this account back.', { provider: providerLabel(signInRecovery) })}
                                 </p>
                             )}
 
@@ -2085,12 +2172,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 for exactly the people this warning is for. */}
                             <div role="alert" className="p-3 mb-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 space-y-1">
                                 <p className="text-xs font-semibold text-amber-900 dark:text-amber-300">
-                                    <span aria-hidden="true">⚠️</span> Browser storage is not permanent
+                                    <span aria-hidden="true">⚠️</span> {t('Browser storage is not permanent')}
                                 </p>
                                 <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
-                                    Safari can clear site data after <strong>7 days of inactivity</strong>, and
-                                    clearing your browsing data wipes your local session.
-                                    Your 12 words on paper are the only offline backup that can't be wiped.
+                                    <BoldWords text={t('Safari can clear site data after **7 days of inactivity**, and clearing your browsing data wipes your local session.')} /> <>{t("Your 12 words on paper are the only offline backup that can't be wiped.")}</>
                                 </p>
                             </div>
 
@@ -2099,7 +2184,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                               1.3x text, where three fixed columns left each word about 29px and pushed the page 50px
                               sideways. A word someone copies onto paper is never broken across lines to fit.
                             */}
-                            <div data-testid="backup-words" style={{
+                            <div data-testid="backup-words" translate="no" className="notranslate" style={{
                                 display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                 gap: '0.4rem', marginBottom: '1rem',
                             }}>
@@ -2115,6 +2200,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </div>
                                 ))}
                             </div>
+                            <WordsAreEnglish />
 
                             <RecoveryKitButton words={pendingWords} />
 
@@ -2126,9 +2212,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                               care.
                             */}
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                No pen handy? Carry on — you can come back to these any time under
-                                Settings → Recovery Phrase. But <strong>don't leave it too long</strong> — your browser
-                                could clear this data without asking.
+                                <>{t('No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.')}</> <BoldWords text={t("But **don't leave it too long** — your browser could clear this data without asking.")} />
                             </p>
 
                             <label htmlFor="seedConfirmed" style={{
@@ -2141,9 +2225,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     type="checkbox"
                                     checked={seedConfirmed}
                                     onChange={(e) => setSeedConfirmed(e.target.checked)}
-                                    style={{ accentColor: '#2563eb' }}
+                                    style={{ accentColor: 'var(--bp-ink-info)' }}
                                 />
-                                I've written these words down somewhere safe
+                                {t("I've written these words down somewhere safe")}
                             </label>
 
 
@@ -2179,13 +2263,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#2563eb',
-                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                    color: 'var(--bp-info-on)', fontSize: '1rem',
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
-                                Next →
+                                {t('Next →')}
                             </button>
 
                             {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
@@ -2208,10 +2292,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         }}
                                         className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
-                                        Add a sign-in as a second way back
+                                        {t('Add a sign-in as a second way back')}
                                     </button>
                                     <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
-                                        You'll choose it after a quick look at how things work here.
+                                        {t("You'll choose it after a quick look at how things work here.")}
                                     </p>
                                 </div>
                             )}
@@ -2228,32 +2312,34 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back to Photo
+                                {t('← Back to Photo')}
                             </button>
                         </>
                     ) : showRecovery ? (
                         /* ===== RECOVERY FROM 12 WORDS ===== */
                         <>
                                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'left' }}>
-                                    🔑 Recover with 12 Words
+                                    {t('🔑 Recover with 12 Words')}
                                 </h3>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, lineHeight: 1.5, textAlign: 'left' }}>
-                                        Enter your 12 recovery words.
+                                {/* Wraps: a translated "Paste Words" (ru, de, el…) is wider than the English and went off a 320 px screen at
+                                    1.3× text (#1947 review B1). The sentence takes the room; the button goes below it when both can't fit. */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, lineHeight: 1.5, textAlign: 'left', flex: '1 1 10em', minWidth: 0 }}>
+                                        {t('Enter your 12 recovery words.')}
                                     </p>
                                     <button
                                         type="button"
-                                        aria-label="Paste recovery words from clipboard"
+                                        aria-label={t('Paste recovery words from clipboard')}
                                         onClick={async () => {
                                             try {
                                                 const text = await navigator.clipboard.readText();
                                                 const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
                                                 if (tokens.length === 0) return;
                                                 const updated = Array(12).fill('');
-                                                tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                 setRecoveryWords(updated);
                                             } catch {
-                                                setError('Unable to read clipboard. Please paste your recovery words directly into the inputs.');
+                                                setError(t('Unable to read clipboard. Please paste your recovery words directly into the inputs.'));
                                             }
                                         }}
                                         className="bg-blue-50 dark:bg-blue-950/40 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none transition-colors"
@@ -2263,11 +2349,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             whiteSpace: 'nowrap',
                                         }}
                                     >
-                                        <span aria-hidden="true">📋 </span>Paste Words
+                                        <span aria-hidden="true">📋 </span>{t('Paste Words')}
                                     </button>
                                 </div>
 
-                                <div style={{
+                                <WordsAreEnglish />
+                                <div translate="no" className="notranslate" style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                                     gap: '0.5rem',
@@ -2278,7 +2365,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         <input
                                             key={i}
                                             id={`recoveryWord-${i}`}
-                                            aria-label={`Recovery word ${i + 1}`}
+                                            aria-label={t('Recovery word {n}', { n: i + 1 })}
                                             type="text"
                                             value={word}
                                             autoCapitalize="none"
@@ -2291,7 +2378,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 if (tokens.length > 1) {
                                                     e.preventDefault();
                                                     const updated = Array(12).fill('');
-                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                     setRecoveryWords(updated);
                                                 }
                                             }}
@@ -2299,15 +2386,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 const tokens = e.target.value.trim().split(/\s+/).filter(Boolean);
                                                 if (tokens.length > 1) {
                                                     const updated = Array(12).fill('');
-                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                     setRecoveryWords(updated);
                                                 } else {
                                                     const updated = [...recoveryWords];
-                                                    updated[i] = e.target.value.toLowerCase().trim();
+                                                    updated[i] = lowercaseRecoveryWords(e.target.value).trim();
                                                     setRecoveryWords(updated);
                                                 }
                                             }}
-                                            placeholder={`${i + 1}`}
+                                            placeholder={String(i + 1)}
                                             className="bg-nature-50/80 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-oat-50 placeholder-nature-400 dark:placeholder-nature-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                                             style={{
                                                 width: '100%',
@@ -2325,7 +2412,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 </div>
 
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: '0 0 1rem', lineHeight: 1.5, textAlign: 'left' }}>
-                                    Your name and picture come back automatically — the 12 words are all you need.
+                                    {t('Your name and picture come back automatically — the 12 words are all you need.')}
                                 </p>
 
                                 {error && (
@@ -2340,13 +2427,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     style={{
                                         width: '100%', padding: '0.85rem', borderRadius: '10px',
                                         border: 'none',
-                                        background: loading ? '#555' : '#2563eb',
-                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
+                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
+                                        color: 'var(--bp-info-on)', fontSize: '1rem',
                                         fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                         fontFamily: 'inherit', transition: 'background 0.2s',
                                     }}
                                 >
-                                    {loading ? 'Recovering...' : 'Recover Identity'}
+                                    {loading ? t('Recovering...') : t('Recover Identity')}
                                 </button>
 
                                 <button
@@ -2357,7 +2444,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                     }}
                                 >
-                                    ← Back
+                                    {t('← Back')}
                                 </button>
                             </>
                     ) : showQrPairing ? (
@@ -2365,10 +2452,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         <>
                             <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
                                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
-                                    📲 Link with Mobile App
+                                    {t('📲 Link with Mobile App')}
                                 </h3>
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.5, margin: 0 }}>
-                                    Scan this QR code with the BeanPool app on your phone to instantly unlock your account on this computer.
+                                    {t('Scan this QR code with the BeanPool app on your phone to instantly unlock your account on this computer.')}
                                 </p>
                             </div>
 
@@ -2400,11 +2487,42 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     position: 'relative',
                                 }}
                             >
-                                {pairingStatus === 'waiting' && pairingSession ? (
+                                {pairingStatus === 'waiting' && pairingSession && pairingConfirming ? (
+                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 1rem', textAlign: 'center', maxWidth: '16rem' }}>
+                                        <label htmlFor="pair-digits" style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '0.75rem' }}>
+                                            {t('Type the two digits your phone shows')}
+                                        </label>
+                                        <input
+                                            id="pair-digits"
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            pattern="[0-9]{2}"
+                                            maxLength={2}
+                                            required
+                                            autoFocus
+                                            value={pairingDigits}
+                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                                            style={{ width: '5rem', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={pairingDigits.length !== 2}
+                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 2 ? 1 : 0.6 }}
+                                        >
+                                            {t('Confirm')}
+                                        </button>
+                                        {pairingDigitsNote && (
+                                            <div role="alert" style={{ marginTop: '0.6rem', fontSize: '0.85rem', color: '#b91c1c' }}>{pairingDigitsNote}</div>
+                                        )}
+                                        <div style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: '#374151' }}>
+                                            {t('Your account opens here only after the right digits. Three wrong tries and nothing is sent.')}
+                                        </div>
+                                    </form>
+                                ) : pairingStatus === 'waiting' && pairingSession ? (
                                     <>
-                                        <div role="img" aria-label="QR code to scan with BeanPool mobile app">
+                                        <div role="img" aria-label={t('QR code to scan with BeanPool mobile app')}>
                                             <QRCodeSVGComponent
-                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(getNodeApiUrl() || window.location.origin)}`}
+                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(nodeOrigin(getNodeApiUrl() || window.location.origin) ?? '')}`}
                                                 size={210}
                                                 level="M"
                                                 marginSize={2}
@@ -2418,25 +2536,25 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '0.35rem',
-                                        }} aria-label={`Expires in ${pairingSecondsLeft} seconds`}>
-                                            <span>⏱️ Expires in {pairingSecondsLeft}s</span>
+                                        }} aria-label={t('Expires in {n} seconds', { n: pairingSecondsLeft })}>
+                                            <span>{t('⏱️ Expires in {n}s', { n: pairingSecondsLeft })}</span>
                                         </div>
                                     </>
                                 ) : pairingStatus === 'decrypting' ? (
                                     <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', animation: 'spin 1s infinite linear' }}>🔐</div>
-                                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>Decrypting & Unlocking...</div>
+                                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{t('Decrypting & Unlocking...')}</div>
                                     </div>
                                 ) : pairingStatus === 'success' ? (
                                     <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✨</div>
-                                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#047857' }}>Device Linked Successfully!</div>
+                                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#047857' }}>{t('Device Linked Successfully!')}</div>
                                     </div>
                                 ) : (
                                     <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: '#374151' }}>
                                         <div style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>⌛</div>
                                         <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-                                            {error ? 'Connection issue with node relay' : 'Pairing code expired'}
+                                            {error ? t('Connection issue with node relay') : t('Pairing code expired')}
                                         </div>
                                         <button
                                             onClick={handleStartQrPairing}
@@ -2453,7 +2571,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 opacity: loading ? 0.7 : 1,
                                             }}
                                         >
-                                            {loading ? '🔄 Connecting...' : '🔄 Try Again / New Code'}
+                                            {loading ? t('🔄 Connecting...') : t('🔄 Try Again / New Code')}
                                         </button>
                                     </div>
                                 )}
@@ -2470,11 +2588,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 color: 'var(--text-secondary)',
                                 border: '1px solid var(--border-primary, rgba(255,255,255,0.1))',
                             }}>
-                                <div style={{ fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>How to scan:</div>
+                                <div style={{ fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>{t('How to scan:')}</div>
                                 <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                    <li>Open <strong>BeanPool</strong> on your mobile phone</li>
-                                    <li>Go to <strong>Settings → Use your account on another device</strong> (older apps: <strong>Link Another Device</strong>)</li>
-                                    <li>Point camera at this screen</li>
+                                    <li><BoldWords text={t('Open **BeanPool** on your mobile phone')} /></li>
+                                    <li><BoldWords text={t('Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)')} /></li>
+                                    <li>{t('Point camera at this screen')}</li>
                                 </ol>
                             </div>
 
@@ -2492,7 +2610,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back to Options
+                                {t('← Back to Options')}
                             </button>
                         </>
                     ) : rekeyCode !== null ? (
@@ -2525,7 +2643,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             })}
                         />
                     ) : restoreReturn === 'checking' ? (
-                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t('One moment…')}</p>
                     ) : (webJoinForDoor && sentInvite === 'none') || (sentJoin === 'settle' && sentInvite !== 'checking') ? (
                         /* A sign-in coming back is met at once, before the node has said what it is; on a node that
                            turns out to be invite-only it is dropped, and the invite page shows as always. A join that
@@ -2565,55 +2683,63 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : finishJoining && typeof sentInvite === 'object' ? (
                         /* ===== A KEY AN INVITE WENT WITH, NOT SETTLED YET (deciding pass 4111943146) ===== */
                         <>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Finish joining</h3>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>{t('Finish joining')}</h3>
                             <p role="alert" data-testid="invite-sent-unreachable" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
                                 {sentInvite.stuck === 'unsaved'
-                                    ? `The community has you as ${sentInvite.name || 'a member'}, but this browser couldn't save the account.`
+                                    ? (sentInvite.name
+                                        ? t("The community has you as {name}, but this browser couldn't save the account.", { name: sentInvite.name })
+                                        : t("The community has you as a member, but this browser couldn't save the account."))
                                     : sentInvite.stuck === 'waiting'
-                                        ? `You asked to join as ${sentInvite.name || 'a new member'} with an invite, and the community doesn't have you yet.`
-                                        : `You asked to join as ${sentInvite.name || 'a new member'}, and the answer didn't reach this browser.`}
-                                {` It's keeping ${sentInvite.name ? `${sentInvite.name}'s` : 'your'} key until it can finish.`}
+                                        ? (sentInvite.name
+                                            ? t("You asked to join as {name} with an invite, and the community doesn't have you yet.", { name: sentInvite.name })
+                                            : t("You asked to join as a new member with an invite, and the community doesn't have you yet."))
+                                        : (sentInvite.name
+                                            ? t("You asked to join as {name}, and the answer didn't reach this browser.", { name: sentInvite.name })
+                                            : t("You asked to join as a new member, and the answer didn't reach this browser."))}{' '}
+                                {sentInvite.name
+                                    ? t("It's keeping {name}'s key until it can finish.", { name: sentInvite.name })
+                                    : t("It's keeping your key until it can finish.")}
                             </p>
                             {sentInvite.stuck === 'unreachable' && (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
-                                    Can't reach the community right now.
+                                    {t("Can't reach the community right now.")}
                                 </p>
                             )}
                             {sentInvite.stuck === 'waiting' && (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
-                                    {`An invite can still go through up to ${waitMinutes} minutes after it was sent. After that, Retry lets the key go, and you can join another way.`}
+                                    {t('An invite can still go through up to {n} minutes after it was sent. After that, Retry lets the key go, and you can join another way.', { n: waitMinutes })}
                                 </p>
                             )}
                             <p role="status" style={{ fontSize: '0.8rem', lineHeight: 1.5, marginBottom: sentInvite.again && !sentInvite.busy ? '1rem' : 0, overflowWrap: 'anywhere' }}>
                                 {sentInvite.again && !sentInvite.busy
                                     ? (sentInvite.stuck === 'unsaved'
-                                        ? "Still couldn't save it. Try again in a minute."
+                                        ? t("Still couldn't save it. Try again in a minute.")
                                         : sentInvite.stuck === 'waiting'
-                                            ? "The community still doesn't have you. Try again in a few minutes."
-                                            : "Still can't reach the community. Try again in a minute.")
+                                            ? t("The community still doesn't have you. Try again in a few minutes.")
+                                            : t("Still can't reach the community. Try again in a minute."))
                                     : ''}
                             </p>
                             {/* aria-disabled, not disabled, while it asks: a disabled button would drop the focus it has. */}
                             <button type="button" aria-disabled={sentInvite.busy} onClick={retrySentInvite}
                                 style={{
                                     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-                                    background: sentInvite.busy ? '#555' : '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    background: sentInvite.busy ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
                                     cursor: sentInvite.busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
                                 }}>
-                                {sentInvite.busy ? 'Checking…' : 'Retry'}
+                                {sentInvite.busy ? t('Checking…') : t('Retry')}
                             </button>
                         </>
                     ) : door === 'checking' || sentJoin === 'checking' || sentInvite === 'checking' || sentInvite === 'kept' ? (
-                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t('One moment…')}</p>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
                             <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                                🎟️ Join with Invite Code
+                                {t('🎟️ Join with Invite Code')}
                             </h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                                Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.
+                                {t('Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.')}
                             </p>
                             {privatePreview && (
                                 <p role="note" data-testid="welcome-private-preview" style={{
@@ -2630,14 +2756,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 fontSize: '0.85rem', fontWeight: 600,
                                 color: 'var(--text-secondary)', marginBottom: '0.5rem',
                             }}>
-                                Invite Code
+                                {t('Invite Code')}
                             </label>
                             <input
                                 id="inviteCode"
                                 type="text"
                                 value={inviteCode}
                                 onChange={(e) => setInviteCode(formatInviteCode(e.target.value))}
-                                placeholder="e.g. BP-7K3X-9M2W"
+                                placeholder={t('e.g. BP-7K3X-9M2W')}
                                 maxLength={800}
                                 disabled={loading}
                                 style={{
@@ -2654,14 +2780,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 fontSize: '0.85rem', fontWeight: 600,
                                 color: 'var(--text-secondary)', marginBottom: '0.5rem',
                             }}>
-                                Your Callsign (Name)
+                                {t('Your Callsign (Name)')}
                             </label>
                             <input
                                 id="callsign"
                                 type="text"
                                 value={callsign}
                                 onChange={(e) => setCallsign(e.target.value)}
-                                placeholder="e.g. Alice"
+                                placeholder={t('e.g. Alice')}
                                 maxLength={MAX_JOIN_CALLSIGN}
                                 disabled={loading}
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -2671,7 +2797,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             {joinTerms && (
                                 <div data-testid="join-consent" style={{ textAlign: 'left', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
                                     <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 0.35rem' }}>
-                                        What this community's admins can see
+                                        {t("What this community's admins can see")}
                                     </p>
                                     <ConsentText text={joinTerms.text} fontSize="0.85rem" />
                                     <label htmlFor="joinConsent" style={{
@@ -2684,12 +2810,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             checked={joinConsentTicked}
                                             onChange={(e) => setJoinTickedVersion(e.target.checked ? joinTerms.version : null)}
                                             disabled={loading}
-                                            style={{ accentColor: '#2563eb', width: 20, height: 20 }}
+                                            style={{ accentColor: 'var(--bp-ink-info)', width: 20, height: 20 }}
                                         />
-                                        I agree
+                                        {t('I agree')}
                                     </label>
                                     <p style={{ fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-muted)', margin: 0 }}>
-                                        Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.
+                                        {t("Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.")}
                                     </p>
                                 </div>
                             )}
@@ -2706,14 +2832,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : 'var(--cta-go, #10b981)',
-                                    color: '#fff', fontSize: '1rem',
+                                    background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-commit-fill)',
+                                    color: 'var(--bp-commit-on)', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                     marginBottom: '1rem',
                                 }}
                             >
-                                {loading ? 'Creating...' : 'Create Identity & Join →'}
+                                {loading ? t('Creating...') : t('Create Identity & Join →')}
                             </button>
 
                             {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28) ===== */}
@@ -2723,8 +2849,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
                                 }}>
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 0.65rem', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-                                        No invite? This community's listings are for its members. Look around the global community, where anyone can join,
-                                        and ask a community near you to let you in from there.
+                                        {t("No invite? This community's listings are for its members. Look around the global community, where anyone can join, and ask a community near you to let you in from there.")}
                                     </p>
                                     <LookAroundGlobal compact />
                                 </div>
@@ -2733,7 +2858,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             {/* ===== FAQs ===== */}
                             <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-primary, #333)', paddingTop: '1.25rem' }}>
                                 <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
-                                    ❓ Frequently Asked Questions
+                                    {t('❓ Frequently Asked Questions')}
                                 </h4>
                                 {FAQ_ITEMS.map((faq, i) => (
                                     <div
@@ -2757,7 +2882,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 textAlign: 'left',
                                             }}
                                         >
-                                            {faq.q}
+                                            {t(faq.q)}
                                             <span style={{
                                                 fontSize: '0.7rem', color: 'var(--text-muted)',
                                                 transition: 'transform 0.2s',
@@ -2770,7 +2895,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 fontSize: '0.78rem', color: 'var(--text-muted)',
                                                 lineHeight: 1.5, marginTop: '0.4rem', textAlign: 'left',
                                             }}>
-                                                {faq.a}
+                                                {t(faq.a)}
                                             </p>
                                         )}
                                     </div>
@@ -2792,7 +2917,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     margin: '0 0 0.65rem',
                                     fontWeight: 500,
                                 }}>
-                                    Already a member or switching devices?
+                                    {t('Already a member or switching devices?')}
                                 </p>
                                 <button
                                     onClick={() => {
@@ -2800,14 +2925,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         setShowMemberOptions(true);
                                         setError(null);
                                     }}
-                                    aria-label="Restore existing identity"
+                                    aria-label={t('Restore existing identity')}
                                     style={{
                                         width: '100%',
                                         padding: '0.75rem 1rem',
                                         borderRadius: '10px',
-                                        border: '1px solid #2563eb',
+                                        border: '1px solid var(--bp-ink-info)',
                                         background: 'transparent',
-                                        color: 'var(--link, #2563eb)',
+                                        color: 'var(--bp-ink-info)',
                                         fontSize: '0.9rem',
                                         fontWeight: 700,
                                         cursor: 'pointer',
@@ -2818,7 +2943,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                     onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                 >
-                                    🔑 Restore Existing Identity →
+                                    {t('🔑 Restore Existing Identity →')}
                                 </button>
                             </div>
 
@@ -2830,7 +2955,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back to Home
+                                {t('← Back to Home')}
                             </button>
                             {onBack && <BackToListings onBack={onBack} />}
                         </>
@@ -2845,8 +2970,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         style={{
                                             width: '100%', padding: '1.1rem 1rem', borderRadius: '14px',
                                             border: 'none',
-                                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                                            color: '#fff', fontSize: '1.1rem', fontWeight: 700,
+                                            background: 'linear-gradient(135deg, var(--bp-info-fill), var(--bp-info-hover))',
+                                            color: 'var(--bp-info-on)', fontSize: '1.1rem', fontWeight: 700,
                                             cursor: 'pointer', fontFamily: 'inherit',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                                             marginBottom: '1rem',
@@ -2857,7 +2982,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                         onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                     >
-                                        I'm Already a Member →
+                                        {t("I'm Already a Member →")}
                                     </button>
 
                                     <button
@@ -2874,17 +2999,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                         onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                                     >
-                                        I'm New Here
+                                        {t("I'm New Here")}
                                     </button>
                                 </>
                             ) : (
                                 /* MEMBER SUB-OPTIONS */
                                 <>
                                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                                        Sign in to your account
+                                        {t('Sign in to your account')}
                                     </h3>
                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                                        Choose how to restore your identity on this device:
+                                        {t('Choose how to restore your identity on this device:')}
                                     </p>
 
                                     {error && (
@@ -2902,9 +3027,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         disabled={loading}
                                         className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                     >
-                                        <span aria-hidden="true">📲</span> Link with Mobile App (Scan QR)
+                                        <span aria-hidden="true">📲</span> {t('Link with Mobile App (Scan QR)')}
                                         <span className="text-[10px] font-extrabold bg-bp-commit-fill text-bp-commit-on px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
-                                            FASTEST
+                                            {t('FASTEST')}
                                         </span>
                                     </button>
 
@@ -2913,7 +3038,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         disabled={loading}
                                         className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                                     >
-                                        <span aria-hidden="true">🔑</span> Recover with 12 Words
+                                        <span aria-hidden="true">🔑</span> {t('Recover with 12 Words')}
                                     </button>
 
                                     <button
@@ -2921,7 +3046,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         disabled={loading}
                                         className="w-full rounded-2xl border border-sky-500/40 bg-sky-50/90 hover:bg-sky-100/90 active:scale-[0.98] dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                                     >
-                                        <span aria-hidden="true">🪪</span> An admin gave me a re-key code
+                                        <span aria-hidden="true">🪪</span> {t('An admin gave me a re-key code')}
                                     </button>
 
                                     <button
@@ -2932,7 +3057,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                         }}
                                     >
-                                        ← Back
+                                        {t('← Back')}
                                     </button>
                                 </>
                             )}
@@ -2941,7 +3066,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     )}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
-                    BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance. By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Privacy Policy</a>.
+                    {/* The last sentence has two links inside it and stays English until such a sentence can be one string. */}
+                    <>{t('BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance.')}</> By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Privacy Policy</a>.
                 </p>
             </div>
         </div>

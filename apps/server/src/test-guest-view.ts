@@ -1277,6 +1277,8 @@ async function main(): Promise<void> {
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
             // The event form's zone of a pin and its picker list (routes/events.ts): members' signed reads, a zone and no listing.
             'GET /api/events/zone', 'GET /api/events/zones',
+            // Cancel or restore one date of a repeating event (routes/events.ts): its host's signed write, members only.
+            'POST /api/events/:postId/skip', 'DELETE /api/events/:postId/skip',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
@@ -1377,6 +1379,7 @@ async function main(): Promise<void> {
             'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
             'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
+            'POST /api/marketplace/posts/:id/let-in',
             'POST /api/marketplace/posts/:id/vote', 'POST /api/marketplace/posts/accept', 'POST /api/marketplace/posts/pause',
             'POST /api/marketplace/posts/remove', 'POST /api/marketplace/posts/request', 'POST /api/marketplace/posts/resume',
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
@@ -1403,7 +1406,7 @@ async function main(): Promise<void> {
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
-            'POST /api/pair/cancel', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
+            'POST /api/pair/cancel', 'POST /api/pair/confirm', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',

@@ -9,7 +9,7 @@
 
 import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
-    LOCAL_CLOCK_RE, formatDate, t, word, type EventWhenParts,
+    LOCAL_CLOCK_RE, formatDate, t, tn, word, type EventWhenParts,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -38,6 +38,16 @@ export function approximatePin(lat: number, lng: number): { lat: number; lng: nu
     return { lat: Math.round(lat * 1000) / 1000, lng: Math.round(lng * 1000) / 1000 };
 }
 
+/**
+ * A new pin from a tap, the host's location or an address. Where anyone can join in a minute (`features.openMembership`,
+ * the global node) it starts Approximate, rounded to about 100 m, and the host can still choose the exact spot, kept as
+ * `exact` (DESIGN-global-member-privacy-fable.md, director amendment 1 item 3; #1965). Elsewhere it is the spot, as always.
+ */
+export function freshEventPin(lat: number, lng: number, openMembership: boolean): { pin: { lat: number; lng: number }; approximate: boolean; exact: { lat: number; lng: number } } {
+    const exact = { lat, lng };
+    return openMembership ? { pin: approximatePin(lat, lng), approximate: true, exact } : { pin: exact, approximate: false, exact };
+}
+
 /** End time when the host leaves it blank: start + 2 hours (decision 32). */
 export function defaultEventEnd(start: Date): Date {
     return new Date(start.getTime() + EVENT_DEFAULT_DURATION_MS);
@@ -63,6 +73,8 @@ export interface EventFormInput {
     tz?: string | null;
     /** That zone's offset now, in minutes, for the past check; null while unknown (the device's own clock is used). */
     tzOffsetMinutes?: number | null;
+    /** "Only people I let in see the note and chat" (hostLetsInDefault for a new event). */
+    hostLetsIn: boolean;
 }
 
 export interface EventPostDraft {
@@ -86,6 +98,8 @@ export interface EventPostDraft {
     eventLink?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
+    /** Always sent: the host's choice, never left to the node's default. */
+    eventHostLetsIn: boolean;
     audienceScope?: 'group';
     targetGroupId?: string;
 }
@@ -146,9 +160,94 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         ...(input.tz ? { eventTz: input.tz } : {}),
         ...(online ? { eventOnline: true as const, ...(link ? { eventLink: link } : {}) } : { eventPlaceName: placeName }),
         ...(note ? { eventPrivateNote: note } : {}),
+        eventHostLetsIn: input.hostLetsIn,
         ...(input.audienceGroupId ? { audienceScope: 'group' as const, targetGroupId: input.audienceGroupId } : {}),
     };
     return { ok: true, draft };
+}
+
+// ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================
+
+/** The node's refusal code for "Going, and the host hasn't let you in yet" (403 on the chat). */
+export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
+/** The tickbox's label and the line under it. */
+export const hostLetsInLabel = (): string => t('Only people I let in see the note and chat');
+export const hostLetsInHint = (): string => t('Tick this if the note is your home address or a gate code.');
+/** What the chat entry says, disabled, while the host hasn't let this member in. */
+export const eventChatWaitingText = (): string => t('Chat opens when the host lets you in.');
+
+/**
+ * An edit from ticked to unticked opens the note and every chat line so far to everyone Going: the form says so before
+ * saving (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1). Never a hard gate.
+ */
+export function hostLetsInOffWarning(before: boolean, after: boolean): string | null {
+    return before && !after ? t('Everyone going will see the note and the chat so far.') : null;
+}
+
+/** The node's system line when the host opens the chat to everyone going (server engine/event-thread.ts). */
+export const EVENT_CHAT_OPENED_SYSTEM_TYPE = 'event_opened_to_going';
+
+/** A system line in an event chat, in the reader's language where the app knows its kind; the node's text otherwise. */
+export function eventChatSystemText(systemType: string | null | undefined, nodeText: string): string {
+    return systemType === EVENT_CHAT_OPENED_SYSTEM_TYPE ? t('The host opened this chat to everyone going.') : nodeText;
+}
+
+/** A new event's tickbox: ticked where anyone can join in a minute (`features.openMembership`), unticked elsewhere. */
+export function hostLetsInDefault(features: { openMembership?: boolean } | null | undefined): boolean {
+    return features?.openMembership === true;
+}
+
+/** The words under the note, by the tickbox and the node (§2.3). */
+export function privateNoteHelper(hostLetsIn: boolean, openMembership: boolean): string {
+    if (hostLetsIn) {
+        return openMembership
+            ? t("Anyone can join this community in a minute. Only the people you let in will see this note and the event chat. You let people in from Who's going.")
+            : t('Only the people you let in see this.');
+    }
+    return openMembership
+        ? t('Everyone who taps Going sees this. Anyone can join this community in a minute.')
+        : t('Everyone who taps Going sees this.');
+}
+
+/** Where a member stands on an event: 'open' where the host doesn't let people in (and for the host). */
+export type EventLetInState = 'open' | 'before' | 'waiting' | 'in';
+
+export function eventLetInState(post: any, isHost: boolean): EventLetInState {
+    if (!post?.eventHostLetsIn || isHost) return 'open';
+    if ((post.myRsvp ?? null) !== 'going') return 'before';
+    return post.myLetIn ? 'in' : 'waiting';
+}
+
+/** The line the event shows a member who isn't let in yet; null otherwise. */
+export function eventLetInLine(state: EventLetInState): string | null {
+    if (state === 'before') return t('The host lets people in. Tap Going, and the note and the chat open once they do.');
+    if (state === 'waiting') return t("You're going. The host hasn't let you in yet: the note and the chat open when they do.");
+    return null;
+}
+
+/** Going and not let in, from the host's RSVP list. */
+export function eventWaitingCount(rsvps: any[] | null | undefined): number {
+    if (!Array.isArray(rsvps)) return 0;
+    return rsvps.filter(r => r?.status === 'going' && !r?.letInAt).length;
+}
+
+export function eventWaitingLine(n: number): string {
+    return tn(n, '{n} waiting to be let in', '{n} waiting to be let in');
+}
+
+/** The host's Let in button, read aloud: whom it lets in, or that a tap takes it back. */
+export function letInButtonLabel(letIn: boolean, name: string | null | undefined): string {
+    if (name) return letIn ? t('Let in. Tap to take it back from {name}', { name }) : t('Let {name} in', { name });
+    return letIn ? t('Let in. Tap to take it back') : t('Let them in');
+}
+
+export function letEveryoneInQuestion(n: number): string {
+    return tn(n, 'Let {n} in? People who tap Going later still wait.', 'Let all {n} in? People who tap Going later still wait.');
+}
+
+/** Whether a node refusal is "you're going, the host hasn't let you in" — never shown as "only the host and people going". */
+export function isWaitingForHost(err: unknown): boolean {
+    return !!err && typeof err === 'object' && (err as { code?: unknown }).code === EVENT_CHAT_WAITING_CODE;
 }
 
 // ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
@@ -521,6 +620,8 @@ export function trimEventChatDraft(text: string): string {
 export function canOpenEventChat(post: any): boolean {
     if (!post || post.type !== 'event') return false;
     if (Array.isArray(post.eventRsvps)) return true;
+    // Where the host lets people in, Going opens it only once they have (the entry shows eventChatWaitingText).
+    if (post.eventHostLetsIn && post.myLetIn === false) return false;
     return (post.myRsvp ?? null) === 'going';
 }
 
@@ -586,6 +687,8 @@ export interface EventEditValues {
     /** The zone the clocks above are in; null for an event from a node before zones (the device's clock, as before). */
     tz?: string | null;
     tzOffsetMinutes?: number | null;
+    /** "Only people I let in see the note and chat". */
+    hostLetsIn: boolean;
 }
 
 /** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
@@ -612,6 +715,7 @@ export function eventEditValues(post: any): EventEditValues {
         link: post?.eventLink ?? '',
         tz: f.tz,
         tzOffsetMinutes: f.tz && Number.isFinite(offset) ? offset : null,
+        hostLetsIn: post?.eventHostLetsIn === true,
     };
 }
 
@@ -630,6 +734,7 @@ export interface EventEditPatch {
     lat?: number;
     lng?: number;
     photos?: string[];
+    eventHostLetsIn?: boolean;
 }
 
 /**
@@ -692,6 +797,8 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (note !== before.privateNote.trim()) patch.eventPrivateNote = note;
     if (!online && (after.lat !== before.lat || after.lng !== before.lng)) { patch.lat = after.lat!; patch.lng = after.lng!; }
     if (after.photo !== before.photo) patch.photos = after.photo ? [after.photo] : [];
+    // Silent like the note: who reads the note is the host's to change.
+    if (after.hostLetsIn !== before.hostLetsIn) patch.eventHostLetsIn = after.hostLetsIn;
     const notifies = patch.eventStartAt !== undefined || patch.eventEndAt !== undefined || patch.eventPlaceName !== undefined
         || patch.lat !== undefined || patch.eventTz !== undefined || patch.eventOnline !== undefined;
     return { ok: true, patch, notifies };
@@ -734,6 +841,8 @@ export const EVENT_LINK_MAX = 500;
 /** Sentences shown from more than one place: marked here, translated where shown (`t(EVENT_TIME_WORDS.linkHint)`). */
 export const EVENT_TIME_WORDS = {
     linkHint: word('Link to join · only people who tap Going see it'),
+    /** Where the host lets people in, the link waits for them as the note does (engine eventPrivateOpenTo, #1953). */
+    linkHintLetIn: word('Link to join · only the people you let in see it'),
     /** The zone line when an online event's zone is not known: the device could not name its own (§3, §7 item 7). */
     zonePrompt: word('Pick the time zone these times are in'),
 } as const;
@@ -1017,9 +1126,11 @@ export function eventTimeAdjustedText(adjusted: { start?: EventClockAdjustment |
  * What an online event's detail says where the join link would be, when the viewer has none: someone not Going is told
  * how to get it (the web's sentence); someone Going is never told to tap Going (#1946 review, finding 7): offline (the
  * node's view not loaded, and the link is never cached) they hear when it will show, and with the view loaded the host
- * simply set none.
+ * simply set none. Where the host lets people in, the link waits for them like the note (#1953): before Going and while
+ * waiting it says so, the web's sentence, never "tap Going" alone.
  */
-export function eventLinkWaitWords(myRsvp: EventRsvpStatus | null | undefined, viewLoaded: boolean): string | null {
+export function eventLinkWaitWords(myRsvp: EventRsvpStatus | null | undefined, viewLoaded: boolean, letIn: EventLetInState = 'open'): string | null {
+    if (letIn === 'before' || letIn === 'waiting') return t('The link to join shows here once the host lets you in.');
     if (myRsvp !== 'going') return t('The link to join shows here once you tap Going.');
     return viewLoaded ? null : t('The link shows when you have signal.');
 }

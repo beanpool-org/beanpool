@@ -377,7 +377,7 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Members</span>
                         <span className="text-lg" aria-hidden="true">👥</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
+                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
                         {membersCount}
                     </div>
                     <p className="text-xs text-nature-400 m-0">
@@ -395,7 +395,7 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Commons Pool</span>
                         <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
+                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
                         {typeof auditState.result?.sumBalances === 'number' && Number.isFinite(auditState.result.sumBalances)
                             ? Math.abs(auditState.result.sumBalances).toFixed(1)
                             : (typeof nodeData?.commonsBalance === 'number'
@@ -418,7 +418,7 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Shared Enterprises</span>
                         <span className="text-lg" aria-hidden="true">🌾</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
+                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
                         {enterprisesCount}
                     </div>
                     <p className="text-xs text-nature-400 m-0">
@@ -436,7 +436,7 @@ export function HomeScreen({
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Circulation</span>
                         <span className="text-lg" aria-hidden="true">🔄</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
+                    <div className="text-3xl font-black text-white mb-1 group-hover:text-bp-ink-terra transition-colors">
                         {circulationVolume} <span className="text-xs font-normal text-nature-400">beans</span>
                     </div>
                     <p className="text-xs text-nature-400 m-0">
@@ -464,7 +464,7 @@ export function HomeScreen({
                     >
                         <span className="text-2xl mb-2">🎫</span>
                         <div>
-                            <div className="text-sm font-bold text-white group-hover:text-terra-400 transition-colors">
+                            <div className="text-sm font-bold text-white group-hover:text-bp-ink-terra transition-colors">
                                 Invite a Member
                             </div>
                             <div className="text-xs text-nature-400 mt-0.5">
@@ -479,7 +479,7 @@ export function HomeScreen({
                     >
                         <span className="text-2xl mb-2">🌾</span>
                         <div>
-                            <div className="text-sm font-bold text-white group-hover:text-terra-400 transition-colors">
+                            <div className="text-sm font-bold text-white group-hover:text-bp-ink-terra transition-colors">
                                 Create an Enterprise
                             </div>
                             <div className="text-xs text-nature-400 mt-0.5">
@@ -495,7 +495,7 @@ export function HomeScreen({
                     >
                         <span className="text-2xl mb-2">{auditState.running ? '⏳' : '⚖️'}</span>
                         <div>
-                            <div className="text-sm font-bold text-white group-hover:text-terra-400 transition-colors">
+                            <div className="text-sm font-bold text-white group-hover:text-bp-ink-terra transition-colors">
                                 {auditState.running ? 'Auditing...' : 'Run Ledger Audit'}
                             </div>
                             <div className="text-xs text-nature-400 mt-0.5">
@@ -510,7 +510,7 @@ export function HomeScreen({
                     >
                         <span className="text-2xl mb-2">💾</span>
                         <div>
-                            <div className="text-sm font-bold text-white group-hover:text-terra-400 transition-colors">
+                            <div className="text-sm font-bold text-white group-hover:text-bp-ink-terra transition-colors">
                                 Download Backup
                             </div>
                             <div className="text-xs text-nature-400 mt-0.5">
@@ -526,7 +526,7 @@ export function HomeScreen({
                         <button
                             type="button"
                             onClick={onStartColdStartWizard}
-                            className="px-3.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-700/50 transition-all"
+                            className="px-3.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-600/50 transition-all"
                         >
                             Launch Cold-Start Wizard →
                         </button>

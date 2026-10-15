@@ -706,8 +706,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         onPress={handleSubmitReport}
                                         disabled={reportSubmitting}
                                         accessibilityRole="button"
-                                        accessibilityState={{ disabled: reportSubmitting }}
-                                        accessibilityLabel="Submit Feedback"
+                                        accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}
+                                        accessibilityLabel={reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'}
                                     >
                                         {reportSubmitting ? (
                                             <ActivityIndicator color="#ffffff" />

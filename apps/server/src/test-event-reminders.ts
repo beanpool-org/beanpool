@@ -178,10 +178,16 @@ async function main(): Promise<void> {
 
     // And a mark written by something OTHER than a sweep — a node that got half way through before it was
     // killed, say — stops the next sweep just as flatly. Nothing in the process has to remember anything.
+    // A mark is for one date (occurrence_at, the event's start: DESIGN-event-times §8, so a repeating event reminds its
+    // regulars once per date); one for another date of the same event stops nothing.
     const evMarked = newEvent(15 * DAY, 'Already told');
     rsvpAt(evMarked.id, goer, 'going', 0);
-    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, sent_at) VALUES (?, ?, 1440, ?)`)
-        .run(evMarked.id, goer, at(14 * DAY));
+    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, occurrence_at, sent_at) VALUES (?, ?, 1440, ?, ?)`)
+        .run(evMarked.id, goer, '2000-01-01T00:00:00.000Z', at(14 * DAY));
+    assert(sweepAt(14 * DAY).length === 1, 'a mark for another date of the event does not stop this date\'s reminder');
+    db.prepare(`DELETE FROM event_reminders_sent WHERE post_id = ? AND occurrence_at = ?`).run(evMarked.id, evMarked.eventStartAt);
+    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, occurrence_at, sent_at) VALUES (?, ?, 1440, ?, ?)`)
+        .run(evMarked.id, goer, evMarked.eventStartAt, at(14 * DAY));
     assert(sweepAt(14 * DAY).length === 0, 'a reminder already marked sent is never sent again');
 
     // ── 2. A per-event choice, and null ──────────────────────────────────────────────────────

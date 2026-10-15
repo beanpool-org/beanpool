@@ -61,7 +61,8 @@ describe('enterprise season calls (native API client)', () => {
             expect(init.body).toBe('{}');
             // Signed over the exact URL and body it sends — no actor rides the body.
             expect(buildSignedHeaders).toHaveBeenCalledWith('POST', `https://test.beanpool.org${path}`, '{}', 'me-priv', 'me-pub');
-            expect(init.headers).toEqual({ 'X-Signed': `POST https://test.beanpool.org${path}` });
+            // …and the language the phone writes in, for the node's answer (utils/language-choice.ts; English here).
+            expect(init.headers).toEqual({ 'X-Signed': `POST https://test.beanpool.org${path}`, 'X-Language': 'en' });
         });
     }
 

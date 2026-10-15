@@ -18,10 +18,12 @@ import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
+import { useLanguage } from './lib/useLanguage';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
+import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
@@ -87,6 +89,8 @@ interface NodeHealthState {
 }
 
 export function App() {
+    // Every screen reads the new words the moment the language changes (lib/language.ts): App re-renders, and so does all of it.
+    useLanguage();
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     /*
@@ -234,6 +238,9 @@ export function App() {
     const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
+    // The recent searches and "near you" answers (lib/members-on-demand) are kept by path alone: another account in this
+    // tab asks afresh (#1965 review N5).
+    useEffect(() => { forgetRecentLookups(); }, [identity?.publicKey]);
     useEffect(() => {
         try { setNewAccountCardClosed(!!identity?.publicKey && localStorage.getItem(`beanpool_new_account_card_closed_${identity.publicKey}`) === '1'); }
         catch { setNewAccountCardClosed(false); }

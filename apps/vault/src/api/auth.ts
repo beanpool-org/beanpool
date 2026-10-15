@@ -23,6 +23,14 @@ export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
 export const NONCE_SWEEP_ABOVE = 50_000;
 
 /**
+ * The most nonces held at once (case 16 NOTE: the store had no cap). A nonce lives about 10 minutes (the freshness
+ * window on either side), so 100,000 is ~170 signed requests a second, every second, from members whose phones make a
+ * handful a day: far past real use, ~15 MB at worst. When full, a request is refused as busy (503, the phone tries
+ * again later) rather than an older nonce forgotten early, which would let its request be replayed.
+ */
+export const NONCE_STORE_MAX = 100_000;
+
+/**
  * Single-use nonces within the freshness window, counted from the request's own timestamp.
  *
  * Forgetting is driven by a min-heap of (expiry, nonce) beside the map, as in the server's NonceStore
@@ -48,6 +56,13 @@ export class NonceStore {
         // A NaN expiry is never spent and never freed, as before; on the heap it would block every sweep.
         if (!Number.isNaN(until)) this.push(until, nonce);
         return true;
+    }
+
+    /** Whether the store holds {@link NONCE_STORE_MAX} nonces still in their window (it forgets the rest first). */
+    full(now: number, max = NONCE_STORE_MAX): boolean {
+        if (this.seen.size < max) return false;
+        this.prune(now);
+        return this.seen.size >= max;
     }
 
     /** Forget every nonce whose window has passed. */
@@ -155,6 +170,7 @@ export function verifySignedRequest(args: {
         }
     })();
     if (!valid) return refuse(401, 'bad_signature', 'The signature does not check out.');
+    if (args.nonces.full(args.now)) return refuse(503, 'busy', 'The key vault is busy just now. Please try again shortly.');
     if (!args.nonces.consume(`${key}:${nonce}`, args.now, Number(timestamp))) return refuse(401, 'replayed', 'This request was already used.');
     return { ok: true, key };
 }

@@ -194,3 +194,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-02 - Add dynamic accessibilityLabel and busy state to report price submit button
 **Learning:** Submit buttons in report modals whose text child is conditionally replaced by an `ActivityIndicator` during submission leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'`) and `accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}`.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled, busy }}` on pricing report submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2027-01-09 - Add dynamic accessibilityLabel, hint, and busy state to Settings Save Profile button
+**Learning:** In profile edit forms, action buttons whose text is replaced by an `ActivityIndicator` during save leave screen readers without explicit text feedback during loading unless dynamic `accessibilityLabel` (`loading ? "Saving profile..." : "Save Profile"`), `accessibilityHint`, and `accessibilityState={{ disabled: loading, busy: loading }}` are provided.
+**Action:** Always supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on profile save buttons rendering `ActivityIndicator` when loading.

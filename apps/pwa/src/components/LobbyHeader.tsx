@@ -14,7 +14,7 @@ export function LobbyHelpButton({ onClick, className }: { onClick: () => void; c
 export function LobbyJoin({ onClick, disabled, className }: { onClick: () => void; disabled: boolean; className: string }) {
     return (
         <button type="button" data-testid="header-join" onClick={onClick} disabled={disabled}
-            className={`border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold cursor-pointer ${className}`}>
+            className={`border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 ${className}`}>
             Join
         </button>
     );

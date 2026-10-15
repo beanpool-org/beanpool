@@ -241,3 +241,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-12 - CommonsInfoModal Touch Target Sizing, Focus Rings & Emoji Accessibility
 **Learning:** `CommonsInfoModal.tsx` close button lacked explicit 44px minimum touch target dimensions (`min-w-[44px] min-h-[44px]`), tab navigation buttons lacked `min-h-[44px]` touch target sizing and explicit `focus-visible:ring-2 focus-visible:ring-emerald-500` ring indicators, and decorative emojis (`🏛️`, `🌱`, step icons, `🛡️`, `✅`) were exposed to screen readers without `aria-hidden="true"`.
 **Action:** Updated `CommonsInfoModal.tsx` close button to `min-w-[44px] min-h-[44px] w-11 h-11`, added `min-h-[44px]` and `focus-visible:ring-2 focus-visible:ring-emerald-500` to tab switcher buttons, wrapped decorative emojis with `<span aria-hidden="true">`, and added unit test coverage in `CommonsInfoModal.test.tsx`.
+
+## 2026-10-15 - LobbyJoin Keyboard Focus Ring Styling
+**Learning:** `LobbyHeader.tsx` rendered the `LobbyJoin` header action button with explicit `border-0` styling without explicit `focus-visible` ring indicators, preventing keyboard users from discerning focus state during header navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2` styling to `LobbyJoin` in `LobbyHeader.tsx` and created `LobbyHeader.test.tsx`.

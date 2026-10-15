@@ -537,10 +537,15 @@ async function main(): Promise<void> {
         }
         const mSchedule = (await main.send('settings')).rows.autosnapshot_config;
         assert(JSON.parse(mSchedule ?? '{}').intervalHours === 6, `M's snapshot schedule is still every 6 hours (${mSchedule})`);
-        // The last admin call on M's HTTPS server: its admin IP allowlist names an address this machine is not.
-        built('it sets its gateway: another origin for its web app, messaging off, a request limit, an admin IP allowlist', await A('/api/local/admin/gateway', {
-            corsAllowedOrigins: ['https://app.riverbend.example'], features: { messaging: false }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
-            adminIpAllowlist: ['203.0.113.7'],
+        // The last admin call on M's HTTPS server: its admin IP allowlist names an address this machine is not, and this
+        // machine's own (a list that would shut out the caller is refused: amendment 1 to design case 18). The gateway is
+        // an owner's with the fresh proof: Manage on the phone, pressed just now.
+        built('it sets its gateway: another origin for its web app, messaging off, a request limit, an admin IP allowlist', await api(m, 'POST', '/api/local/admin/gateway', {
+            admin: await main.send('owner-phone-session'),
+            body: {
+                corsAllowedOrigins: ['https://app.riverbend.example'], features: { messaging: false }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
+                adminIpAllowlist: ['203.0.113.7', '127.0.0.1'],
+            },
         }));
         mSettings = await main.send('settings');
         const mCommunity = communitySettings(mSettings);

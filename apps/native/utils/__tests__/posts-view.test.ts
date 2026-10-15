@@ -18,7 +18,8 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (key: string) => (key === 'beanpool_anchor_url' ? state.anchor : null)),
+        // The phone holds a copy of the node's profile (utils/node-profile.ts): with none, a sync asks the node first.
+        getItem: vi.fn(async (key: string) => (key === 'beanpool_anchor_url' ? state.anchor : key === 'beanpool_node_profiles' && state.anchor ? JSON.stringify({ [state.anchor]: { profile: 'local', features: {}, checkedAt: new Date().toISOString() } }) : null)),
         setItem: vi.fn(async () => undefined),
         removeItem: vi.fn(async () => undefined),
     },

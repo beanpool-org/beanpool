@@ -152,6 +152,8 @@ let t0 = 0;
 beforeEach(async () => {
     store.clear();
     store.set('beanpool_anchor_url', A_URL);
+    // A local community, as the phone knows it (utils/node-profile.ts): with no copy, a sync asks the node first.
+    store.set('beanpool_node_profiles', JSON.stringify(Object.fromEntries([A_URL].map(u => [u, { profile: 'local', features: {}, checkedAt: new Date().toISOString() }]))));
     resetSyncFingerprints();
     gate.switchBeforeNextWrite = false;
     vi.mocked(AsyncStorage.setItem).mockClear();

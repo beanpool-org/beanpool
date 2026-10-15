@@ -1901,7 +1901,8 @@ export async function updateNodeSnapshotSchedule(
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...config, ...passwordField(adminPassword) }),
     });
-    // The node's own sentence: keeping fewer snapshots, or none, asks a fresh proof (a current code, or Manage on the phone).
+    // The node's own sentence: a shorter span of snapshots (fewer kept, more often with as many kept, or none) asks a fresh
+    // proof (a current code, or Manage on the phone).
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);

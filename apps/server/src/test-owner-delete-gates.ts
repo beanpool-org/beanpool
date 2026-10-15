@@ -20,8 +20,10 @@
  *     it, an emergency suspension, one through a report, cutting short one's removal) asks the same, and each refusal
  *     leaves them an active owner; an owner whose key waits on a re-key code is one too (nothing held aside, no vote
  *     opened); the only owner is suspended by neither route, even with the code; an admin or a member as target asks
- *     what it asked before. Keeping fewer snapshots (a lower keep, turning them off, an
- *     interval past their 14-day age) asks the same; keeping more, turning them on, a shorter interval do not.
+ *     what it asked before. Shortening the span the scheduled snapshots cover (interval × keep, at most their 14-day
+ *     age: a lower keep that prunes some now, a shorter interval, turning them off, an interval past that age) asks the
+ *     same; a change that keeps the span or lengthens it (keeping more, turning them on, a longer interval within the
+ *     age, more often with as many more kept) does not.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
  *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
@@ -698,9 +700,9 @@ async function main(): Promise<void> {
         }
         for (const pk of coOwners) if (roleRow(pk)) revokeNodeRole(pk, roleRow(pk), owner);
 
-        // Fewer snapshots asks the same fresh proof (#1984 confirmation N-2): a lower keep, turning scheduled snapshots off,
-        // an interval past their 14-day age. More, on, or a shorter interval: no proof.
-        console.log('\n── 3d. keeping fewer snapshots, or none, asks the fresh proof; keeping more does not ──');
+        // A shorter span of snapshots asks the same fresh proof (#1984 confirmation N-2; #1992 confirmation NB 2): a lower
+        // keep, a shorter interval, turning scheduled snapshots off, an interval past their 14-day age. More, on: no proof.
+        console.log('\n── 3d. a shorter span of snapshots, or none, asks the fresh proof; keeping more does not ──');
         const snapCfg = () => JSON.stringify(getAutoSnapshotConfig());
         const configRoute = '/api/local/admin/snapshots/config';
         const raise = await call('POST', configRoute, asComputer, { keep: 9 });
@@ -708,6 +710,9 @@ async function main(): Promise<void> {
         const MAX_AGE_HOURS = (snapshots.SNAPSHOT_MAX_AGE_DAYS ?? 14) * 24;
         const lessen: Array<[string, Record<string, unknown>, () => boolean, Record<string, unknown>]> = [
             ['keep fewer snapshots (9 → 8, then 7)', { keep: 8 }, () => getAutoSnapshotConfig().keep === 8, { keep: 7 }],
+            // With keep fixed, each one taken pushes the oldest out: one an hour turns a week of daily ones over in 7 hours.
+            ['take them more often with the same keep (24 h → 6 h, then 1 h)', { intervalHours: 6 }, () => getAutoSnapshotConfig().intervalHours === 6,
+                { intervalHours: 1 }],
             ['turn scheduled snapshots off', { enabled: false }, () => getAutoSnapshotConfig().enabled === false, { enabled: false }],
             [`an interval past their age (${MAX_AGE_HOURS + 1} h)`, { intervalHours: MAX_AGE_HOURS + 1 }, () => getAutoSnapshotConfig().intervalHours === MAX_AGE_HOURS + 1,
                 { intervalHours: MAX_AGE_HOURS + 2 }],
@@ -746,14 +751,61 @@ async function main(): Promise<void> {
         const shorter = await call('POST', configRoute, asComputer, { intervalHours: MAX_AGE_HOURS });
         assert(shorter.status === 200 && getAutoSnapshotConfig().intervalHours === MAX_AGE_HOURS,
             `a shorter interval (${MAX_AGE_HOURS} h, within their age) from a computer: no proof asked (${short(shorter)})`);
-        const daily = await call('POST', configRoute, asComputer, { intervalHours: 24, keep: 8, enabled: true });
+        // From one every 14 days back to daily, keep 8: the span goes from 14 days to 8, so it is asked too.
+        const dailyComputer = await call('POST', configRoute, asComputer, { intervalHours: 24, keep: 8, enabled: true });
+        assert(dailyComputer.status === 403 && dailyComputer.json?.code === 'phone_required' && getAutoSnapshotConfig().intervalHours === MAX_AGE_HOURS,
+            `back to daily and keep 8 from a computer (a span of ${MAX_AGE_HOURS} h → 192 h): the proof is asked (${short(dailyComputer)}; ${snapCfg()})`);
+        const daily = await call('POST', configRoute, asPhone(), { intervalHours: 24, keep: 8, enabled: true });
         assert(daily.status === 200 && getAutoSnapshotConfig().intervalHours === 24 && getAutoSnapshotConfig().keep === 8,
-            `back to daily and keep 8 from a computer: no proof asked (${short(daily)})`);
+            `and from the phone, Manage pressed just now → 200 (${short(daily)})`);
         const mixed = await call('POST', configRoute, asComputer, { keep: 7, enabled: true });
         assert(mixed.status === 403 && mixed.json?.code === 'phone_required' && getAutoSnapshotConfig().keep === 8,
             `keep fewer with snapshots on in the same change: the proof is still asked (${short(mixed)})`);
         const sameKeep = await call('POST', configRoute, asComputer, { keep: 8, intervalHours: 24 });
         assert(sameKeep.status === 200, `the same keep and interval sent again: no proof asked (${short(sameKeep)})`);
+
+        // One rule (#1992 confirmation NB 2): the span the kept scheduled snapshots cover, interval × keep and at most their
+        // 14-day age, may not get shorter without the fresh proof, neither once the new schedule has run nor right away: a
+        // lower keep prunes those already taken, at whatever interval they were taken, so it always asks.
+        console.log('\n── 3e. the span the snapshots cover: shorter asks the fresh proof; the same or longer does not ──');
+        const reset = await call('POST', configRoute, asPhone(), { enabled: true, intervalHours: 24, keep: 7 });
+        assert(reset.status === 200, `setup: daily, keep 7, a span of 168 h (${short(reset)})`);
+        const cfgIs = (want: Record<string, unknown>) => Object.entries(want).every(([k, v]) => (getAutoSnapshotConfig() as any)[k] === v);
+        const spanRows: Array<[string, Record<string, unknown>, 'proof' | 'none', boolean]> = [
+            ['24 h → 1 h with keep 7 (168 h → 7 h)', { intervalHours: 1 }, 'proof', true],
+            ['1 h → 24 h (7 h → 168 h)', { intervalHours: 24 }, 'none', true],
+            ['keep 7 → 14 with 24 h → 12 h (168 h → 168 h)', { keep: 14, intervalHours: 12 }, 'none', true],
+            ['keep 14 → 7 with 12 h → 24 h (168 h once it has run, but the 7 kept now were taken 12 h apart: 84 h)',
+                { keep: 7, intervalHours: 24 }, 'proof', true],
+            ['keep 7 → 3 with 24 h → 72 h (216 h once it has run, 72 h right away)', { keep: 3, intervalHours: 72 }, 'proof', true],
+            ['keep 3 → 14 at 72 h (216 h → 336 h, the 14-day age)', { keep: 14 }, 'none', true],
+            // The schedule says 336 h either way, but the 14 kept now may have been taken a day apart (24 h → 72 h above asked
+            // nothing): keep 7 would prune seven of them at once.
+            ['keep 14 → 7 at 72 h (336 h → 336 h once it has run; a lower keep prunes now)', { keep: 7 }, 'proof', true],
+            ['72 h → 24 h with keep 7 (336 h → 168 h)', { intervalHours: 24 }, 'proof', true],
+            ['raising keep 7 → 10 at 24 h (168 h → 240 h)', { keep: 10 }, 'none', true],
+            [`an interval past their age, ${MAX_AGE_HOURS + 1} h (240 h → hours with none)`, { intervalHours: MAX_AGE_HOURS + 1 }, 'proof', false],
+            ['turning them off', { enabled: false }, 'proof', false],
+            ['turning them off while keeping more', { enabled: false, keep: 14 }, 'proof', false],
+        ];
+        for (const [what, change, expect, apply] of spanRows) {
+            const before = snapCfg();
+            const fromComputer = await call('POST', configRoute, asComputer, change);
+            if (expect === 'none') {
+                assert(fromComputer.status === 200 && cfgIs(change), `${what}, from a computer: no proof asked (${short(fromComputer)}; ${snapCfg()})`);
+                continue;
+            }
+            assert(fromComputer.status === 403 && fromComputer.json?.code === 'phone_required' && snapCfg() === before,
+                `${what}, from a computer: the proof is asked, the config as it was (${short(fromComputer)}; ${snapCfg()})`);
+            const noCode = await call('POST', configRoute, pwSession(), change);
+            assert(noCode.status === 401 && noCode.json?.totpRequired === true && snapCfg() === before,
+                `${what}, a password session with no code: asked for one (${short(noCode)})`);
+            if (!apply) continue;
+            const withCode = await call('POST', configRoute, pwSession(), { ...change, code: tfa.code() });
+            assert(withCode.status === 200 && cfgIs(change), `${what}, with a current code → 200 (${short(withCode)}; ${snapCfg()})`);
+        }
+        const restore = await call('POST', configRoute, asPhone(), { enabled: true, intervalHours: 24, keep: 8 });
+        assert(restore.status === 200 && cfgIs({ enabled: true, intervalHours: 24, keep: 8 }), `back to daily, keep 8 (${short(restore)})`);
         // Retiring the password is a key session's alone: the phone, unlocked within 90 seconds. Last, as it ends the password.
         const retireStale = await call('POST', '/api/local/admin/auth/retire-password', asStalePhone(), { acceptOneOwner: true });
         assert(retireStale.status === 403 && retireStale.json?.code === 'step_up_required', `retire the password (C4), Manage 91 s ago → 403 step_up_required (${short(retireStale)})`);

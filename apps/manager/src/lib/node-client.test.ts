@@ -711,7 +711,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(bind).rejects.toMatchObject({ message: askPhone, code: 'phone_required', triesLeft: undefined });
     });
 
-    it("removing or suspending an owner, and keeping fewer snapshots, pass the node's own sentence through (#1984 confirmation N-1, N-2)", async () => {
+    it("removing or suspending an owner, and a shorter span of snapshots, pass the node's own sentence through (#1984 confirmation N-1, N-2)", async () => {
         const { pruneNodeUser, updateNodeSnapshotSchedule, executeOffboardApi } = await import('./node-client');
         const askCode = 'Enter a current code from your authenticator app (or a backup code) to remove or suspend an owner';
         const askPhone = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
@@ -724,7 +724,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(emergencySuspendMember('https://node.example.com', 'pub1', 'A reason members can read')).rejects.toThrow(stale);
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
         await expect(executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'prune_zero_balance' })).rejects.toMatchObject({ message: askPhone, code: 'phone_required', status: 403 });
-        const fewer = 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or take them less often or not at all';
+        const fewer = 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or make them cover less time';
         fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: fewer, totpRequired: true }) });
         await expect(updateNodeSnapshotSchedule('https://node.example.com', { keep: 3 }, 'adminpass', 'tfa123')).rejects.toThrow(fewer);
         // A node that answers no sentence still says something.

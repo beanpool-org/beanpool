@@ -2,10 +2,10 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "maharagwe",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Maeneo yanatoka OpenStreetMap. Unachoandika hapa kinatumwa kwao.",
   "Choose {place}": "Chagua {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Jumuiya hii inahitaji picha ya wasifu kabla hujachapisha. Unaweza kuiongeza baadaye kutoka kwenye wasifu wako.",
-  "A picture is optional here. You can add one later from your profile.": "Picha ni ya hiari hapa. Ukipenda, unaweza kuiongeza baadaye kutoka kwenye wasifu wako."
+  "A picture is optional here. You can add one later from your profile.": "Picha ni ya hiari hapa. Ukipenda, unaweza kuiongeza baadaye kutoka kwenye wasifu wako.",
+  "{n}st\u0004day of the month": "tarehe {n}",
+  "{n}nd\u0004day of the month": "tarehe {n}",
+  "{n}rd\u0004day of the month": "tarehe {n}",
+  "{n}th\u0004day of the month": "tarehe {n}",
+  "Every month on the first {weekday}": "Kila mwezi {weekday} ya kwanza",
+  "Every month on the second {weekday}": "Kila mwezi {weekday} ya pili",
+  "Every month on the third {weekday}": "Kila mwezi {weekday} ya tatu",
+  "Every month on the fourth {weekday}": "Kila mwezi {weekday} ya nne",
+  "Every month on the last {weekday}": "Kila mwezi {weekday} ya mwisho",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Kila mwezi, {weekday} ya kwanza",
+    "other": "Kila baada ya miezi {n}, {weekday} ya kwanza"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Kila mwezi, {weekday} ya pili",
+    "other": "Kila baada ya miezi {n}, {weekday} ya pili"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Kila mwezi, {weekday} ya tatu",
+    "other": "Kila baada ya miezi {n}, {weekday} ya tatu"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Kila mwezi, {weekday} ya nne",
+    "other": "Kila baada ya miezi {n}, {weekday} ya nne"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Kila mwezi, {weekday} ya mwisho",
+    "other": "Kila baada ya miezi {n}, {weekday} ya mwisho"
+  },
+  "Monthly, first {weekday}": "Kila mwezi, {weekday} ya kwanza",
+  "Monthly, second {weekday}": "Kila mwezi, {weekday} ya pili",
+  "Monthly, third {weekday}": "Kila mwezi, {weekday} ya tatu",
+  "Monthly, fourth {weekday}": "Kila mwezi, {weekday} ya nne",
+  "Monthly, last {weekday}": "Kila mwezi, {weekday} ya mwisho",
+  "Does not repeat": "Haijirudii",
+  "Every week on {weekday}": "Kila wiki mnamo {weekday}",
+  "Every 2 weeks on {weekday}": "Kila baada ya wiki 2 mnamo {weekday}",
+  "Every month on the {day}": "Kila mwezi mnamo {day}",
+  "An event that repeats must end before its next date starts": "Tukio linalojirudia lazima liishe kabla ya tarehe yake inayofuata kuanza",
+  "(months without a {day} are skipped)": "(miezi isiyo na {day} hurukwa)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Kila {weekday}",
+    "other": "Kila baada ya wiki {n} mnamo {weekday}"
+  },
+  "Every {weekday}": "Kila {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Kila mwezi mnamo {day}",
+    "other": "Kila baada ya miezi {n} mnamo {day}"
+  },
+  "Monthly on the {day}": "Kila mwezi mnamo {day}",
+  "{repeats} · until {date}": "{repeats} · hadi {date}",
+  "The last date must be a date on or after the first one": "Tarehe ya mwisho lazima iwe tarehe ya kwanza au baada yake",
+  "The last date can be at most {n} years after the first one": "Tarehe ya mwisho inaweza kuwa hadi miaka {n} baada ya ya kwanza",
+  "{date} is cancelled. Next: {next}": "{date} limeghairiwa. Linalofuata: {next}",
+  "{date} is cancelled.": "{date} limeghairiwa.",
+  "{date} is back on": "{date} limerudishwa tena",
+  "Moved from the regular {weekday}": "Limehamishwa kutoka {weekday} ya kawaida",
+  "Moved from the regular date": "Limehamishwa kutoka tarehe ya kawaida",
+  "Choose how the event repeats from the list": "Chagua jinsi tukio linavyojirudia kutoka kwenye orodha",
+  "An event can repeat every 1 to 12 weeks or months": "Tukio linaweza kujirudia kila wiki au miezi 1 hadi 12",
+  "The first date must be one of the repeating dates": "Tarehe ya kwanza lazima iwe moja ya tarehe zinazojirudia",
+  "The last date can be at most 5 years after the first one": "Tarehe ya mwisho inaweza kuwa hadi miaka 5 baada ya ya kwanza",
+  "Pick one of the dates this event repeats on": "Chagua mojawapo ya tarehe ambazo tukio hili hujirudia",
+  "This event does not repeat": "Tukio hili halijirudii",
+  "Only the host can cancel or restore a date": "Mwenyeji pekee ndiye anayeweza kughairi au kurudisha tarehe",
+  "This is the last date: change when the event ends, or cancel the event": "Hii ndiyo tarehe ya mwisho: badilisha wakati tukio linapoisha, au ghairi tukio",
+  "At most 100 dates can be cancelled": "Upeo wa tarehe 100 zinaweza kughairiwa",
+  "This event has been cancelled": "Tukio hili limeghairiwa",
+  "Pick a time zone from the list": "Chagua ukanda wa saa kutoka kwenye orodha",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Inaonyeshwa kwa takriban kilomita 1. Muulize {name} mahali hasa mnapopanga kukutana.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Inaonyeshwa kwa kila mtu anayeweza kuona tukio. Weka anwani kamili katika dokezo lililo hapa chini.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Hii inaonekana kama anwani ya mtaa. Kila mtu anayeweza kuona tukio ataisoma, kwa hivyo ni salama zaidi kwenye dokezo lililo hapa chini.",
+  "An earlier message was removed when this chat was locked": "Ujumbe wa awali uliondolewa wakati gumzo hili lilipofungwa",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "Ujumbe {n} wa awali uliondolewa wakati gumzo hili lilipofungwa",
+    "other": "Jumbe {n} za awali ziliondolewa wakati gumzo hili lilipofungwa"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "Ujumbe {n} uliondolewa na mratibu",
+    "other": "Jumbe {n} ziliondolewa na mratibu"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "Ujumbe {n} ulifutwa",
+    "other": "Jumbe {n} zilifutwa"
+  }
 }

@@ -21,7 +21,7 @@ import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
-import { fetchNodeProfile, getCachedNodeProfile, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
+import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFresh, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import { nearbySetHash } from '../utils/nearby-hash';
 import {
@@ -481,9 +481,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // REPORT-1792-first-sync-2026-10-16.md, result 3). So with no copy the node is asked (one small read), and with
         // no answer the cycle ends here, having read nothing; the next one (the socket, the app's return, the 5-minute
         // timer) asks again, and the app shows what it holds meanwhile. Without the phone's key nothing reads by area.
+        // A copy an hour old or more (NODE_PROFILE_FRESH_MS) is asked again too, at most one small read an hour: a copy
+        // from before the node turned listings or members by area on read the whole board once more (review of #1999,
+        // NB1: 60 requests, 2.16 MB gz, 10,000 listings). That copy is used only when the node doesn't answer.
         let profile: NodeProfile | null = null;
         if (pubKey) {
-            profile = (await getCachedNodeProfile(anchorUrl)) ?? (await fetchNodeProfile(anchorUrl));
+            const held = await getCachedNodeProfile(anchorUrl);
+            profile = held && nodeProfileIsFresh(held) ? held : ((await fetchNodeProfile(anchorUrl)) ?? held);
             if (!profile) {
                 console.warn(`[Pillar Sync] ${anchorUrl} didn't say what kind of community it is; nothing read this cycle.`);
                 result.errorMessage = PROFILE_UNREAD;
@@ -532,11 +536,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             console.error('[Pillar Sync] Failed to query local members count', e);
         }
 
-        // A community that says `membersOnDemand` (the worldwide one, DESIGN-global-members-by-area §2.2): this phone never
-        // reads its directory whole nor asks for everyone who changed. It holds the cards it has a reason to show and asks
-        // for those by key once the cycle has landed (syncMembersOnDemand). Anywhere else, every request is as it was. A
-        // node that refuses the whole read as `members_on_demand` turns it on below (a copy from before its switch).
-        let membersOnDemand = profile?.features.membersOnDemand === true;
+        // A community that says `membersOnDemand` or `openMembership` (the worldwide one, DESIGN-global-members-by-area
+        // §2.2; node-profile.ts membersByKey): this phone never reads its directory whole nor asks for everyone who changed.
+        // It holds the cards it has a reason to show and asks for those by key once the cycle has landed
+        // (syncMembersOnDemand). Anywhere else, every request is as it was. A node that refuses the whole read as
+        // `members_on_demand` turns it on below (a copy from before its switch).
+        let membersOnDemand = membersByKey(profile?.features);
 
         let shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||

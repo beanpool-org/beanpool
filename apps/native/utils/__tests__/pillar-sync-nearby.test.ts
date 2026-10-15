@@ -763,5 +763,17 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(sorted(heldIds())).toEqual(heldWithCopy);
         expect(mem.async.has('beanpool_node_profiles')).toBe(true);
         await control('limiters');
+
+        // A copy an hour old or more from before the node turned listings by area on (review of #1999, NB1: measured at
+        // 60 requests, 2.16 MB gz and 10,000 listings in its first cycle): asked again first, then read by area exactly as
+        // with a fresh copy, never the whole board.
+        await freshInstall(false);
+        const hourAndMore = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        mem.async.set('beanpool_node_profiles', JSON.stringify({ [URL_BASE.replace(/\/+$/, '').toLowerCase()]: { profile: 'local', features: {}, checkedAt: hourAndMore } }));
+        await sync();
+        expect(sent.map(r => `${r.method} ${r.url} ${r.status}`)).toEqual([`GET /api/community/info 200`, ...withCopy]);
+        expect(postsReads().every(r => r.url.includes('nearby=1'))).toBe(true);
+        expect(sorted(heldIds())).toEqual(heldWithCopy);
+        await control('limiters');
     }, START_MS);
 });

@@ -25,7 +25,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
-import { beansOn } from '../utils/node-profile';
+import { beansOn, membersByKey } from '../utils/node-profile';
 
 
 
@@ -414,7 +414,7 @@ export default function PublicProfileScreen() {
     // On a community that says `membersOnDemand` this phone may hold no card for the member: it is fetched by key when
     // missing or a day old (utils/members-lookup.ts). Offline with none held, the profile says so, and the name is never
     // a blank (DESIGN-global-members-by-area §2.4): the name the caller passed, the card's, or the key's first 8 characters.
-    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const membersOnDemand = membersByKey(nodeProfile?.features);
     const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
         || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
     const [cardUnreachable, setCardUnreachable] = useState(false);

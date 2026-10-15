@@ -20,6 +20,7 @@ import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
 import { sendGroupInvitations } from '../utils/group-invite-send';
 import { t } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { membersByKey } from '../utils/node-profile';
 import { lookUpMembers, searchPath } from '../utils/members-lookup';
 import { pickerEmpty } from '../utils/community-list-note';
 import { MemberAvatar } from './MemberAvatar';
@@ -48,7 +49,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const [sending, setSending] = useState(false);
     // On a community that says `membersOnDemand`: the people this member has dealt with, and a search of 2 letters or
     // more asks the node (utils/members-lookup.ts). Anywhere else, the whole list as always.
-    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const membersOnDemand = membersByKey(useNodeProfile()?.features);
     const [nodeResults, setNodeResults] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
     // What became of the node search, for the empty list's words (the New message picker's): never "Nobody else is in
     // this community" over a list that is only the people this member has dealt with (review of #1859, B3).

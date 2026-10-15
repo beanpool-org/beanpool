@@ -21,7 +21,7 @@ import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
-import { getCachedNodeProfile, noteMembersOnDemand } from './node-profile';
+import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
@@ -4122,11 +4122,14 @@ export async function syncMessages(publicKey: string) {
             localMembersCount = membersRow?.count || 0;
         } catch (e) {}
 
-        // A community that says `membersOnDemand` (the worldwide one): never the whole directory, nor its `membersComplete`
-        // garbage collection over the cards held (DESIGN-global-members-by-area §1, §2.4 (d)). pillar-sync fetches the cards
-        // this phone has a reason to show by key. Anywhere else, as it always was.
-        const membersOnDemand = (await getCachedNodeProfile(anchorUrl).catch(() => null))?.features.membersOnDemand === true;
-        const shouldFetchMembers = !membersOnDemand && (!lastMembersSync ||
+        // A community that reads members by key (node-profile.ts membersByKey, the worldwide one): never the whole
+        // directory, nor its `membersComplete` garbage collection over the cards held (DESIGN-global-members-by-area §1,
+        // §2.4 (d)). pillar-sync fetches the cards this phone has a reason to show by key. With no copy of the profile this
+        // phone can't tell, so nothing is read whole here: a node with members on demand and anyone-can-join off answers a
+        // whole read, which wrote every member (review of #1999, NB2). pillar-sync asks for the profile before it reads
+        // anything, and the next check here reads as it says. Anywhere else, as it always was.
+        const profile = await getCachedNodeProfile(anchorUrl).catch(() => null);
+        const shouldFetchMembers = !!profile && !membersByKey(profile.features) && (!lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0);
 

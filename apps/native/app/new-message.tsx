@@ -12,6 +12,7 @@ export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { membersByKey } from '../utils/node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { pickerEmpty, pickerHeading } from '../utils/community-list-note';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -167,7 +168,7 @@ export default function NewMessageScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     // On a community that says `membersOnDemand` the phone holds only the people this member has dealt with: recents and
     // friends come from those, and a search of 2 letters or more also asks the node (DESIGN-global-members-by-area §2.3).
-    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const membersOnDemand = membersByKey(useNodeProfile()?.features);
     const [nodeResults, setNodeResults] = useState<any[]>([]);
     const [nodeSearch, setNodeSearch] = useState<'none' | 'answered' | 'unreachable'>('none');
     const searchRef = useRef<TextInput>(null);

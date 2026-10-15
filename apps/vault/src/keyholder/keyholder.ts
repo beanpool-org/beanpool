@@ -98,6 +98,7 @@ import { combineMnemonics, decodeShare, splitMasterSecret } from './slip39.js';
  * hold their share: each signs a check of its words ({@link Keyholder.confirmShare}), or two of them unlock with the
  * new shares. Until then the old state is the vault's, and every unlock uses it. Two current custodians can drop a
  * ceremony nobody finished ({@link Keyholder.cancelPending}); a genesis nobody finished is also replaced by the next.
+ * A reshare an older image left waiting switches by neither way ({@link keysUnknown}): it can only be cancelled.
  */
 
 export class KeyholderError extends Error {
@@ -168,6 +169,21 @@ const ROW_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 function fail(code: string, message: string): never {
     throw new KeyholderError(code, message);
 }
+
+/**
+ * A reshare whose file has no public keys, written by an image from before they were kept: this keyholder can't say
+ * which keys its switch would put in force, and that image kept the old ticket and deposit keys, which the retiring
+ * custodians' shares still open. Neither a confirmation nor an unlock with its new shares switches it (the switch
+ * would skip the rotation in silence); two current custodians cancel it and start again.
+ *
+ * A genesis left waiting the same way still switches, by either: there is no key in force to keep listed, and its
+ * keys are the first the vault has.
+ */
+function keysUnknown(p: PendingStateFile): boolean {
+    return p.purpose === 'reshare' && !p.publicKeys;
+}
+
+const KEYS_UNKNOWN = 'This reshare was started by an older image, whose new keys are unknown here (that image kept the old ticket and deposit keys): two current custodians cancel it and start the reshare again.';
 
 /**
  * The ceremony that switched at this boot. Its new shares, sealed to their custodians, stay fetchable until a restart:
@@ -451,11 +467,8 @@ export class Keyholder {
      * A new custodian shows they hold their share: a signed check of its words. At two, the vault switches. Kept on disk,
      * so a restart in between loses no confirmation.
      *
-     * Not for a reshare whose file has no public keys, written by an image from before they were kept: this keyholder
-     * can't say which keys the switch would put in force, and that image kept the old ticket and deposit keys, which the
-     * retiring custodians' shares still open. Two current custodians cancel it and start again. A genesis, with no key
-     * in force to keep, still switches. So does an unlock with the new shares (the way back if only those are left): it
-     * opens the vault on that image's keys, and the report shows them.
+     * Not for a reshare an older image left waiting ({@link keysUnknown}): two current custodians cancel it and start
+     * again. A genesis left the same way still switches.
      */
     confirmShare(raw: unknown) {
         const c = raw as ShareConfirmation;
@@ -472,9 +485,7 @@ export class Keyholder {
         if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
         const next = p.file.state;
         this.checkConfirmation(p.file, c);
-        if (p.file.purpose === 'reshare' && !p.file.publicKeys) {
-            fail('keys_unknown', 'This reshare was started by an older image, whose new keys are unknown here (that image kept the old ticket and deposit keys): two current custodians cancel it and start the reshare again.');
-        }
+        if (keysUnknown(p.file)) fail('keys_unknown', KEYS_UNKNOWN);
         if (!p.file.confirmed.includes(c.custodian)) {
             const record = { ...p.file, confirmed: [...p.file.confirmed, c.custodian] };
             writePendingFile(this.opts.stateDir, record);
@@ -560,7 +571,9 @@ export class Keyholder {
      * custodian, or not signed for this boot, changes nothing.
      *
      * An unlock opens the state in force; failing that, a genesis or reshare still waiting, whose new shares these may
-     * be: two new custodians unlocking with them is the other way to show they hold them, and the vault switches.
+     * be: two new custodians unlocking with them is the other way to show they hold them, and the vault switches. Not
+     * to a reshare an older image left waiting ({@link keysUnknown}): refused, with nothing written, and the vault stays
+     * locked on the state in force. A genesis left the same way still switches.
      */
     submitShare(raw: unknown) {
         const sub = raw as ShareSubmission;
@@ -651,6 +664,11 @@ export class Keyholder {
                 return { state: this.state, sharesPresent: 0, threshold, ...this.reshare(newCustodians as string[]) };
             }
             const openedNext = purpose === 'unlock' ? tryOpen(next) : null;
+            if (openedNext?.ok && keysUnknown((this.pending as Pending).file)) {
+                openedNext.keys.wipe();
+                this.lastError = 'keys_unknown';
+                fail('keys_unknown', KEYS_UNKNOWN);
+            }
             if (openedNext?.ok) {
                 this.switchToPending(openedNext.keys, contributors);
                 return { state: this.state, sharesPresent: 0, threshold, switched: true, generation: this.stateFile?.generation };

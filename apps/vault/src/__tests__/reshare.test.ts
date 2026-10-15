@@ -8,7 +8,7 @@ import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
 import { cancelPending, confirmShare, custodianKey, fetchPendingShare, genesis, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
 import { KeyholderError } from '../keyholder/keyholder.js';
-import { PENDING_FILE, readStateFile, writePendingFile } from '../keyholder/keys.js';
+import { PENDING_FILE, readStateFile, STATE_FILE, writePendingFile } from '../keyholder/keys.js';
 import { buildConfirmation, confirmStatement, shareCheck, signStatement, type CustodianShare } from '../shared/ceremony.js';
 import {
     confirmWith,
@@ -502,6 +502,54 @@ describe('a reshare gives the vault new signing keys', () => {
         expect((await present(v, c4, again.fresh[2])).body.state).toBe('open');
     });
 
+    it('a reshare left waiting by an older keyholder: two new custodians unlocking with its shares are refused and nothing is written; the vault stays locked on the keys in force, and once cancelled a new reshare switches to keys it knows', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const { fresh } = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        asOlderKeyholderWroteIt(v);
+        await v.restartKeyholder();
+        const onDisk = () => [STATE_FILE, PENDING_FILE].map(f => readFileSync(path.join(v.stateDir, f), 'utf8'));
+        const before = onDisk();
+
+        // Its new shares open the waiting state, but the switch would put keys in force that no file lists (that image
+        // kept the old ones), so the unlock is refused the way a confirmation is.
+        expect((await present(v, c1, fresh[0])).body).toMatchObject({ state: 'locked', sharesPresent: 1 });
+        const refused = await present(v, c4, fresh[2]);
+        expect(refused.status).toBe(409);
+        expect(refused.body.code).toBe('keys_unknown');
+        expect(refused.body.error).toMatch(/older image.*new keys are unknown.*cancel it and start the reshare again/i);
+        expect(v.keyholder().status()).toMatchObject({
+            state: 'locked', generation: 1, sharesPresent: 0, lastError: 'keys_unknown', switched: null,
+            pending: { purpose: 'reshare', generation: 2, publicKeys: null, confirmed: [] },
+        });
+        expect(onDisk()).toEqual(before);
+
+        // The shares in force still open it, on the keys in force.
+        await present(v, c1, g.shares[0]);
+        expect((await present(v, c2, g.shares[1])).body.state).toBe('open');
+        expect(v.keyholder().status()).toMatchObject({ generation: 1, lastError: null });
+        expect(await ticketUnder(v, [g.ticketKey])).toBe('ok');
+        expect(onDisk()).toEqual(before);
+
+        const pendingId = v.keyholder().status().pending!.id;
+        await cancelPending(v.baseUrl, c1, pendingId, v.call());
+        expect((await cancelPending(v.baseUrl, c2, pendingId, v.call())).body).toMatchObject({ cancelled: true });
+        expect(existsSync(path.join(v.stateDir, PENDING_FILE))).toBe(false);
+
+        // Started again on this image (a minute on, for this address's ceremony limit), it switches to the keys it lists.
+        v.clock.advance(60_000);
+        const again = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        expect(again.waiting.ticket[0]).not.toBe(g.ticketKey);
+        await v.restartKeyholder();
+        await present(v, c1, again.fresh[0]);
+        expect((await present(v, c4, again.fresh[2])).body).toMatchObject({ state: 'open', switched: true, generation: 2 });
+        expect(v.keyholder().status().publicKeys).toEqual(again.waiting);
+        expect(await ticketUnder(v, again.waiting.ticket)).toBe('ok');
+        expect(await ticketUnder(v, [g.ticketKey])).toBe('signature');
+    });
+
     it('a genesis left waiting by an older keyholder doesn\'t stop the keyholder starting; two custodians confirm and their shares open it', async () => {
         const v = await vault();
         const r = await genesis(v.baseUrl, v.custodians[0], v.call());
@@ -514,6 +562,18 @@ describe('a reshare gives the vault new signing keys', () => {
         expect((await confirmWith(v, shares, [0, 1]))[1].body).toMatchObject({ state: 'locked', switched: true, generation: 1 });
         await present(v, v.custodians[0], shares[0]);
         expect((await present(v, v.custodians[1], shares[1])).body.state).toBe('open');
+    });
+
+    it('a genesis left waiting by an older keyholder also switches when two custodians unlock with its shares: there is no key in force to keep listed', async () => {
+        const v = await vault();
+        const r = await genesis(v.baseUrl, v.custodians[0], v.call());
+        asOlderKeyholderWroteIt(v);
+
+        await v.restartKeyholder();
+        const shares = r.body.custodianShares as CustodianShare[];
+        await present(v, v.custodians[0], shares[0]);
+        expect((await present(v, v.custodians[2], shares[2])).body).toMatchObject({ state: 'open', switched: true, generation: 1 });
+        expect(existsSync(path.join(v.stateDir, PENDING_FILE))).toBe(false);
     });
 
     it('a vault rebuilt from a backup made before the reshare cannot pose as the vault after it', async () => {

@@ -139,3 +139,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-10 - Replace catch e any in NodeRolesPanel
 **Learning:** `NodeRolesPanel.tsx` used `catch (e: any)` in async role fetching, granting, and revoking handlers, bypassing strict type checking for error objects.
 **Action:** Replace `catch (e: any)` with `catch (e: unknown)` and safe type guards checking `e instanceof Error` or object message properties.
+
+## 2026-12-11 - Improve error handling and submit loading indicator in OffboardMemberWizard
+**Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview and confirm offboard handlers and lacked a visual loading spinner in the confirm button during submission.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` using `err instanceof Error ? err.message : String(err)` and render an animated SVG spinner alongside button text during submission.

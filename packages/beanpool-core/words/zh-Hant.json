@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "豆子",
@@ -39,5 +39,80 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "地點資料來自 OpenStreetMap。你在這裡輸入的內容會傳送給它。",
   "Choose {place}": "選擇 {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "本社群要求在發佈前提供大頭貼。你也可以稍後在個人檔案中新增。",
-  "A picture is optional here. You can add one later from your profile.": "這裡的大頭貼是選填的。你可以稍後在個人檔案中新增。"
+  "A picture is optional here. You can add one later from your profile.": "這裡的大頭貼是選填的。你可以稍後在個人檔案中新增。",
+  "{n}st\u0004day of the month": "{n}日",
+  "{n}nd\u0004day of the month": "{n}日",
+  "{n}rd\u0004day of the month": "{n}日",
+  "{n}th\u0004day of the month": "{n}日",
+  "Every month on the first {weekday}": "每月第一個{weekday}",
+  "Every month on the second {weekday}": "每月第二個{weekday}",
+  "Every month on the third {weekday}": "每月第三個{weekday}",
+  "Every month on the fourth {weekday}": "每月第四個{weekday}",
+  "Every month on the last {weekday}": "每月最後一個{weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "other": "每 {n} 個月一次，第一個{weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "other": "每 {n} 個月一次，第二個{weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "other": "每 {n} 個月一次，第三個{weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "other": "每 {n} 個月一次，第四個{weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "other": "每 {n} 個月一次，最後一個{weekday}"
+  },
+  "Monthly, first {weekday}": "每月一次，第一個{weekday}",
+  "Monthly, second {weekday}": "每月一次，第二個{weekday}",
+  "Monthly, third {weekday}": "每月一次，第三個{weekday}",
+  "Monthly, fourth {weekday}": "每月一次，第四個{weekday}",
+  "Monthly, last {weekday}": "每月一次，最後一個{weekday}",
+  "Does not repeat": "不重複",
+  "Every week on {weekday}": "每週的{weekday}",
+  "Every 2 weeks on {weekday}": "每 2 週的{weekday}",
+  "Every month on the {day}": "每月的{day}",
+  "An event that repeats must end before its next date starts": "重複活動必須在下一個開始日期前結束",
+  "(months without a {day} are skipped)": "(跳過沒有{day}的月份)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "other": "每 {n} 週的{weekday}"
+  },
+  "Every {weekday}": "每{weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "other": "每 {n} 個月在{day}"
+  },
+  "Monthly on the {day}": "每月在{day}",
+  "{repeats} · until {date}": "{repeats} · 持續到 {date}",
+  "The last date must be a date on or after the first one": "結束日期必須與開始日期相同或在其之後",
+  "The last date can be at most {n} years after the first one": "結束日期最多只能在開始日期後 {n} 年",
+  "{date} is cancelled. Next: {next}": "{date}已取消。下一次：{next}",
+  "{date} is cancelled.": "{date}已取消。",
+  "{date} is back on": "{date}已恢復",
+  "Moved from the regular {weekday}": "已從常規的{weekday}調整",
+  "Moved from the regular date": "已從常規日期調整",
+  "Choose how the event repeats from the list": "從清單中選擇活動重複方式",
+  "An event can repeat every 1 to 12 weeks or months": "活動可以每 1 到 12 週或每 1 到 12 個月重複一次",
+  "The first date must be one of the repeating dates": "首次日期必須是重複日期之一",
+  "The last date can be at most 5 years after the first one": "結束日期最多只能在首次日期後 5 年",
+  "Pick one of the dates this event repeats on": "選擇此活動重複的日期之一",
+  "This event does not repeat": "此活動不重複",
+  "Only the host can cancel or restore a date": "只有主辦人可以取消或恢復日期",
+  "This is the last date: change when the event ends, or cancel the event": "這是最後一個日期：更改活動結束時間，或取消活動",
+  "At most 100 dates can be cancelled": "最多可以取消 100 個日期",
+  "This event has been cancelled": "此活動已被取消",
+  "Pick a time zone from the list": "從清單中選擇時區",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "顯示在大約 1 公里範圍內。約定見面時請向 {name} 詢問具體地點。",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "對所有能看到該活動的人可見。請在下方備註中填入詳細地址。",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "這看起來像街道地址。所有能看到該活動的人都會看到它，因此放在下方備註中會更安全。",
+  "An earlier message was removed when this chat was locked": "此聊天鎖定時已移除之前的一則訊息",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "other": "此聊天被鎖定時已移除之前的 {n} 則訊息"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "other": "協調人已移除 {n} 則訊息"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "other": "已刪除 {n} 則訊息"
+  }
 }

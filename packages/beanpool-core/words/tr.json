@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "fasulye",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Yerler OpenStreetMap'ten gelir. Buraya yazdıkların OpenStreetMap'e gönderilir.",
   "Choose {place}": "Seç: {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Bu topluluk, paylaşım yapmadan önce bir profil fotoğrafı ister. Sonradan profilinden ekleyebilirsin.",
-  "A picture is optional here. You can add one later from your profile.": "Burada fotoğraf eklemek isteğe bağlıdır. İstersen sonradan profilinden ekleyebilirsin."
+  "A picture is optional here. You can add one later from your profile.": "Burada fotoğraf eklemek isteğe bağlıdır. İstersen sonradan profilinden ekleyebilirsin.",
+  "{n}st\u0004day of the month": "ayın {n}.",
+  "{n}nd\u0004day of the month": "ayın {n}.",
+  "{n}rd\u0004day of the month": "ayın {n}.",
+  "{n}th\u0004day of the month": "ayın {n}.",
+  "Every month on the first {weekday}": "Her ayın ilk {weekday} günü",
+  "Every month on the second {weekday}": "Her ayın ikinci {weekday} günü",
+  "Every month on the third {weekday}": "Her ayın üçüncü {weekday} günü",
+  "Every month on the fourth {weekday}": "Her ayın dördüncü {weekday} günü",
+  "Every month on the last {weekday}": "Her ayın son {weekday} günü",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Aylık, ilk {weekday}",
+    "other": "Her {n} ayda bir, ilk {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Aylık, ikinci {weekday}",
+    "other": "Her {n} ayda bir, ikinci {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Aylık, üçüncü {weekday}",
+    "other": "Her {n} ayda bir, üçüncü {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Aylık, dördüncü {weekday}",
+    "other": "Her {n} ayda bir, dördüncü {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Aylık, son {weekday}",
+    "other": "Her {n} ayda bir, son {weekday}"
+  },
+  "Monthly, first {weekday}": "Aylık, ilk {weekday}",
+  "Monthly, second {weekday}": "Aylık, ikinci {weekday}",
+  "Monthly, third {weekday}": "Aylık, üçüncü {weekday}",
+  "Monthly, fourth {weekday}": "Aylık, dördüncü {weekday}",
+  "Monthly, last {weekday}": "Aylık, son {weekday}",
+  "Does not repeat": "Tekrarlanmaz",
+  "Every week on {weekday}": "Her hafta {weekday}",
+  "Every 2 weeks on {weekday}": "2 haftada bir {weekday}",
+  "Every month on the {day}": "Her ayın {day} günü",
+  "An event that repeats must end before its next date starts": "Tekrarlanan bir etkinlik sonraki tarihi başlamadan önce bitmelidir",
+  "(months without a {day} are skipped)": "({day} günü olmayan aylar atlanır)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Her {weekday}",
+    "other": "Her {n} haftada bir {weekday}"
+  },
+  "Every {weekday}": "Her {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Her ay {day}",
+    "other": "Her {n} ayda bir {day}"
+  },
+  "Monthly on the {day}": "Her ay {day}",
+  "{repeats} · until {date}": "{repeats} · {date} tarihine kadar",
+  "The last date must be a date on or after the first one": "Son tarih ilk tarihle aynı veya daha sonra olmalıdır",
+  "The last date can be at most {n} years after the first one": "Son tarih ilk tarihten en fazla {n} yıl sonra olabilir",
+  "{date} is cancelled. Next: {next}": "{date} iptal edildi. Sonraki: {next}",
+  "{date} is cancelled.": "{date} iptal edildi.",
+  "{date} is back on": "{date} yeniden planlandı",
+  "Moved from the regular {weekday}": "Normal {weekday} gününden taşındı",
+  "Moved from the regular date": "Normal tarihten taşındı",
+  "Choose how the event repeats from the list": "Etkinliğin nasıl tekrarlanacağını listeden seçin",
+  "An event can repeat every 1 to 12 weeks or months": "Bir etkinlik 1 ila 12 haftada veya ayda bir tekrarlanabilir",
+  "The first date must be one of the repeating dates": "İlk tarih tekrarlanan tarihlerden biri olmalıdır",
+  "The last date can be at most 5 years after the first one": "Son tarih ilk tarihten en fazla 5 yıl sonra olabilir",
+  "Pick one of the dates this event repeats on": "Bu etkinliğin tekrarlandığı tarihlerden birini seçin",
+  "This event does not repeat": "Bu etkinlik tekrarlanmaz",
+  "Only the host can cancel or restore a date": "Bir tarihi yalnızca düzenleyici iptal edebilir veya geri yükleyebilir",
+  "This is the last date: change when the event ends, or cancel the event": "Bu son tarihtir: etkinliğin ne zaman biteceğini değiştirin veya etkinliği iptal edin",
+  "At most 100 dates can be cancelled": "En fazla 100 tarih iptal edilebilir",
+  "This event has been cancelled": "Bu etkinlik iptal edildi",
+  "Pick a time zone from the list": "Listeden bir saat dilimi seçin",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Yaklaşık 1 km içinde gösterilir. Buluşmayı ayarlarken tam yeri {name} kişisine sorun.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Etkinliği görebilen herkese gösterilir. Tam adresi aşağıdaki nota yazın.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Bu bir sokak adresi gibi görünüyor. Etkinliği görebilen herkes bunu okuyacaktır, bu yüzden aşağıdaki nota koymak daha güvenlidir.",
+  "An earlier message was removed when this chat was locked": "Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "Bu sohbet kilitlendiğinde önceki {n} mesaj kaldırıldı",
+    "other": "Bu sohbet kilitlendiğinde önceki {n} mesaj kaldırıldı"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "Bir koordinatör tarafından {n} mesaj kaldırıldı",
+    "other": "Bir koordinatör tarafından {n} mesaj kaldırıldı"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} mesaj silindi",
+    "other": "{n} mesaj silindi"
+  }
 }

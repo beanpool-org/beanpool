@@ -10,6 +10,7 @@
 import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, t, tn, word, type EventWhenParts,
+    repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -75,6 +76,9 @@ export interface EventFormInput {
     tzOffsetMinutes?: number | null;
     /** "Only people I let in see the note and chat" (hostLetsInDefault for a new event). */
     hostLetsIn: boolean;
+    /** How it repeats, a choice computed from the first date, and its last date ('' = until cancelled; DESIGN-event-times §8). */
+    repeat?: RepeatChoiceKey;
+    repeatUntil?: string;
 }
 
 export interface EventPostDraft {
@@ -100,6 +104,9 @@ export interface EventPostDraft {
     eventPrivateNote?: string;
     /** Always sent: the host's choice, never left to the node's default. */
     eventHostLetsIn: boolean;
+    /** How it repeats (the pattern; the node adds the clock and length) and its last date. Absent on a one-off. */
+    eventRepeat?: RepeatPattern;
+    eventRepeatUntil?: string;
     audienceScope?: 'group';
     targetGroupId?: string;
 }
@@ -138,6 +145,8 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
     if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
     const description = input.description.trim();
     if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: `Keep the description under ${EVENT_DESCRIPTION_MAX} characters.` };
+    const series = eventRepeatFields(input.repeat ?? 'never', input.repeatUntil ?? '', startLocal.slice(0, 10));
+    if (!series.ok) return series;
 
     const draft: EventPostDraft = {
         type: 'event',
@@ -161,9 +170,23 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         ...(online ? { eventOnline: true as const, ...(link ? { eventLink: link } : {}) } : { eventPlaceName: placeName }),
         ...(note ? { eventPrivateNote: note } : {}),
         eventHostLetsIn: input.hostLetsIn,
+        ...(series.pattern ? { eventRepeat: series.pattern, ...(input.repeatUntil ? { eventRepeatUntil: input.repeatUntil } : {}) } : {}),
         ...(input.audienceGroupId ? { audienceScope: 'group' as const, targetGroupId: input.audienceGroupId } : {}),
     };
     return { ok: true, draft };
+}
+
+/**
+ * The Repeats and Until rows checked the way the node checks them (DESIGN-event-times §8): a choice the first date offers,
+ * and an Until on or after it and at most five years out. The pattern is read on that date; null for "Does not repeat".
+ */
+export function eventRepeatFields(choice: RepeatChoiceKey, until: string, firstDate: string):
+    { ok: true; pattern: RepeatPattern | null } | { ok: false; error: string } {
+    if (choice === 'never') return { ok: true, pattern: null };
+    const pattern = repeatChoicesFor(firstDate).some(c => c.key === choice) ? repeatPatternFor(choice, firstDate) : null;
+    if (!pattern) return { ok: false, error: t('Choose how the event repeats from the list') };
+    const problem = repeatUntilProblem(until, firstDate);
+    return problem ? { ok: false, error: problem } : { ok: true, pattern };
 }
 
 // ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================
@@ -486,8 +509,9 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
  * The host's clock, its zone and online ride along (DESIGN-event-times amendment 1, item 3), so the card reads right from the
  * cache. The join link does not: it is served like the private note, to the host and Going only.
  */
-export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number, string | null, string | null, string | null, number | null] {
-    if (p?.type !== 'event') return [null, null, null, null, 0, 0, null, null, null, null];
+export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number, string | null, string | null, string | null, number | null, string | null, string | null] {
+    if (p?.type !== 'event') return [null, null, null, null, 0, 0, null, null, null, null, null, null];
+    const series = eventRepeatOf(p);
     const online = p.event_online ?? p.eventOnline;
     return [
         p.event_start_at ?? p.eventStartAt ?? null,
@@ -500,7 +524,32 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
         p.event_end_local ?? p.eventEndLocal ?? null,
         p.event_tz ?? p.eventTz ?? null,
         online == null ? null : (online === true || online === 1 ? 1 : 0),
+        // A repeating event's pattern and last date (DESIGN-event-times §8), so the cached card shows its ↻ caption.
+        series.rule ? JSON.stringify(series.rule) : null,
+        series.until,
     ];
+}
+
+/**
+ * A repeating event's rule and last date, from the node's row (camelCase `eventRepeat`) or the cache's (snake_case
+ * `event_repeat`, JSON text). The pattern only: the host's clock and each date's length are the node's.
+ */
+export function eventRepeatOf(p: any): { rule: RepeatPattern | null; until: string | null } {
+    let raw = p?.eventRepeat ?? p?.event_repeat ?? null;
+    if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch { raw = null; }
+    }
+    const until = (p?.eventRepeatUntil ?? p?.event_repeat_until ?? null) as string | null;
+    if (!raw || typeof raw !== 'object' || (raw.freq !== 'weekly' && raw.freq !== 'monthly')) return { rule: null, until: null };
+    const { freq, interval, byDay, byMonthDay, pos } = raw;
+    const rule = { freq, interval, ...(byDay ? { byDay } : {}), ...(byMonthDay != null ? { byMonthDay } : {}), ...(pos != null ? { pos } : {}) } as RepeatPattern;
+    return { rule, until: typeof until === 'string' && until ? until : null };
+}
+
+/** The ↻ caption beside a repeating event's date ("Every Friday · until 18 Dec"); '' for a one-off. */
+export function eventRepeatCaption(p: any): string {
+    const { rule, until } = eventRepeatOf(p);
+    return repeatCaption(rule, until);
 }
 
 /**
@@ -689,6 +738,9 @@ export interface EventEditValues {
     tzOffsetMinutes?: number | null;
     /** "Only people I let in see the note and chat". */
     hostLetsIn: boolean;
+    /** How it repeats and its last date ('' = until cancelled). */
+    repeat?: RepeatChoiceKey;
+    repeatUntil?: string;
 }
 
 /** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
@@ -716,6 +768,8 @@ export function eventEditValues(post: any): EventEditValues {
         tz: f.tz,
         tzOffsetMinutes: f.tz && Number.isFinite(offset) ? offset : null,
         hostLetsIn: post?.eventHostLetsIn === true,
+        repeat: repeatChoiceKeyOf(eventRepeatOf(post).rule),
+        repeatUntil: eventRepeatOf(post).until ?? '',
     };
 }
 
@@ -735,6 +789,8 @@ export interface EventEditPatch {
     lng?: number;
     photos?: string[];
     eventHostLetsIn?: boolean;
+    eventRepeat?: RepeatPattern | null;
+    eventRepeatUntil?: string | null;
 }
 
 /**
@@ -799,6 +855,21 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (after.photo !== before.photo) patch.photos = after.photo ? [after.photo] : [];
     // Silent like the note: who reads the note is the host's to change.
     if (after.hostLetsIn !== before.hostLetsIn) patch.eventHostLetsIn = after.hostLetsIn;
+    // The series (§8 Edit), as the web app sends it: the choice read on the NEW first date (a series moved from a Friday to a
+    // Saturday goes as every Saturday, which is what the list then says), sent when the choice or the first date changed.
+    const was = before.repeat ?? 'never';
+    const now2 = after.repeat ?? 'never';
+    const firstDate = startLocal.slice(0, 10);
+    const dateMoved = !before.start || deviceLocalClock(before.start).slice(0, 10) !== firstDate;
+    if (now2 !== was || (now2 !== 'never' && dateMoved)) {
+        const series = eventRepeatFields(now2, after.repeatUntil ?? '', firstDate);
+        if (!series.ok) return series;
+        patch.eventRepeat = series.pattern;
+    } else if (now2 !== 'never') {
+        const problem = repeatUntilProblem(after.repeatUntil ?? '', firstDate);
+        if (problem) return { ok: false, error: problem };
+    }
+    if (now2 !== 'never' && (after.repeatUntil ?? '') !== (before.repeatUntil ?? '')) patch.eventRepeatUntil = after.repeatUntil || null;
     const notifies = patch.eventStartAt !== undefined || patch.eventEndAt !== undefined || patch.eventPlaceName !== undefined
         || patch.lat !== undefined || patch.eventTz !== undefined || patch.eventOnline !== undefined;
     return { ok: true, patch, notifies };
@@ -1133,4 +1204,9 @@ export function eventLinkWaitWords(myRsvp: EventRsvpStatus | null | undefined, v
     if (letIn === 'before' || letIn === 'waiting') return t('The link to join shows here once the host lets you in.');
     if (myRsvp !== 'going') return t('The link to join shows here once you tap Going.');
     return viewLoaded ? null : t('The link shows when you have signal.');
+}
+
+/** The one line "Change this date only" puts on top of the copy's description (DESIGN-event-times §8). */
+export function withMovedFromLine(line: string, description: string): string {
+    return description.trim() ? `${line}\n\n${description}` : line;
 }

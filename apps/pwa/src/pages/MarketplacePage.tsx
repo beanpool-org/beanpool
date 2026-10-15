@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
 import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -267,6 +267,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Unknown, or a read that fails, draws no examples and no label.
     const [examplesOn, setExamplesOn] = useState(false);
     const [informalPolls, setInformalPolls] = useState(false);
+    // The node says `openMembership` (anyone can join in a minute): other people's places come to about 1 km.
+    const [openMembership, setOpenMembership] = useState(false);
     // Where the list is read from on a node that keeps each member to the listings near their area (lib/listings-near,
     // DESIGN-global-sync-by-area §5): the node's radius, and this member's stored area. The first read waits until both
     // are known, or NEAR_WAIT_MS has passed, so it is made once, from the right place; a node without the switch, a
@@ -289,6 +291,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (cancelled) return;
                 setExamplesOn(exampleListingsOn(info));
                 setInformalPolls(pollsInformal(info));
+                setOpenMembership((info?.features as { openMembership?: boolean } | undefined)?.openMembership === true);
                 const nearby = info?.features?.nearbyListings ?? null;
                 setNearbyListings(nearby);
                 if (nearby && identity?.publicKey && !isVisitor) {
@@ -1295,6 +1298,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                         </div>
                     </button>
+                    {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md
+                        §4): said here, so a pin on the map is never taken for the door. */}
+                    {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
+                        <p data-testid="rough-place-line" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
+                            {t(PLACE_WORDS.roughPlace, { name: selectedPost.authorCallsign })}
+                        </p>
+                    )}
                 </div>
 
                  {/* Action buttons */}

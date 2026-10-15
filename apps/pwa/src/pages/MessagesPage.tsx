@@ -1348,7 +1348,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <p style={note} aria-live="polite" data-testid="new-message-search-status">
                     {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
                         : pickerSearch.state === 'searching' ? 'Searching…'
-                        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
+                        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? "Couldn't search just now. Check your connection and try again.")
                         : pickerSearch.found && found.length === 0 ? 'Nobody here has a name starting with that.'
                         : null}
                 </p>

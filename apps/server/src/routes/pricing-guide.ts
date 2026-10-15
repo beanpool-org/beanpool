@@ -61,7 +61,7 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
      * Public list of items, category taxonomy, and node pricing config.
      */
     router.get('/api/pricing-guide', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
+        if (!deps.rateLimit(ctx, 'pricing-guide')) return;
 
         // `?q=a&q=b` arrives as an array: one string or none, never a value .trim() throws on.
         const category = typeof ctx.query.category === 'string' ? ctx.query.category : undefined;
@@ -82,7 +82,7 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
     });
 
     router.post('/api/pricing-guide/report', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
+        if (!deps.rateLimit(ctx, 'pricing-guide')) return;
 
         const body = (ctx.request as any).body || {};
         const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';

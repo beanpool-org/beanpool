@@ -3,6 +3,8 @@
  *
  *   GET /api/events/mine                  — the signer's own RSVPs, soonest first
  *   PUT /api/events/:postId/reminder      — the signer's reminders for one event
+ *   GET /api/events/zone?lat=&lng=        — the time zone of a pin, for the event form (DESIGN-event-times §2)
+ *   GET /api/events/zones                 — every zone this node accepts, for the form's picker
  *
  * Both are the SIGNER's and nobody else's. The member is `ctx.state.actor`, which only the signature
  * middleware sets, and never a field in the body or the query — the same rule the RSVP route already keeps
@@ -18,9 +20,49 @@ import {
     NO_RSVP_MESSAGE, BAD_OFFSETS_MESSAGE,
 } from '../state-engine.js';
 import type { RouteDeps } from './types.js';
+import { zoneOfPin, describeZone, acceptedZones } from '../engine/event-zone.js';
 
 export function createEventsRoutes(_deps: RouteDeps): Router {
     const router = new Router();
+
+    /**
+     * GET /api/events/zone?lat=&lng=  → { tz, label, offsetMinutes }
+     *
+     * The zone an in-person event's clock belongs to, looked up offline from the pin (engine/event-zone.ts), with its
+     * words ("Lagos time") and its offset now. The form shows it, with the picker one tap away; the node does the
+     * same lookup at create/edit only when the app sends no zone. A signed read like every member read: the form is
+     * only ever open to a member.
+     */
+    router.get('/api/events/zone', async (ctx) => {
+        const rawLat = ctx.query.lat;
+        const rawLng = ctx.query.lng;
+        const tz = typeof rawLat === 'string' && typeof rawLng === 'string' && rawLat && rawLng ? zoneOfPin(Number(rawLat), Number(rawLng)) : null;
+        if (!tz) {
+            ctx.status = 400;
+            ctx.body = { error: 'lat and lng must be a point on the map' };
+            return;
+        }
+        ctx.body = describeZone(tz);
+    });
+
+    /**
+     * GET /api/events/zones  → { zones: [{ tz, label, offsetMinutes }] }
+     *
+     * Served rather than bundled, so the list is exactly what this node accepts (an app on Hermes has no
+     * Intl.supportedValuesOf). ETag-cached; rebuilt hourly as offsets move with DST.
+     */
+    router.get('/api/events/zones', async (ctx) => {
+        const { zones, etag } = acceptedZones();
+        ctx.set('ETag', etag);
+        ctx.set('Cache-Control', 'private, max-age=3600');
+        // A compressed answer goes out with the tag made weak (W/), and comes back that way.
+        const inm = ctx.get('If-None-Match');
+        if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag)) {
+            ctx.status = 304;
+            return;
+        }
+        ctx.body = { zones };
+    });
 
     /**
      * GET /api/events/mine

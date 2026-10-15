@@ -472,7 +472,8 @@ async function main(): Promise<void> {
         const hashed = snap?.tableHashes?.tables ?? {};
         // Version 2: members hashed with the photo's reference and size, and member_photos (engine/replica-hashes.ts).
         // Version 3: groups hashed with their picture's reference and size, and group_pictures (#1486).
-        assert(snap?.tableHashes?.v === 3 && ['members', 'member_photos', 'groups', 'group_pictures', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 4: posts hashed with the five event-times columns (#1937).
+        assert(snap?.tableHashes?.v === 4 && ['members', 'member_photos', 'groups', 'group_pictures', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

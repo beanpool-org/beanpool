@@ -120,6 +120,8 @@ async function child(): Promise<void> {
             setReplicationToken(a.replicationToken);
             return true;
         },
+        /** The importer format this build reads (engine/sync.ts REPLICA_FORMAT), as its own puller sends it. */
+        'replica-format': async () => (await import('./engine/sync.js')).REPLICA_FORMAT,
         /** Whether copies take the replication token only, as the operator sets it in Settings. */
         'token-only': async (a: { on: boolean }) => {
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -360,9 +362,9 @@ async function main(): Promise<void> {
     };
     const gwen = newId('Gwen');
     const [ann, bo, cy, dee] = ['Ann', 'Bo', 'Cy', 'Dee'].map(newId);
-    // As a standby asks: with the importer format it reads (engine/sync.ts REPLICA_FORMAT; routes/backup.ts refuses a copy to
-    // one older than photos by reference). The old routes ignore it.
-    const auth = { 'X-Replication-Token': replicationToken, 'X-Replica-Format': '8' };
+    // As a standby asks: with the importer format it reads (engine/sync.ts REPLICA_FORMAT, read from M's build once it is up;
+    // routes/backup.ts refuses a copy to one older than OLDEST_STANDBY_FORMAT). The old routes ignore it.
+    const auth = { 'X-Replication-Token': replicationToken, 'X-Replica-Format': '' };
     const unsigned: string[] = [];
 
     let main = await spawnNode(SCRIPT, dir, env);
@@ -423,6 +425,7 @@ async function main(): Promise<void> {
         // ── 1. M, the old routes, and a whole copy that is today's payload ──
         console.log('\n— 1. the main server; the old routes; a whole copy in pages carries what the whole payload carries —');
         await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
+        auth['X-Replica-Format'] = String(await main.send('replica-format'));
         const m = `https://localhost:${await main.send('serve')}`;
         const As = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         const join = async (who: Id) => {

@@ -61,6 +61,7 @@ export * from './group-words.js';
 export * from './tour.js';
 export * from './help-map.js';
 export * from './brand-colours.js';
+export * from './event-when.js';
 export * from './words.js';
 export * from './report-kind.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made

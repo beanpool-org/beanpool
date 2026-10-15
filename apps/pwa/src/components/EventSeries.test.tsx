@@ -132,7 +132,7 @@ describe('the ↻ caption: card, map popup (the same card) and Home', () => {
 
     it('with a last date', () => {
         at320(<EventCard post={{ ...series, eventRepeatUntil: '2027-12-17' }} identity={identity} />);
-        expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec');
+        expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec 2027');
     });
 
     it('a one-off has none', () => {

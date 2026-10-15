@@ -148,14 +148,14 @@ export function repeatSkipNote(key: RepeatChoiceKey, firstDate: string): string 
     return day >= 29 ? t('(months without a {day} are skipped)', { day: dayOrdinal(day) }) : null;
 }
 
-/** "18 Dec": a local date, from the tables. */
-function shortDate(date: string): string {
-    return formatDate(dateOf(utcOf(date)), 'day-month', { utc: true });
+/** "18 Dec 2026": a local date, from the tables. With its year: a last date can be years away, and "until 15 Dec" reads as this one. */
+function untilDate(date: string): string {
+    return formatDate(dateOf(utcOf(date)), 'day-month-year', { utc: true });
 }
 
 /**
  * The ↻ caption beside a repeating event's date: "Every Friday", "Every 2 weeks on Friday", "Monthly on the 16th",
- * "Monthly, third Friday", and " · until 18 Dec" when it has a last date. '' for a one-off or a rule this build cannot read.
+ * "Monthly, third Friday", and " · until 18 Dec 2026" when it has a last date. '' for a one-off or a rule this build cannot read.
  */
 export function repeatCaption(rule: Partial<RepeatPattern> | null | undefined, until?: string | null): string {
     if (!rule || typeof rule !== 'object') return '';
@@ -174,7 +174,7 @@ export function repeatCaption(rule: Partial<RepeatPattern> | null | undefined, u
         caption = nthWeekdayCaption(r.pos as 1 | 2 | 3 | 4 | -1, weekdayName(byDay));
     }
     if (!caption) return '';
-    return isDate(until) ? t('{repeats} · until {date}', { repeats: caption, date: shortDate(until) }) : caption;
+    return isDate(until) ? t('{repeats} · until {date}', { repeats: caption, date: untilDate(until) }) : caption;
 }
 
 /** The latest Until a first date allows ("YYYY-MM-DD"), the node's latestUntil. '' for an unreadable date. */

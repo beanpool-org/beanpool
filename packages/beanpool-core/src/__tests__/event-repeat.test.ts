@@ -110,7 +110,7 @@ describe('repeatCaption: the ↻ line on a card, Home and the map popup', () => 
     });
 
     it('adds the last date when there is one', () => {
-        expect(repeatCaption({ freq: 'weekly', interval: 1, byDay: 'FR' }, '2026-12-18')).toBe('Every Friday · until 18 Dec');
+        expect(repeatCaption({ freq: 'weekly', interval: 1, byDay: 'FR' }, '2026-12-18')).toBe('Every Friday · until 18 Dec 2026');
     });
 
     it('nothing for a one-off or an unreadable rule', () => {

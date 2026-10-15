@@ -70,7 +70,7 @@ describe('the cache, the caption and Home', () => {
         expect(cols.slice(10)).toEqual(['{"freq":"weekly","interval":2,"byDay":"FR"}', '2026-12-18']);
         const cached = { type: 'event', event_repeat: cols[10], event_repeat_until: cols[11] };
         expect(eventRepeatOf(cached)).toEqual({ rule: { freq: 'weekly', interval: 2, byDay: 'FR' }, until: '2026-12-18' });
-        expect(eventRepeatCaption(cached)).toBe('Every 2 weeks on Friday · until 18 Dec');
+        expect(eventRepeatCaption(cached)).toBe('Every 2 weeks on Friday · until 18 Dec 2026');
         expect(eventCacheColumns({ type: 'event' }).slice(10)).toEqual([null, null]);
         expect(eventRepeatCaption({ type: 'event', event_repeat: 'not json' })).toBe('');
     });

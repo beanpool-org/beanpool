@@ -55,7 +55,7 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }
                     const label = seriesDateLabel(d.date);
                     return (
                         <li key={d.date} data-testid="event-next-date" className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-0">
-                            <span className={`whitespace-nowrap text-sm font-bold ${d.cancelled ? 'line-through text-nature-500 dark:text-nature-400' : 'text-nature-900 dark:text-nature-100'}`}>{label}</span>
+                            <span className={`whitespace-nowrap text-sm font-bold ${d.cancelled ? 'line-through text-nature-700 dark:text-nature-300' : 'text-nature-900 dark:text-nature-100'}`}>{label}</span>
                             {d.cancelled && <span className="whitespace-nowrap text-xs font-bold uppercase text-red-700 dark:text-red-300">{t('Cancelled')}</span>}
                             {isHost && !d.cancelled && (
                                 <>

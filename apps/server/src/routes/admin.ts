@@ -542,8 +542,9 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
  * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
  * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
- * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof). From
- * the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the engine is given.
+ * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof; removing
+ * or suspending an owner asks more: ownerRemovalProof). From the phone's Manage hand-off it asks for its unlock again
+ * (requirePhoneStepUp). `actor` is the one the engine is given.
  * Answers 403 and returns false when that is due.
  */
 function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {

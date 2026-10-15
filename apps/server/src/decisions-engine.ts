@@ -1832,7 +1832,7 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
  * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
  * caller's choosing to that role. No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
- * stepUpIfOwnerOnly). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
+ * stepUpIfOwnerOnly), and an owner's fresh proof on those that remove or suspend an owner (adminActionRemovesOwner). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
  */
 export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;

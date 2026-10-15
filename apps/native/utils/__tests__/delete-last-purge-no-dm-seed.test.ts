@@ -98,7 +98,7 @@ const disconnects = (net: Net) => net.sent.filter((s) => s.origin === VAULT && s
 const fetchOrder = (net: Net, req: SentRequest) => vi.mocked(fetch).mock.invocationCallOrder[net.sent.indexOf(req)];
 
 let kim: BeanPoolIdentity;
-let purgeMode: "ok" | "refuse" | "ok-false" | "hang" = "ok";
+const purgeMode: "ok" | "refuse" | "ok-false" | "hang" = "ok";
 const quietError = console.error;
 
 beforeEach(async () => {

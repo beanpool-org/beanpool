@@ -308,6 +308,17 @@ run_check "workflows" node --test scripts/check-workflows.test.mjs
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
 run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 
+# The website follows the visitor's light or dark setting (Marty, 15 Oct 2026). Its every colour is in style.css's two
+# sets, and each light value is its role in core's brand-colours.ts (it reads core's dist, so it starts once build has
+# finished; instant). Then every page in headless Chromium, both themes, 320 and 1280 px: words under 4.5:1 (3:1 large)
+# fail in light, and in dark any but the pairs pinned as they were. No network; about a minute.
+run_website_colours() {
+  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  node --test scripts/website-colours.test.mjs
+}
+run_check "website_colours" run_website_colours
+run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node scripts/website-contrast.mjs'
+
 # setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
 # prints the primary's words and the way out. Instant.
 run_check "setup_backup" node --test scripts/setup-backup.test.mjs

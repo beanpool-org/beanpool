@@ -220,3 +220,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** Boundary coordinate extremes (poles and anti-meridian) and decimal rounding threshold edge cases in `apps/manager/src/lib/geo.ts` lacked explicit unit assertions.
 **Learning:** Adding tests for `approximateLocation` at 90/-90 lat and 180/-180 lng as well as 4th decimal rounding boundaries (.0004 vs .0005) ensures `geo` calculations handle extreme GIS coordinates accurately.
 **Action:** Continue identifying unit test coverage gaps across `apps/manager/`.
+
+## 2026-10-15 - [manager tests] isModeratorSession, sectionTargetFor, and endKeySession unit tests
+**Gap:** `isModeratorSession`, `sectionTargetFor`, and `endKeySession` helper functions in `apps/manager/src/lib/key-session.ts` were untested directly.
+**Learning:** Testing `sectionTargetFor` verified that moderator sessions are strictly routed to the moderation section (`{ tab: 'people', subTab: 'moderation' }`) regardless of requested section, while `endKeySession` confirmed CSRF header inclusion and network exception handling.
+**Action:** Continue identifying untested helper functions and edge cases across `apps/manager/src/lib/`.

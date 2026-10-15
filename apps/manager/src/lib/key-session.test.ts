@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseHandoffFragment, startKeySession, sectionTarget, signInWithPassword, forgetStoredAdminSecrets } from './key-session';
+import { parseHandoffFragment, startKeySession, sectionTarget, isModeratorSession, sectionTargetFor, endKeySession, signInWithPassword, forgetStoredAdminSecrets } from './key-session';
 import { buildAdminHeaders, setKeySessionCsrfToken } from './node-client';
 
 const TOKEN = 'a'.repeat(64);
@@ -34,6 +34,51 @@ describe('parseHandoffFragment', () => {
         expect(sectionTarget('disputes')).toEqual({ tab: 'economy', subTab: 'disputes' });
         expect(sectionTarget('decisions')).toEqual({ tab: 'economy', subTab: 'decisions' });
         expect(sectionTarget('home')).toEqual({ tab: 'home' });
+    });
+});
+
+describe('isModeratorSession and sectionTargetFor', () => {
+    it('isModeratorSession returns true only for moderator sessions', () => {
+        expect(isModeratorSession({ role: 'moderator', memberPubkey: 'ab' })).toBe(true);
+        expect(isModeratorSession({ role: 'admin', memberPubkey: 'ab' })).toBe(false);
+        expect(isModeratorSession({ role: 'owner', memberPubkey: 'ab' })).toBe(false);
+        expect(isModeratorSession(null)).toBe(false);
+        expect(isModeratorSession(undefined)).toBe(false);
+    });
+
+    it('sectionTargetFor forces moderation tab for moderators, or returns section target for other roles', () => {
+        expect(sectionTargetFor('moderator', 'disputes')).toEqual({ tab: 'people', subTab: 'moderation' });
+        expect(sectionTargetFor('moderator', null)).toEqual({ tab: 'people', subTab: 'moderation' });
+        expect(sectionTargetFor('admin', 'disputes')).toEqual({ tab: 'economy', subTab: 'disputes' });
+        expect(sectionTargetFor('owner', 'home')).toEqual({ tab: 'home' });
+        expect(sectionTargetFor('owner', null)).toBeNull();
+        expect(sectionTargetFor(null, 'disputes')).toEqual({ tab: 'economy', subTab: 'disputes' });
+    });
+});
+
+describe('endKeySession', () => {
+    it('posts to logout with CSRF token header when present', async () => {
+        const fetchMock = vi.fn(async () => reply(200, { success: true }));
+        vi.stubGlobal('fetch', fetchMock);
+        await endKeySession('csrf-123');
+        expect(fetchMock).toHaveBeenCalledWith('/api/local/admin/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-123' },
+            body: '{}',
+        });
+    });
+
+    it('posts to logout without CSRF token header when token is null, and handles errors gracefully', async () => {
+        const fetchMock = vi.fn(async () => { throw new Error('Network error'); });
+        vi.stubGlobal('fetch', fetchMock);
+        await expect(endKeySession(null)).resolves.toBeUndefined();
+        expect(fetchMock).toHaveBeenCalledWith('/api/local/admin/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
     });
 });
 

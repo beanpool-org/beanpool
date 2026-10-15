@@ -263,6 +263,42 @@ describe('backups', () => {
         await expectCopy(b, 'google', 'two-reshares', member);
     });
 
+    it('after a second reshare that keeps one custodian, that custodian is refused a fresh vault naming a backup from before it, so a retired custodian\'s share never counts; the newest generation still restores (#1981 confirmation 1)', async () => {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'kept-one');
+        const share = (shares: CustodianShare[], k: CustodianKey) => shares.find(s => s.custodian === k.publicKey) as CustodianShare;
+        const reshare = async (from: CustodianKey[], fromShares: CustodianShare[], to: CustodianKey[]) => {
+            const newCustodians = to.map(c => c.publicKey);
+            await presentShare(a.baseUrl, from[0], share(fromShares, from[0]), { ...a.call(), purpose: 'reshare', newCustodians });
+            const r = await presentShare(a.baseUrl, from[1], share(fromShares, from[1]), { ...a.call(), purpose: 'reshare', newCustodians });
+            const shares = r.body.custodianShares as CustodianShare[];
+            expect((await confirmWith(a, shares, [0, 1], to))[1].body).toMatchObject({ switched: true });
+            await a.api.idle();
+            a.clock.advance(60_000);
+            return shares;
+        };
+        const n = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const nShares = await reshare(a.custodians, g.shares, n);
+        const post1 = await a.api.runBackup();
+        a.clock.advance(60_000);
+        // The second reshare keeps n[0] and retires n[1] and n[2].
+        const p = [n[0], custodianKey(crypto.randomBytes(32)), custodianKey(crypto.randomBytes(32))];
+        const pShares = await reshare(n, nShares, p);
+        const post2 = await a.api.runBackup();
+
+        const b = await vault({ stub: a.stub, clock: a.clock, custodians: a.custodians, storeDir: a.storeDir });
+        // n[0] is in force and post1 lists it, but post1's state opens with generation-2 shares, retired n[1]'s among them.
+        await expect(restoreFromBackup(b.baseUrl, n[0], post1, b.call())).rejects.toThrow(/403/);
+        expect(b.keyholder().status().state).toBe('fresh');
+
+        expect((await restoreFromBackup(b.baseUrl, n[0], post2, b.call())).body).toMatchObject({ state: 'locked', generation: 3 });
+        await presentShare(b.baseUrl, n[0], share(pShares, n[0]), b.call());
+        expect((await presentShare(b.baseUrl, p[1], share(pShares, p[1]), b.call())).body.state).toBe('open');
+        await expectCopy(b, 'google', 'kept-one', member);
+    });
+
     it('two backups in the same second keep their order: the second one\'s deletions still reach the first', async () => {
         expect(['bv-20261001T120000Z-1.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T115959Z.bin'].sort(compareBackupNames))
             .toEqual(['bv-20261001T115959Z.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T120000Z-1.bin']);

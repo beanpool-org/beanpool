@@ -536,7 +536,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                     restoreFailure = null;
                 } catch (e) {
                     restoreRetryAt = clock() + RESTORE_RETRY_MS;
-                    restoreFailure = (e instanceof Error ? e.message : String(e)).slice(0, 240);
+                    restoreFailure = (e instanceof Error ? e.message : String(e)).slice(0, 320);
                     counters.counts.errors++;
                     console.error(`vault-api: the restore from backup is not finished: ${restoreFailure}`);
                     throw restoreWaiting();
@@ -571,13 +571,18 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * newer backup's deletion records are applied to it, so a copy deleted after that backup was made is dropped again
      * (§1.7), and only then does it go into place. A newer backup that can't be listed, fetched or opened fails the
      * whole restore, which is tried again: skipping one would bring back copies its members deleted. (A file of another
-     * vault in the same store is not one of this vault's backups and says nothing about its copies.)
+     * vault in the same store is not one of this vault's backups and says nothing about its copies. It is passed over
+     * unnamed, and so is a file of this vault whose header's vaultId was changed: the copies deleted in it come back.
+     * Carried, review #1981 N5.)
      *
      * So that one damaged file doesn't stop a restore for good (V2, case 16), every store's copy of a newer backup is
      * tried, and its deletion records are read by their own seal, which holds when the snapshot or the signature beside
-     * them is damaged ({@link newerDeletions}). One whose records open in no store is never skipped by the vault itself
-     * (review #1981, B2): the restore waits, locked as before, and the file is named to the custodians (the unlock's
-     * 503 and /v1/unlock/backups) until a good copy of it is in a store.
+     * them is damaged ({@link newerDeletions}). Other than a header naming another vault, one whose records open in no
+     * store is never skipped by the vault itself (review #1981, B2): the restore waits, locked as before, and the file
+     * is named to the custodians (the unlock's 503 and /v1/unlock/backups). The way out is a good copy put in a store,
+     * if one exists (no custodian command fetches a backup file), or the file deleted from the off-box store with the
+     * bucket's own credentials, which loses the deletions in it. The vault's own store can't be edited (the image has no
+     * login), so a file bad there and missing or bad off the box leaves only a wipe.
      *
      * A record the backup already holds is older than the backup and is left alone: a copy deposited again after it
      * must survive. The keyholder forgets the backup (`restoreDone`) only once the built database is in place: a crash
@@ -651,9 +656,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     /**
      * A newer backup's deletion records for a restore (B2, review #1981), from the first store whose copy opens: the
      * vault's own, then the off-box one. The keyholder reads them by their own seal, so a copy whose snapshot or
-     * signature is damaged still gives them. `null` only when every copy is another vault's file. A copy that can't be
-     * fetched fails the try (it may be the good one). A file of this vault whose records open in no store fails it too,
-     * named: the vault never skips one itself, since the copies deleted in it would come back.
+     * signature is damaged still gives them. `null` only when every copy is another vault's file. When no copy opens, a
+     * copy that couldn't be fetched fails the try (it may be the good one), and so does a file of this vault whose
+     * records open in no store, named: the vault never skips one itself, since the copies deleted in it would come back.
      */
     async function newerDeletions(name: string, holders: BackupStore[], vaultId: string): Promise<WireDeletion[] | null> {
         let fetchError: unknown = null;
@@ -681,7 +686,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             }
         }
         if (why !== null) {
-            throw new Error(`the newer backup ${name} does not open${fetchError ? ', nor can its other copy be fetched' : ' in any store'} (${why}); the restore waits for a good copy of it`);
+            throw new Error(`the newer backup ${name} does not open${fetchError ? ', nor can its other copy be fetched' : ' in any store'} (${why}): put a good copy in a store, or delete it from the off-box store and lose its deletions`);
         }
         if (fetchError || !otherVault) throw fetchError ?? new Error(`the newer backup ${name} is in neither store`);
         return null;
@@ -1697,9 +1702,13 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * V1 (case 16): a fresh vault's custodians in force are the genesis keys its image pins, so after a reshare the new
      * custodians alone could not rebuild one. A fresh vault also lets a key make the hello and the restore when the
      * backup the request names, read by name from the vault's own stores (never from the request), lists that key in
-     * its state's `custodians`, and so does the newest backup of that vault the stores hold (B1, review #1981): an
-     * older backup still lists custodians a later reshare retired, who must not take a fresh vault with it. A newer
-     * file this can't read might be that newest backup, so it refuses (the image's pinned genesis keys still restore).
+     * its state's `custodians`, and so does the newest backup of that vault the stores hold (B1, review #1981), and the
+     * named backup is of that newest backup's generation (#1981 confirmation 1): an older backup still lists custodians
+     * a later reshare retired, and its state unlocks with their shares, so neither their own keys nor a custodian the
+     * reshare kept may start it. A newer file this can't read might be that newest backup, so it refuses (the image's
+     * pinned genesis keys still start the restore). This is about the keys a request is signed by: the pinned genesis
+     * keys, the rebuild keys, start a restore of any generation (README "Rebuild keys"), and the newest backup is the
+     * newest the stores list, so someone who can remove files from a store can make an older one the newest.
      * Never a key the backup doesn't list: the keyholder's `adoptState` checks the list again on the very state it
      * adopts, with the key's signature over the restore statement for this boot and that name.
      *
@@ -1721,6 +1730,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             return false;
         }
         if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) return false;
+        const generationOf = (state: unknown) => (state as { generation?: unknown } | null)?.generation;
         const lists = (state: unknown) => {
             const custodians = (state as { custodians?: unknown } | null)?.custodians;
             return Array.isArray(custodians) && custodians.includes(key);
@@ -1734,7 +1744,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 for (const holder of listing.holders(n)) {
                     try {
                         const header = parseBackupFile(await holder.get(n)).header;
-                        if (header.vaultId === named.vaultId) return lists(header.state);
+                        // And of the newest backup's generation: an older generation's state unlocks with its own
+                        // custodians' shares, retired ones included, so a re-appointed custodian would let them in.
+                        if (header.vaultId === named.vaultId) return lists(header.state) && generationOf(header.state) === generationOf(named.state);
                     } catch {
                         unreadable = true;
                     }

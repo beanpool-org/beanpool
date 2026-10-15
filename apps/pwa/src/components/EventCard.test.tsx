@@ -433,3 +433,82 @@ describe('Events round 2: the host (A1, A3, A4, B4)', () => {
         confirm.mockRestore();
     });
 });
+
+describe('Event times on the card and the detail (DESIGN-event-times §4, slice 2)', () => {
+    const savedTz = process.env.TZ;
+    // A reader in New York, so a Lagos or Sydney event reads differently from their own clock.
+    beforeEach(() => { process.env.TZ = 'America/New_York'; });
+    afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; document.documentElement.style.fontSize = ''; });
+
+    // Lagos (UTC+1): Sat 28 Sep 2030 20:50 at the hall is 19:50Z, 15:50 in New York.
+    const lagos = {
+        ...baseEvent, eventStartAt: '2030-09-28T19:50:00.000Z', eventEndAt: '2030-09-28T21:50:00.000Z',
+        eventStartLocal: '2030-09-28T20:50', eventEndLocal: '2030-09-28T22:50', eventTz: 'Africa/Lagos', eventOnline: false,
+    };
+    // Online, a Sydney host's Fri 18 Oct 2030 20:50 (AEDT): 09:50Z, 5:50 in New York.
+    const online = {
+        ...baseEvent, lat: undefined, lng: undefined, eventPlaceName: undefined,
+        eventStartAt: '2030-10-18T09:50:00.000Z', eventEndAt: '2030-10-18T11:50:00.000Z',
+        eventStartLocal: '2030-10-18T20:50', eventEndLocal: '2030-10-18T22:50', eventTz: 'Australia/Sydney', eventOnline: true,
+    };
+
+    it('in person somewhere else: the place clock leads, the second time under it, each half whole', () => {
+        renderAt320(<EventCard post={lagos} identity={identity} distanceKm={2.4} />);
+        const when = screen.getByTestId('event-when');
+        expect(Array.from(when.children).map(c => c.textContent)).toEqual(['SAT 28 SEP ·', '20:50–22:50']);
+        expect(when.getAttribute('aria-label')).toBe('SAT 28 SEP · 20:50–22:50 · Lagos time · 15:50 your time');
+        const note = screen.getByTestId('event-when-note');
+        expect(Array.from(note.children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className)])).toEqual([
+            ['Lagos time ·', true], ['15:50 your time', true],
+        ]);
+        expect(note.className).toMatch(/flex-wrap/);
+    });
+
+    it('in person where the reader is: no second line', () => {
+        const here = { ...lagos, eventStartAt: '2030-09-29T00:50:00.000Z', eventEndAt: '2030-09-29T02:50:00.000Z', eventTz: 'America/New_York' };
+        renderAt320(<EventCard post={here} identity={identity} />);
+        expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('SAT 28 SEP · 20:50–22:50');
+        expect(screen.queryByTestId('event-when-note')).not.toBeInTheDocument();
+    });
+
+    it("online: the reader's own time, \"your time\", and Online where the place goes", () => {
+        renderAt320(<EventCard post={online} identity={identity} distanceKm={3} />);
+        expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('FRI 18 OCT · 5:50–7:50 your time');
+        // "your time" is a whole piece of its own, so the line can wrap before it at 320px in the page's large text.
+        expect(Array.from(screen.getByTestId('event-when').children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className)])).toEqual([
+            ['FRI 18 OCT ·', true], ['5:50–7:50', true], ['your time', true],
+        ]);
+        const card = screen.getByTestId('event-card');
+        expect(within(card).getByText('Online').textContent).toBe('🌐 Online');
+        expect(within(card).queryByText(/km/)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('event-when-note')).not.toBeInTheDocument();
+    });
+
+    it("the online detail: the host's clock, Join for Going, and the words for anyone else", () => {
+        const { unmount } = render(<EventDetail post={{ ...online, eventLink: 'https://meet.example/abc' }} identity={identity} />);
+        expect(screen.getByTestId('event-when-host')).toHaveTextContent('20:50 for the host (Sydney time)');
+        const join = screen.getByTestId('event-join');
+        expect(join.getAttribute('href')).toBe('https://meet.example/abc');
+        expect(join.getAttribute('rel')).toBe('noopener noreferrer');
+        expect(screen.queryByRole('button', { name: 'Show on map' })).not.toBeInTheDocument();
+        unmount();
+
+        render(<EventDetail post={{ ...online, myRsvp: 'interested' }} identity={identity} />);
+        expect(screen.queryByTestId('event-join')).not.toBeInTheDocument();
+        expect(screen.getByText('The link to join shows here once you tap Going.')).toBeInTheDocument();
+    });
+
+    it('never tells someone who is Going to tap Going: with no link yet, it says the host has not added one', () => {
+        const { unmount } = render(<EventDetail post={{ ...online, myRsvp: 'going' }} identity={identity} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The host has not added a link to join yet.');
+        expect(within(screen.getByTestId('event-online')).queryByText(/tap Going/)).not.toBeInTheDocument();
+        unmount();
+        render(<EventDetail post={{ ...online, myRsvp: null }} identity={identity} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The link to join shows here once you tap Going.');
+    });
+
+    it('never makes a link of anything but http(s)', () => {
+        render(<EventDetail post={{ ...online, eventLink: 'javascript:alert(1)' }} identity={identity} />);
+        expect(screen.queryByTestId('event-join')).not.toBeInTheDocument();
+    });
+});

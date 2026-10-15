@@ -179,7 +179,7 @@
   "Your other phone gets your account the next time it checks, in about a minute.": "もう一方の端末が次回確認したとき（約1分後）にアカウントが読み込まれます。",
   "Your {name} sign-in is now linked, in every community. If you lose this phone, sign in with {name} to get back in: it takes a day, or less if another phone of yours says it's you.": "{name}でのサインインがすべてのコミュニティで連携されました。この端末を紛失した場合は、{name}でサインインして復旧できます（通常1日、別の端末で本人確認できればそれより早く完了します）。",
   "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. Your 12 words work any time.": "コミュニティ内にある{name}のアカウントコピーは削除され、BeanPoolの鍵の金庫にも保持されません。再度連携するまで、{name}を使ってコミュニティや鍵の金庫から復元することはできません。12個の単語はいつでも使用できます。",
-  "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.": "コミュニティ内にある{name}のアカウントコピーは削除され、BeanPoolの鍵の金庫にも保持されません。再度連携するまで、{name}を使って復元することはできません。この端末には12個の単語がありません。端末を紛失すると復元できなくなります。",
+  "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.": "コミュニティ内にある{name}のアカウントコピーは削除され、BeanPoolの鍵の金庫にも保持されません。再度連携するまで、{name}ではコミュニティからも鍵の金庫からも復元できません。この端末には12個の単語がありません。端末を紛失すると復元できなくなります。",
   "Key code: {code}": "キーコード: {code}",
   "Chat memory": "チャットの記憶",
   "Reset": "リセット",

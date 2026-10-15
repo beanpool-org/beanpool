@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "콩",
@@ -39,5 +39,80 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "장소 정보는 OpenStreetMap에서 가져와요. 여기에 입력한 내용은 OpenStreetMap으로 전송돼요.",
   "Choose {place}": "{place} 선택",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "이 커뮤니티는 글을 올리기 전에 프로필 사진을 요청해요. 나중에 프로필에서 추가할 수 있어요.",
-  "A picture is optional here. You can add one later from your profile.": "여기서는 사진이 선택 사항이에요. 원하면 나중에 프로필에서 추가할 수 있어요."
+  "A picture is optional here. You can add one later from your profile.": "여기서는 사진이 선택 사항이에요. 원하면 나중에 프로필에서 추가할 수 있어요.",
+  "{n}st\u0004day of the month": "{n}일",
+  "{n}nd\u0004day of the month": "{n}일",
+  "{n}rd\u0004day of the month": "{n}일",
+  "{n}th\u0004day of the month": "{n}일",
+  "Every month on the first {weekday}": "매월 첫째 주 {weekday}",
+  "Every month on the second {weekday}": "매월 둘째 주 {weekday}",
+  "Every month on the third {weekday}": "매월 셋째 주 {weekday}",
+  "Every month on the fourth {weekday}": "매월 넷째 주 {weekday}",
+  "Every month on the last {weekday}": "매월 마지막 {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "other": "{n}개월마다 첫째 주 {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "other": "{n}개월마다 둘째 주 {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "other": "{n}개월마다 셋째 주 {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "other": "{n}개월마다 넷째 주 {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "other": "{n}개월마다 마지막 {weekday}"
+  },
+  "Monthly, first {weekday}": "매월 첫째 주 {weekday}",
+  "Monthly, second {weekday}": "매월 둘째 주 {weekday}",
+  "Monthly, third {weekday}": "매월 셋째 주 {weekday}",
+  "Monthly, fourth {weekday}": "매월 넷째 주 {weekday}",
+  "Monthly, last {weekday}": "매월 마지막 {weekday}",
+  "Does not repeat": "반복 안 함",
+  "Every week on {weekday}": "매주 {weekday}",
+  "Every 2 weeks on {weekday}": "2주마다 {weekday}",
+  "Every month on the {day}": "매월 {day}",
+  "An event that repeats must end before its next date starts": "반복되는 일정은 다음 일정 시작 전에 종료되어야 해요",
+  "(months without a {day} are skipped)": "({day}이 없는 달은 건너뜁니다)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "other": "{n}주마다 {weekday}"
+  },
+  "Every {weekday}": "매주 {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "other": "{n}개월마다 {day}"
+  },
+  "Monthly on the {day}": "매월 {day}",
+  "{repeats} · until {date}": "{repeats} · {date}까지",
+  "The last date must be a date on or after the first one": "종료일은 시작일과 같거나 그 이후여야 해요",
+  "The last date can be at most {n} years after the first one": "종료일은 시작일로부터 최대 {n}년 후까지 가능해요",
+  "{date} is cancelled. Next: {next}": "{date} 일정이 취소되었어요. 다음 일정: {next}",
+  "{date} is cancelled.": "{date} 일정이 취소되었어요.",
+  "{date} is back on": "{date} 일정이 다시 진행돼요",
+  "Moved from the regular {weekday}": "정기 {weekday}에서 변경됨",
+  "Moved from the regular date": "정기 일정에서 변경됨",
+  "Choose how the event repeats from the list": "목록에서 반복 방식을 선택하세요",
+  "An event can repeat every 1 to 12 weeks or months": "일정은 1~12주 또는 1~12개월마다 반복할 수 있어요",
+  "The first date must be one of the repeating dates": "시작일은 반복되는 일정 중 하나여야 해요",
+  "The last date can be at most 5 years after the first one": "종료일은 시작일로부터 최대 5년 후까지 가능해요",
+  "Pick one of the dates this event repeats on": "이 일정이 반복되는 날짜 중 하나를 선택하세요",
+  "This event does not repeat": "이 일정은 반복되지 않아요",
+  "Only the host can cancel or restore a date": "주최자만 일정을 취소하거나 복원할 수 있어요",
+  "This is the last date: change when the event ends, or cancel the event": "마지막 일정이에요. 종료 시점을 변경하거나 일정을 취소하세요",
+  "At most 100 dates can be cancelled": "최대 100개 일정까지 취소할 수 있어요",
+  "This event has been cancelled": "이 이벤트는 취소되었어요",
+  "Pick a time zone from the list": "목록에서 표준시간대를 선택하세요",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "약 1km 반경으로 표시돼요. 만날 약속을 잡을 때 {name} 님에게 정확한 장소를 문의하세요.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "이벤트를 볼 수 있는 모든 사람에게 표시돼요. 정확한 주소는 아래 메모에 적어 주세요.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "도로명 주소처럼 보여요. 이벤트를 보는 모든 사람이 읽을 수 있으니 아래 메모에 적는 편이 더 안전해요.",
+  "An earlier message was removed when this chat was locked": "이 대화방이 잠겼을 때 이전 메시지가 삭제되었어요",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "other": "이 대화방이 잠겼을 때 이전 메시지 {n}개가 삭제되었어요"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "other": "운영자에 의해 메시지 {n}개가 삭제되었어요"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "other": "메시지 {n}개가 삭제되었어요"
+  }
 }

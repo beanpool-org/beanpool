@@ -343,7 +343,7 @@ describe('the detail: Next dates', () => {
     });
 
     it("an older node's list (no ends) shows as it is", () => {
-        const old = rolledView.eventNextDates.map(({ endAt: _e, ...d }) => d);
+        const old = rolledView.eventNextDates.map((d: { date: string; startLocal: string; startAt: string; cancelled: boolean }) => ({ date: d.date, startLocal: d.startLocal, startAt: d.startAt, cancelled: d.cancelled }));
         expect(seriesDatesShown(old, '2027-10-29', Date.parse('2030-01-01T00:00:00Z'))).toEqual(old);
         expect(seriesDatesShown(rolledView.eventNextDates, '2027-10-29', Date.parse('2027-10-15T10:00:00Z')).map(d => d.date)).toEqual(['2027-10-22', '2027-10-29']);
     });

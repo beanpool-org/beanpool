@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fasulye",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "Koordinatör: {name}",
   "Some invitations were not sent": "Bazı davetler gönderilemedi",
   "{sent} sent. Not sent: {names}. {reason}": "Gönderilen: {sent}. Gönderilemeyen kişiler: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Gönderilen: {sent}. Gönderilemeyen kişiler: {names}. Sinyalin olduğunda tekrar dene."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Gönderilen: {sent}. Gönderilemeyen kişiler: {names}. Sinyalin olduğunda tekrar dene.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "Güvenliğin için, oturum açarak geri dönmek bir gün sürer. BeanPool hesabının olduğu başka bir telefonun hâlâ varsa, orada BeanPool'u aç ve hesabını hemen geri getirmek için \"Yes, it's me\" düğmesine dokun. Sen değilsen, o telefon bunu durdurabilir.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "Güvenliğin için bir gün sürer; başka bir telefonun senin olduğunu onaylarsa daha kısa sürer."
 }

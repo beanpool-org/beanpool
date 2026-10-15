@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "Koordinator: {name}",
   "Some invitations were not sent": "Beberapa undangan tidak terkirim",
   "{sent} sent. Not sent: {names}. {reason}": "Terkirim: {sent}. Tidak terkirim ke: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Terkirim: {sent}. Tidak terkirim ke: {names}. Coba lagi saat kamu punya sinyal."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Terkirim: {sent}. Tidak terkirim ke: {names}. Coba lagi saat kamu punya sinyal.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "Demi keamananmu, masuk kembali lewat login butuh satu hari. Kalau kamu masih punya ponsel lain yang berisi akun BeanPool-mu, buka BeanPool di sana dan ketuk \"Yes, it's me\" untuk mengembalikannya sekarang. Kalau itu bukan kamu, ponsel itu bisa menghentikannya.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "Demi keamananmu, ini butuh satu hari, atau kurang jika ponsel lain milikmu memastikan itu kamu."
 }

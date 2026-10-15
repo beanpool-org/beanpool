@@ -108,6 +108,11 @@ export {
 
 // ─── What the member reads ─────────────────────────────────────────────────────────────────
 
+/**
+ * Plain English only. This file opens a sign-in copy to the account's seed, so it is on the 12 words' key path, where
+ * nothing may reach the words layer (#1944, core __tests__/recovery-path-files.test.ts). A vault sentence shown in the
+ * member's language is a word() key in vault-words.ts, translated by the screen that shows it.
+ */
 export const VAULT_MESSAGES = {
     /** Never met by a member: every vault path runs only in a build that has one ({@link signInCopiesAt}). */
     notConfigured: "Sign-in recovery isn't set up in this version of the app. Your 12 words work any time.",
@@ -125,18 +130,18 @@ export const VAULT_MESSAGES = {
     wrongAccount: "The copy that came back doesn't make the account it belongs to, so nothing was saved. Your 12 words "
         + 'work any time.',
     notOpened: "The copy that came back didn't open with this sign-in, so nothing was saved. Your 12 words work any time.",
-    // Also the answer when a newer restore of the same account, from another device, took this one's place (server.ts
-    // /v1/restore): F6, case 16, so it doesn't say a phone stopped it.
-    stopped: 'This restore was stopped, from a phone or computer that has your account or by a newer restore started on '
-        + "another device, so nothing came back. If that wasn't you, use your 12 words.",
     gone: 'This restore is no longer waiting at the key vault. Start again, or use your 12 words.',
     noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
     tooMany: 'Too many tries just now. Please try again later.',
     signInRefused: "BeanPool's key vault couldn't check that sign-in, so nothing happened. Try again. Your 12 words work any time.",
-    /** A Stop (or "Yes, it's me") after the other device already collected: it has the account now. */
-    holdCollected: 'That restore has already gone through: the other phone or computer has your account now. If it wasn\'t you, '
-        + "someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's "
-        + 'admins for help.',
+    /**
+     * A Stop (or "Yes, it's me") after the other device already collected: it has the account now. Only the phone app
+     * restores from the vault, so that device is a phone. The banner shows vault-words.ts's copy, the same English
+     * (vault-phone.test.ts keeps them equal), in the member's language.
+     */
+    holdCollected: "That restore has already gone through: the other phone has your account now. If it wasn't you, someone "
+        + "else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins "
+        + 'for help.',
     holdStopped: "That restore was already stopped. It won't go through.",
     holdGone: 'That restore is no longer waiting at the key vault.',
 } as const;
@@ -479,7 +484,10 @@ export async function forgetVaultCopyKnowledge(publicKey: string): Promise<void>
     await AsyncStorage.removeItem(vaultCopyKnownStoreKey(publicKey)).catch(() => {});
 }
 
-/** Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7). */
+/**
+ * Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7), or later if the vault
+ * is locked then: a locked vault takes and removes no backups (apps/vault/README.md).
+ */
 export async function disconnectFromVault(identity: VaultSigner, provider: SsoProvider | 'all'): Promise<number> {
     const body = await vaultPost('/v1/copies/delete', provider === 'all' ? { all: true } : { provider }, identity, ['deleted']);
     if (typeof body.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "പയർ",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "കൺവീനർ: {name}",
   "Some invitations were not sent": "ചില ക്ഷണങ്ങൾ അയയ്ക്കാനായില്ല",
   "{sent} sent. Not sent: {names}. {reason}": "അയച്ച ക്ഷണങ്ങൾ: {sent}. ഇവർക്ക് അയയ്ക്കാനായില്ല: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "അയച്ച ക്ഷണങ്ങൾ: {sent}. ഇവർക്ക് അയയ്ക്കാനായില്ല: {names}. സിഗ്നൽ ലഭിക്കുമ്പോൾ വീണ്ടും ശ്രമിക്കുക."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "അയച്ച ക്ഷണങ്ങൾ: {sent}. ഇവർക്ക് അയയ്ക്കാനായില്ല: {names}. സിഗ്നൽ ലഭിക്കുമ്പോൾ വീണ്ടും ശ്രമിക്കുക.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "നിങ്ങളുടെ സുരക്ഷയ്ക്കായി, സൈൻ-ഇൻ വഴി തിരികെ കയറാൻ ഒരു ദിവസം എടുക്കും. നിങ്ങളുടെ BeanPool അക്കൗണ്ടുള്ള മറ്റൊരു ഫോൺ ഇനിയും ഉണ്ടെങ്കിൽ, അവിടെ BeanPool തുറന്ന് ഇപ്പോൾ തന്നെ തിരികെ കൊണ്ടുവരാൻ \"Yes, it's me\" ടാപ്പ് ചെയ്യുക. അത് നിങ്ങൾ അല്ലെങ്കിൽ, ആ ഫോണിന് അത് തടയാം.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "നിങ്ങളുടെ സുരക്ഷയ്ക്കായി ഇതിന് ഒരു ദിവസം എടുക്കും, അല്ലെങ്കിൽ നിങ്ങളുടെ മറ്റൊരു ഫോൺ ഇത് നിങ്ങളാണെന്ന് സ്ഥിരീകരിച്ചാൽ അതിൽ കുറവ്."
 }

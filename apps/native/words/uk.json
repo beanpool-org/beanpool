@@ -2,10 +2,10 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "боби",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "Координує: {name}",
   "Some invitations were not sent": "Деякі запрошення не надіслано",
   "{sent} sent. Not sent: {names}. {reason}": "Надіслано: {sent}. Не надіслано: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Надіслано: {sent}. Не надіслано: {names}. Спробуйте ще раз, коли з’явиться зв’язок."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Надіслано: {sent}. Не надіслано: {names}. Спробуйте ще раз, коли з’явиться зв’язок.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "Задля вашої безпеки повернення через вхід триває добу. Якщо у вас ще є інший телефон із вашим обліковим записом BeanPool, відкрийте там BeanPool і торкніться «Yes, it's me», щоб повернути його зараз. Якщо це були не ви, цей телефон може це зупинити.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "Задля вашої безпеки це триває добу або менше, якщо інший ваш телефон підтвердить, що це ви."
 }

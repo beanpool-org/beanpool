@@ -90,6 +90,7 @@ import {
     noteVaultCopy, takeHoldsToShow, vaultCopyKnown,
     vaultHoldsAtOpen, vaultStatus, VAULT_MESSAGES, VaultError,
 } from '../vault';
+import { VAULT_WORDS } from '../vault-words';
 import { PUSH_TOKEN_STORE_KEY, VAULT_RESTORE_STORE_KEY } from '../storage-keys';
 import { protectionFrom } from '../protection-state';
 import { releaseAccountFromPhone, UNREGISTER_TIMEOUT_MS } from '../account-leaves-phone';
@@ -428,6 +429,9 @@ describe('the move card', () => {
         expect(card).toMatch(/\{move && \([\s\S]*?Alert\.alert\([\s\S]*?style: 'destructive'[\s\S]*?removeInstead\(identity, offer\)/);
         expect(card).toMatch(/VAULT_MOVE_COPY\.removeBody\(name, hasMnemonic\(identity\)\)/);
         expect(card).toMatch(/This phone has no 12 words: if you lose it after this, nothing brings your account back\./);
+        // Only this community's copy goes: another community may still keep one for the sign-in (vault words fact check).
+        expect(card).toContain("{name} won't bring your account back through your community or the key vault until you link it again.");
+        expect(card).not.toMatch(/won't bring your account back until/);
     });
 
     it('Apple is not offered on a phone that cannot sign in with Apple', async () => {
@@ -792,6 +796,42 @@ describe('status, disconnect, push token, and the check at app open', () => {
         expect(await disconnectSsoKeeper('google', member)).toEqual({ success: true, enrolledSso: [] });
         expect(net.vault.copiesOf(member.publicKey)).toEqual([]);
         expect(to(VAULT).find(s => s.path === '/v1/copies/delete')?.body).toEqual({ provider: 'google', challenge: CHALLENGE });
+    });
+
+    // Vault words fact check (16 Oct): Disconnect removes only the vault's copy (above: nothing is sent to the community),
+    // so the words never say the sign-in brings the account back nowhere; and a locked vault takes and removes no
+    // backups (apps/vault/README.md), so "within 30 days" can run longer.
+    it("Disconnect's words: only the vault's copy goes, a community's copy stays, and the backups can take longer", () => {
+        const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
+        const from = settings.indexOf('const handleDisconnectSso');
+        const vaultBranch = settings.slice(from, settings.indexOf('} else {', from));
+        expect(vaultBranch).toContain("this {name} account will no longer bring your account back from BeanPool's key vault, in any community.");
+        expect(vaultBranch).toContain('from its backups within 30 days, or later if the vault is paused in that time.');
+        expect(vaultBranch).toContain("If a community's server still keeps a copy for this sign-in, from before the key vault or from the web app, that copy stays and can still bring your account back there.");
+        expect(vaultBranch).not.toMatch(/backups within 30 days\.["'`]/);
+    });
+
+    it('no vault words say a computer can answer, stop or get a sign-in restore: only the phone app has a vault client', () => {
+        for (const rel of ['../../app/welcome.tsx', '../../components/RecoveryAlertBanner.tsx', '../../components/KeeperProtectionPanel.tsx',
+            '../../components/SsoEnrolSheet.tsx', '../vault.ts', '../vault-words.ts', '../sso-recovery.ts']) {
+            const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+            expect(src, rel).not.toMatch(/phone or computer|computer of yours|your devices are told/);
+        }
+    });
+
+    // Fix round 1 of #2001 (CI run 38764423120): vault.ts is on the 12 words' key path, so its sentences stay plain English
+    // and the ones a member reads in their language are word() keys in vault-words.ts. The core guard
+    // (recovery-path-files.test.ts) sees a direct import of the words layer; this sees one through vault-words.ts.
+    it('vault.ts never reaches the words layer through vault-words.ts, and the two say the same English', () => {
+        const vault = fs.readFileSync(path.resolve(__dirname, '../vault.ts'), 'utf8');
+        expect(vault).not.toMatch(/from\s+['"]\.\/vault-words['"]|import\(\s*['"]\.\/vault-words['"]|require\(\s*['"]\.\/vault-words['"]/);
+        // The error vault.ts makes for a Stop that came too late, and the banner's translated copy of it.
+        expect(VAULT_WORDS.holdCollected).toBe(VAULT_MESSAGES.holdCollected);
+        expect(VAULT_WORDS.stopped).toBe("This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.");
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        expect(welcome).toMatch(/result\.status === 'stopped'\) \{\s*setSsoWaiting\(null\);\s*setError\(t\(VAULT_WORDS\.stopped\)\);/);
+        const banner = fs.readFileSync(path.resolve(__dirname, '../../components/RecoveryAlertBanner.tsx'), 'utf8');
+        expect(banner.match(/Alert\.alert\(RECOVERY_ALERT_COPY\.finalTitle\(e\), RECOVERY_ALERT_COPY\.finalBody\(e\)\)/g)).toHaveLength(2);
     });
 
     it('the deposit carries this phone\'s push token, and a changed one is given to the vault once', async () => {

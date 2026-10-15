@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "콩",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "담당자: {name}",
   "Some invitations were not sent": "일부 초대를 보내지 못했어요",
   "{sent} sent. Not sent: {names}. {reason}": "보낸 초대: {sent}. 보내지 못한 사람: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "보낸 초대: {sent}. 보내지 못한 사람: {names}. 신호가 있을 때 다시 시도해 주세요."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "보낸 초대: {sent}. 보내지 못한 사람: {names}. 신호가 있을 때 다시 시도해 주세요.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "안전을 위해 로그인으로 다시 들어오는 데는 하루가 걸려요. BeanPool 계정이 있는 다른 휴대폰이 아직 있다면, 그 휴대폰에서 BeanPool을 열고 \"Yes, it's me\"를 탭해 지금 바로 되찾으세요. 본인이 아니었다면 그 휴대폰에서 멈출 수 있어요.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "안전을 위해 하루가 걸려요. 다른 휴대폰에서 본인이라고 확인하면 더 빨라져요."
 }

@@ -62,6 +62,7 @@ import {
 } from '../utils/sso-recovery';
 import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -263,7 +264,7 @@ export default function WelcomeScreen() {
                 setSsoWaiting(w => (w ? { ...w, until: result.until } : w));
             } else if (result.status === 'stopped') {
                 setSsoWaiting(null);
-                setError(VAULT_MESSAGES.stopped);
+                setError(t(VAULT_WORDS.stopped));
             } else {
                 setSsoReleased(result.restored);
                 setError(null);
@@ -274,7 +275,7 @@ export default function WelcomeScreen() {
         } finally {
             setSsoChecking(false);
         }
-    }, []);
+    }, [t]);
 
     // While a restore waits on this screen: asked now, every minute, and whenever the app comes back.
     useEffect(() => {
@@ -3289,7 +3290,7 @@ export default function WelcomeScreen() {
                                         Your account comes back {holdEndsText(waitingUntil)}.
                                     </Text>
                                     <Text style={styles.fieldHint}>
-                                        For your safety, getting back in with a sign-in waits a day. If you still have a phone or computer with your BeanPool account on it, open BeanPool there and tap "Yes, it's me" to bring it back now. If it wasn't you, those devices can stop it.
+                                        {t('For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap "Yes, it\'s me" to bring it back now. If it wasn\'t you, that phone can stop it.')}
                                     </Text>
                                     <Text style={styles.fieldHint}>
                                         Keep BeanPool on this phone: it checks by itself. Your 12 words work any time, with no wait.
@@ -3318,7 +3319,7 @@ export default function WelcomeScreen() {
                                         Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.
                                     </Text>
                                     <Text style={styles.fieldHint}>
-                                        For your safety it takes a day, or less if another phone or computer of yours says it's you.
+                                        {t("For your safety it takes a day, or less if another phone of yours says it's you.")}
                                     </Text>
 
                                     {loading && (

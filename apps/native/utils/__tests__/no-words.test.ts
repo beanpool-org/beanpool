@@ -23,7 +23,7 @@ vi.mock('../../components/SsoButton', () => {
 });
 
 import {
-    KeeperProtectionPanel, VAULT_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SSO_GROUP_NOTE, SSO_WAIT_NOTE,
+    KeeperProtectionPanel, VAULT_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SSO_GROUP_NOTE,
 } from '../../components/KeeperProtectionPanel';
 import { noVault, useVault } from './fake-vault';
 
@@ -218,9 +218,12 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
         const text = textOf(panel(COVERED, true));
         expect(text).not.toMatch(/Neither of them can open/);
         // Was "…it takes your community's server too.": the vault keeps the copy for every community now (V4), and
-        // every restore waits a day unless a device of the member's says it's them (D2).
-        expect(text).toContain(`Protected by your sign-in account, in every community. It brings your account back on a new phone: ${SSO_WAIT_NOTE}`);
+        // every restore waits a day unless a phone of the member's says it's them (D2). Was "another phone or computer of
+        // yours … your devices are told": only the phone app is told of a restore or can answer it (the web app has no
+        // vault client), so it says phones (vault words fact check, 16 Oct).
+        expect(text).toContain("Protected by your sign-in account, in every community. It brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it.");
         expect(text).not.toMatch(/community's server/);
+        expect(text).not.toMatch(/computer/);
     });
 });
 

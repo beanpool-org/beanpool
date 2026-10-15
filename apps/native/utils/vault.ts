@@ -87,6 +87,8 @@ import {
     type VaultAnswer,
     type VaultAnswerKind,
     type VaultTicketPurpose,
+    t,
+    word,
 } from '@beanpool/core';
 import { buildVaultSignedHeaders, hexToBytes, randomSeed, seedToKeypair } from './crypto';
 import { isSsoProvider, offeredProviders, type SsoProvider } from './sso-providers';
@@ -126,17 +128,18 @@ export const VAULT_MESSAGES = {
         + 'work any time.',
     notOpened: "The copy that came back didn't open with this sign-in, so nothing was saved. Your 12 words work any time.",
     // Also the answer when a newer restore of the same account, from another device, took this one's place (server.ts
-    // /v1/restore): F6, case 16, so it doesn't say a phone stopped it.
-    stopped: 'This restore was stopped, from a phone or computer that has your account or by a newer restore started on '
-        + "another device, so nothing came back. If that wasn't you, use your 12 words.",
+    // /v1/restore): F6, case 16, so it doesn't say a phone stopped it. Only the phone app can Stop (the web app has no
+    // vault client), so it says a phone, never a computer. A word() key: t() where it is shown.
+    stopped: word("This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words."),
     gone: 'This restore is no longer waiting at the key vault. Start again, or use your 12 words.',
     noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
     tooMany: 'Too many tries just now. Please try again later.',
     signInRefused: "BeanPool's key vault couldn't check that sign-in, so nothing happened. Try again. Your 12 words work any time.",
-    /** A Stop (or "Yes, it's me") after the other device already collected: it has the account now. */
-    holdCollected: 'That restore has already gone through: the other phone or computer has your account now. If it wasn\'t you, '
-        + "someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's "
-        + 'admins for help.',
+    /**
+     * A Stop (or "Yes, it's me") after the other device already collected: it has the account now. Only the phone app
+     * restores from the vault, so that device is a phone. A word() key: t() where the error is made.
+     */
+    holdCollected: word("That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help."),
     holdStopped: "That restore was already stopped. It won't go through.",
     holdGone: 'That restore is no longer waiting at the key vault.',
 } as const;
@@ -217,7 +220,7 @@ export function vaultRefusal(status: number, body: unknown): VaultError {
     }
     if (status === 429) return new VaultError('rate_limited', VAULT_MESSAGES.tooMany, code);
     // A Stop or "Yes, it's me" that came too late: final answers, not ones to try again (confirmation review NEW-3).
-    if (status === 409 && code === 'collected') return new VaultError('refused', VAULT_MESSAGES.holdCollected, code);
+    if (status === 409 && code === 'collected') return new VaultError('refused', t(VAULT_MESSAGES.holdCollected), code);
     if (status === 409 && code === 'stopped') return new VaultError('refused', VAULT_MESSAGES.holdStopped, code);
     if (status === 404 && code === 'no_hold') return new VaultError('refused', VAULT_MESSAGES.holdGone, code);
     if (status === 401 && (code === 'signin_refused' || code?.startsWith('ticket_'))) return new VaultError('refused', VAULT_MESSAGES.signInRefused, code);
@@ -479,7 +482,10 @@ export async function forgetVaultCopyKnowledge(publicKey: string): Promise<void>
     await AsyncStorage.removeItem(vaultCopyKnownStoreKey(publicKey)).catch(() => {});
 }
 
-/** Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7). */
+/**
+ * Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7), or later if the vault
+ * is locked then: a locked vault takes and removes no backups (apps/vault/README.md).
+ */
 export async function disconnectFromVault(identity: VaultSigner, provider: SsoProvider | 'all'): Promise<number> {
     const body = await vaultPost('/v1/copies/delete', provider === 'all' ? { all: true } : { provider }, identity, ['deleted']);
     if (typeof body.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);

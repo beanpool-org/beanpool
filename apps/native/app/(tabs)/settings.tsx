@@ -470,9 +470,12 @@ export default function SettingsScreen() {
         const provName = SSO_PROVIDER_NAMES[provider];
         let message: string;
         if (hasVault()) {
-            // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly.
-            message = `On a new phone, this ${provName} account will no longer bring your account back, in any community. `
-                + "BeanPool's key vault deletes its copy at once, and from its backups within 30 days.";
+            // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly. It removes
+            // only the vault's copy (keeper-enrolment.ts disconnectSsoKeeper): one a community's server still keeps for
+            // this sign-in (from before the vault, or a web-app join) stays, so the words never say nothing brings the
+            // account back. A locked vault takes and removes no backups (apps/vault/README.md), so "within 30 days" can
+            // run longer.
+            message = t("On a new phone, this {name} account will no longer bring your account back from BeanPool's key vault, in any community. The key vault deletes its copy at once, and from its backups within 30 days, or later if the vault is paused in that time. If a community's server still keeps a copy for this sign-in, from before the key vault or from the web app, that copy stays and can still bring your account back there.", { name: provName });
         } else {
             // Name the community: without a vault this only ever affects recovery on THIS node, and saying
             // so plainly is the difference between a member knowing where they're covered

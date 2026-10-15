@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "فاصوليا",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "التنسيق: {name}",
   "Some invitations were not sent": "لم يتم إرسال بعض الدعوات",
   "{sent} sent. Not sent: {names}. {reason}": "الدعوات المُرسلة: {sent}. لم تُرسل الدعوة إلى: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "الدعوات المُرسلة: {sent}. لم تُرسل الدعوة إلى: {names}. حاول مرة أخرى عندما تتوفر إشارة الشبكة."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "الدعوات المُرسلة: {sent}. لم تُرسل الدعوة إلى: {names}. حاول مرة أخرى عندما تتوفر إشارة الشبكة.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "لأمانك، تستغرق العودة عن طريق تسجيل الدخول يومًا واحدًا. إذا كان لا يزال لديك هاتف آخر عليه حسابك في BeanPool، فافتح BeanPool هناك واضغط على \"Yes, it's me\" لاستعادته الآن. إذا لم تكن أنت، فيمكن لذلك الهاتف إيقافه.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "لأمانك يستغرق ذلك يومًا واحدًا، أو أقل إذا أكد هاتف آخر لك أنك أنت."
 }

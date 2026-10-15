@@ -12,6 +12,7 @@ import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
 import { hasVault } from '../utils/vault-config';
+import { t, tn } from '@beanpool/core';
 
 /**
  * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
@@ -30,8 +31,7 @@ export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could
  * custodian, Marty, until the reshare to people in other countries, and the guide says so). The copy is at the vault,
  * not at any community. BeanPool can open it (the vault checks the sign-in itself, so it learns the id that opens the
  * copy: review FABLE-sec-crypto F1); the host can read the running server's memory; a court could order it; anyone
- * holding the sign-in account could get in, unless a device of the member's stops the day's wait (SSO_WAIT_NOTE, in the
- * footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
+ * holding the sign-in account could get in, unless a phone of the member's stops the day's wait (the covered footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
  */
 export const VAULT_COPY_OPENERS =
     "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.";
@@ -49,9 +49,6 @@ export const COMMUNITY_SSO_GROUP_NOTE =
 export const SSO_GROUP_NOTE =
     'Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.';
 
-/** How a sign-in restore goes with a key vault (D2: every one waits a day unless a device that has the account says it's you). */
-export const SSO_WAIT_NOTE =
-    "it takes a day, or less if another phone or computer of yours says it's you, and your devices are told so they can stop it.";
 
 export function formatCommunityName(raw?: string | null): string | null {
     if (!raw) return null;
@@ -226,11 +223,16 @@ export function KeeperProtectionPanel({
                         <Text style={styles.rowLabel}>{label}</Text>
                     </View>
                 ))}
+                {/* How a sign-in restore goes with a key vault (D2: every one waits a day unless a phone that has the
+                    account says it's you). Only the phone app is told of a restore, and only it can answer one (the
+                    web app has no vault client), so these say phones, never a computer. */}
                 <Text style={styles.footnote}>
                     {atVault
                         ? (enrolledSso.length > 1
-                            ? `Protected by ${enrolledSso.length} sign-in accounts, in every community. Any one of them brings your account back on a new phone: ${SSO_WAIT_NOTE}`
-                            : `Protected by your sign-in account, in every community. It brings your account back on a new phone: ${SSO_WAIT_NOTE}`)
+                            ? tn(enrolledSso.length,
+                                "Protected by {n} sign-in account, in every community. Any one of them brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it.",
+                                "Protected by {n} sign-in accounts, in every community. Any one of them brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it.")
+                            : t("Protected by your sign-in account, in every community. It brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it."))
                         : enrolledSso.length > 1
                             ? `Protected by ${enrolledSso.length} sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.`
                             : "Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy."}

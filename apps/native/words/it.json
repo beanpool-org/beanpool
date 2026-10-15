@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fagioli",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "Coordina: {name}",
   "Some invitations were not sent": "Alcuni inviti non sono stati inviati",
   "{sent} sent. Not sent: {names}. {reason}": "Inviati: {sent}. Non inviati a: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Inviati: {sent}. Non inviati a: {names}. Riprova quando hai segnale."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Inviati: {sent}. Non inviati a: {names}. Riprova quando hai segnale.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "Per la tua sicurezza, rientrare con un accesso richiede un giorno. Se hai ancora un altro telefono con il tuo account BeanPool, apri BeanPool lì e tocca \"Yes, it's me\" per riaverlo subito. Se non sei stato tu, quel telefono può fermarlo.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "Per la tua sicurezza richiede un giorno, o meno se un altro tuo telefono conferma che sei tu."
 }

@@ -9,8 +9,9 @@
  *   the phone knows has no copy at the vault (`vaultCopyKnowledge` 'none'; PR #1336 review finding 1). The vault is off the
  *   everyday path (Marty, 2026-09-28). Two answers, each confirmed first:
  *     - **Stop**: it is never released. Whoever started it gets nothing, and has to use the 12 words.
- *     - **Yes, it's me**: it goes through now, to the phone or computer that asked. Behind the phone's lock, since it
- *       hands the account to another device.
+ *     - **Yes, it's me**: it goes through now, to the phone that asked (only the phone app restores from the vault, and
+ *       only the phone app can answer here: the web app has no vault client). Behind the phone's lock, since it hands
+ *       the account to another device.
  * - **The member's community** (`/api/recovery/collect/mine`): a restore at a community that keeps a sign-in copy
  *   (every copy, in a build without a vault; old ones until the date they are removed, in a build with one, key vault
  *   design §5.1). Watched every ~30 s while the app is in front, as before the vault. The community sends how many
@@ -27,6 +28,7 @@ import { withJitter } from '../utils/jitter';
 import { useIdentity } from '../app/IdentityContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
+import { t } from '@beanpool/core';
 import {
     approvedHolds, approveVaultHold, forgetEndedApprovals, hasVault, holdAnswerIsFinal, holdEndsText, stopVaultHold, vaultCopyKnowledge,
     vaultStatus,
@@ -45,8 +47,7 @@ export const RECOVERY_ALERT_COPY = {
         ? 'All active recovery sessions have been cancelled.'
         : `${left} recovery session${left === 1 ? ' is' : 's are'} still active. Tap Stop It Now again.`),
     approvedTitle: 'Let through',
-    approvedBody: (name: string) => `You let the restore with ${name} through. Your other phone or computer gets your account `
-        + 'the next time it checks.',
+    approvedBody: (name: string) => t('You let the restore with {name} through. Your other phone gets your account the next time it checks.', { name }),
 } as const;
 
 interface RecoverySession {
@@ -260,7 +261,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         const name = SSO_PROVIDER_NAMES[hold.provider];
         Alert.alert(
             'Was it you?',
-            `Only if you started getting back into BeanPool with ${name} on another phone or computer yourself. Your account goes there now.`,
+            t('Only if you started getting back into BeanPool with {name} on another phone yourself. Your account goes there now.', { name }),
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -272,7 +273,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         try {
                             await approveVaultHold(identity, hold.holdId);
                             setApproved(a => [...a, hold.holdId]);
-                            Alert.alert('Let through', 'Your other phone or computer gets your account the next time it checks, in about a minute.');
+                            Alert.alert('Let through', t('Your other phone gets your account the next time it checks, in about a minute.'));
                         } catch (e) {
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), (e as Error).message);
                             else Alert.alert('Not let through', `${(e as Error).message} Try again.`);

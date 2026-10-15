@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "শিম",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "সমন্বয়কারী: {name}",
   "Some invitations were not sent": "কিছু আমন্ত্রণ পাঠানো যায়নি",
   "{sent} sent. Not sent: {names}. {reason}": "পাঠানো আমন্ত্রণ: {sent}। এঁদের পাঠানো যায়নি: {names}। {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "পাঠানো আমন্ত্রণ: {sent}। এঁদের পাঠানো যায়নি: {names}। সিগন্যাল পেলে আবার চেষ্টা করুন।"
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "পাঠানো আমন্ত্রণ: {sent}। এঁদের পাঠানো যায়নি: {names}। সিগন্যাল পেলে আবার চেষ্টা করুন।",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "আপনার নিরাপত্তার জন্য, সাইন-ইন দিয়ে ফিরে আসতে এক দিন লাগে। যদি আপনার কাছে এখনও অন্য কোনো ফোন থাকে যাতে আপনার BeanPool অ্যাকাউন্ট আছে, সেখানে BeanPool খুলুন এবং এখনই ফিরিয়ে আনতে \"Yes, it's me\" ট্যাপ করুন। যদি এটি আপনি না হন, সেই ফোন এটি থামাতে পারে।",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "আপনার নিরাপত্তার জন্য এতে এক দিন লাগে, অথবা আরও কম, যদি আপনার অন্য কোনো ফোন নিশ্চিত করে যে এটি আপনি।"
 }

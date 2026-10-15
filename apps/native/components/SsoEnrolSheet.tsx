@@ -4,6 +4,7 @@ import { type AppColors } from '../constants/colors';
 import { useOnboardingColors } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { hasVault } from '../utils/vault-config';
+import { t } from '@beanpool/core';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -206,7 +207,8 @@ export function SsoEnrolSheet({
                             <Text style={styles.title} accessibilityRole="header">You're covered</Text>
                             <Text style={styles.body}>
                                 {atVault
-                                    ? `Your ${PROVIDER_NAME} sign-in is now linked, in every community. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in: it takes a day, or less if another phone or computer of yours says it's you.`
+                                    // Another phone, never a computer: only the phone app can answer a restore (the web app has no vault client).
+                                    ? t("Your {name} sign-in is now linked, in every community. If you lose this phone, sign in with {name} to get back in: it takes a day, or less if another phone of yours says it's you.", { name: PROVIDER_NAME })
                                     : `Your ${PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with ${PROVIDER_NAME} to get back in.`}
                             </Text>
                             {enrolResult?.replaced && (

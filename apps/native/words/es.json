@@ -2,10 +2,10 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "frijoles",
@@ -84,5 +84,7 @@
   "Convenor: {name}": "Coordina: {name}",
   "Some invitations were not sent": "Algunas invitaciones no se enviaron",
   "{sent} sent. Not sent: {names}. {reason}": "Enviadas: {sent}. No se envió a: {names}. {reason}",
-  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Enviadas: {sent}. No se envió a: {names}. Inténtalo de nuevo cuando tengas señal."
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Enviadas: {sent}. No se envió a: {names}. Inténtalo de nuevo cuando tengas señal.",
+  "For your safety, getting back in with a sign-in waits a day. If you still have another phone with your BeanPool account on it, open BeanPool there and tap \"Yes, it's me\" to bring it back now. If it wasn't you, that phone can stop it.": "Por tu seguridad, volver a entrar con un inicio de sesión tarda un día. Si todavía tienes otro celular con tu cuenta de BeanPool, abre BeanPool allí y toca \"Yes, it's me\" para recuperarla ahora. Si no fuiste tú, ese celular puede detenerlo.",
+  "For your safety it takes a day, or less if another phone of yours says it's you.": "Por tu seguridad tarda un día, o menos si otro celular tuyo confirma que eres tú."
 }

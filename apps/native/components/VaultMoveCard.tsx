@@ -16,6 +16,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
+import { t } from '@beanpool/core';
 import { finishMove, moveLater, removeInstead, vaultMoveOffer, type VaultMoveOffer } from '../utils/vault-move';
 import { hasMnemonic } from '../utils/identity';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -33,11 +34,11 @@ export const VAULT_MOVE_COPY = {
     later: 'Not now',
     removeButton: 'Remove it instead',
     removeTitle: (name: string) => `Remove your ${name} recovery?`,
-    removeBody: (name: string, hasWords: boolean) => `Your community's copy of your account for ${name} is deleted, and none is `
-        + `kept at BeanPool's key vault. ${name} won't bring your account back until you link it again. `
-        + (hasWords
-            ? 'Your 12 words work any time.'
-            : 'This phone has no 12 words: if you lose it after this, nothing brings your account back.'),
+    // Only this community's copy goes: another community may still keep one for the same sign-in from before the vault
+    // (or the global community, from a web-app join), so the words say which ways back close, never that none is left.
+    removeBody: (name: string, hasWords: boolean) => (hasWords
+        ? t("Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. Your 12 words work any time.", { name })
+        : t("Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.", { name })),
     removeConfirm: 'Remove it',
     removeCancel: 'Keep it',
     removeFailedTitle: 'Not removed yet',

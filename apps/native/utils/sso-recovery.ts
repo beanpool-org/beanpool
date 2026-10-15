@@ -9,7 +9,7 @@
  *
  * 1. {@link startSsoRestore}: a throwaway key, a restore ticket for it (checked against the vault's pinned keys before
  *    any sheet opens), the provider's sheet with the ticket's nonce, then `/v1/restore`. Every restore is held (D2):
- *    24 hours, or less once a phone or computer that has the account taps "Yes, it's me". That device is told at once
+ *    24 hours, or less once another phone that has the account taps "Yes, it's me". That device is told at once
  *    and can Stop it.
  * 2. {@link checkSsoRestore}: asks the vault, while the member waits and whenever the app comes back. Released: the
  *    copy opens with the throwaway key and the sign-in's subject, and counts only if its seed makes the key the

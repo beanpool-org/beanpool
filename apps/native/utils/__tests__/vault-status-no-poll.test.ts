@@ -230,6 +230,8 @@ describe('a hold this phone let through ("Yes, it\'s me")', () => {
         const text = host.textContent ?? '';
         expect(text).toContain('Let through');
         expect(text).toContain('You let the restore with Google through.');
+        expect(text).toContain('Your other phone gets your account the next time it checks.');
+        expect(text).not.toMatch(/computer/);
         expect(text).not.toContain('Stop');
         expect(text).not.toContain("Yes, it's me");
     });
@@ -256,7 +258,8 @@ describe('a Stop that comes after the other device collected (confirmation revie
         await act(async () => { await (buttons as { text: string; onPress?: () => Promise<void> }[]).find(b => b.text === 'Stop it')!.onPress!(); });
         const [title, message] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
         expect(title).toBe('Already gone through');
-        expect(message).toContain('That restore has already gone through: the other phone or computer has your account now.');
+        // Was "the other phone or computer": only the phone app restores from the vault (vault words fact check, 16 Oct).
+        expect(message).toContain('That restore has already gone through: the other phone has your account now.');
         expect(message).not.toMatch(/try again/i);
         expect(message).not.toContain('already collected');
     });

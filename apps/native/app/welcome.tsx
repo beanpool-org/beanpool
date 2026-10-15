@@ -16,6 +16,8 @@ import {
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
+// t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
+import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
@@ -55,9 +57,10 @@ import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import {
-    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, vaultKeepsNoCopyFor,
-    waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
+    checkSsoRestore, finishSsoRestore, lookupRestorable, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
+    vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
 } from '../utils/sso-recovery';
+import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -76,6 +79,9 @@ import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-sugg
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 import { communitySwitched } from '../utils/community-switch';
 import { ConsentText } from '../components/ConsentText';
+import { useWords } from '../components/LanguageProvider';
+import { LanguageSwitch } from '../components/LanguagePicker';
+import { Sentence } from '../components/Sentence';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -115,6 +121,8 @@ export default function WelcomeScreen() {
     // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
     // the app's dark tokens in dark. See utils/onboarding-colors.ts.
     const { colors, dark } = useOnboardingColors();
+    // The member's language, live: the first screen's switch and Settings → Language re-render this screen in it.
+    const { t } = useWords();
     const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
@@ -176,7 +184,7 @@ export default function WelcomeScreen() {
      */
     const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
-    const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
+    const [ssoCandidates, setSsoCandidates] = useState<RestorableAccount[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
     /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
     const skipNextSsoLookupRef = useRef(false);
@@ -199,24 +207,19 @@ export default function WelcomeScreen() {
             return;
         }
         let cancelled = false;
-        const t = setTimeout(async () => {
+        const timer = setTimeout(async () => {
             setSsoLookupBusy(true);
             try {
-                const res = await fetch(`${anchor}/api/recovery/lookup/${encodeURIComponent(typed)}`);
-                if (!res.ok) throw new Error(String(res.status));
-                const all = await res.json();
-                if (!cancelled) {
-                    setSsoCandidates(Array.isArray(all) ? all.filter((c: any) => c.canRecoverBySso) : []);
-                }
-            } catch {
-                // Offline or an old node without the field: fall back to whatever they typed, which
-                // is exactly the behaviour before this existed.
-                if (!cancelled) setSsoCandidates([]);
+                // The same lookup the restore checks its key against (utils/sso-recovery.ts `lookupRestorable`).
+                // Offline or an old node without the field: no picker, and whatever they typed goes to the restore,
+                // which asks again and says plainly if it can't.
+                const all = await lookupRestorable(anchor, typed);
+                if (!cancelled) setSsoCandidates((all ?? []).filter(c => c.canRecoverBySso));
             } finally {
                 if (!cancelled) setSsoLookupBusy(false);
             }
         }, 400);
-        return () => { cancelled = true; clearTimeout(t); };
+        return () => { cancelled = true; clearTimeout(timer); };
     }, [ssoCallsign, recoveryAnchorUrl]);
     /**
      * A sign-in restore waiting at BeanPool's key vault (utils/sso-recovery.ts), or null. No name and no address: the
@@ -1101,7 +1104,7 @@ export default function WelcomeScreen() {
     // back to the node. If the node can't be reached the account still restores —
     // it comes up nameless and adopts its real callsign on the first online sync.
     async function handleRecover() {
-        const words = recoveryWords.map(w => w.toLowerCase().trim());
+        const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
             setError('Please enter all 12 recovery words.');
@@ -1227,6 +1230,8 @@ export default function WelcomeScreen() {
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
+        // Set once the provider has handed back its token: from then on its page may be in front of the app.
+        let signedIn = false;
         try {
             const result = await recoverAccountWithSso({
                 callsign: trimmedCallsign,
@@ -1234,6 +1239,7 @@ export default function WelcomeScreen() {
                 provider,
                 onProgress: (p) => setSsoProgressMessage(p.message),
                 signal: abort.signal,
+                onSignedIn: () => { signedIn = true; },
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
@@ -1264,13 +1270,16 @@ export default function WelcomeScreen() {
                 router.replace('/');
             }
         } catch (e: any) {
+            // Refused after the sign-in (the release, the copy, another account's key): on Android the provider's page can
+            // still be in front of the app, over the sentence below. Brought back first, as a success and Replace are.
+            if (signedIn) await returnToApp();
             // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
             // its key unless even that failed): the app must not go on as it.
             if (e instanceof ReplaceNotSaved) setIdentity(null);
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {
-                setError(e.message || `Recovery failed: ${String(e)}`);
+                setError(restoreRefusalText(e) || `Recovery failed: ${String(e)}`);
                 leaveReplace('ssoRecover');
             }
         } finally {
@@ -1740,8 +1749,12 @@ export default function WelcomeScreen() {
     }
 
     // --- Onboarding Progress Stepper ---
+    // Four equal quarters of the row, each label up to three centred lines, shrinking to 0.7 at most: at 320dp and 1.3x
+    // text the four English labels need 237dp on one line even at 0.7 against the row's 184dp (measured with real
+    // shaping), so one line cut them off. Two lines hold every language; the third is for the pseudo-locale's +35%
+    // (utils/__tests__/language-switch-render.test.ts).
     function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
-        const steps = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
+        const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];
         return (
             <View style={stepperStyles.container}>
                 {steps.map((label, i) => {
@@ -1755,7 +1768,7 @@ export default function WelcomeScreen() {
                                 <View style={[stepperStyles.dot, isActive && stepperStyles.dotActive, isCompleted && stepperStyles.dotCompleted]}>
                                     {isCompleted && <Text style={stepperStyles.dotCheck}>✓</Text>}
                                 </View>
-                                <Text style={[stepperStyles.label, isActive && stepperStyles.labelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+                                <Text style={[stepperStyles.label, isActive && stepperStyles.labelActive]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
                             </View>
                         </React.Fragment>
                     );
@@ -1828,7 +1841,15 @@ export default function WelcomeScreen() {
     // Moved to AvatarPickerSheet component
 
     async function handleCompleteProfile() {
-        if (!pendingIdentity || !pendingAvatar) return;
+        if (!pendingIdentity) return;
+        // No picture picked: on to the 12 words all the same (rehearsal 14 Oct S9, never a gate); the step said whether
+        // the node asks for one before a first post.
+        if (!pendingAvatar) {
+            setError(null);
+            await updatePendingOnboarding({ step: 'seedBackup', avatar: null }).catch(() => {});
+            setMode('seedBackup');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -1937,9 +1958,13 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
+                        {!pendingAvatar && (
+                            <Text style={styles.subtitle} testID="photo-step-note">{photoStepNote(joinBeansOn)}</Text>
+                        )}
+
                         <Pressable
-                            style={[styles.primaryBtn, !pendingAvatar && styles.disabledBtn]}
-                            disabled={!pendingAvatar || loading}
+                            style={styles.primaryBtn}
+                            disabled={loading}
                             onPress={handleCompleteProfile}
                             accessibilityRole="button"
                         >
@@ -2315,7 +2340,7 @@ export default function WelcomeScreen() {
                             {hasMnemonic(pendingIdentity) ? (
                                 <>
                                     <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
+                                        {t('Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.')}
                                     </Text>
                                     <Text style={guideStyles.bulletItem}>
                                         📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
@@ -2332,7 +2357,7 @@ export default function WelcomeScreen() {
                         {/* Card 5: Where to Start */}
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
-                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (blue) and needs (orange) near you.</Text>
+                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (green) and needs (orange) near you.</Text>
                             <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
                             <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
                             {joinBeansOn && (
@@ -2385,11 +2410,11 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>🎟️ Join BeanPool</Text>
+                        <Text style={styles.title}>{t('🎟️ Join BeanPool')}</Text>
 
                         {clipboardMayHaveInvite && !inviteCode && (
                             <View style={styles.pasteCard}>
-                                <Text style={styles.pasteCardText}>Tap Paste to insert the code from your invite.</Text>
+                                <Text style={styles.pasteCardText}>{t('Tap Paste to insert the code from your invite.')}</Text>
                                 {Clipboard.isPasteButtonAvailable ? (
                                     <Clipboard.ClipboardPasteButton
                                         onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'join'); }}
@@ -2402,7 +2427,7 @@ export default function WelcomeScreen() {
                                     />
                                 ) : (
                                     <Pressable style={styles.pasteCardBtn} onPress={handlePasteInvite} accessibilityRole="button">
-                                        <Text style={styles.pasteCardBtnText}>📋 Paste</Text>
+                                        <Text style={styles.pasteCardBtnText}>{t('📋 Paste')}</Text>
                                     </Pressable>
                                 )}
                             </View>
@@ -2410,52 +2435,52 @@ export default function WelcomeScreen() {
 
                         <TextInput
                             style={styles.input}
-                            placeholder="Paste your invite link or code"
+                            placeholder={t('Paste your invite link or code')}
                             placeholderTextColor={colors.text.muted}
                             value={inviteCode}
                             onChangeText={setInviteCode}
                             autoCapitalize="none"
                             autoCorrect={false}
-                            accessibilityLabel="Invite link or code"
+                            accessibilityLabel={t('Invite link or code')}
                         />
 
                         {inviteCode && !inviteCode.startsWith('http') && (
                             <>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Community name or address (e.g. mullum)"
+                                    placeholder={t('Community name or address (e.g. mullum)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={createAnchorUrl}
                                     onChangeText={setCreateAnchorUrl}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
-                                    accessibilityLabel="Community name or node address"
-                                    accessibilityHint="Enter your community name, like mullum, or its full address"
+                                    accessibilityLabel={t('Community name or node address')}
+                                    accessibilityHint={t('Enter your community name, like mullum, or its full address')}
                                 />
                                 <Text style={styles.fieldHint}>
-                                    Required — the community node you're joining. Ask whoever invited you if you're unsure.
+                                    {t("Required — the community node you're joining. Ask whoever invited you if you're unsure.")}
                                 </Text>
                             </>
                         )}
 
-                        <Text style={styles.callsignLabel}>What should we call you?</Text>
+                        <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
                         <TextInput
                             style={styles.callsignInput}
-                            placeholder="Your name or nickname"
+                            placeholder={t('Your name or nickname')}
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
-                            onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
+                            onChangeText={(text) => { setCallsign(text); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
                             maxLength={MAX_JOIN_NAME}
                             autoFocus={true}
                             autoCapitalize="words"
-                            accessibilityLabel="Your name or nickname"
+                            accessibilityLabel={t('Your name or nickname')}
                         />
                         <Text style={styles.callsignHelper}>
-                            This is your display name — how the community sees you, e.g. Sarah. You can change it later.
+                            {t('This is your display name — how the community sees you, e.g. Sarah. You can change it later.')}
                         </Text>
                         <Text style={styles.callsignTip}>
-                            💡 Tip: adding your suburb helps locals find you!
+                            {t('💡 Tip: adding your suburb helps locals find you!')}
                         </Text>
 
                         {callsignSuggestions.length > 0 && (
@@ -2466,7 +2491,7 @@ export default function WelcomeScreen() {
                                         style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 }}
                                         onPress={() => { setCallsign(s); setCallsignSuggestions([]); setError(null); }}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Use the name ${s}`}
+                                        accessibilityLabel={t('Use the name {name}', { name: s })}
                                     >
                                         <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
                                     </Pressable>
@@ -2476,7 +2501,7 @@ export default function WelcomeScreen() {
 
                         {joinTerms && (
                             <View style={{ marginBottom: 12 }} testID="join-consent">
-                                <Text style={styles.checkboxText} accessibilityRole="header">What this community's admins can see</Text>
+                                <Text style={styles.checkboxText} accessibilityRole="header">{t("What this community's admins can see")}</Text>
                                 <ConsentText text={joinTerms.text} />
                                 <Pressable
                                     style={[styles.checkbox, { marginVertical: 8, minHeight: 48 }, joinConsentTicked && styles.checkboxActive]}
@@ -2484,11 +2509,11 @@ export default function WelcomeScreen() {
                                     disabled={loading}
                                     accessibilityRole="checkbox"
                                     accessibilityState={{ checked: joinConsentTicked }}
-                                    accessibilityLabel="I agree"
+                                    accessibilityLabel={t('I agree')}
                                 >
-                                    <Text style={[styles.checkboxText, { flexShrink: 1 }]}>{joinConsentTicked ? '✅ ' : '⬜ '} I agree</Text>
+                                    <Text style={[styles.checkboxText, { flexShrink: 1 }]}>{joinConsentTicked ? t('✅ I agree') : t('⬜ I agree')}</Text>
                                 </Pressable>
-                                <Text style={{ color: colors.text.muted, fontSize: 13, lineHeight: 18 }}>Up to you: you join either way. If you don&apos;t agree, the admins never see your balance. You can agree later in Settings.</Text>
+                                <Text style={{ color: colors.text.muted, fontSize: 13, lineHeight: 18 }}>{t("Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.")}</Text>
                             </View>
                         )}
 
@@ -2506,7 +2531,7 @@ export default function WelcomeScreen() {
                                         accessibilityRole="button"
                                     >
                                         <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
-                                            🔑 Recover an existing account with seed phrase →
+                                            {t('🔑 Recover an existing account with seed phrase →')}
                                         </Text>
                                     </Pressable>
                                 )}
@@ -2518,24 +2543,24 @@ export default function WelcomeScreen() {
                             onPress={handleCreate}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel={loading ? "Joining network..." : "Next"}
+                            accessibilityLabel={loading ? t('Joining network...') : t('Next')}
                             accessibilityState={{ disabled: loading, busy: loading }}
                         >
-                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
+                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
                         </Pressable>
 
                         {/* Restore Existing Identity CTA for returning members (#98). This and Back to Home wait while
                             Next is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                         <View style={styles.restorePromptBox}>
-                            <Text style={styles.restorePromptLabel}>Already have an account or switching phones?</Text>
+                            <Text style={styles.restorePromptLabel}>{t('Already have an account or switching phones?')}</Text>
                             <Pressable
                                 style={[styles.restorePromptBtn, loading && styles.closedWhileNextIsOut]}
                                 onPress={() => leaveUnlessNextIsOut(nextOutRef, () => { setMode('member'); setError(null); })}
                                 disabled={loading}
                                 accessibilityRole="button"
-                                accessibilityLabel="Restore existing identity"
+                                accessibilityLabel={t('Restore existing identity')}
                             >
-                                <Text style={styles.restorePromptBtnText}>🔑 Restore Existing Identity →</Text>
+                                <Text style={styles.restorePromptBtnText}>{t('🔑 Restore Existing Identity →')}</Text>
                             </Pressable>
                         </View>
 
@@ -2544,16 +2569,19 @@ export default function WelcomeScreen() {
                             onPress={() => leaveUnlessNextIsOut(nextOutRef, goBack)}
                             disabled={loading}
                             accessibilityRole="button"
-                            accessibilityLabel="Back to Home"
+                            accessibilityLabel={t('Back to Home')}
                         >
-                            <Text style={styles.backBtnText}>← Back to Home</Text>
+                            <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
                         </Pressable>
 
                         <Text style={styles.tosText}>
-                            By joining you agree to our{' '}
-                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service & EULA</Text>
-                            {' '}and{' '}
-                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                            <Sentence
+                                text={t('By joining you agree to our {terms} and {privacy}.')}
+                                parts={{
+                                    terms: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>{t('Terms of Service & EULA')}</Text>,
+                                    privacy: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>{t('Privacy Policy')}</Text>,
+                                }}
+                            />
                         </Text>
                     </View>
                 </ScrollView>
@@ -2701,7 +2729,7 @@ export default function WelcomeScreen() {
                                         placeholder="Your name or nickname"
                                         placeholderTextColor={colors.text.muted}
                                         value={callsign}
-                                        onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
+                                        onChangeText={(text) => { setCallsign(text); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
                                         maxLength={MAX_JOIN_NAME}
                                         autoFocus={true}
                                         autoCapitalize="words"
@@ -3065,7 +3093,7 @@ export default function WelcomeScreen() {
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
                                         {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
                                     </Text>
-                                    {ssoCandidates.map((c: any) => (
+                                    {ssoCandidates.map((c) => (
                                         <Pressable
                                             key={c.publicKey}
                                             onPress={() => {
@@ -3360,27 +3388,32 @@ export default function WelcomeScreen() {
             {/* Scrolls: at 320dp and 1.3x text, the button, the hint and the paste offer are taller than a small phone. */}
             <ScrollView contentContainerStyle={pinnedTop !== null ? [styles.homeContent, { paddingTop: pinnedTop }] : [styles.homeContent, styles.homeCentred]}>
                 <View style={styles.homeMain} onLayout={(e) => { if (!globalOffer) setHomeTop(e.nativeEvent.layout.y); }}>
-                    <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
+                    {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
+                    <LanguageSwitch />
+                    <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
                     <Text style={styles.headerSubtitle}>
-                        Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
+                        {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
                     </Text>
 
                     {/* Nearly every first launch is a new user, so joining is THE primary action. Restoring an account on
-                        a new phone is the rare case and lives as a quiet link below. One line at 320dp and 1.3x text: the
-                        label shrinks rather than wraps. The hint reads true with or without the offer below it. */}
-                    <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel="Join with an invite">
-                        <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🎟️ Join with an invite</Text>
+                        a new phone is the rare case and lives as a quiet link below. One line in English at 320dp and 1.3x
+                        text, shrinking rather than wrapping; a longer language (ru, fr, ar, the pseudo-locale) may take a
+                        second line rather than shrink past 0.6 (utils/__tests__/language-switch-render.test.ts). The hint
+                        reads true with or without the offer below it. */}
+                    <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel={t('Join with an invite')}>
+                        <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🎟️ Join with an invite')}</Text>
                     </Pressable>
 
                     <Text style={styles.inviteOnlyHint}>
-                        You join a local community with an invite from one of its members.{'\n'}
-                        No invite yet? Ask a friend on BeanPool, or find a community near you at{' '}
-                        <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text>.
+                        <Sentence
+                            text={t('You join a local community with an invite from one of its members.\nNo invite yet? Ask a friend on BeanPool, or find a community near you at {link}.')}
+                            parts={{ link: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text> }}
+                        />
                     </Text>
 
                     {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
                         <View style={styles.clipboardHintBox}>
-                            <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap Paste to open it</Text>
+                            <Text style={styles.clipboardHintText}>{t('📋 Been sent an invite? Tap Paste to open it')}</Text>
                             <Clipboard.ClipboardPasteButton
                                 onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'home'); }}
                                 acceptedContentTypes={['plain-text', 'url']}
@@ -3393,7 +3426,7 @@ export default function WelcomeScreen() {
                         </View>
                     ) : (
                         <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
-                            <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
+                            <Text style={styles.clipboardHintText}>{t('📋 Been sent an invite? Tap to check your clipboard')}</Text>
                         </Pressable>
                     ))}
 
@@ -3401,18 +3434,18 @@ export default function WelcomeScreen() {
                         style={styles.restoreSecondaryBtn}
                         onPress={() => setMode('member')}
                         accessibilityRole="button"
-                        accessibilityLabel="Already a Member? Restore Account"
+                        accessibilityLabel={t('Already a Member? Restore Account')}
                     >
-                        <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
+                        <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
                     </Pressable>
                 </View>
 
                 {/* The door's offer (utils/global-door-offer.ts). The door asks the node again when it is tapped. */}
                 {globalOffer && (
                     <Animated.View style={[styles.homeOffer, { opacity: offerFade }]}>
-                        <Text style={styles.inviteOnlyHint}>No invite? Explore BeanPool worldwide and find a community near you.</Text>
-                        <Pressable style={[styles.memberBtn, styles.homeOfferBtn]} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel="Explore BeanPool worldwide">
-                            <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🌍 Explore BeanPool worldwide</Text>
+                        <Text style={styles.inviteOnlyHint}>{t('No invite? Explore BeanPool worldwide and find a community near you.')}</Text>
+                        <Pressable style={[styles.memberBtn, styles.homeOfferBtn]} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel={t('Explore BeanPool worldwide')}>
+                            <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
                         </Pressable>
                     </Animated.View>
                 )}
@@ -3517,7 +3550,8 @@ const styles = StyleSheet.create({
 
     // Main welcome buttons
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
-    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700' },
+    // Centred: a longer language's label takes a second line (numberOfLines={2}), and both lines sit in the middle.
+    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
     secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 14, alignItems: 'center', width: '100%' },
     secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
@@ -3670,7 +3704,7 @@ const stepperStyles = StyleSheet.create({
     },
     stepItem: {
         alignItems: 'center',
-        flexShrink: 1,
+        flex: 1,
         minWidth: 0,
     },
     dot: {
@@ -3704,13 +3738,14 @@ const stepperStyles = StyleSheet.create({
         fontSize: 11,
         color: colors.text.secondary,
         fontWeight: '500',
+        textAlign: 'center',
     },
     labelActive: {
         color: colors.text.heading,
         fontWeight: '700',
     },
     line: {
-        width: 20,
+        width: 12,
         height: 2,
         backgroundColor: colors.border.strong,
         marginBottom: 18,

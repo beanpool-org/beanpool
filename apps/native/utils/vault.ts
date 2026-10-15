@@ -17,8 +17,9 @@
  *
  * No vault-configured build ships until (PR #1336's gate list, also in apps/native/.env.example): global's door accepts
  * vault tickets, V5 (finding 5; the phone half is in, global-join.ts "Only at a door that takes the ticket", so a door
- * without them costs door joins their copy, never the join); and the custodians' parts are reshared, with the parked
- * guide pages (GitHub issue #1349). CLOSED:
+ * without them costs door joins their copy, never the join). The reshare gates the public launch, not a vault build
+ * (Marty, 2026-10-05: real copies may go in before it); the parked guide pages (GitHub issue #1349) ship with the
+ * first public vault build. CLOSED:
  * - the vault signs its releases and deposit receipts (review finding 4; see "Every answer signed" below);
  * - a member whose only copy is still at a community gets back in there: on the vault's signed "no copy" for a sign-in,
  *   the restore with that provider goes on at the community as a build without a vault does it, and the move card is
@@ -124,8 +125,10 @@ export const VAULT_MESSAGES = {
     wrongAccount: "The copy that came back doesn't make the account it belongs to, so nothing was saved. Your 12 words "
         + 'work any time.',
     notOpened: "The copy that came back didn't open with this sign-in, so nothing was saved. Your 12 words work any time.",
-    stopped: 'This restore was stopped from a phone or computer that has your account, so nothing came back. If that '
-        + "wasn't you, use your 12 words.",
+    // Also the answer when a newer restore of the same account, from another device, took this one's place (server.ts
+    // /v1/restore): F6, case 16, so it doesn't say a phone stopped it.
+    stopped: 'This restore was stopped, from a phone or computer that has your account or by a newer restore started on '
+        + "another device, so nothing came back. If that wasn't you, use your 12 words.",
     gone: 'This restore is no longer waiting at the key vault. Start again, or use your 12 words.',
     noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
     tooMany: 'Too many tries just now. Please try again later.',

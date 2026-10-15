@@ -21,6 +21,7 @@ import { communityOrigin } from './community-origin';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
+import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, knownCommunityCount } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
 export { communityOrigin };
@@ -54,10 +55,13 @@ export interface GlobalHome {
     /** Where the point came from: the phone's (`request`), the member's own coarse area (`area`), or none. */
     point: 'request' | 'area' | null;
     communities: DirectoryCommunity[];
-    communityCount: number;
+    /** Every community listed; null when the node didn't say (unknown, never 0). */
+    communityCount: number | null;
     nearbyPosts: { radiusKm: number; count: number; more: boolean } | null;
     /** null: not a member's read. */
     watches: PlaceWatch[] | null;
+    /** When the node last fetched the directory; null: never, so "none" is not said (@beanpool/core find-community.ts). */
+    directoryFetchedAt: string | null;
 }
 
 export type Fetched<T> =
@@ -127,11 +131,12 @@ export function readGlobalHome(body: unknown): GlobalHome | null {
     return {
         point: b.point === 'request' || b.point === 'area' ? b.point : null,
         communities: readCommunities(b.communities),
-        communityCount: finite(b.communityCount) ? Math.max(0, Math.floor(b.communityCount)) : 0,
+        communityCount: knownCommunityCount(b.communityCount),
         nearbyPosts: np && finite(np.count) && finite(np.radiusKm)
             ? { radiusKm: np.radiusKm, count: Math.max(0, Math.floor(np.count)), more: np.more === true }
             : null,
         watches: Array.isArray(b.watches) ? b.watches.map(readWatch).filter((w): w is PlaceWatch => w !== null) : null,
+        directoryFetchedAt: typeof b.directoryFetchedAt === 'string' && b.directoryFetchedAt ? b.directoryFetchedAt : null,
     };
 }
 
@@ -189,7 +194,8 @@ export function fetchGlobalHome(point: Point | null, identity?: BeanPoolIdentity
     return getJson('/api/global/home', pointQuery(point), readGlobalHome, identity, base);
 }
 
-export interface CommunitySearch { communities: DirectoryCommunity[]; total: number }
+/** `fetchedAt`: when the node last fetched the directory; null: never, so an empty list is unknown, not empty. */
+export interface CommunitySearch { communities: DirectoryCommunity[]; total: number; fetchedAt: string | null }
 
 /** Communities nearest `point` first (by name without one), optionally only those whose name matches `q`. */
 export function fetchCommunities(
@@ -202,9 +208,10 @@ export function fetchCommunities(
     if (opts.offset) query.push(`offset=${Math.max(0, Math.floor(opts.offset))}`);
     return getJson('/api/global/communities', query, body => {
         if (!body || typeof body !== 'object' || !Array.isArray((body as any).communities)) return null;
-        const b = body as { communities: unknown[]; total?: unknown };
+        const b = body as { communities: unknown[]; total?: unknown; fetchedAt?: unknown };
         const communities = readCommunities(b.communities);
-        return { communities, total: finite(b.total) ? b.total : communities.length };
+        const fetchedAt = typeof b.fetchedAt === 'string' && b.fetchedAt ? b.fetchedAt : null;
+        return { communities, total: finite(b.total) ? b.total : communities.length, fetchedAt };
     }, null, base);
 }
 
@@ -254,20 +261,39 @@ export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string |
     return `${count.toLocaleString('en')}${more ? '+' : ''} ${count === 1 && !more ? 'listing' : 'listings'} within ${radiusKm} km of you`;
 }
 
-/** The card's headline, from what the node said (or couldn't). */
+/**
+ * The card's headline, from what the node said (or couldn't). The rule is @beanpool/core's, shared with the web: "No
+ * community near you yet." is the one "none" sentence, said only once the directory has loaded; a community 12,000 km
+ * away is named with its distance under it, never as near you. The card's buttons (Start a community, Tell me when
+ * one starts here) carry the actions, so the sentence names none.
+ */
 export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint: boolean): { title: string; body: string } {
-    const title = 'Find your community';
+    const title = FIND_COMMUNITY_WORDS.title;
     if (!home) return { title, body: 'Looking for communities near you…' };
     if (!home.ok) return { title, body: home.message };
-    const { communities, communityCount } = home.value;
-    if (communities.length > 0) {
-        const nearest = communities[0];
-        const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null }).toLowerCase() || 'near you';
-        const more = communities.length > 1 ? `, and ${communities.length - 1} more nearby` : '';
-        return { title, body: `${communityLabel(nearest)} is ${where}${more}. Ask to join, and trade with your neighbours there.` };
+    const { communities } = home.value;
+    switch (findCommunityState(home.value)) {
+        case 'near': {
+            const nearest = communities[0];
+            const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null }).toLowerCase() || 'near you';
+            // "More nearby" counts only those within 250 km: never one 12,000 km away.
+            const near = communitiesNear(communities);
+            const more = near.length > 1 ? `, and ${near.length - 1} more nearby` : '';
+            return { title, body: `${communityLabel(nearest)} is ${where}${more}. Ask to join, and trade with your neighbours there.` };
+        }
+        case 'far': {
+            const nearest = communities.find(c => c.distanceKm !== null) ?? communities[0];
+            const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null });
+            return { title, body: `${FIND_COMMUNITY_WORDS.noneNear} The nearest listed is ${communityLabel(nearest)}, ${where}.` };
+        }
+        case 'none':
+            return { title, body: FIND_COMMUNITY_WORDS.noneNear };
+        case 'not_loaded':
+            return { title, body: FIND_COMMUNITY_WORDS.notLoaded };
+        case 'no_point': {
+            const n = home.value.communityCount;
+            const see = hasPoint ? 'Tap Communities near you to see the nearest.' : 'Use your location, or type your town, to see the nearest.';
+            return { title, body: n === null ? see : `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. ${see}` };
+        }
     }
-    if (!hasPoint && home.value.point === null) {
-        return { title, body: `${communityCount.toLocaleString('en')} communit${communityCount === 1 ? 'y is' : 'ies are'} listed. Use your location, or type your town, to see the nearest.` };
-    }
-    return { title, body: 'No community is listed near you yet. Start one, or ask to be told when one starts here.' };
 }

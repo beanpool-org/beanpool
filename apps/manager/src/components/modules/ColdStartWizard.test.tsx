@@ -128,10 +128,10 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             expect.stringContaining('/api/local/update-identity'),
             expect.objectContaining({
                 method: 'POST',
+                // The name alone: the callsign stays as stored, never one the owner didn't choose (#1935 finding 1).
                 body: JSON.stringify({
                     password: 'admin-password',
                     communityName: 'Mullumbimby Commons',
-                    callsign: 'mullum-node',
                 }),
             })
         );
@@ -245,6 +245,26 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText('INV-REAL-B')).toBeInTheDocument();
         expect(screen.getByText('INV-REAL-C')).toBeInTheDocument();
         expect(screen.getByText('Founding Invite #3')).toBeInTheDocument();
+    });
+
+    it('step 1 on a community with no name: the box starts empty, Next waits for a typed name, and the save is that name alone (#1935 finding 1)', async () => {
+        // The node's diagnostics give the stored name and callsign, null for none (never "BeanPool Community Node" or
+        // "admin": saved untouched, that stand-in was published as the community's name).
+        await renderWizard({ diag: { ...mockDiag, communityName: null, callsign: null } });
+        const box = screen.getByLabelText('Community Name') as HTMLInputElement;
+        expect(box.value).toBe('');
+        expect(box.required).toBe(true);
+        const next = screen.getByRole('button', { name: /Next: Owner & 2FA/i }) as HTMLButtonElement;
+        expect(next.disabled).toBe(true);
+        await click(next);
+        const identityCalls = () => (global.fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/update-identity'));
+        expect(identityCalls()).toHaveLength(0);
+
+        await act(async () => { fireEvent.change(box, { target: { value: '  Riverbend Commons ' } }); });
+        expect(next.disabled).toBe(false);
+        await click(next);
+        expect(identityCalls()).toHaveLength(1);
+        expect(JSON.parse(identityCalls()[0][1].body)).toEqual({ password: 'admin-password', communityName: 'Riverbend Commons' });
     });
 
     it('step 1: a failed Verify Reachable says so plainly, with what to check, and shows no ✓', async () => {

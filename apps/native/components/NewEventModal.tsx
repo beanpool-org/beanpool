@@ -7,6 +7,12 @@
  * the public-pin warning; description; photo; the note for people who are
  * going; audience (this community or a group); and "Post as", shown only to a keeper or convenor.
  *
+ * Event times (scratch/global-node/DESIGN-event-times-fable.md §3, slice 3): "At a place / Online" heads the place section;
+ * online hides the place, address and pin and asks for a link to join. Under Starts and Ends, one muted line names the zone
+ * the clocks are in when it is not this phone's (in person: the pin's, from the node; online: always, the phone's own or a
+ * picked one), with Change opening a searchable list the node serves. The phone makes ONE Intl call (its own zone) and no
+ * zone arithmetic: the node turns the clock + zone into the instant, and says after saving if a clock fell in a DST change.
+ *
  * Reach is always local in v1 (§2.4), so there is no linked-communities option. Keyboard avoidance comes from
  * react-native-keyboard-controller's root provider; this Modal must not add its own.
  *
@@ -14,7 +20,7 @@
  * event, dates and photo included; Save sends only what changed. Audience and host are fixed once posted.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, StyleSheet, Modal, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Platform,
     Linking, Keyboard,
@@ -30,25 +36,35 @@ import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { createPost, fetchGroups, getBalance, getTreasuries, updateEvent } from '../utils/db';
+import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
-    buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
+    buildEventDraft, buildEventEditPatch, approximatePin, freshEventPin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    type EventCopy, type EventEditValues,
+    EVENT_TIME_WORDS, EVENT_LINK_MAX, deviceTimeZone, eventTimeAdjustedText, eventZoneLine, filterZones, sameZone, zonePickerEntry,
+    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
+    type EventCopy, type EventEditValues, type EventZone, type EventZoneSource,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
 import { EVENT_ACCENT } from './EventCard';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
-import type { AddressResult } from '@beanpool/core';
+import { looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult } from '@beanpool/core';
+import { onlineEventsOn } from '../utils/node-profile';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
 
 type Field = 'start' | 'end';
+
+/** The zone the Starts and Ends clocks are in, and where it came from; `moved` after the pin moved it ("Times are now…"). */
+type FormZone = { tz: string | null; offsetMinutes: number | null; source: EventZoneSource | null; moved: boolean };
+const NO_ZONE: FormZone = { tz: null, offsetMinutes: null, source: null, moved: false };
+/** Rows the zone list shows at once; typing narrows the rest (445 zones on a node with event times). */
+const ZONE_ROWS = 40;
 
 const HEADER_PAD_TOP = 10;
 type HostOption = { key: string; label: string; authorPubkey: string; groupId: string | null };
@@ -94,12 +110,20 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const scrollRef = useRef<ScrollView | null>(null);
     // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
+    // The spot a new pin was placed at, kept while the pin shows Approximate, so the host can still choose it.
+    const exactPin = useRef<{ lat: number; lng: number } | null>(null);
     const centreMap = (latitude: number, longitude: number) => {
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
     const [description, setDescription] = useState('');
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
+    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): ticked where anyone can
+    // join in a minute. Null until the host touches it, so a profile that arrives late still sets the default.
+    const nodeProfile = useNodeProfile();
+    const openMembership = hostLetsInDefault(nodeProfile?.features);
+    const [hostLetsInChoice, setHostLetsIn] = useState<boolean | null>(null);
+    const hostLetsIn = hostLetsInChoice ?? openMembership;
     const [audienceGroupId, setAudienceGroupId] = useState<string | null>(null);
     const [hostKey, setHostKey] = useState('me');
     // The host a copy names, held separately so the copy is posted by the same enterprise or group even if the
@@ -107,6 +131,45 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [copiedHost, setCopiedHost] = useState<HostOption | null>(null);
     const [isCopy, setIsCopy] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Event times. The device's zone is read once per opening, the one Intl call (§7 item 7).
+    const deviceTz = useMemo(() => (visible ? deviceTimeZone() : null), [visible]);
+    const [online, setOnline] = useState(false);
+    const [link, setLink] = useState('');
+    const [zone, setZone] = useState<FormZone>(NO_ZONE);
+    const [zonePicker, setZonePicker] = useState<{ open: boolean; query: string; error: string | null }>({ open: false, query: '', error: null });
+    const [zoneList, setZoneList] = useState<EventZone[] | null>(null);
+    // Each pin lookup takes a ticket; an answer for an older pin (or after a pick) is dropped.
+    const zoneTicket = useRef(0);
+    // The pin's zone as the node last answered it, and the lookup still on its way (Create waits for it).
+    const pinZone = useRef<string | null>(null);
+    const pendingZone = useRef<Promise<EventZone | null> | null>(null);
+    // "Online" only where the node carries an online event (features.onlineEvents; absent = off: a node before event times
+    // refuses one, and the worldwide one would hold it in its host's set alone, #1946 review finding 1). An event that is
+    // already online keeps the choice, so its host can move it back to a place. (nodeProfile: read above, for the let-in default.)
+    const onlineOffered = onlineEventsOn(nodeProfile?.features) || online || !!prefill?.online || !!editOf?.values.online;
+    const deviceZone = (): FormZone => (deviceTz
+        ? { tz: deviceTz, offsetMinutes: -new Date().getTimezoneOffset(), source: 'device', moved: false }
+        : NO_ZONE);
+    // The pin's zone, from the node. A node before event times (or no signal) answers nothing: the line stays away and
+    // the node reads the clock at the pin itself.
+    const lookupPinZone = (lat: number, lng: number) => {
+        const ticket = ++zoneTicket.current;
+        const asked = fetchEventZone(lat, lng);
+        pendingZone.current = asked;
+        asked.then(z => {
+            if (ticket !== zoneTicket.current) return;
+            const samePinZone = !!z && sameZone(pinZone.current, z.tz);
+            pinZone.current = z?.tz ?? null;
+            setZone(prev => {
+                // A zone the host picked stays while the pin stays in the same zone (a nudge), as the node keeps it.
+                if (prev.source === 'picked' && samePinZone) return prev;
+                return z
+                    ? { tz: z.tz, offsetMinutes: Number.isFinite(z.offsetMinutes) ? z.offsetMinutes : null, source: 'pin', moved: !!prev.tz && !sameZone(prev.tz, z.tz) }
+                    : NO_ZONE;
+            });
+        });
+    };
 
     // Android shows the OS dialog twice (date, then time); iOS shows one inline datetime spinner.
     const [picker, setPicker] = useState<{ field: Field; mode: 'date' | 'time'; draft: Date } | null>(null);
@@ -165,9 +228,12 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
 
     const reset = () => {
-        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
+        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
         setCopiedHost(null); setIsCopy(false);
+        setOnline(false); setLink(''); setZone(NO_ZONE); setZonePicker({ open: false, query: '', error: null });
+        zoneTicket.current++;
+        setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -184,7 +250,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
-        setApproximate(false);
+        setApproximate(false); exactPin.current = null;
         setAudienceGroupId(prefill.groupId);
         const copied: HostOption | null = prefill.enterprisePubkey
             ? { key: `ent:${prefill.enterprisePubkey}`, label: 'Enterprise', authorPubkey: prefill.enterprisePubkey, groupId: null }
@@ -193,9 +259,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 : null;
         setCopiedHost(copied);
         setHostKey(copied?.key ?? 'me');
-        if (prefill.lat != null && prefill.lng != null) {
+        setOnline(prefill.online);
+        setLink(prefill.link);
+        setZone(prefill.online ? deviceZone() : NO_ZONE);
+        if (!prefill.online && prefill.lat != null && prefill.lng != null) {
             setPin({ lat: prefill.lat, lng: prefill.lng });
             centreMap(prefill.lat, prefill.lng);
+            lookupPinZone(prefill.lat, prefill.lng);
         } else {
             setPin(null);
         }
@@ -215,9 +285,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setEnd(v.end);
         setPlaceName(v.placeName);
         setNote(v.privateNote);
+        setHostLetsIn(v.hostLetsIn);
         setPhoto(v.photo);
         setPicker(null);
-        setApproximate(false);
+        setOnline(v.online === true);
+        setLink(v.link ?? '');
+        // The event's own zone, as the node holds it; where it came from is not known now, so no "(where the pin is)".
+        setZone({ tz: v.tz ?? null, offsetMinutes: v.tzOffsetMinutes ?? null, source: v.online && sameZone(v.tz, deviceTz) ? 'device' : null, moved: false });
+        setApproximate(false); exactPin.current = null;
         if (v.lat != null && v.lng != null) {
             setPin({ lat: v.lat, lng: v.lng });
             centreMap(v.lat, v.lng);
@@ -233,7 +308,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         if (!visible) { appliedInitialPin.current = false; return; }
         if (prefill || editOf || appliedInitialPin.current || !initialPin) return;
         appliedInitialPin.current = true;
-        setPin({ lat: initialPin.lat, lng: initialPin.lng });
+        // A new pin, as a tap in the form is: Approximate from the start where anyone can join (freshEventPin).
+        placePin(initialPin.lat, initialPin.lng);
         centreMap(initialPin.lat, initialPin.lng);
     }, [visible, prefill, initialPin]);
 
@@ -268,10 +344,60 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
     };
 
+    // Where anyone can join, a new pin starts Approximate (freshEventPin); "Use the exact spot" takes it back.
     const placePin = (lat: number, lng: number) => {
-        setPin({ lat, lng });
-        setApproximate(false);
+        const fresh = freshEventPin(lat, lng, openMembership);
+        exactPin.current = fresh.exact;
+        setPin(fresh.pin);
+        setApproximate(fresh.approximate);
+        // Moving the pin re-asks its zone; the clocks the host typed stay, and the line says "Times are now Accra time".
+        // Asked at the pin as it shows: an Approximate one never sends the exact spot to the node (#1965).
+        lookupPinZone(fresh.pin.lat, fresh.pin.lng);
     };
+
+    const chooseExactPin = () => {
+        if (!exactPin.current) return;
+        setPin(exactPin.current);
+        setApproximate(false);
+        lookupPinZone(exactPin.current.lat, exactPin.current.lng);
+    };
+
+    const chooseOnline = (next: boolean) => {
+        if (next === online || (next && !onlineOffered)) return;
+        Keyboard.dismiss();
+        setOnline(next);
+        zoneTicket.current++;
+        setZonePicker(p => ({ ...p, open: false }));
+        if (next) setZone(deviceZone());
+        else if (pin) { setZone(NO_ZONE); lookupPinZone(pin.lat, pin.lng); }
+        else setZone(NO_ZONE);
+    };
+
+    const openZonePicker = () => {
+        Keyboard.dismiss();
+        setZonePicker({ open: true, query: '', error: null });
+        if (zoneList) return;
+        fetchEventZones()
+            .then(zones => setZoneList(zones))
+            .catch(e => setZonePicker(p => ({
+                ...p,
+                error: isRouteMissing(e)
+                    ? t("This community's node does not offer time zones yet.")
+                    : t('The list of time zones could not be loaded. Try again when you have signal.'),
+            })));
+    };
+
+    const pickZone = (z: EventZone) => {
+        zoneTicket.current++;
+        setZone({ tz: z.tz, offsetMinutes: z.offsetMinutes, source: 'picked', moved: false });
+        setZonePicker({ open: false, query: '', error: null });
+    };
+
+    // The zone's offset for the form's past check; the phone's own zone uses the Date itself, which knows its DST.
+    const zoneOffset = zone.source === 'device' ? null : zone.offsetMinutes;
+    // The pickers' floor is this phone's now, which is only right when the clocks are this phone's zone's.
+    const clocksAreDevice = !zone.tz || sameZone(zone.tz, deviceTz);
+    const zoneLine = eventZoneLine({ online, tz: zone.tz, source: zone.source, deviceTz, offsetMinutes: zone.offsetMinutes, moved: zone.moved });
 
     const placePinAtMyLocation = async () => {
         try {
@@ -309,6 +435,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const makeApproximate = () => {
         if (!pin) return;
+        if (!approximate) exactPin.current = pin;
         setPin(approximatePin(pin.lat, pin.lng));
         setApproximate(true);
     };
@@ -331,6 +458,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const editValues = (): EventEditValues => ({
         title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+        online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
+        hostLetsIn,
     });
     const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
 
@@ -347,11 +476,15 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
         setSubmitting(true);
         try {
-            const saved = await updateEvent(editOf.id, editCheck.patch);
+            const out: { eventTimeAdjusted?: any } = {};
+            const saved = await updateEvent(editOf.id, editCheck.patch, out);
+            const dst = eventTimeAdjustedText(out.eventTimeAdjusted, zone.tz);
+            // The node's word on UPDATED: a new zone with the same offset (Lagos → Kinshasa) moves no instant, so it marks
+            // nothing and tells nobody (#1946 review, finding 6).
+            const told = editCheck.notifies && saved?.eventState !== 'scheduled';
+            const done = told ? t('It now shows UPDATED, and everyone going has been told.') : t('Your changes are saved.');
             reset();
-            Alert.alert('Event saved', editCheck.notifies
-                ? 'It now shows UPDATED, and everyone going has been told.'
-                : 'Your changes are saved.');
+            Alert.alert(t('Event saved'), [done, ...dst].join('\n\n'));
             onSaved?.(saved);
             onClose();
         } catch (err: any) {
@@ -367,10 +500,26 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             Alert.alert('Error', 'No member identity found. Please set up your profile.');
             return;
         }
+        let tz = zone.tz;
+        let tzOffsetMinutes = zoneOffset;
+        if (!online && pin && !tz && pendingZone.current) {
+            // The pin's zone is still on its way (or never came): wait for it rather than save a clock the host has not
+            // seen labelled. A zone that is not this phone's is shown first; Create again saves (#1946 review, finding 5).
+            setSubmitting(true);
+            const z = await pendingZone.current.catch(() => null);
+            setSubmitting(false);
+            if (z && !sameZone(z.tz, deviceTz)) {
+                Alert.alert(t('Check the times'), t('The times are {zone}, where the pin is. Check them, then tap Create again.', { zone: zoneLabelFor(z.tz, z.offsetMinutes) }));
+                return;
+            }
+            if (z) { tz = z.tz; tzOffsetMinutes = null; }
+        }
         const built = buildEventDraft({
             title, description, start, end, placeName,
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
+            online, link, tz, tzOffsetMinutes,
+            hostLetsIn,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -378,14 +527,16 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
         setSubmitting(true);
         try {
-            await createPost({
+            const answer = await createPost({
                 id: Crypto.randomUUID(),
                 ...built.draft,
                 photos: photo ? JSON.stringify([photo]) : null,
                 created_at: new Date().toISOString(),
             });
+            const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
+            const done = t('Your event is in the Market feed.');
             reset();
-            Alert.alert('Event created', 'Your event is in the Market feed.');
+            Alert.alert(t('Event created'), [done, ...dst].join('\n\n'));
             onSuccess?.();
             onClose();
         } catch (err: any) {
@@ -427,7 +578,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         value={picker.draft}
                         mode={Platform.OS === 'ios' ? 'datetime' : picker.mode}
                         display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        minimumDate={field === 'end' && start ? start : new Date()}
+                        minimumDate={field === 'end' && start ? start : clocksAreDevice ? new Date() : undefined}
                         onChange={onPickerChange}
                     />
                     {Platform.OS === 'ios' && (
@@ -501,7 +652,95 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         )}
                         {dateRow('start', 'STARTS *', start, 'Pick a date and time')}
                         {dateRow('end', 'ENDS (OPTIONAL)', end, start ? `2 hours after start (${formatPickerValue(defaultEventEnd(start)).split(', ')[1]})` : '2 hours after start if blank')}
+                        {zoneLine && (
+                            <View style={styles.zoneLine} accessibilityLiveRegion="polite">
+                                <Text style={styles.zoneText}>
+                                    {'prompt' in zoneLine ? zoneLine.prompt : (
+                                        <>{zoneLine.before}<Text style={styles.zoneStrong}>{zoneLine.zone}</Text>{zoneLine.after}</>
+                                    )}
+                                </Text>
+                                <Pressable
+                                    onPress={zonePicker.open ? () => setZonePicker(p => ({ ...p, open: false })) : openZonePicker}
+                                    style={styles.zoneChange}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ expanded: zonePicker.open }}
+                                    accessibilityLabel={'prompt' in zoneLine ? t('Pick a time zone') : t('Change the time zone, now {zone}', { zone: zoneLine.zone })}
+                                >
+                                    <Text style={styles.zoneChangeText} numberOfLines={1}>{zonePicker.open ? t('Close') : 'prompt' in zoneLine ? t('Pick') : t('Change')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
+                        {zonePicker.open && (
+                            <View style={styles.zonePanel}>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={t('Search a city or zone')}
+                                    placeholderTextColor={colors.text.muted}
+                                    value={zonePicker.query}
+                                    onChangeText={q => setZonePicker(p => ({ ...p, query: q }))}
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    accessibilityLabel={t('Search time zones')}
+                                />
+                                {zonePicker.error ? (
+                                    <Text style={styles.helper}>{zonePicker.error}</Text>
+                                ) : !zoneList ? (
+                                    <ActivityIndicator style={{ marginTop: 10 }} color={EVENT_ACCENT} />
+                                ) : (() => {
+                                    const found = filterZones(zoneList, zonePicker.query);
+                                    return (<>
+                                        {found.slice(0, ZONE_ROWS).map(z => {
+                                            const selected = sameZone(z.tz, zone.tz);
+                                            return (
+                                                <Pressable
+                                                    key={z.tz}
+                                                    onPress={() => pickZone(z)}
+                                                    style={styles.zoneRow}
+                                                    accessibilityRole="button"
+                                                    accessibilityState={{ selected }}
+                                                    accessibilityLabel={zonePickerEntry(z)}
+                                                >
+                                                    <Text style={[styles.zoneRowText, selected && styles.zoneRowSelected]} numberOfLines={1}>
+                                                        {zonePickerEntry(z)}{selected ? ' ✓' : ''}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                        {found.length === 0 && <Text style={styles.helper}>{t('No time zone matches that.')}</Text>}
+                                        {found.length > ZONE_ROWS && <Text style={styles.helper}>{tn(found.length - ZONE_ROWS, '{n} more. Type a city to narrow the list.', '{n} more. Type a city to narrow the list.')}</Text>}
+                                    </>);
+                                })()}
+                            </View>
+                        )}
 
+                        {onlineOffered && (
+                            <View style={styles.field}>
+                                <Text style={styles.label}>{t('WHERE')}</Text>
+                                <View style={styles.chipWrap}>
+                                    {chip('place', t('At a place'), !online, () => chooseOnline(false))}
+                                    {chip('online', t('Online'), online, () => chooseOnline(true))}
+                                </View>
+                            </View>
+                        )}
+
+                        {online ? (
+                            <View style={styles.field}>
+                                <Text style={styles.label}>{t('LINK TO JOIN')}</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={t('https://')}
+                                    placeholderTextColor={colors.text.muted}
+                                    value={link}
+                                    onChangeText={setLink}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                    maxLength={EVENT_LINK_MAX}
+                                    accessibilityLabel={t('Link to join')}
+                                />
+                                <Text style={styles.helper}>{hostLetsIn ? t(EVENT_TIME_WORDS.linkHintLetIn) : t(EVENT_TIME_WORDS.linkHint)}</Text>
+                            </View>
+                        ) : (<>
                         <View style={styles.field}>
                             <Text style={styles.label}>PLACE NAME *</Text>
                             <TextInput
@@ -513,6 +752,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 maxLength={EVENT_PLACE_NAME_MAX}
                                 accessibilityLabel="Place name"
                             />
+                            {/* Where anyone can join, the place name is the one place everyone who can see the event reads
+                                (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
+                            {openMembership && (
+                                <Text style={styles.helper} testID="event-place-helper">
+                                    {looksLikeStreetAddress(placeName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
+                                </Text>
+                            )}
                         </View>
 
                         <View style={styles.field} onLayout={(e) => { addressY.current = e.nativeEvent.layout.y; }}>
@@ -573,8 +819,20 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 >
                                     <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
                                 </Pressable>
+                                {approximate && exactPin.current && (
+                                    <Pressable
+                                        onPress={chooseExactPin}
+                                        style={[styles.secondaryBtn, styles.approxBtn]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Use the exact spot')}
+                                        testID="event-pin-exact"
+                                    >
+                                        <Text style={styles.secondaryText} numberOfLines={1}>{t('Use the exact spot')}</Text>
+                                    </Pressable>
+                                )}
                             </View>
                         </View>
+                        </>)}
 
                         <View style={styles.field}>
                             <Text style={styles.label}>DESCRIPTION</Text>
@@ -613,7 +871,27 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 maxLength={EVENT_PRIVATE_NOTE_MAX}
                                 accessibilityLabel="Note for people who are going"
                             />
-                            <Text style={styles.helper}>Only people who tap Going see this.</Text>
+                            <Text style={styles.helper} testID="event-note-helper">{privateNoteHelper(hostLetsIn, openMembership)}</Text>
+                            <Pressable
+                                onPress={() => setHostLetsIn(!hostLetsIn)}
+                                style={styles.tickRow}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: hostLetsIn }}
+                                accessibilityLabel={hostLetsInLabel()}
+                                testID="event-host-lets-in"
+                            >
+                                <Text style={styles.tickBox}>{hostLetsIn ? '☑' : '☐'}</Text>
+                                <View style={styles.tickTextCol}>
+                                    <Text style={styles.tickTitle}>{hostLetsInLabel()}</Text>
+                                    <Text style={styles.helper}>{hostLetsInHint()}</Text>
+                                </View>
+                            </Pressable>
+                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
+                            {editOf && hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn) && (
+                                <Text style={styles.letInOffWarning} accessibilityLiveRegion="polite" testID="event-host-lets-in-off">
+                                    {hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn)}
+                                </Text>
+                            )}
                         </View>
 
                         {editOf && editCheck?.ok && editCheck.notifies && (
@@ -710,6 +988,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         },
         mapFallback: { justifyContent: 'center', alignItems: 'center', padding: 16 },
         helper: { fontSize: 12, color: colors.text.secondary, marginTop: 6, lineHeight: 16 },
+        tickRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, minHeight: 44, paddingVertical: 4 },
+        tickBox: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
+        tickTextCol: { flex: 1, minWidth: 0 },
+        tickTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, lineHeight: 19 },
+        letInOffWarning: { fontSize: 13, fontWeight: '600', color: colors.text.body, lineHeight: 18, marginTop: 6 },
         copyNote: {
             fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12,
             padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle,
@@ -745,5 +1028,17 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         chipSelected: { borderColor: EVENT_ACCENT, backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff' },
         chipText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary },
         chipTextSelected: { fontWeight: '800', color: accentText },
+        zoneLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, marginTop: -8, marginBottom: 12 },
+        zoneText: { flexShrink: 1, fontSize: 13, color: colors.text.secondary, lineHeight: 18 },
+        zoneStrong: { fontWeight: '800', color: colors.text.body },
+        zoneChange: { minHeight: 48, minWidth: 48, justifyContent: 'center', flexShrink: 0 },
+        zoneChangeText: { fontSize: 14, fontWeight: '700', color: colors.text.link },
+        zonePanel: {
+            marginTop: -4, marginBottom: 16, padding: 10, borderRadius: 12, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.subtle,
+        },
+        zoneRow: { minHeight: 44, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: colors.border.default },
+        zoneRowText: { fontSize: 15, color: colors.text.body },
+        zoneRowSelected: { fontWeight: '800', color: accentText },
     });
 };

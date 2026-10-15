@@ -7,7 +7,7 @@ import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migrati
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -38,8 +38,53 @@ export const db: Database.Database = new Database(DB_PATH);
 // `haversine_km`, for the posts listing searched by distance (G4). A function lives on the connection, not in the file,
 // and this is the one connection that runs the listing; the read-only handles opened on backups and snapshots never do.
 registerGeoFunctions(db);
+// `name_fold`, the one rule by which two member names are the same name, and the TEMP triggers that write callsign_fold
+// from it (names.ts in the engine); a database from before the column gets them in migrateCallsignFold.
+installNameFold(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
+
+/**
+ * Names in any alphabet (#1956). `callsign_fold` is `foldName(callsign)` (the engine's names.ts), the one rule by which two
+ * names are the same name. The lower(callsign) index above folds A–Z only, so "Олег" typed as stored matched nothing.
+ *
+ * Two TEMP triggers write it, on INSERT and on any UPDATE OF callsign (an upsert included), on each connection that
+ * installs them (the engine's installNameFold: this one, and the two command-line tools that write members), so no writer
+ * there can forget it: a standby's import and a key move are inserts like any other. TEMP, never in the file: a stored
+ * trigger calling `name_fold` made the previous image crash at boot after a rollback, and the sqlite3 shell unable to add
+ * a member (deciding review of #1956, B1), so the ones an earlier build of this PR stored are dropped here. A handle
+ * without them (an older image, the shell) writes members as before, leaving the fold NULL or stale; every boot re-folds
+ * each row whose fold differs, which repairs those, carries a change of the rule to every row, and fills a node from
+ * before this column. That UPDATE names no column of members_touch_updated_at, so it stamps nothing and sends nothing to
+ * a standby (each server makes its own; replication-manifest.ts). Reads bind foldName(x) from JS, never name_fold(?).
+ *
+ * The index is NOT unique, on purpose. A node may already hold two members whose names fold the same ("Олег" and
+ * "олег", both allowed before this): both are kept, neither is renamed, boot goes on, and one line per such name tells
+ * the operator. A unique index would fail to build there, and on a standby it would refuse the copy of that pair.
+ * isCallsignAvailable (engine/members.ts) refuses a new one at registration and at a member's rename, and better-sqlite3
+ * runs them one at a time. The other writers of a name take the same rule: a project's row at its create and at each title
+ * edit (the engine's projectRowName), and a visitor's row, whose name from a peer is kept only while free (engine/members.ts
+ * writeVisitorRow) (review of #1956, N3). A standby's import writes its main server's names as they are.
+ */
+export function migrateCallsignFold(conn: Database.Database): void {
+    try {
+        const has = conn.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'callsign_fold'`).get();
+        if (!has) conn.prepare(`ALTER TABLE members ADD COLUMN callsign_fold TEXT`).run();
+        conn.exec(`DROP TRIGGER IF EXISTS main.members_callsign_fold_insert; DROP TRIGGER IF EXISTS main.members_callsign_fold_rename;`);
+        installNameFold(conn);
+        conn.prepare(`UPDATE members SET callsign_fold = name_fold(callsign) WHERE callsign_fold IS NOT name_fold(callsign)`).run();
+        conn.prepare(`CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned')`).run();
+        const clashes = conn.prepare(`SELECT json_group_array(callsign) AS names, count(*) AS n FROM members
+            WHERE status NOT IN ('migrated', 'pruned') AND callsign_fold IS NOT NULL
+            GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
+        for (const c of clashes) {
+            const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
+            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, the web restore lists each of them and restores the one chosen; the phone restores the one with a sign-in copy, and refuses when both have one; their 12 words still work.`);
+        }
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);
+    }
+}
 
 export function afterTransactionCommit(fn: () => void): void {
     if (!(db as any).inTransaction) {
@@ -223,6 +268,48 @@ export function deletePlainRows(table: string, where: string, ...args: unknown[]
         for (const r of rows) if (r[key.length]) writeTombstone(table, r.slice(0, key.length).map((v) => String(v)).join('|'));
         return gone;
     })();
+}
+
+/**
+ * event_reminders_sent keyed on the date too (DESIGN-event-times §8): a repeating event reminds its regulars once per date,
+ * where the old key (post, member, offset) let the first week's mark block every later week's. SQLite cannot change a
+ * table's key in place, so a table of the old shape is rebuilt, before the schema.sql exec (which then finds it as it
+ * writes it). Each old mark is for the date its event has now, so nothing already sent is sent again. Its touch triggers
+ * go with the old table; stampPlainTables makes them again after the exec. Foreign keys are off on this database, and
+ * `legacy_alter_table` is on for the rename, as repackGroups has them. Once rebuilt, every later boot finds the column and
+ * does nothing.
+ */
+function rekeyReminderMarksByOccurrence(): void {
+    const cols = db.prepare(`SELECT name FROM pragma_table_info('event_reminders_sent')`).all() as { name: string }[];
+    if (cols.length === 0 || cols.some((c) => c.name === 'occurrence_at')) return;
+    const hasUpdatedAt = cols.some((c) => c.name === 'updated_at');
+    db.pragma('legacy_alter_table = ON');
+    try {
+        db.transaction(() => {
+            db.exec(`
+                DROP TABLE IF EXISTS event_reminders_sent_by_date;
+                CREATE TABLE event_reminders_sent_by_date (
+                    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    offset_min INTEGER NOT NULL,
+                    occurrence_at TEXT NOT NULL DEFAULT '',
+                    sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (post_id, member_pubkey, offset_min, occurrence_at)
+                );
+                INSERT INTO event_reminders_sent_by_date (post_id, member_pubkey, offset_min, occurrence_at, sent_at, updated_at)
+                    SELECT s.post_id, s.member_pubkey, s.offset_min,
+                           COALESCE((SELECT p.event_start_at FROM posts p WHERE p.id = s.post_id), ''),
+                           s.sent_at, ${hasUpdatedAt ? 's.updated_at' : 'NULL'}
+                      FROM event_reminders_sent s;
+                DROP TABLE event_reminders_sent;
+                ALTER TABLE event_reminders_sent_by_date RENAME TO event_reminders_sent;
+            `);
+        })();
+    } finally {
+        db.pragma('legacy_alter_table = OFF');
+    }
+    console.log('[DB] event_reminders_sent is keyed on the date too (repeating events)');
 }
 
 /**
@@ -1337,6 +1424,20 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row reads as off.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_host_lets_in INTEGER`).run(); } catch { }
+    // Event times (DESIGN-event-times §2): the host's clock and its zone beside the instant, and online events. NULL on
+    // every non-event row, and on an event from before them until it is next edited.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_local TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_end_local TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_tz TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_online INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_link TEXT`).run(); } catch { }
+    // Repeating events (DESIGN-event-times §8): the rule, its last date and its cancelled dates. NULL on every row: no
+    // event repeats until its host says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT`).run(); } catch { }
     // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
     // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
     // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,
@@ -1366,6 +1467,14 @@ export function initSchema() {
     // is not the failure we want to discover at boot. NULL on every existing row means "my default
     // applies", which is exactly the behaviour a node that upgrades into this should have.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
+    // The date an RSVP is for (DESIGN-event-times §8). Before the schema.sql exec, which indexes it. NULL on every existing
+    // row: an RSVP from before it is for the date its event has (engine/event-series-roll.ts RSVP_IS_CURRENT).
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN occurrence_at DATETIME`).run(); } catch { }
+    rekeyReminderMarksByOccurrence();
+    // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
+    // matters only on an event whose host lets people in, and no existing event is one.
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_by TEXT`).run(); } catch { }
 
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
@@ -1904,6 +2013,7 @@ export function initSchema() {
     } catch (e) {
         console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
     }
+    migrateCallsignFold(db);
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
@@ -2762,11 +2872,7 @@ export function createCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     const now = new Date().toISOString();
-    const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-    const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-    ).get(baseCallsign, id) as any;
-    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
+    const callsign = projectRowName(db, title, id);
 
     // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
     db.transaction(() => {
@@ -2845,6 +2951,8 @@ export function updateCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     photos = ownAvatarUrlsAsStored(id, project.photos, photos);
+    // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
+    const rowName = projectRowName(db, title, id);
 
     db.transaction(() => {
         if (deadline_at !== undefined) {
@@ -2858,7 +2966,7 @@ export function updateCrowdfundProject(
                 UPDATE members
                 SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, goal_amount, deadline_at, now, id);
+            `).run(rowName, description, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -2870,7 +2978,7 @@ export function updateCrowdfundProject(
                 UPDATE members
                 SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, goal_amount, now, id);
+            `).run(rowName, description, description, goal_amount, now, id);
         }
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();

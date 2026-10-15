@@ -422,7 +422,7 @@ export function GatewayModule({
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <label className="block text-nature-300 font-bold text-xs">Max Requests / Minute Threshold</label>
-                                        <span className="text-[10px] font-mono text-terra-400 font-bold">Configured Limit: {maxReqLimit} req/min</span>
+                                        <span className="text-[10px] font-mono text-bp-ink-terra font-bold">Configured Limit: {maxReqLimit} req/min</span>
                                     </div>
                                     <p className="text-[11px] text-nature-400 mb-2">
                                         Each IP is allowed up to <strong>{maxReqLimit}</strong> requests per minute. Exceeding this triggers an automatic <code>429 Too Many Requests</code> HTTP response block.
@@ -519,7 +519,7 @@ export function GatewayModule({
                                         });
                                     }
                                 }}
-                                className="px-2.5 py-1 rounded bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-[10px] font-semibold border border-terra-800 transition-all"
+                                className="px-2.5 py-1 rounded bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-[10px] font-semibold border border-terra-600/40 transition-all"
                             >
                                 ➕ Include Current Manager Domain ({typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'})
                             </button>

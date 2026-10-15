@@ -19,7 +19,7 @@ import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext'
 import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import {
-    formatEventWhen, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
@@ -51,14 +51,16 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         // Re-sync from the post only when its counts or my RSVP change, not on every render of a new post object.
     }, [post.id, post.goingCount, post.interestedCount, post.event_going_count, post.event_interested_count, post.myRsvp]);
 
-    const when = formatEventWhen(post.event_start_at ?? post.eventStartAt, post.event_end_at ?? post.eventEndAt);
+    // The place's clock first; the reader's own on a second line only when it differs; online, the reader's with "your time"
+    // (DESIGN-event-times §4).
+    const when = formatEventWhenFor(post);
+    const timeNote = eventWhen(post)?.note ?? null;
     const badge = eventBadge(post);
     const closed = eventStateOf(post) === 'cancelled' || isEventEnded(post);
-    const placeName = post.event_place_name ?? post.eventPlaceName ?? '';
     const distance = myLocation && post.lat != null && post.lng != null
         ? formatDistance(distanceKm(myLocation.lat, myLocation.lng, post.lat, post.lng))
         : null;
-    const placeLine = [placeName, distance].filter(Boolean).join(' · ');
+    const placeLine = eventPlaceLine(post, distance);
     const photo = eventCoverPhoto(post);
     // "Your events" is built from /api/events/mine, which carries no counts — and "0 going" on an event the
     // viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
@@ -154,8 +156,9 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                         )}
                         <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
                     </View>
+                    {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}
                     <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
-                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
+                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
                     {countsKnown && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
                 </View>
             </View>
@@ -213,6 +216,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontSize: 17,
             fontWeight: '800',
             color: colors.text.heading,
+        },
+        timeNote: {
+            fontSize: 13,
+            color: colors.text.secondary,
+            marginBottom: 4,
         },
         hosting: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT, marginTop: 8 },
         whenCancelled: {

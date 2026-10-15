@@ -25,9 +25,10 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, readTourRecord, starterCards, tourEnded, type TourRecord,
+    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
+import { eventHomeWhen } from './events';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
@@ -63,14 +64,6 @@ export const FIND_PINNED_DAYS = 30;
  * < 14 days or any line undone"; the node's routes/home-answer.ts `stepsCard`, the web app's `STEPS_NEW_DAYS`).
  */
 export const STEPS_NEW_DAYS = 14;
-/**
- * "Within reach" for "Ask a community to let you in" (DESIGN-home-dashboard-fable.md §7: the ask shows "while there is
- * one within reach"): 250 km, the radius the global node's listings use (scratch/global-node/
- * DESIGN-global-sync-by-area-fable.md: a phone keeps the nearest 500 listings within 250 km), so a community 9,000 km
- * away is never suggested (#1517; the web app's
- * `ASK_WITHIN_KM`). A community the node lists with no distance is not within reach.
- */
-export const ASK_WITHIN_KM = 250;
 const DAY_MS = 86_400_000;
 
 /** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
@@ -126,7 +119,11 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
 export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 
 export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
-export interface HomeEventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
+export interface HomeEventItem {
+    id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
+    /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */
+    startLocal?: string | null; tz?: string | null; online?: boolean | null;
+}
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }
 
 /**
@@ -763,11 +760,16 @@ export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: 
 /** Whether the answer carries a Find your community body the screen can read (its rows are checked as they are drawn). */
 export const isFindCard = (v: unknown): v is HomeFind => isObj(v) && Array.isArray(v.communities);
 
-/** Whether a listed community is within reach ({@link ASK_WITHIN_KM}): its distance a number, 0 to 250 km. */
-const withinReach = (km: unknown): boolean => typeof km === 'number' && Number.isFinite(km) && km >= 0 && km <= ASK_WITHIN_KM;
+/**
+ * Whether a listed community is within reach for "Ask a community to let you in" (DESIGN-home-dashboard-fable.md §7: the
+ * ask shows "while there is one within reach"): @beanpool/core's NEAR_COMMUNITY_KM, 250 km, the radius the global
+ * node's listings use and every "near you" on both apps, so a community 9,000 km away is never suggested (#1517). A
+ * community the node lists with no distance is not within reach.
+ */
+const withinReach = isNearKm;
 
 /**
- * A community within reach ({@link ASK_WITHIN_KM}) with an address to knock on, checked as Communities near you and the
+ * A community within reach (core's NEAR_COMMUNITY_KM) with an address to knock on, checked as Communities near you and the
  * find card check it (utils/community-origin.ts `communityOrigin`: an https host name, never an IP literal, a dotless
  * host or the global node's own; #1517). Both of the same community.
  */
@@ -1093,8 +1095,13 @@ export function eventDay(iso: string): string {
     return formatDate(d, 'weekday-day-month');
 }
 
+/**
+ * "Sat 3 Oct · Working bee, The hall". The day is the place's, with its clock and zone when they are not this phone's
+ * ("Sat 17 Oct, 20:50 Lagos time"); an online event reads in the phone's own time and says Online (§4).
+ */
 export function eventLine(e: HomeEventItem): string {
-    return `${eventDay(e.startsAt)} · ${e.title}${e.place ? `, ${e.place}` : ''}`;
+    const place = e.online ? t('Online') : e.place;
+    return `${eventHomeWhen(e)} · ${e.title}${place ? `, ${place}` : ''}`;
 }
 
 export const RSVP_WORDS: Record<'going' | 'interested', string> = { going: 'Going', interested: 'Interested' };

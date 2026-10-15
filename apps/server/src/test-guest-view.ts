@@ -588,6 +588,7 @@ async function main(): Promise<void> {
             [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
             [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
+            [path.join('routes', 'events.ts')]: 2, // the event form's pin → its zone (/api/events/zone): members only, answers a zone and no listing
         };
         assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
             `the code reads a point from a query in the modules this suite knows, and no others (${JSON.stringify(found)}); a new one needs its reads in POINT_READS and measured`);
@@ -1236,7 +1237,7 @@ async function main(): Promise<void> {
         const EVERY_ROUTE = new Set<string>([
             'GET /', 'GET /.well-known/apple-app-site-association', 'GET /.well-known/apple-developer-domain-association.txt',
             'GET /.well-known/assetlinks.json', 'GET /app', 'POST /app/auth/apple', 'GET /apple-app-site-association', 'GET /settings',
-            'GET /settings-legacy', 'GET /settings.js', 'GET /settings/(.*)', 'GET /trust',
+            'GET /settings/(.*)', 'GET /trust',
             'GET /api/activity/feed',
             'POST /api/admin/check-update', 'POST /api/admin/reports', 'POST /api/admin/seed-invite', 'POST /api/admin/thresholds',
             'POST /api/admin/thresholds/get',
@@ -1274,6 +1275,10 @@ async function main(): Promise<void> {
             'DELETE /api/enterprises/:treasury/thread/message/:messageId', 'POST /api/enterprises/:treasury/thread/remove', 'GET /api/enterprises/map',
             'GET /api/enterprises/statuses',
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
+            // The event form's zone of a pin and its picker list (routes/events.ts): members' signed reads, a zone and no listing.
+            'GET /api/events/zone', 'GET /api/events/zones',
+            // Cancel or restore one date of a repeating event (routes/events.ts): its host's signed write, members only.
+            'POST /api/events/:postId/skip', 'DELETE /api/events/:postId/skip',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
@@ -1345,7 +1350,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/replication-token/status', 'GET /api/local/admin/reports', 'POST /api/local/admin/reports/:id/action',
             'POST /api/local/admin/reports/:id/dismiss', 'POST /api/local/admin/restore', 'POST /api/local/admin/restore/phone/wait',
             'GET /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status/acknowledge',
-            'POST /api/local/admin/snapshots/config', 'POST /api/local/admin/snapshots/create', 'POST /api/local/admin/snapshots/delete',
+            'POST /api/local/admin/snapshots/config', 'POST /api/local/admin/snapshots/create',
             'GET /api/local/admin/snapshots/download', 'POST /api/local/admin/snapshots/list',
             'POST /api/local/admin/standby-health', 'POST /api/local/admin/standby-health/forget', 'POST /api/local/admin/storage/clean',
             'GET /api/local/admin/storage/clean-preview', 'POST /api/local/admin/storage/clean-preview', 'GET /api/local/admin/storage/disk-health',
@@ -1368,12 +1373,13 @@ async function main(): Promise<void> {
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'POST /api/local/change-password', 'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',
-            'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling', 'POST /api/local/reset',
+            'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling',
             'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
             'GET /api/map/enterprises',
             'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
             'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
+            'POST /api/marketplace/posts/:id/let-in',
             'POST /api/marketplace/posts/:id/vote', 'POST /api/marketplace/posts/accept', 'POST /api/marketplace/posts/pause',
             'POST /api/marketplace/posts/remove', 'POST /api/marketplace/posts/request', 'POST /api/marketplace/posts/resume',
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
@@ -1400,7 +1406,7 @@ async function main(): Promise<void> {
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
-            'POST /api/pair/cancel', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
+            'POST /api/pair/cancel', 'POST /api/pair/confirm', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',

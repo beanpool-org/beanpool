@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat, createConversationApi } from '../lib/api';
+import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat, createConversationApi, getConversationMessages } from '../lib/api';
 import { openDmLine } from '../lib/e2e-crypto';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest, lockedGroupsOf } from '../lib/group-chat-lock-store';
@@ -592,10 +592,13 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         render(<MessagesPage identity={me} />);
         fireEvent.click(await screen.findByText('✉️ New DM', {}, { timeout: 5000 }));
         fireEvent.click(await screen.findByText('Eve', {}, { timeout: 5000 }));
+        await waitFor(() => expect(createConversationApi).toHaveBeenCalled(), { timeout: 5000 });
+        extraConvs = [dmWithEve];
         const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await waitFor(() => expect(getConversationMessages).toHaveBeenCalledWith(D), { timeout: 5000 });
         expect(isKnownDmConversation(D)).toBe(false);
         await send(composer, 'C5 hello Eve');
-        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT, {}, { timeout: 5000 })).toBeTruthy();
         expect(sendMessageApi).not.toHaveBeenCalled();
 
         reload();
@@ -603,10 +606,83 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         extraConvs = [dmWithEve];
         render(<MessagesPage identity={me} openConversationId={D} />);
         const again = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
-        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-        expect(isKnownDmConversation(D)).toBe(true);
+        await waitFor(() => expect(isKnownDmConversation(D)).toBe(true), { timeout: 5000 });
         await send(again, 'C5 hello Eve');
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalled(), { timeout: 3000 });
         expect(String(vi.mocked(sendMessageApi).mock.calls[0][3]).startsWith('x25519-xc20p-v2:')).toBe(true);
+    });
+});
+
+describe('removed lines in a row are one line (Marty, 15 Oct: "Yes, one line")', () => {
+    /** A line removed by a convenor (Ana), or deleted by its author (Ben): the node's tombstone row. */
+    const tombstone = (by: 'convenor' | 'author' | 'locked') => {
+        const id = crypto.randomUUID();
+        const metadata = by === 'locked'
+            // What the node's day-zero wipe leaves (server group-thread.ts wipeReadableGroupLines).
+            ? { removed: true, removedBy: 'SYSTEM', lockedAway: true }
+            : { removed: true, removedBy: by === 'convenor' ? ana.publicKey : ben.publicKey };
+        node.lines.push({ id, author: ben.publicKey, ciphertext: 'eA==', nonce: 'plaintext-v1', metadata });
+        return id;
+    };
+    const sealedLine = async (text: string) => {
+        const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
+        const id = crypto.randomUUID();
+        const sealed = sealLine(text, { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id });
+        node.lines.push({ id, author: ben.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: ben.publicKey } });
+        forgetGroupKeys();
+        return id;
+    };
+    const drawn = () => screen.queryAllByTestId('group-line-tombstone').map((el) => el.textContent);
+
+    it('eleven in a row: one line that counts them, every line still an anchor a reply can scroll to', async () => {
+        const ids = Array.from({ length: 11 }, () => tombstone('convenor'));
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual(['11 messages removed by a convenor']), { timeout: 3000 });
+        expect(screen.queryByText('Removed by a convenor')).toBeNull();
+        const run = screen.getByTestId('group-line-tombstone');
+        expect(run.id).toBe(`msg-${ids[0]}`);
+        for (const id of ids) expect(run.contains(document.getElementById(`msg-${id}`))).toBe(true);
+    });
+
+    it('a real line between breaks the run; one alone keeps today\'s words; an author\'s own deletes join only each other', async () => {
+        tombstone('convenor'); tombstone('convenor');
+        await sealedLine('Bring gloves');
+        tombstone('convenor'); tombstone('convenor'); tombstone('convenor');
+        await sealedLine('See you there');
+        tombstone('convenor');
+        await sealedLine('Thanks all');
+        tombstone('author'); tombstone('author'); tombstone('convenor');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual([
+            '2 messages removed by a convenor', '3 messages removed by a convenor', 'Removed by a convenor',
+            '2 messages were deleted', 'Removed by a convenor',
+        ]), { timeout: 3000 });
+        expect(screen.getByText('Bring gloves')).toBeTruthy();
+    });
+
+    it('lines removed when the chat was locked say so, never "Removed by a convenor": eleven are one line', async () => {
+        for (let i = 0; i < 11; i++) tombstone('locked');
+        await sealedLine('Bring gloves');
+        tombstone('locked');
+        await sealedLine('See you there');
+        tombstone('convenor'); tombstone('locked');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual([
+            '11 earlier messages removed when this chat was locked', 'An earlier message was removed when this chat was locked',
+            'Removed by a convenor', 'An earlier message was removed when this chat was locked',
+        ]), { timeout: 3000 });
+        expect(screen.queryByText('11 messages removed by a convenor')).toBeNull();
+    });
+
+    it('a search draws each hit as itself: hits in a row need not be in a row in the chat', async () => {
+        tombstone('convenor'); tombstone('convenor');
+        await sealedLine('Bring gloves');
+        tombstone('convenor');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual(['2 messages removed by a convenor', 'Removed by a convenor']), { timeout: 3000 });
+        fireEvent.click(screen.getByTestId('group-chat-search-toggle'));
+        fireEvent.change(screen.getByTestId('group-chat-search'), { target: { value: 'convenor' } });
+        await waitFor(() => expect(drawn()).toEqual(['Removed by a convenor', 'Removed by a convenor', 'Removed by a convenor']));
+        expect(screen.queryByText('Bring gloves')).toBeNull();
     });
 });

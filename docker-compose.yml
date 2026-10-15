@@ -143,6 +143,9 @@ services:
       # admin join, and visitors see nothing. Empty or 0/false/no/off = off. Any other value stops the node at start, so a
       # typo never leaves it open.
       - PRIVATE_PREVIEW=${PRIVATE_PREVIEW:-}
+      # Off the public directory whatever the settings say (apps/server/src/services/directory-publisher.ts): 1/true/
+      # yes/on. Our own test and review nodes set it in their .env; empty for a community.
+      - DIRECTORY_UNLISTED=${DIRECTORY_UNLISTED:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is
@@ -168,6 +171,9 @@ services:
       # container is on (where cloudflared connects from) and Cloudflare's edge are trusted already. Only for a
       # reverse proxy on ANOTHER host. See apps/server/src/client-ip.ts.
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+      # The open door's busy day (apps/server/src/engine/door-signal.ts doorBusy): past this many open-door joins in 24 hours a
+      # 12-words join asks at least work level 3. EMPTY = 300; 0 switches it off.
+      - DOOR_BUSY_NEW_MEMBERS_PER_DAY=${DOOR_BUSY_NEW_MEMBERS_PER_DAY:-}
       # Request binding (apps/server/src/engine/own-addresses.ts, engine/member-signature.ts). Both EMPTY by default.
       # BEANPOOL_ADDRESSES: extra names members' apps may sign for here, comma-separated (a domain of your own, a
       # proxy's name). EMPTY = the public address and the owner-confirmed ones only. A server WITH an address refuses

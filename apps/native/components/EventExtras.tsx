@@ -21,7 +21,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder } from '../utils/db';
-import { formatEventWhen } from '../utils/events';
+import { eventShareWhen } from '../utils/events';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
     formatReminderChoice, googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets,
@@ -38,6 +38,7 @@ export function shareableEvent(post: any): ShareableEvent {
         endAt: post.eventEndAt ?? post.event_end_at ?? null,
         placeName: post.eventPlaceName ?? post.event_place_name ?? null,
         description: post.description || null,
+        tz: post.eventTz ?? post.event_tz ?? null,
     };
 }
 
@@ -50,7 +51,8 @@ async function anchorOrThrow(): Promise<string> {
 export function EventShareAndCalendar({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const event = shareableEvent(post);
-    const when = formatEventWhen(event.startAt, event.endAt);
+    // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
+    const when = eventShareWhen(post);
 
     const share = async () => {
         try {

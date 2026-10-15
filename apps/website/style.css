@@ -920,6 +920,40 @@ a.logo { min-height: 44px; }
     height: 540px;
     width: 100%;
 }
+.map-empty-state {
+    /* Over the dimmed map, inside it at any width: 320px leaves 1rem either side. The site's own tokens only. */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+    width: min(22rem, calc(100% - 2rem));
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+    z-index: 1000;
+    text-align: center;
+    overflow-wrap: anywhere;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.map-empty-state span { display: block; }
+/* 44px to tap. */
+.map-empty-state a {
+    display: inline-block;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 0.75rem 0.5rem 0.5rem;
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+}
+.map-empty-state a:hover {
+    text-decoration: none;
+}
 
 /* Beautiful Dusk / Slate-Blue Map Filter */
 .leaflet-container .leaflet-tile-pane {
@@ -1801,6 +1835,8 @@ footer {
     background: rgba(16, 185, 129, 0.07);
     border-radius: var(--radius-sm);
 }
+/* help.html#writing-to-us is linked from other sites: land the heading below the fixed bar */
+#writing-to-us { scroll-margin-top: 100px; }
 @media (max-width: 480px) {
     .help-centre { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
     .help-card { padding: 1.1rem 1rem; }

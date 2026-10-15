@@ -20,6 +20,7 @@ function form(over: Partial<EventFormInput> = {}): EventFormInput {
         privateNote: 'Gate code 1234',
         audienceGroupId: null,
         authorPubkey: 'me',
+        hostLetsIn: false,
         ...over,
     };
 }
@@ -160,8 +161,8 @@ describe('events: cache columns', () => {
         expect(eventCacheColumns({
             type: 'event', eventStartAt: 's', eventEndAt: 'e', eventPlaceName: 'Hall', eventState: 'updated',
             goingCount: 7, interestedCount: 3, eventPrivateNote: 'secret', myRsvp: 'going',
-        })).toEqual(['s', 'e', 'Hall', 'updated', 7, 3]);
-        expect(eventCacheColumns({ type: 'offer', eventStartAt: 's' })).toEqual([null, null, null, null, 0, 0]);
+        })).toEqual(['s', 'e', 'Hall', 'updated', 7, 3, null, null, null, null]);
+        expect(eventCacheColumns({ type: 'offer', eventStartAt: 's' })).toEqual([null, null, null, null, 0, 0, null, null, null, null]);
     });
 });
 
@@ -241,7 +242,7 @@ describe('Copy to a new date', () => {
             title: copy.title, description: copy.description, placeName: copy.placeName,
             lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
             audienceGroupId: copy.groupId, authorPubkey: copy.enterprisePubkey ?? 'host',
-            start: new Date(2026, 9, 24, 9, 0), end: null,
+            start: new Date(2026, 9, 24, 9, 0), end: null, hostLetsIn: false,
         }, new Date(2026, 8, 20, 8, 0));
         expect(built.ok).toBe(true);
         if (built.ok) {
@@ -256,7 +257,7 @@ describe('Copy to a new date', () => {
         const built = buildEventDraft({
             title: copy.title, description: copy.description, placeName: copy.placeName,
             lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
-            audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null,
+            audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null, hostLetsIn: false,
         }, new Date(2026, 8, 20, 8, 0));
         expect(built.ok).toBe(false);
     });

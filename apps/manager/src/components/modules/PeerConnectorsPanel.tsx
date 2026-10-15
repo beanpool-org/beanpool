@@ -401,7 +401,7 @@ export function PeerConnectorsPanel({
             <div className="space-y-3" data-testid="connectors-list">
                 {loading && connectors.length === 0 ? (
                     <div className="p-4 rounded-xl bg-nature-950 border border-nature-800 text-xs text-nature-400 flex items-center gap-2">
-                        <span className="animate-spin text-terra-400">⏳</span>
+                        <span className="animate-spin text-bp-ink-terra">⏳</span>
                         <span>Loading connectors…</span>
                     </div>
                 ) : connectors.length === 0 ? (
@@ -638,7 +638,7 @@ export function PeerConnectorsPanel({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label htmlFor="new-connector-addr" className="block text-xs font-bold text-nature-300 mb-1">
-                                Peer Address <span className="text-terra-400">*</span>
+                                Peer Address <span className="text-bp-ink-terra">*</span>
                             </label>
                             <input
                                 id="new-connector-addr"

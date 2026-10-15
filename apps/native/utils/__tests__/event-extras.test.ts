@@ -181,6 +181,13 @@ describe('googleCalendarUrl — what Android gets', () => {
         expect(url.searchParams.get('dates')).toBe('20260926T230000Z/20260927T020000Z');
         expect(url.searchParams.get('location')).toBe('Town hall, Mullumbimby');
         expect(url.searchParams.get('details')).toContain('https://n.example/?post=ev-1');
+        expect(url.searchParams.has('ctz')).toBe(false);
+    });
+
+    it("names the event's zone when the node sent one, and the dates stay UTC (event times, amendment 1 item 5)", () => {
+        const url = new URL(googleCalendarUrl({ ...EVENT, tz: 'Africa/Lagos' }, 'https://n.example/?post=ev-1'));
+        expect(url.searchParams.get('ctz')).toBe('Africa/Lagos');
+        expect(url.searchParams.get('dates')).toBe('20260926T230000Z/20260927T020000Z');
     });
 });
 

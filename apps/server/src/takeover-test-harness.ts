@@ -410,6 +410,8 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
  *   - owner-token { scope?, owner? }: an automation token (it lives in local-config.json, so it outlives a restart); no
  *     token makes an owner-only change.
  *   - owner-session { owner? }: an owner's key session, for owner-only routes (in memory: ask again after a restart).
+ *   - owner-phone-session { owner? }: an owner's key session from the phone's Manage hand-off, just unlocked: for the owner
+ *     changes that ask a fresh proof (admin-auth.ts requireFreshProof), within 90 seconds. Ask for one per such change.
  * The owner is `owner`, else the first member holding the owner role, else one seeded for it.
  */
 export const adminCredentialCommands: Record<string, (args: any) => Promise<unknown>> = {
@@ -420,6 +422,10 @@ export const adminCredentialCommands: Record<string, (args: any) => Promise<unkn
     'owner-session': async (a: { owner?: string }) => {
         const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
         return ownerSessionHeaders(a.owner ?? await firstOwner());
+    },
+    'owner-phone-session': async (a: { owner?: string }) => {
+        const { ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
+        return ownerPhoneSessionHeaders(a.owner ?? await firstOwner());
     },
     /** 2FA on, and the password with a fresh code: for a suite whose check is the password itself. */
     'password-and-code': async (a: { password: string }) => {

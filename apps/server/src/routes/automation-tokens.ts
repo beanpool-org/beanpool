@@ -14,7 +14,7 @@
 
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { issueAutomationToken, listAutomationTokens, revokeAutomationToken, TOKEN_SCOPES } from '../automation-tokens.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
@@ -65,6 +65,8 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
             return;
         }
         const b = body(ctx);
+        // A token outlives the session that made it: the fresh proof every time (design case 18, C10).
+        if (!(await requireFreshProof(ctx, b.code, 'make an automation token'))) return;
         if (b.scope === 'agent') {
             ctx.status = 400;
             ctx.body = {

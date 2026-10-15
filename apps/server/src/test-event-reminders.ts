@@ -86,6 +86,17 @@ const pushSpy = (targets: string[], actor: string, title: string, body: string, 
  * (posts.ts), and not one this suite is here to exercise. `post.authorPublicKey` is the host when a check
  * needs to edit or cancel what it made.
  */
+/**
+ * An in-person event's reminder names the place's own clock after the relative words (DESIGN-event-times §6):
+ * "Starts in 1 day · Sat 23:49 Sydney time". Read here with Intl in the pin's zone, apart from the node's code. The pin
+ * below is in New South Wales.
+ */
+function placeTime(startIso: string): string {
+    const f = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', hour: 'numeric', minute: '2-digit', hourCycle: 'h23' });
+    const parts = Object.fromEntries(f.formatToParts(new Date(startIso)).map(p => [p.type, p.value]));
+    return `${parts.weekday} ${Number(parts.hour)}:${parts.minute} Sydney time`;
+}
+
 let hostSeq = 0;
 function newEvent(startMs: number, title = 'Working bee', photos: string[] = [PHOTO]) {
     const author = makeMember(`Host${++hostSeq}`);
@@ -152,8 +163,8 @@ async function main(): Promise<void> {
     assert(first[0]?.data?.screen === 'post' && first[0]?.data?.postId === ev.id,
         '...carrying the payload the phone routes to /post/:id');
     assert(first[0]?.title === reminderPushTitle('Working bee'), '...titled with the event');
-    assert(first[0]?.body === 'Starts in 1 day',
-        `...and saying how long there is left, in words no timezone can shift (got "${first[0]?.body}")`);
+    assert(first[0]?.body === `Starts in 1 day · ${placeTime(ev.eventStartAt!)}`,
+        `...and saying how long there is left, then the place's own clock with its zone named, which no timezone can shift (got "${first[0]?.body}")`);
 
     assert(sentMarks(ev.id).join() === '1440', 'the send is marked in event_reminders_sent');
     assert(sweepAt(9 * DAY).length === 0, 'the same sweep run again sends nothing');
@@ -167,10 +178,16 @@ async function main(): Promise<void> {
 
     // And a mark written by something OTHER than a sweep — a node that got half way through before it was
     // killed, say — stops the next sweep just as flatly. Nothing in the process has to remember anything.
+    // A mark is for one date (occurrence_at, the event's start: DESIGN-event-times §8, so a repeating event reminds its
+    // regulars once per date); one for another date of the same event stops nothing.
     const evMarked = newEvent(15 * DAY, 'Already told');
     rsvpAt(evMarked.id, goer, 'going', 0);
-    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, sent_at) VALUES (?, ?, 1440, ?)`)
-        .run(evMarked.id, goer, at(14 * DAY));
+    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, occurrence_at, sent_at) VALUES (?, ?, 1440, ?, ?)`)
+        .run(evMarked.id, goer, '2000-01-01T00:00:00.000Z', at(14 * DAY));
+    assert(sweepAt(14 * DAY).length === 1, 'a mark for another date of the event does not stop this date\'s reminder');
+    db.prepare(`DELETE FROM event_reminders_sent WHERE post_id = ? AND occurrence_at = ?`).run(evMarked.id, evMarked.eventStartAt);
+    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, occurrence_at, sent_at) VALUES (?, ?, 1440, ?, ?)`)
+        .run(evMarked.id, goer, evMarked.eventStartAt, at(14 * DAY));
     assert(sweepAt(14 * DAY).length === 0, 'a reminder already marked sent is never sent again');
 
     // ── 2. A per-event choice, and null ──────────────────────────────────────────────────────
@@ -185,7 +202,7 @@ async function main(): Promise<void> {
 
     assert(sweepAt(19 * DAY).length === 0, 'the default no longer fires once this event has its own choice');
     const twoHours = sweepAt(20 * DAY - 2 * HOUR);
-    assert(twoHours.length === 1 && twoHours[0]?.body === 'Starts in 2 hours',
+    assert(twoHours.length === 1 && twoHours[0]?.body === `Starts in 2 hours · ${placeTime(ev2.eventStartAt!)}`,
         `the chosen 2-hour reminder fires instead (got "${twoHours[0]?.body}")`);
 
     const ev3 = newEvent(30 * DAY, 'Repair café');
@@ -258,7 +275,7 @@ async function main(): Promise<void> {
         .run(at(0), ev7.id, goer);
     assert(sweepAt(69 * DAY).length === 0, 'the reminder does not fire on the OLD date after the event moved');
     const rearmed = sweepAt(72 * DAY);
-    assert(rearmed.length === 1 && rearmed[0]?.body === 'Starts in 1 day',
+    assert(rearmed.length === 1 && rearmed[0]?.body === `Starts in 1 day · ${placeTime(at(73 * DAY))}`,
         're-arms against the new time and fires a day before THAT');
 
     // A start pulled backwards puts a moment in the past. It stays silent rather than arriving stale.
@@ -422,7 +439,7 @@ async function main(): Promise<void> {
         assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.reminder' && !JSON.stringify(sent[0]?.sent).includes(wired.id)
             && !JSON.stringify(sent[0]?.sent).includes('Wired up'),
             `...its lock screen shows only "An event you're going to starts soon.", with no event name or post id (${sent[0]?.sent?.body})`);
-        assert(sent[0]?.title === reminderPushTitle('Wired up') && sent[0]?.body === reminderPushBody(1440),
+        assert(sent[0]?.title === reminderPushTitle('Wired up') && sent[0]?.body === `Starts in 1 day · ${placeTime(wired.eventStartAt!)}`,
             `...its details (what the app shows) have the reminder's words (${sent[0]?.title} / ${sent[0]?.body})`);
         assert(sent[0]?.data?.screen === 'post' && sent[0]?.data?.postId === wired.id,
             '...and the payload that opens /post/:id');

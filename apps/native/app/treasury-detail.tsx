@@ -33,6 +33,7 @@ import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { ReportReasonBox } from '../components/ReportReasonBox';
+import { reportedAlertBody } from '../utils/reportReasons';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -1842,9 +1843,10 @@ export default function TreasuryDetailScreen() {
                                     onSubmit={async (reason) => {
                                         if (!identity?.publicKey || !treasuryKey) return;
                                         try {
-                                            await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
+                                            const sent = await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
                                             setShowReportForm(false);
-                                            Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
+                                            // The thanks, and why the member's words were left out when they were (case 14).
+                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message || 'Could not submit report.');
                                             throw e; // the box keeps the choice and the words

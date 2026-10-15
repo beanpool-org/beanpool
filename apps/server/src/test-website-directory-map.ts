@@ -17,6 +17,8 @@
  *  2. A normal row still gets its mailto: and tel: links, its member count and its radius, and a link to its address.
  *  3. A row whose place isn't a number (Leaflet throws on it) is left off the map, and the rows after it still show.
  *  4. The totals count communities and whole-number member counts only.
+ *  5. An empty directory says the apps' one "none" sentence with Start a community (the site's own #run-a-node); a
+ *     first read that fails says the list isn't available, never "none", and offers no Start.
  *
  * Run: pnpm exec tsx src/test-website-directory-map.ts
  */
@@ -24,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { FIND_COMMUNITY_WORDS } from '@beanpool/core';
 
 // jsdom is the manager's and the web app's test DOM, found in the root node_modules (.npmrc: node-linker=hoisted). Its
 // types aren't installed, so it is read untyped.
@@ -80,6 +83,14 @@ const NORMAL = {
 const ROWS = [...HOSTILE_ROWS, ...URL_RULE_ROWS.map((r) => r.row), NOT_A_PLACE, NORMAL];
 
 /** The website's own scripts, in the order index.html loads them (the CDN ones are replaced by fakes). */
+/** The map's empty-state box exactly as index.html has it, so the test runs on the page's own markup. */
+function emptyStateMarkup(): string {
+    const html = fs.readFileSync(path.join(WEBSITE, 'index.html'), 'utf-8');
+    const m = html.match(/<div id="map-empty-state"[\s\S]*?<\/div>/);
+    if (!m) throw new Error('index.html has no #map-empty-state');
+    return m[0];
+}
+
 function siteScripts(): string[] {
     const html = fs.readFileSync(path.join(WEBSITE, 'index.html'), 'utf-8');
     const out: string[] = [];
@@ -99,7 +110,8 @@ async function main() {
     virtualConsole.on('jsdomError', (e: Error) => errors.push(e.message));
     virtualConsole.on('error', (...a: unknown[]) => errors.push(a.map(String).join(' ')));
     const dom = new JSDOM(
-        `<!doctype html><html><body><nav id="navbar"></nav><div id="nodes-map"></div>
+        `<!doctype html><html><body><nav id="navbar"></nav><div class="map-wrapper"><div id="nodes-map"></div>
+         ${emptyStateMarkup()}</div>
          <span id="stat-nodes">—</span><span id="stat-members">—</span></body></html>`,
         { runScripts: 'dangerously', url: 'https://beanpool.org/', virtualConsole },
     );
@@ -131,12 +143,15 @@ async function main() {
         },
     };
     let reads = 0;
+    let currentRows: unknown[] = ROWS;
+    let readFails = false;
     w.supabase = {
         createClient: () => ({
             from: (table: string) => ({
                 select: async () => {
                     reads++;
-                    return table === 'directory_nodes' ? { data: ROWS, error: null } : { data: [], error: null };
+                    if (readFails) return { data: null, error: new Error('the directory is down') };
+                    return table === 'directory_nodes' ? { data: currentRows, error: null } : { data: [], error: null };
                 },
             }),
             auth: { signUp: async () => ({ data: null, error: null }) },
@@ -223,7 +238,52 @@ async function main() {
     assert(statNodes === String(ROWS.length), `every community in the directory is counted (${statNodes})`);
     assert(statMembers === String(3 + 4 + 2 + 5 + 6 + 1 + 42),`members are summed from whole-number counts only (${statMembers})`);
 
+    const emptyState = w.document.getElementById('map-empty-state');
+    assert(emptyState?.style.display === 'none', 'map empty state is hidden when communities exist');
+
+    console.log('\n── 5. map empty state ──');
+    // A later read that fails changes nothing on the map: the communities from the last good read stay.
+    readFails = true;
+    await w.pollNodes();
+    assert(emptyState?.style.display === 'none' && w.document.getElementById('stat-nodes').textContent === String(ROWS.length),
+        'a failed read after a good one leaves the map as it was');
+    readFails = false;
+    currentRows = [];
+    await w.pollNodes();
+    const emptyText = w.document.getElementById('map-empty-text');
+    const startLink = w.document.getElementById('map-empty-start');
+    assert(emptyState?.style.display === 'block', 'map empty state is displayed when 0 communities are listed');
+    assert(emptyText?.textContent === FIND_COMMUNITY_WORDS.noneNear,
+        `it says the apps' one "none" sentence, "${FIND_COMMUNITY_WORDS.noneNear}" (${JSON.stringify(emptyText?.textContent)})`);
+    assert(startLink?.getAttribute('href') === '#run-a-node' && startLink?.textContent === FIND_COMMUNITY_WORDS.start && startLink?.style.display !== 'none',
+        `with Start a community, to the site's own how-to-run-a-node (${startLink?.outerHTML})`);
+    assert(emptyState?.getAttribute('role') === 'status', 'and a screen reader hears it');
+    const emptyStatNodes = w.document.getElementById('stat-nodes').textContent;
+    assert(emptyStatNodes === '—', `stat-nodes is — rather than bare 0 (${emptyStatNodes})`);
     dom.window.close();
+
+    console.log('\n── 5b. the directory never answered: no "none" ──');
+    const down = new JSDOM(
+        `<!doctype html><html><body><nav id="navbar"></nav><div class="map-wrapper"><div id="nodes-map"></div>
+         ${emptyStateMarkup()}</div><span id="stat-nodes">—</span><span id="stat-members">—</span></body></html>`,
+        { runScripts: 'dangerously', url: 'https://beanpool.org/', virtualConsole: new VirtualConsole() },
+    );
+    const d = down.window as any;
+    d.L = w.L;
+    d.supabase = { createClient: () => ({ from: () => ({ select: async () => ({ data: null, error: new Error('the directory is down') }) }), auth: { signUp: async () => ({ data: null, error: null }) } }) };
+    d.console.error = () => {};
+    for (const src of scripts) {
+        const el = d.document.createElement('script');
+        el.textContent = fs.readFileSync(path.join(WEBSITE, src), 'utf-8');
+        d.document.body.appendChild(el);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    const downText = d.document.getElementById('map-empty-text')?.textContent;
+    assert(d.document.getElementById('map-empty-state')?.style.display === 'block' && downText === FIND_COMMUNITY_WORDS.notLoaded,
+        `a first read that fails says the list isn't available, not that there is none (${JSON.stringify(downText)})`);
+    assert(d.document.getElementById('map-empty-start')?.style.display === 'none', 'and offers no Start on a map it could not read');
+    down.window.close();
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ The map shows what communities publish as text.');

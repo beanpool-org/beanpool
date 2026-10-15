@@ -18,10 +18,12 @@ import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
+import { useLanguage } from './lib/useLanguage';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
+import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
@@ -87,6 +89,8 @@ interface NodeHealthState {
 }
 
 export function App() {
+    // Every screen reads the new words the moment the language changes (lib/language.ts): App re-renders, and so does all of it.
+    useLanguage();
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     /*
@@ -158,6 +162,10 @@ export function App() {
     const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
+    // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
+    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
+    const [openMarketReviewTxId, setOpenMarketReviewTxId] = useState<string | null>(null);
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
     const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
@@ -234,6 +242,9 @@ export function App() {
     const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
+    // The recent searches and "near you" answers (lib/members-on-demand) are kept by path alone: another account in this
+    // tab asks afresh (#1965 review N5).
+    useEffect(() => { forgetRecentLookups(); }, [identity?.publicKey]);
     useEffect(() => {
         try { setNewAccountCardClosed(!!identity?.publicKey && localStorage.getItem(`beanpool_new_account_card_closed_${identity.publicKey}`) === '1'); }
         catch { setNewAccountCardClosed(false); }
@@ -326,6 +337,12 @@ export function App() {
             setShowSettings(true);
             return;
         }
+        // A chat's "Rate your partner": the Market with that trade's rating form open.
+        if (tab === 'marketplace-review') {
+            setActiveTab('marketplace');
+            if (contextId) setOpenMarketReviewTxId(contextId);
+            return;
+        }
         // A saved search's See more: the Market with the words in its search.
         if (tab === 'marketplace-search') {
             setActiveTab('marketplace');
@@ -341,7 +358,7 @@ export function App() {
         }
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
-        if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
+        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
     }
 
     // `/app#profile=<key>` (node Settings' "View my profile"): read once on load, opened once the identity has loaded.
@@ -366,11 +383,13 @@ export function App() {
         const kept = takeKeptLinkedPost();
         if (!kept) return;
         setActiveTab('marketplace');
+        setOpenMarketPostSaysWhy(false);
         setOpenMarketPostId(kept);
     }, [identity]);
     useEffect(() => {
         if (!identity || !linkedPost) return;
         setActiveTab('marketplace');
+        setOpenMarketPostSaysWhy(false);
         setOpenMarketPostId(linkedPost);
         setLinkedPost(null);
     }, [identity, linkedPost]);
@@ -959,6 +978,9 @@ export function App() {
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
                                     onPostOpened={() => setOpenMarketPostId(null)}
+                                    sayWhenPostUnopened={openMarketPostSaysWhy}
+                                    openReviewTxId={openMarketReviewTxId}
+                                    onReviewOpened={() => setOpenMarketReviewTxId(null)}
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
                                     onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}

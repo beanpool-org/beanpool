@@ -61,7 +61,7 @@ export function KnownConsentCard() {
                 {offer && (
                     <button type="button" onClick={() => { void agree(); }} disabled={busy} aria-busy={busy}
                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        style={{ ...button, border: 'none', background: '#10b981', color: '#fff', fontWeight: 700 }}>
+                        style={{ ...button, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', fontWeight: 700 }}>
                         {busy ? 'Saving…' : 'I agree'}
                     </button>
                 )}

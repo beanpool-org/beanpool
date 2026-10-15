@@ -290,14 +290,19 @@ export function extractRepo(root = ROOT, packages = PACKAGES) {
 // ── Core's checks, compiled in memory ───────────────────────────────────────────────────────────────────────────
 
 let corePromise = null;
-/** words.ts (with words-dates.ts) and words-check.ts from the SOURCE, as ES modules, without writing a file. */
+/** words.ts (with words-dates.ts and its per-language modules) and words-check.ts from the SOURCE, as ES modules, without writing a file. */
 export function loadCoreChecks(root = ROOT) {
     corePromise ??= (async () => {
         const compile = (rel) => ts.transpileModule(fs.readFileSync(path.join(root, rel), 'utf8'), {
             compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
         }).outputText;
         const asUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString('base64')}`;
-        const datesUrl = asUrl(compile('packages/beanpool-core/src/words-dates.ts'));
+        // words-dates.ts gathers one module per language (words-dates/<lang>.ts): each becomes a URL of its own.
+        const dateDir = 'packages/beanpool-core/src/words-dates';
+        const dateUrls = Object.fromEntries(fs.readdirSync(path.join(root, dateDir)).filter((f) => f.endsWith('.ts'))
+            .map((f) => [`./words-dates/${f.replace(/\.ts$/, '.js')}`, asUrl(compile(`${dateDir}/${f}`))]));
+        const datesUrl = asUrl(compile('packages/beanpool-core/src/words-dates.ts')
+            .replace(/(['"])(\.\/words-dates\/[^'"]+\.js)\1/g, (whole, _q, spec) => (dateUrls[spec] ? JSON.stringify(dateUrls[spec]) : whole)));
         const wordsUrl = asUrl(compile('packages/beanpool-core/src/words.ts').replace(/(['"])\.\/words-dates\.js\1/g, JSON.stringify(datesUrl)));
         const checkJs = compile('packages/beanpool-core/src/words-check.ts').replace(/(['"])\.\/words\.js\1/g, JSON.stringify(wordsUrl));
         const [words, check] = await Promise.all([import(wordsUrl), import(asUrl(checkJs))]);

@@ -271,6 +271,8 @@ async function main(): Promise<void> {
         // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls go under an owner's key session the
         // node makes (takeover-test-harness.ts owner-session).
         const admin: Record<string, string> = await N.send('owner-session');
+        // Claiming over a live name and taking the address offline ask the owner's fresh proof (design case 18, B1, B3):
+        // those calls go under a session from the phone's Manage, pressed just now (owner-phone-session), one each.
         const statusOpen = () => call(nBase, 'GET', '/api/local/admin/public-address/status', admin);
         const bound = async (node: NodeProc, hosts: string[]) => {
             await settled();
@@ -325,7 +327,7 @@ async function main(): Promise<void> {
             const s0 = await N.send('inspect');
             assert(asked.status === 200 && asked.body?.hostname === 'bname.beanpool.org' && s0.publicAddress?.name === 'bname' && s0.tunnel === 'T-bname',
                 `an answer about another name this key holds is not stored: still bname (${show(asked)})`);
-            const moved = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'newname', mode: 'tunnel' });
+            const moved = await call(nBase, 'POST', '/api/local/admin/public-address/claim', await N.send('owner-phone-session'), { name: 'newname', mode: 'tunnel' });
             assert(moved.status === 200, `the owner claims newname in Settings (${show(moved)})`);
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.hostname === 'newname.beanpool.org', `Settings shows newname live (${show(opened)})`);
@@ -365,7 +367,7 @@ async function main(): Promise<void> {
         await section('4', async () => {
             const heldUntilS = Math.floor(Date.now() / 1000) + 12 * 86_400;
             reg.release = { status: 'released', name: 'newname', held_until: heldUntilS };
-            const off = await call(nBase, 'POST', '/api/local/admin/public-address/offline', admin, {});
+            const off = await call(nBase, 'POST', '/api/local/admin/public-address/offline', await N.send('owner-phone-session'), {});
             assert(off.status === 200 && off.body?.success === true, `Take offline answers (${show(off)})`);
             const r = await bound(N, ['newname.beanpool.org', 'bname.beanpool.org', 'other.test']);
             assert(r['newname.beanpool.org'] === 200, `during the hold a request signed for newname.beanpool.org is still accepted (${r['newname.beanpool.org']}; main: 421)`);
@@ -381,11 +383,11 @@ async function main(): Promise<void> {
 
             // Another name, claimed in Settings, then released with an answer that gives no held_until: the registrar freed
             // it at once, so no hold is recorded (#1247's review 4115220670; this assertion said 30 days before).
-            const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'third', mode: 'tunnel' });
+            const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', await N.send('owner-phone-session'), { name: 'third', mode: 'tunnel' });
             assert(claimed.status === 200 && claimed.body?.hostname === 'third.beanpool.org', `Settings claims third (${show(claimed)})`);
             reg.release = { status: 'released', name: 'third' };
             const before = Date.now();
-            const off2 = await call(nBase, 'POST', '/api/local/admin/public-address/offline', admin, {});
+            const off2 = await call(nBase, 'POST', '/api/local/admin/public-address/offline', await N.send('owner-phone-session'), {});
             assert(off2.status === 200, `and takes it offline (${show(off2)})`);
             const s2 = await N.send('inspect');
             const third = entry(s2.registrarNames, 'third.beanpool.org');
@@ -396,7 +398,7 @@ async function main(): Promise<void> {
             assert(r2['third.beanpool.org'] === 200, `third is still accepted (${r2['third.beanpool.org']}; main: 421)`);
 
             // Taking newname back: current again, the hold over.
-            const back = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'newname', mode: 'tunnel' });
+            const back = await call(nBase, 'POST', '/api/local/admin/public-address/claim', await N.send('owner-phone-session'), { name: 'newname', mode: 'tunnel' });
             assert(back.status === 200, `Settings claims newname again (${show(back)})`);
             const s3 = await N.send('inspect');
             const nb = entry(s3.registrarNames, 'newname.beanpool.org');

@@ -15,7 +15,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardCaption, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
-    invitesForReader, ASK_WITHIN_KM, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
+    invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
@@ -23,7 +23,7 @@ import {
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { HOME_STARTER_SET, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
+import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
@@ -983,7 +983,8 @@ describe('the global node\'s Home (H4)', () => {
     });
 
     it('"Ask a community to let you in" only for one within 250 km, the radius global\'s listings use (#1517)', () => {
-        expect(ASK_WITHIN_KM).toBe(250);
+        // Core's NEAR_COMMUNITY_KM: one meaning of near on every screen (#1935), no copy of its own.
+        expect(NEAR_COMMUNITY_KM).toBe(250);
         const askAt = (distanceKm: unknown) => globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'https://x.example.org', distanceKm }] }), false).map(l => l.id);
         expect(askAt(12)).toEqual(['post', 'ask']);
         expect(askAt(0)).toEqual(['post', 'ask']);

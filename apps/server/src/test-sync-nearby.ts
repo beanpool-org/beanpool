@@ -62,7 +62,7 @@ delete process.env.NEARBY_LISTINGS_MAX;
 process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
-import { haversineKm, boundingBox, getNearbySet } from '@beanpool/engine';
+import { haversineKm, boundingBox, getNearbySet, exactPlacesFor, neighbourhoodOf, neighbourhoodBox } from '@beanpool/engine';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -269,14 +269,22 @@ async function main() {
             near = listed.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '') || b.id.localeCompare(a.id))
                 .slice(0, 100).map(p => p.id);
         } else {
-            const box = boundingBox(me.area_lat!, me.area_lng!, 250);
+            // The global node is one where anyone can join (`openMembership`): each listing but the member's exact ones (her
+            // own, her enterprises', the events she may read in full: engine exactPlacesFor) is measured from its
+            // neighbourhood, about 1.1 km across both ways (DESIGN-global-member-privacy-fable.md §4), and the bounded pass
+            // reads the box grown by half a neighbourhood so it holds both.
+            const places = exactPlacesFor(db, m.pubKeyHex);
+            const exact = (p: any) => places.authors.includes(p.author_pubkey) || places.posts.includes(p.id);
+            const kmTo = (p: any) => exact(p) ? haversineKm(me.area_lat!, me.area_lng!, p.lat, p.lng)
+                : (() => { const c = neighbourhoodOf(p.lat, p.lng); return haversineKm(me.area_lat!, me.area_lng!, c.lat, c.lng); })();
+            const box = neighbourhoodBox(boundingBox(me.area_lat!, me.area_lng!, 250));
             const placed = listed.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number');
             const inBox = bound === undefined ? placed : placed
                 .filter(p => p.lat >= box.latMin && p.lat <= box.latMax && box.lngRanges.some(([a, b]) => p.lng >= a && p.lng <= b))
                 .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '') || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
                 .slice(0, bound);
             near = inBox
-                .map(p => ({ p, d: haversineKm(me.area_lat!, me.area_lng!, p.lat, p.lng) }))
+                .map(p => ({ p, d: kmTo(p) }))
                 .filter(x => x.d <= 250)
                 .sort((a, b) => a.d - b.d || (b.p.updated_at ?? '').localeCompare(a.p.updated_at ?? '') || (b.p.created_at ?? '').localeCompare(a.p.created_at ?? '') || (a.p.id < b.p.id ? -1 : a.p.id > b.p.id ? 1 : 0))
                 .slice(0, 500).map(x => x.p.id);
@@ -337,13 +345,14 @@ async function main() {
             `each statement of a set reads an index: the box, the authors off the board, on holiday, whose standing moved, their rows' change times by key; no table of people (${wholeTable.join('; ') || 'none read whole'})`);
     }
     // The bound below the listings in the box: the engine measures the newest that many, and the set is the nearest of
-    // them. Once with the box holding more than the bound (the pass again, newest first), once with it holding fewer.
+    // them. Once with the box holding more than the bound (the pass again, newest first), once with it holding fewer. As
+    // the route asks on the global node (`neighbourhood`, where anyone can join).
     for (const bound of [40, 5000]) {
         let same = 0;
         for (const m of members.filter(x => x.kind !== 'empty')) {
             const me = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(m.id.pubKeyHex) as { area_lat: number; area_lng: number };
             const got = getNearbySet(db, m.id.pubKeyHex, { area: { lat: me.area_lat, lng: me.area_lng }, radiusKm: 250, max: 500, newestWithoutArea: 100,
-                types: TYPES.split(','), excludeEvents: false, measureAtMost: bound });
+                types: TYPES.split(','), excludeEvents: false, measureAtMost: bound, neighbourhood: true });
             if (got.near.join() === bruteSet(m.id, bound).near.join()) same++;
         }
         assert(same === 20, `with the bound at ${bound}, each placed member's near part is the nearest of the newest ${bound} in the box, in order (${same}/20)`);

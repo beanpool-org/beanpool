@@ -121,7 +121,9 @@ export function ColdStartWizard({
     const nodeBaseUrl = activeNode?.url ? activeNode.url.replace(/\/+$/, '') : '';
     const nodeHost = nodeBaseUrl.replace(/^https?:\/\//, '') || 'this server';
 
-    // Step 1: Name & check. The step is done only when the node answered its health check AND saved the name.
+    // Step 1: Name & check. The step is done only when the node answered its health check AND saved the name. The box
+    // starts as the stored name: empty on a community with none, so the owner types one (the box is required). It never
+    // starts as a stand-in: saved untouched, that was published as the community's name (#1935 finding 1).
     const [communityName, setCommunityName] = useState(diag?.communityName || '');
     const [reachabilityStatus, setReachabilityStatus] = useState<'unchecked' | 'checking' | 'reachable' | 'error'>('unchecked');
     const [reachError, setReachError] = useState<string | null>(null);
@@ -246,8 +248,9 @@ export function ColdStartWizard({
                 headers: buildAdminHeaders(nodeCredential(activeNode), tfa),
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
+                    // The name the owner typed, and nothing else: the callsign stays as stored (none on a new community)
+                    // rather than one the owner never chose ("node-genesis", or the "admin" diagnostics once stood in with).
                     communityName: communityName.trim(),
-                    callsign: diag?.callsign || 'node-genesis',
                 }),
             });
         } catch {
@@ -580,7 +583,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
             <div className="bg-nature-900/90 border border-nature-800 rounded-3xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <span className="text-xs font-bold uppercase tracking-wider text-terra-400">
+                        <span className="text-xs font-bold uppercase tracking-wider text-bp-ink-terra">
                             First Run Cold-Start Wizard
                         </span>
                         <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
@@ -1074,7 +1077,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         <div className="p-4 rounded-2xl bg-nature-950 border border-nature-800 space-y-3">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-white">First Offer (Offer Covenant)</span>
-                                <span className="text-[10px] text-terra-400 font-mono">Rule 4 Covenant</span>
+                                <span className="text-[10px] text-bp-ink-terra font-mono">Rule 4 Covenant</span>
                             </div>
                             <div>
                                 <label className="block text-[11px] text-nature-400 mb-1">Offer Title</label>
@@ -1321,7 +1324,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                         className="p-5 rounded-2xl bg-nature-950 border-2 border-terra-500/40 text-center space-y-3 flex flex-col justify-between shadow-lg"
                                     >
                                         <div>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-terra-400">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-bp-ink-terra">
                                                 Founding Invite #{idx + 1}
                                             </span>
                                             <h4 className="text-sm font-bold text-white m-0 mt-0.5 truncate">

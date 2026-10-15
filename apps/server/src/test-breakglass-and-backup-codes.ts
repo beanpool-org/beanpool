@@ -30,7 +30,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests, verifyAndFindBackupCodeHash } from './totp.js';
 import { logger } from './logger.js';
@@ -72,12 +72,13 @@ function seedMember(callsign: string): Who {
     const pkcs8 = new Uint8Array(privateKey.export({ type: 'pkcs8', format: 'der' }) as Buffer);
     return { pub, priv: privateKey, sign: ed25519Signer(pkcs8) };
 }
-function keySession(who: Who): string {
+/** A key session: a computer's, or (phone) the one the phone's Manage hand-off opens, its unlock just now. */
+function keySession(who: Who, phone = false): string {
     const chal = createAdminChallenge();
     const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), who.priv).toString('hex');
     const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: who.pub, signature });
     if (!solved.ok) throw new Error(solved.error);
-    const ex = consumeHandshakeToken(solved.handshakeToken!);
+    const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
     if (!ex.ok) throw new Error(ex.error);
     return ex.sessionId!;
 }
@@ -136,6 +137,8 @@ async function main() {
     BASE = `https://localhost:${await startHttpsServer(0)}`;
     // Key sessions are made while 2FA is off (a key sign-in under 2FA asks for the code too).
     const asOwner = { 'x-admin-session': keySession(owner) };
+    // Making a break-glass code asks the owner's fresh proof (design case 18, C7): Manage on the phone, pressed just now.
+    const ownerPhone = () => ({ 'x-admin-session': keySession(owner, true) });
     const asAdmin = { 'x-admin-session': keySession(admin) };
     const asMod = { 'x-admin-session': keySession(moderator) };
     const asPassword = { 'x-admin-password': PW };
@@ -146,7 +149,10 @@ async function main() {
     console.log('\n1. Break-glass code from Settings');
     {
         const before = hashOf(owner.pub);
-        const r = await post(ISSUE, {}, asOwner);
+        const fromComputer = await post(ISSUE, {}, asOwner);
+        assert(fromComputer.status === 403 && fromComputer.body?.code === 'phone_required' && !fromComputer.body?.breakGlassCode,
+            `an owner's computer session is sent to the phone (${fromComputer.status})`);
+        const r = await post(ISSUE, {}, ownerPhone());
         assert(r.status === 200 && BG_SHAPE.test(r.body?.breakGlassCode), `an owner's key session gets a code (${r.status} ${JSON.stringify(r.body)})`);
         assert(r.body?.memberPubkey === owner.pub, 'the code is for the owner\'s own key');
         assert((r.headers.get('cache-control') || '').includes('no-store'), 'the answer is never cached');
@@ -155,10 +161,10 @@ async function main() {
         const stored = hashOf(owner.pub);
         assert(!!stored && stored !== before && stored.startsWith('scrypt$') && !stored.includes(code1), 'stored scrypt-hashed, never in the clear');
 
-        const other = await post(ISSUE, { memberPubkey: owner2.pub }, asOwner);
+        const other = await post(ISSUE, { memberPubkey: owner2.pub }, ownerPhone());
         assert(other.status === 403 && hashOf(owner2.pub) === null, `a key session cannot make a code for another owner (${other.status})`);
 
-        const r2 = await post(ISSUE, {}, asOwner);
+        const r2 = await post(ISSUE, {}, ownerPhone());
         const code2 = r2.body?.breakGlassCode as string;
         shown.push(code2);
         assert(r2.status === 200 && code2 !== code1, 'a second press makes a new code');
@@ -204,7 +210,7 @@ async function main() {
         const pwMode = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
         assert(pwMode.status === 403 && pwMode.body?.code !== PASSWORD_NEEDS_2FA_CODE && !pwMode.body?.breakGlassCode, `break-glass mode closes it to the password (${pwMode.status})`);
         updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
-        const keyMode = await post(ISSUE, {}, asOwner);
+        const keyMode = await post(ISSUE, {}, ownerPhone());
         assert(keyMode.status === 200 && BG_SHAPE.test(keyMode.body?.breakGlassCode), `…not to an owner's key (${keyMode.status})`);
         shown.push(keyMode.body?.breakGlassCode);
         updateLocalConfig({ breakGlassMode: false } as any);
@@ -252,7 +258,7 @@ async function main() {
             `Settings shows the app made owner2's code, and when (${JSON.stringify(appMade)})`);
 
         // The review's measurement (r4172011768): an owner's key session makes a code, then the owner signs out everywhere.
-        const stolen = { 'x-admin-session': keySession(owner3) };
+        const stolen = { 'x-admin-session': keySession(owner3, true) };
         const made = await post(ISSUE, {}, stolen);
         const stolenCode = made.body?.breakGlassCode as string;
         shown.push(stolenCode);
@@ -274,7 +280,7 @@ async function main() {
             `Settings shows the owner has no code (${JSON.stringify(gone)})`);
 
         // The owner makes a new one from Settings when needed, and the normal break-glass flow works with it.
-        const fresh = { 'x-admin-session': keySession(owner3) };
+        const fresh = { 'x-admin-session': keySession(owner3, true) };
         const remade = await post(ISSUE, {}, fresh);
         shown.push(remade.body?.breakGlassCode);
         assert(remade.status === 200 && BG_SHAPE.test(remade.body?.breakGlassCode), `a new session makes a new code (${remade.status})`);

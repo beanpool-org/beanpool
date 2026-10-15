@@ -123,6 +123,14 @@ describe('the throwaway key signs every call in the restore', () => {
         expect(calls[3].body).toEqual({ collectionId: 'col-1', provider: 'apple', idToken: 'd.e.f', nonce: 'n-2' });
     });
 
+    it('opens the session for the account picked, by the key the lookup listed (a name two accounts hold in another case)', async () => {
+        const eph = makeEphemeralKey();
+        const calls = stubNode({ '/api/recovery/collect': () => json(200, { collectionId: 'col-2', threshold: 1 }) });
+        expect(await openRestoreSession(eph, 'Олег', account.publicKey)).toEqual({ collectionId: 'col-2' });
+        expect(calls[0].body).toEqual({ callsign: 'Олег', candidatePublicKey: account.publicKey });
+        expect(signedBy(calls[0], eph.publicKey)).toBe(true);
+    });
+
     it('a refused open or nonce hands the answer back rather than a session', async () => {
         const eph = makeEphemeralKey();
         stubNode({

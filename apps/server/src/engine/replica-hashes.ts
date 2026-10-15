@@ -38,7 +38,21 @@ export interface TableHashes {
  * 3: groups' own pictures out of their rows (schema.sql group_pictures, #1486): `groups` is hashed with avatar_ref and
  * avatar_bytes where it had avatar_url, and group_pictures is hashed too. Raised for the same reason as 2.
  */
-export const TABLE_HASHES_VERSION = 3;
+/**
+ * 4: posts gains the five event-times columns (event_start_local, event_end_local, event_tz, event_online, event_link;
+ * REPLICA_FORMAT 10). A main server refuses a copy to an older standby (OLDEST_STANDBY_FORMAT), but a standby updated
+ * before its main server hashes `posts` over five more columns, so it would read every copy as "posts not exact" and
+ * force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
+ */
+/**
+ * 5: posts gains event_host_lets_in, and event_rsvps let_in_at and let_in_by (the host lets people in; REPLICA_FORMAT 11).
+ * Raised for the same reason as 4: a standby updated before its main server hashes both tables over more columns.
+ */
+/**
+ * 6: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
+ * date (REPLICA_FORMAT 12). Raised for the same reason as 4.
+ */
+export const TABLE_HASHES_VERSION = 6;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

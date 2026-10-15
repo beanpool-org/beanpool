@@ -13,8 +13,8 @@
  *      included, and nothing is stored; the live password session, its 2FA session and the log stream it opened end at
  *      once; /api/local/status and the 2FA status say passwordRetired; the community got a critical announcement.
  *   4. Still works: the owner's key, a break-glass code on the enrol route (the recovery factor).
- *   5. A start with ADMIN_PASSWORD in .env keeps it retired (the hash stays gone, the password still refused), and so
- *      does Wipe & Reset.
+ *   5. A start with ADMIN_PASSWORD in .env keeps it retired (the hash stays gone, the password still refused);
+ *      there is no Wipe & Reset to bring it back (design case 18, A1: the route answers 404).
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-retire-admin-password" node ../../scripts/run-server-suites.mjs
  */
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
         assert(codeOff.status === 403 || codeOff.status === 401, `a break-glass code off the enrol routes opens nothing (${show(codeOff)})`);
 
         // ── 5. A start with ADMIN_PASSWORD in .env, and Wipe & Reset ──────────────────────────────────
-        console.log('── 5. ADMIN_PASSWORD in .env and Wipe & Reset never bring it back ──');
+        console.log('── 5. ADMIN_PASSWORD in .env never brings it back, and there is no Wipe & Reset to ──');
         process.env.ADMIN_PASSWORD = 'Brought-Back-By-Env-1!';
         const lines: string[] = [];
         const origLog = console.log;
@@ -326,9 +326,10 @@ async function main(): Promise<void> {
         const envPw = await call('GET', '/api/local/admin/diagnostics', { headers: { 'X-Admin-Password': 'Brought-Back-By-Env-1!' } });
         assert(retiredRefusal(envPw), `the .env password is refused (${show(envPw)})`);
         const k2 = await keySignIn(owner);
+        // Wipe & Reset is gone (design case 18, A1): the owner's key session gets 404, and the password stays retired.
         const reset = await call('POST', '/api/local/reset', { body: {}, headers: asCookie(k2.sessionId, k2.csrf) });
-        assert(reset.status === 200, `the owner wipes and resets (${show(reset)})`);
-        assert(!!getLocalConfig().passwordRetired, 'Wipe & Reset keeps the password retired');
+        assert(reset.status === 404, `there is no Wipe & Reset to bring it back: 404 (${show(reset)})`);
+        assert(!!getLocalConfig().passwordRetired, 'the password stays retired');
         try { initAdminPassword(); } catch { /* asserted below */ }
         assert(!getLocalConfig().adminHash, 'and the start after it takes no ADMIN_PASSWORD');
         delete process.env.ADMIN_PASSWORD;

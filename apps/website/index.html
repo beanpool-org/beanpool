@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=2.7">
+    <link rel="stylesheet" href="style.css?v=2.8">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -320,14 +320,14 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Map</h3>
-                    <p>See what is on offer near you. Every pin is one you place: use your location at that moment, or drop the pin by hand. When you allow it, the app also uses your location to show what is nearest you, and never in the background. Event pins, and enterprise pins set in the web app, can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. When the global community opens to everyone, a visitor there sees listings and roughly where they are, but no names, no profile pictures and no exact spots.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots." -->
+                    <p>See what is on offer near you. Every pin is one you place: use your location at that moment, or drop the pin by hand. When you allow it, the app also uses your location to show what is nearest you, and never in the background. Event pins, and enterprise pins set in the web app, can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. When the global community opens to everyone, a visitor there sees listings and roughly where they are, but no names, no profile pictures and no exact spots. Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; the exact spot is yours to share when you arrange to meet.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
                 </div>
 
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">📅</div>
                     <h3>Events <span class="new-pill">New</span></h3>
-                    <p>Post a working bee, a repair café or a skill-share with a time and a place. People tap Going or Interested. Everyone going gets the event chat and the host's private note &mdash; the gate code, what to bring &mdash; and hears about it if the time or place changes or it is cancelled. Events are free; no Beans change hands. Find them on the map under Today, This weekend or Next 7 days, and use Copy to a new date to run one again.</p>
+                    <p>Post a working bee, a repair café or a skill-share with a time and a place. People tap Going or Interested. People going get the event chat and the host's private note &mdash; the gate code, what to bring &mdash; and hear about it if the time or place changes or it is cancelled. Where anyone can join, as on the global community, the host lets each person in first, by default. Events are free; no Beans change hands. Find them on the map under Today, This weekend or Next 7 days, and use Copy to a new date to run one again.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -462,6 +462,10 @@
             </div>
             <div class="map-wrapper">
                 <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">No community near you yet.</span>
+                    <a id="map-empty-start" href="#run-a-node">Start a community</a>
+                </div>
             </div>
             <div class="map-stats">
                 <div class="map-stat">
@@ -625,11 +629,11 @@ docker compose exec beanpool-node beanpool claim</code>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities.</p>
+                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities. Time zone boundaries © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).</p>
             </div>
         </div>
     </footer>
 
-    <script src="main.js?v=1.9"></script>
+    <script src="main.js?v=1.10"></script>
 </body>
 </html>

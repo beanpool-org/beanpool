@@ -170,7 +170,7 @@ function main() {
 
     // 4. Page and List Helpers
     const paged = pageWithOwnWithheld(conv1, alice, 10, 0, () => [baseMessage]);
-    assert(paged.length >= 1, 'pageWithOwnWithheld merges stored messages with withheld lines');
+    assert(paged.map((m) => m.id).join() === [realMsgId, msgId1].join(), `pageWithOwnWithheld merges the stored message with Alice's own withheld line (${paged.map((m) => m.id.slice(0, 12)).join(', ')})`);
 
     const listed = listWithOwnWithheld(alice, [] as { id: string; createdAt?: string }[]);
     assert(listed.length === 1 && listed[0].id === conv1, 'listWithOwnWithheld includes withheld conversation');

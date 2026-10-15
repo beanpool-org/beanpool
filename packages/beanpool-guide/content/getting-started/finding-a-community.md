@@ -42,7 +42,7 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 - Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, a number is added, such as "Sarah2". You can change it in the next step.
 - Your posts, chats and trades stay in each community. On the new one you start fresh.
 - Tap **Next**, then check your name and photo for the new community.
-- A sign-in account you linked to get back into your account works in the new community too: BeanPool's key vault keeps one copy for all your communities.
+- A sign-in account you linked in an up-to-date phone app, to get back into your account, works in the new community too: BeanPool's key vault keeps one copy for all your communities.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
 

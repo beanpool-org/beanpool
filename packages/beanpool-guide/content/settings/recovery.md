@@ -27,7 +27,7 @@ This works only if you linked one before (see below). BeanPool's key vault keeps
 - Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
 - For your safety, getting back in with a sign-in waits a day. The app says when your account comes back. Keep BeanPool on this phone: it checks by itself while it is open, and **Check now** asks straight away.
-- If you still have another phone or computer with your account on it, open BeanPool there and tap **Yes, it's me** (see "If someone else tries"). Your account comes back the next time this phone checks, in about a minute.
+- If you still have another phone with your account on it, open BeanPool there and tap **Yes, it's me** (see "If someone else tries"). Your account comes back the next time this phone checks, in about a minute. BeanPool in a web browser can't do this: only the phone app can.
 - When your account is back, choose the community to open it in. The global community is filled in; to use your own, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. You can add your other communities afterwards.
 - **Use my 12 words instead** works any time, with no wait. **Start again** starts over with a sign-in.
 
@@ -54,13 +54,13 @@ This is not a way to log in. Your account is still your own key. The linked acco
 
 - If BeanPool's key vault is paused when you link an account, nothing is linked and the app says so. **Settings** offers to link it again once the vault is back.
 - A sign-in account protects one BeanPool account. If it was protecting a different one, it protects this one now, and the app says so: that other account then has only its 12 words.
-- To remove it, tap **Disconnect**. On a new phone it then no longer brings your account back, in any community. The key vault deletes its copy at once, and from its backups within 30 days.
+- To remove it, tap **Disconnect**. On a new phone it then no longer brings your account back from the key vault, in any community. The key vault deletes its copy at once, and from its backups within 30 days, or later if the vault is paused in that time. **Disconnect** doesn't remove a copy a community still keeps for that sign-in: see "Who can open the copy".
 
 ## Moving a copy your community keeps
 
-Before the key vault, each community kept its own copy for the sign-in accounts linked there. If yours still keeps one, **Settings** shows **Move your Google recovery to BeanPool's key vault** (or Facebook, or Apple). Tap **Move it** and sign in once, as when you link an account. The key vault gets a fresh copy, made on this phone, and your community's copy is then removed. **Not now** puts the card away for a week.
+Before the key vault, each community kept its own copy for the sign-in accounts linked there. If yours still keeps one, and the key vault keeps none for that sign-in account, **Settings** shows **Move your Google recovery to BeanPool's key vault** (or Facebook, or Apple), with that community open. Tap **Move it** and sign in once, as when you link an account. The key vault gets a fresh copy, made on this phone, and your community's copy is then removed. **Not now** puts the card away for a week.
 
-If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is kept at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app says so first: if you lose the phone after this, nothing brings your account back.
+If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is kept at the key vault, so that sign-in account no longer brings your account back through your community or the key vault until you link it again. A copy another community still keeps for it is not touched: open that community to remove it there. On a phone with no 12 words, the app says so first: if you lose the phone after this, nothing brings your account back.
 
 Until you move it, the old copy still works: if you lose your phone, the app finds that the key vault keeps no copy for that sign-in, and gets your account back through your community's server, as above. It then offers to move the copy.
 
@@ -74,22 +74,22 @@ BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locke
 
 ## Who can open the copy
 
-When you link Google, Apple or Facebook in the phone app, your app locks a copy of your account with that sign-in and sends it to BeanPool's key vault: a small server in Iceland that does nothing else. No community keeps a copy made in the phone app, not even yours. The vault gives the copy back only after Google, Apple or Facebook tells it that it's you, and your other phones are told when that happens. It waits a day first, so you can stop it if it wasn't you.
+When you link Google, Apple or Facebook in an up-to-date phone app, your app locks a copy of your account with that sign-in and sends it to BeanPool's key vault: a small server in Iceland that does nothing else. No community keeps a copy made there, not even yours. The vault gives the copy back only after Google, Apple or Facebook tells it that it's you, and your other phones are told when that happens (the phone app is told, not BeanPool in a web browser). It waits a day first, so you can stop it if it wasn't you.
 
-BeanPool can open these copies. For now one person, BeanPool's founder, looks after the vault. It is moving to three people in different countries, and then two of them must act together. The vault's backups from before that move stay for their 30 days. Nobody can log in to the vault. The company that hosts it can read its memory while it runs, as with any rented server. A court could order a copy opened. Anyone who takes over your Google, Apple or Facebook account could get in too, unless a phone of yours stops it during the day's wait: see "If someone else tries".
+BeanPool can open these copies. For now one person, BeanPool's founder, looks after the vault. It is moving to three people in different countries, and then two of them must act together. The vault's backups from before that move stay until they are 30 days old, or longer if the vault is paused then. Nobody can log in to the vault. The company that hosts it can read its memory while it runs, as with any rented server. A court could order a copy opened. Anyone who takes over your Google, Apple or Facebook account could get in too, unless a phone of yours stops it during the day's wait: see "If someone else tries".
 
-If you would rather nobody but you could ever get in, keep your 12 words written down and tap **Disconnect** next to each sign-in account. That deletes the copy from the vault at once, and from its backups within 30 days. Your 12 words always work, with or without the vault.
+If you would rather nobody but you could ever get in, keep your 12 words written down, tap **Disconnect** next to each sign-in account, and remove each copy a community still keeps (below). **Disconnect** deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. It doesn't remove a copy a community keeps. Your 12 words always work, with or without the vault.
 
 Some copies are still kept by a community's server, and the people who run that server can open them, because their server checks your sign-in:
 
-- A copy your community kept from before the key vault, until you move it or remove it (above). Copies of it already in that server's backups stay until those backups are deleted.
-- On the global community, the copy kept for a sign-in you joined with, or added, in the web app. See "Using BeanPool in a web browser".
+- A copy your community kept from before the key vault, until you move it or remove it, with that community open (see "Moving a copy your community keeps"). If the key vault already keeps a copy for the same sign-in account, **Settings** offers that only after you tap **Disconnect** next to it. Copies of it already in that server's backups stay until those backups are deleted.
+- On the global community, the copy kept for a sign-in you joined with, or added, in the web app, until you remove it the same way, with the global community open in the phone app. See "Using BeanPool in a web browser".
 
 ## If someone else tries
 
-If someone starts getting back into your account with your linked sign-in account, your phones are told, and **Settings** shows **Someone is getting back into your account**, with when it goes through.
+If someone starts getting back into your account with your linked sign-in account, your phones are told, and **Settings** shows **Someone is getting back into your account**, with when it goes through. Only the phone app is told, and only it can answer: BeanPool in a web browser can't.
 
-- If it was you, on another phone or computer, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through**: your other device gets your account the next time it checks.
+- If it was you, on another phone, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through**: your other phone gets your account the next time it checks.
 - If it wasn't, tap **Stop**. It never goes through, and whoever tried gets nothing. Then make sure that sign-in account has its own strong password.
 
 A copy your community still keeps from before the key vault is watched as before: **Settings** shows **Someone is recovering your account** while a restore with it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. Moving the copy to the key vault (above) gives it the day's wait too.

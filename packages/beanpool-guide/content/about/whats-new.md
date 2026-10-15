@@ -9,9 +9,9 @@ related: home, the-bean, how-it-works, rules, faq, communities
 
 You get these with an up-to-date phone app.
 
-- **One copy, for every community.** A Google, Apple or Facebook account you link in the phone app keeps its locked copy of your account at BeanPool's key vault, not at your community. You link it once, and it works in every community you join. See "Getting your account back".
+- **One copy, for every community.** A Google, Apple or Facebook account you link in an up-to-date phone app keeps its locked copy of your account at BeanPool's key vault, not at your community. You link it once, and it works in every community you join. See "Getting your account back".
 - **No name or address to type.** **Recover with Social** finds your account from the sign-in. Afterwards you choose the community to open it in.
-- **A day's wait, and a way to stop it.** Getting back in with a sign-in waits a day, unless another phone or computer of yours taps **Yes, it's me**. Your phones are told, and can tap **Stop**.
+- **A day's wait, and a way to stop it.** Getting back in with a sign-in waits a day, unless another phone of yours taps **Yes, it's me**. Your phones are told, and can tap **Stop**. BeanPool in a web browser can't do either.
 - **Moving your copy.** If your community still keeps a copy, **Settings** offers to move it to the key vault, with one sign-in, or to remove it. Until you do, it still gets you back in.
 - **Who can open it.** Said plainly under "Who can open the copy" in "Getting your account back": for now one person, BeanPool's founder, looks after the vault.
 

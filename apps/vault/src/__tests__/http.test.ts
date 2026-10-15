@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import crypto from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
+import { NonceStore } from '../api/auth.js';
 import { GLOBAL_ORIGIN, LIMITS } from '../api/server.js';
+import { listBackups } from '../custodian/lib.js';
 import { checkMemoryHygiene, hygieneRefusal } from '../keyholder/hygiene.js';
 import { deposit, doGenesis, get, newMember, signed, startRestore, startVault, type VaultUnderTest } from './harness.js';
 
@@ -106,6 +109,28 @@ describe('the HTTP surface', () => {
         v.clock.advance(60_000);
         expect((await signed(v, '/v1/copies/status', {}, member.seed)).status).toBe(200);
         expect((await get(v, '/v1/report')).status).toBe(200);
+    });
+
+    it('custodian routes from one address: the 21st call in a minute is refused 429 before its signature and stores no nonce; a member and a custodian elsewhere still get 200 (B3, review #1981)', async () => {
+        v = await startVault({ trustProxy: true });
+        await doGenesis(v);
+        const member = newMember();
+        const from = (address: string) => ({ 'X-Forwarded-For': address });
+        const consumed = vi.spyOn(NonceStore.prototype, 'consume');
+        try {
+            // Keys that are no custodian: each would store a nonce, and the store's cap is shared by everyone.
+            for (let i = 0; i < LIMITS.ceremonyCallsPerAddressPerMinute; i++) {
+                expect((await signed(v, '/v1/unlock/genesis', { sig: 'x' }, crypto.randomBytes(32), from('203.0.113.7'))).status).toBe(403);
+            }
+            const stored = consumed.mock.calls.length;
+            const over = await signed(v, '/v1/unlock/genesis', { sig: 'x' }, crypto.randomBytes(32), from('203.0.113.7'));
+            expect(over).toMatchObject({ status: 429, body: { code: 'rate_limited' } });
+            expect(consumed.mock.calls.length).toBe(stored);
+            expect((await signed(v, '/v1/copies/status', {}, member.seed, from('198.51.100.20'))).status).toBe(200);
+            expect((await listBackups(v.baseUrl, v.custodians[0], v.call())).status).toBe(200);
+        } finally {
+            consumed.mockRestore();
+        }
     });
 
     it('with the keyholder gone, the vault is locked to the outside', async () => {

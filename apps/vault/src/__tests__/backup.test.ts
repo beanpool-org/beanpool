@@ -8,12 +8,13 @@ import { openSeedFromSso, openVaultRelease, vaultUnb64 } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { HOLD_MS, RESTORE_RETRY_MS } from '../api/server.js';
-import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.js';
+import { custodianKey, listBackups, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
 import { openState, readStateFile, type WorkingKeys } from '../keyholder/keys.js';
 import { combineMnemonics, splitMasterSecret } from '../keyholder/slip39.js';
 import { BACKUP_BODY_AAD, BACKUP_DELETIONS_AAD, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
 import { openCustodianShare, type CustodianShare } from '../shared/ceremony.js';
 import {
+    breakDeletions,
     confirmWith,
     deposit,
     doGenesis,
@@ -227,6 +228,41 @@ describe('backups', () => {
         await expectCopy(b, 'google', 'after-the-reshare', member);
     });
 
+    it('after a second reshare, custodians it retired are refused a fresh vault even naming a backup that lists them; those in force at the newest backup restore it (B1, review #1981)', async () => {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'two-reshares');
+        const share = (shares: CustodianShare[], k: CustodianKey) => shares.find(s => s.custodian === k.publicKey) as CustodianShare;
+        const reshare = async (from: CustodianKey[], fromShares: CustodianShare[]) => {
+            const to = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+            const newCustodians = to.map(c => c.publicKey);
+            await presentShare(a.baseUrl, from[0], share(fromShares, from[0]), { ...a.call(), purpose: 'reshare', newCustodians });
+            const r = await presentShare(a.baseUrl, from[1], share(fromShares, from[1]), { ...a.call(), purpose: 'reshare', newCustodians });
+            const shares = r.body.custodianShares as CustodianShare[];
+            expect((await confirmWith(a, shares, [0, 1], to))[1].body).toMatchObject({ switched: true });
+            await a.api.idle();
+            a.clock.advance(60_000);
+            return { to, shares };
+        };
+        const n = await reshare(a.custodians, g.shares);
+        const post1 = await a.api.runBackup();
+        a.clock.advance(60_000);
+        const p = await reshare(n.to, n.shares);
+        const post2 = await a.api.runBackup();
+
+        const b = await vault({ stub: a.stub, clock: a.clock, custodians: a.custodians, storeDir: a.storeDir });
+        // post1 lists N, but the newest backup lists P: N is retired, alone or two of them.
+        await expect(restoreFromBackup(b.baseUrl, n.to[2], post1, b.call())).rejects.toThrow(/403/);
+        await expect(restoreFromBackup(b.baseUrl, n.to[0], post1, b.call())).rejects.toThrow(/403/);
+        expect(b.keyholder().status().state).toBe('fresh');
+
+        expect((await restoreFromBackup(b.baseUrl, p.to[0], post2, b.call())).body).toMatchObject({ state: 'locked', generation: 3 });
+        await presentShare(b.baseUrl, p.to[0], share(p.shares, p.to[0]), b.call());
+        expect((await presentShare(b.baseUrl, p.to[1], share(p.shares, p.to[1]), b.call())).body.state).toBe('open');
+        await expectCopy(b, 'google', 'two-reshares', member);
+    });
+
     it('two backups in the same second keep their order: the second one\'s deletions still reach the first', async () => {
         expect(['bv-20261001T120000Z-1.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T115959Z.bin'].sort(compareBackupNames))
             .toEqual(['bv-20261001T115959Z.bin', 'bv-20261001T120000Z.bin', 'bv-20261001T120000Z-1.bin']);
@@ -413,7 +449,7 @@ describe('a restore from backup is finished before anything sees it', () => {
         expect(b.keyholder().status().restorePending).toBe(false);
     });
 
-    it('a newer backup with one flipped byte: the first try fails naming it, the next finishes from the last good one, and the report names the file it skipped (V2)', async () => {
+    it('a newer backup with one flipped byte in its snapshot: its deletion records still open by their own seal and apply, at the first try (B2, review #1981)', async () => {
         const { a, g, older, newer } = await deletedAfterBackup();
         const b = await restoring(a, older, inner => wrap(inner, {
             get: async n => {
@@ -423,50 +459,42 @@ describe('a restore from backup is finished before anything sees it', () => {
             },
         }));
         await unlockWith(b, g.shares, [0]);
-        const [unlocked] = await unlockWith(b, g.shares, [1]);
-        // Named before anything is skipped: the custodians who unlocked see which file, and what skipping it costs.
-        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring' } });
-        expect(unlocked.body.reason).toContain(`the newer backup ${newer} does not open`);
-        expect(unlocked.body.reason).toContain('the copies deleted in it come back');
-        expect((await get(b, '/v1/health')).body.state).toBe('locked');
-
-        b.clock.advance(RESTORE_RETRY_MS);
-        // Finished from the older backup alone: the copy deleted in the skipped one is back, with its hold held again,
-        // which is why the file is named.
-        const { reply } = await startRestore(b, 'google', 'deleted-later');
-        expect(reply).toMatchObject({ status: 409, body: { code: 'hold_open' } });
-        expect((await get(b, '/v1/health')).body.state).toBe('open');
+        expect((await unlockWith(b, g.shares, [1]))[0].body.state).toBe('open');
+        // The copy deleted after the older backup stays deleted.
+        await expectNoCopy(b, 'google', 'deleted-later');
         expect(b.keyholder().status().restorePending).toBe(false);
-        const report = JSON.parse((await get(b, '/v1/report')).body.report.text as string) as { restoreSkipped: { name: string; why: string }[] };
-        expect(report.restoreSkipped).toEqual([{ name: newer, why: expect.stringContaining('not signed by this vault') }]);
     });
 
-    it('a newer backup that doesn\'t open is skipped only after it is named, never a list or fetch error (V2)', async () => {
+    it('a newer backup whose deletion records open in no store: the restore waits, named to the custodians, and the vault never skips it; a good copy put back finishes it (B2, review #1981)', async () => {
         const { a, g, older, newer } = await deletedAfterBackup();
-        let failing: 'list' | 'get' | null = 'list';
+        let broken = true;
         const b = await restoring(a, older, inner => wrap(inner, {
-            list: async () => {
-                if (failing === 'list') throw new Error('the store is unreachable');
-                return inner.list();
-            },
             get: async n => {
-                if (failing === 'get' && n === newer) throw new Error('the store timed out');
-                return inner.get(n);
+                const bytes = Buffer.from(await inner.get(n));
+                return broken && n === newer ? breakDeletions(bytes) : bytes;
             },
         }));
         await unlockWith(b, g.shares, [0]);
-        expect((await unlockWith(b, g.shares, [1]))[0]).toMatchObject({ status: 503, body: { code: 'restoring', reason: 'the store is unreachable' } });
-        // A list or fetch error fails every try, however often: it is never taken for a file that doesn't open.
-        for (const why of ['list', 'get', 'get'] as const) {
-            failing = why;
+        const [unlocked] = await unlockWith(b, g.shares, [1]);
+        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        expect(unlocked.body.reason).toContain(`the newer backup ${newer} does not open`);
+        // On the image the unlock answers before the data partition is mounted and the restore runs: a custodian reads
+        // why from the backups answer, and any other caller only that it is being finished.
+        expect((await listBackups(b.baseUrl, b.custodians[0], b.call())).body.restoreWaiting).toContain(newer);
+        for (let i = 0; i < 4; i++) {
             b.clock.advance(RESTORE_RETRY_MS);
-            expect((await startRestore(b, 'google', 'deleted-later')).reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
-            expect(b.keyholder().status().restorePending).toBe(true);
+            const { reply } = await startRestore(b, 'google', 'deleted-later');
+            expect(reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
+            expect(JSON.stringify(reply.body)).not.toContain(newer);
         }
-        failing = null;
+        expect(b.keyholder().status().restorePending).toBe(true);
+        expect((await get(b, '/v1/health')).body.state).toBe('locked');
+
+        broken = false;
         b.clock.advance(RESTORE_RETRY_MS);
         await expectNoCopy(b, 'google', 'deleted-later');
-        expect((JSON.parse((await get(b, '/v1/report')).body.report.text as string) as { restoreSkipped: unknown[] }).restoreSkipped).toEqual([]);
+        expect((await get(b, '/v1/health')).body.state).toBe('open');
+        expect((await listBackups(b.baseUrl, b.custodians[0], b.call())).body.restoreWaiting).toBeNull();
     });
 
     it('a failing list: nothing is served and nothing written until the restore finishes, and an API restart after it doesn\'t run it again', async () => {

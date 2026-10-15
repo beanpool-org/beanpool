@@ -501,15 +501,24 @@ there are, a count the public report gives anyway. Requests to the store are sig
 5. Two custodians unlock with their shares (`vault-custodian unlock …`). The vault finishes the restore before it
    serves anything: it applies the deletion records of every newer backup in either store (an off-box store it can't
    list makes it wait and try again, rather than bring back a copy its member deleted), holds every open restore a
-   fresh 24 hours and tells those members' devices again, then opens.
+   fresh 24 hours and tells those members' devices again, then opens. A newer backup's records are read from each
+   store's copy in turn, by their own seal, so a copy damaged elsewhere still gives them. One whose records open in
+   no store is never skipped by the vault: the restore waits, locked, and names the file in the unlock's answer and in
+   `vault-custodian backups`, until a good copy of it is put in a store.
 
 **Rebuild keys (the custody step at the reshare).** A fresh vault's custodians in force are the genesis keys its
 image pins: they alone set its settings, and the off-box store is in the settings. So at the reshare the genesis key
 files go to the new custodians as their rebuild keys, kept like their shares; without them nobody can point a new
 machine at the off-box backups. A rebuild key opens nothing by itself: the restore still unlocks only with two shares
-of the custodians the backup lists. Step 4 (its hello and the restore) also takes a key that the named backup's header
-lists (V1, `backupListsKey` in `src/api/server.ts`), so once the settings are in, or when the vault's
-own store still holds its backups, the custodians in force at that backup restore it with their own keys. The header
+of the custodians the backup lists. But two rebuild keys set a fresh vault's settings, which say where its off-box
+store is, and any one starts a restore of any backup, one from before the reshare included, which the old shares
+open: on a fresh machine they are as sensitive as shares. Step 4 (its hello and the restore) also takes a key that
+both the named backup's header and the newest backup of that vault in the stores list (V1, `backupListsKey` in
+`src/api/server.ts`), so once the settings are in, or when the vault's own store still holds its backups, the
+custodians in force at the newest backup restore with their own keys. A custodian a later reshare retired is
+refused, whichever older backup still lists them; and until the first backup after a reshare is in the stores, the
+newest backup lists the old custodians, so their shares are not destroyed before it. A newer file whose header can't
+be read in any store might be the newest backup, so it refuses too (the rebuild keys still restore). The header
 can't be checked at that point (a fresh vault has no keys to check it with): it is checked by the unlock (two shares of
 custodians it lists must rebuild an `M` that opens its state) and by `openBackup` (the file signed by that state's
 ticket key, with the name and state the restore recorded) before anything is served. What that can't tell is a whole

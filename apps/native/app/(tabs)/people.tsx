@@ -25,7 +25,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
-import { invitesOn } from '../../utils/node-profile';
+import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
     guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
@@ -213,7 +213,7 @@ export default function PeopleScreen() {
     // On a community that says `membersOnDemand` (the worldwide one) this phone holds only the people it has dealt with:
     // the list is the 50 nearest and a search, both asked of the node (utils/members-lookup.ts), and the cards held
     // offline. Anywhere else, the whole list from the copy as always.
-    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const membersOnDemand = membersByKey(nodeProfile?.features);
     const [listNote, setListNote] = useState<CommunityListNote | null>(null);
     const onDemandOpened = useRef(false);
     // Where the node previews invites (the showcase), how a local community grows, as the marker's line (design §1 row 8).

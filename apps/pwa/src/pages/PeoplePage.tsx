@@ -7,7 +7,6 @@
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
     getFriends, addFriendApi, removeFriendApi, getAddedYou,
-    getMembers,
     type FriendEntry, type Member, type MemberCard, type AddedYou,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -15,8 +14,10 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { InvitePage } from './InvitePage';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import {
-    useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
+    useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, getMembersWhole, isMembersOnDemandRefusal,
+    MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
 } from '../lib/members-on-demand';
+import { t } from '@beanpool/core';
 import { readMyArea } from '../lib/member-area';
 
 interface Props {
@@ -85,6 +86,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     const [friends, setFriends] = useState<FriendEntry[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(false);
+    // The whole list couldn't be read (offline, the node busy): said, with Try again, never an empty list.
+    const [membersFailed, setMembersFailed] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     const [blocklistVersion, setBlocklistVersion] = useState(0);
@@ -173,10 +176,15 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
 
     async function loadMembers() {
         setLoading(true);
+        setMembersFailed(false);
         try {
-            const data = await getMembers();
+            const data = await getMembersWhole();
             setMembers(data);
-        } catch { /* offline */ }
+        } catch (e) {
+            // A 403 members_on_demand has turned the switch on: the by-area view replaces this one (review of #1999,
+            // item 1). Anything else is said, with Try again.
+            if (!isMembersOnDemandRefusal(e)) setMembersFailed(true);
+        }
         setLoading(false);
     }
 
@@ -498,6 +506,11 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
 
                     {loading || onDemand === null ? (
                         <p className="text-center text-nature-500 p-8 font-medium animate-pulse">Loading community...</p>
+                    ) : membersFailed && members.length === 0 ? (
+                        <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-members-failed">
+                            <span>{t("Couldn't load this community's members just now.")}</span>
+                            <button type="button" onClick={() => loadMembers()} className={linkButton}>{t('Try again')}</button>
+                        </p>
                     ) : (
                         <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
                             {filteredMembers.map(m => (

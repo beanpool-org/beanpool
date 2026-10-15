@@ -5,9 +5,14 @@
  */
 import { getNodeApiUrl, type CommunityInfo } from './api';
 
-/** Whether this community wants people asked for, not read whole. A node that doesn't say: no. */
+/**
+ * Whether this community wants people asked for, not read whole. A node that doesn't say: no. Where anyone can join in a
+ * minute (`openMembership`) the node refuses the whole directory with 403 `members_on_demand` (apps/server
+ * routes/community.ts refusedWholeDirectory), whatever `membersOnDemand` says: asked for there too, the phone's rule
+ * (review of #1999, NB3).
+ */
 export function membersOnDemandOn(info: CommunityInfo | null | undefined): boolean {
-    return info?.features?.membersOnDemand === true;
+    return info?.features?.membersOnDemand === true || info?.features?.openMembership === true;
 }
 
 /** Where this browser keeps each node's last answer about the switch: `<prefix><node address>` = '1' or '0'. */

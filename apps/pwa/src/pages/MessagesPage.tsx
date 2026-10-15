@@ -9,7 +9,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
-    sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
+    sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry,
@@ -39,7 +39,7 @@ import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpda
 import { withJitter } from '../lib/jitter';
 import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
 import { nodeRefusal } from '../lib/node-refusal';
-import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
+import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
@@ -796,7 +796,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         if (membersOnDemandRef.current !== false) return;
         try {
-            const result = await getMembers();
+            // A 403 members_on_demand turns the switch on (getMembersWhole): the names then come by key.
+            const result = await getMembersWhole();
             const blocked = new Set(getBlockedUsers());
             setMembers(result.filter((m: Member) => m.publicKey !== identity.publicKey && !blocked.has(m.publicKey)));
         } catch { /* offline */ }

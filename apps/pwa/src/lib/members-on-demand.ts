@@ -9,7 +9,7 @@
  * answered this browser, and as one without only when it never has.
  */
 import { useEffect, useState } from 'react';
-import { getMemberCards, type MemberCard } from './api';
+import { getMemberCards, getMembers, type Member, type MemberCard } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { bounded } from './bounded';
 import { membersOnDemandOn, membersOnDemandLastSeen, noteMembersOnDemand } from './members-on-demand-seen';
@@ -153,26 +153,61 @@ export function useMemberSearch(typed: string, enabled: boolean): { found: Membe
     return { found, state, refusal };
 }
 
+/** The node's code when it refused the whole directory because people are asked for there (routes/community.ts). */
+export const MEMBERS_ON_DEMAND_CODE = 'members_on_demand';
+
+/** Whether a failed read is the node refusing the whole directory as one where people are asked for (403 `members_on_demand`). */
+export function isMembersOnDemandRefusal(e: unknown): boolean {
+    const err = e as { status?: unknown; code?: unknown } | null;
+    return err?.status === 403 && err?.code === MEMBERS_ON_DEMAND_CODE;
+}
+
+/** Every useMembersOnDemand on the page, told when the node refused a whole read as one where people are asked for. */
+const refusedWholeListeners = new Set<() => void>();
+
+/**
+ * The whole directory, where the node said it reads whole or couldn't say (useMembersOnDemand false). A 403
+ * `members_on_demand` is the node saying people are asked for here (the worldwide community, whose info read failed:
+ * review of #1999, item 1): kept as its answer, every useMembersOnDemand on the page turns true, and the error goes on to
+ * the caller, which keeps no list from it. Any other failure switches nothing: the caller says it couldn't read.
+ */
+export async function getMembersWhole(): Promise<Member[]> {
+    try {
+        return await getMembers();
+    } catch (e) {
+        if (isMembersOnDemandRefusal(e)) {
+            noteMembersOnDemand(true);
+            for (const told of [...refusedWholeListeners]) told();
+        }
+        throw e;
+    }
+}
+
 /**
  * Whether this community wants people asked for: null until the node's answer (the page's one shared read of
  * /api/community/info), then true or false. A read that fails takes the node's last answer to this browser, so an
- * offline start on the worldwide community still asks, never reads whole (review of #1861, N2); only a node that has
- * never answered here reads as it did before the switch.
+ * offline start on the worldwide community still asks, never reads whole (review of #1861, N2); a node that has never
+ * answered here reads as it did before the switch, until a whole read is refused 403 `members_on_demand`
+ * (getMembersWhole), which turns it true.
  */
 export function useMembersOnDemand(): boolean | null {
     const [on, setOn] = useState<boolean | null>(null);
     useEffect(() => {
         let cancelled = false;
+        // A refusal is the node's newest word: an info answer that lands after it doesn't turn it back.
+        let refused = false;
+        const told = () => { refused = true; if (!cancelled) setOn(true); };
+        refusedWholeListeners.add(told);
         // Asked inside the promise, so a read that throws before it starts is "couldn't say" too, never a broken page.
         Promise.resolve()
             .then(() => communityInfoOnce())
             .then(info => {
-                const answer = membersOnDemandOn(info);
+                const answer = refused || membersOnDemandOn(info);
                 noteMembersOnDemand(answer);
                 if (!cancelled) setOn(answer);
             })
-            .catch(() => { if (!cancelled) setOn(membersOnDemandLastSeen() ?? false); });
-        return () => { cancelled = true; };
+            .catch(() => { if (!cancelled) setOn(refused || (membersOnDemandLastSeen() ?? false)); });
+        return () => { cancelled = true; refusedWholeListeners.delete(told); };
     }, []);
     return on;
 }

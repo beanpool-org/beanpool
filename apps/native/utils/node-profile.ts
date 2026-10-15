@@ -245,6 +245,17 @@ async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: num
 }
 
 /**
+ * Whether this phone reads a node's members by key, never whole (utils/members-on-demand.ts): where it says
+ * `membersOnDemand`, and where anyone can join in a minute (`openMembership`), since there the node refuses the whole
+ * directory and everyone-who-changed with 403 `members_on_demand` (apps/server routes/community.ts refusedWholeDirectory)
+ * whatever `membersOnDemand` says: the two are set one by one (review of #1999, NB3). One rule, for the sync and every
+ * screen that lists people.
+ */
+export function membersByKey(features: NodeFeatures | null | undefined): boolean {
+    return features?.membersOnDemand === true || features?.openMembership === true;
+}
+
+/**
  * A node that refused a whole read of its directory with 403 `members_on_demand` (members-on-demand.ts
  * isMembersOnDemandRefusal) reads members by key, whatever this phone's copy of its profile says: that copy is from
  * before the switch. The profile is asked again (one small read), so whatever changed with it is known too (listings by
@@ -254,7 +265,7 @@ async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: num
 export async function noteMembersOnDemand(url: string, fetchImpl: typeof fetch = fetch): Promise<void> {
     try {
         const fresh = await fetchNodeProfile(url, fetchImpl);
-        if (fresh?.features.membersOnDemand === true) return;
+        if (membersByKey(fresh?.features)) return;
         const all = await readCache();
         const held = all[cacheKey(url)];
         if (!held || typeof held !== 'object') return;

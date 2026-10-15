@@ -19,11 +19,17 @@ let viewerRole: 'convenor' | 'member' = 'convenor';
 let closedAt: string | null = null;
 let muted = false;
 
-vi.mock('../lib/members-on-demand', () => ({
-    useMembersOnDemand: () => false,
-    useMemberSearch: () => ({ found: null, state: 'idle' }),
-    MEMBERS_SEARCH_MIN_CHARS: 2,
-}));
+vi.mock('../lib/members-on-demand', async () => {
+    // The whole read goes to the api's getMembers below, as the module's own does.
+    const api = await import('../lib/api');
+    return {
+        useMembersOnDemand: () => false,
+        useMemberSearch: () => ({ found: null, state: 'idle' }),
+        getMembersWhole: () => api.getMembers(),
+        isMembersOnDemandRefusal: () => false,
+        MEMBERS_SEARCH_MIN_CHARS: 2,
+    };
+});
 
 vi.mock('../lib/api', () => ({
     getGroupDecisions: vi.fn(async () => null),

@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
-    getBalance, getTransactions, sendTransfer, getMembers, request,
+    getBalance, getTransactions, sendTransfer, request,
     type BalanceInfo, type TierInfo, type Transaction, type Member
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -19,7 +19,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLev
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
-import { useMembersOnDemand, useMemberSearch, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
+import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 
 interface Props {
@@ -157,7 +157,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
                     // the Send picker keeps who it had and the next refresh reads them again.
                     // Read only once the node has said it reads whole (the effect below reads them when it says so).
-                    membersOnDemandRef.current === false ? getMembers().catch(() => null) : null,
+                    // A 403 members_on_demand turns the switch on (getMembersWhole): the picker then searches.
+                    membersOnDemandRef.current === false ? getMembersWhole().catch(() => null) : null,
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -193,7 +194,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         if (membersOnDemand !== false || !viewerIsMember) return;
         // Asked inside the promise, so a read that throws before it starts waits for the next refresh too.
         Promise.resolve()
-            .then(() => getMembers())
+            .then(() => getMembersWhole())
             .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== identity.publicKey)); })
             .catch(() => { /* the next refresh reads them again */ });
     }, [membersOnDemand]);

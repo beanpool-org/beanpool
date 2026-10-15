@@ -217,6 +217,9 @@ let rhea: Person;
 beforeEach(async () => {
     h.store.clear();
     h.store.set('beanpool_anchor_url', ANCHOR);
+    // A local community, as the phone knows it (utils/node-profile.ts): with no copy, the chats' read leaves the directory
+    // to the sync, which asks the node first (review of #1999, NB2).
+    h.store.set('beanpool_node_profiles', JSON.stringify({ [ANCHOR.replace(/\/+$/, '').toLowerCase()]: { profile: 'local', features: {}, checkedAt: new Date().toISOString() } }));
     h.store.set('bp_trust_sync_v3', 'true');
     h.store.set(CACHE_NAMES_DONE_KEY, '1');
     // Each test is its own phone and its own people: what the phone remembers of an earlier one cannot help it here.

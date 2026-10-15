@@ -9,8 +9,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t, tn } from '@beanpool/core';
-import { getMembers, inviteGroupMember } from '../lib/api';
-import { useMembersOnDemand, useMemberSearch, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
+import { inviteGroupMember } from '../lib/api';
+import { useMembersOnDemand, useMemberSearch, getMembersWhole, isMembersOnDemandRefusal, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { invitableShown, sendInvitations, type InvitablePerson } from '../lib/group-invite';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { useDialogFocus } from './dialog-focus';
@@ -34,20 +34,28 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
     const [picked, setPicked] = useState<Set<string>>(new Set());
     const [sending, setSending] = useState(false);
     const [failedNote, setFailedNote] = useState<string | null>(null);
+    // The whole list couldn't be read: said, never "nobody else is here".
+    const [listFailed, setListFailed] = useState(false);
     const search = useMemberSearch(query, membersOnDemand === true);
 
     useEffect(() => {
         if (membersOnDemand === null) return;
+        setListFailed(false);
         if (membersOnDemand) { setPeople([]); return; }
         let alive = true;
-        getMembers()
+        getMembersWhole()
             .then(rows => {
                 if (!alive) return;
                 setPeople((Array.isArray(rows) ? rows : [])
                     .filter((m: any) => m?.publicKey && m.status !== 'pruned')
                     .map((m: any) => ({ publicKey: m.publicKey, callsign: m.callsign || m.publicKey.slice(0, 8), avatarUrl: m.avatarUrl ?? null })));
             })
-            .catch(() => { if (alive) setPeople([]); });
+            .catch((e) => {
+                // A 403 members_on_demand turns the switch on (getMembersWhole) and this runs again, searching.
+                if (!alive || isMembersOnDemandRefusal(e)) return;
+                setPeople([]);
+                setListFailed(true);
+            });
         return () => { alive = false; };
     }, [membersOnDemand]);
 
@@ -96,6 +104,7 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
     if (!waitingForList && shown.length === 0) {
         if (membersOnDemand && query.trim().length < MEMBERS_SEARCH_MIN_CHARS) emptyNote = t('Type at least 2 letters of a name to find someone.');
         else if (membersOnDemand && search.state === 'failed') emptyNote = t('The community could not be searched just now. Try again in a moment.');
+        else if (!membersOnDemand && listFailed) emptyNote = t("The community's members could not be read just now. Close this and try again in a moment.");
         else if (query.trim()) emptyNote = t('Nobody here by that name.');
         else emptyNote = t('Nobody else is in this community yet.');
     }

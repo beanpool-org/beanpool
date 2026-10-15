@@ -62,6 +62,7 @@ afterAll(() => { (Module as any)._load = realLoad; });
 
 import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings, syncMessages } from '../db';
 import { PROFILE_UNREAD, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { fetchNodeProfile } from '../node-profile';
 
 const DB = 'beanpool_a.beanpool.org.db';
 const KEY = (id: string) => `pillar_sync_${DB}_${id}`;
@@ -77,8 +78,9 @@ const node = {
     // directory is refused, as the server refuses it (routes/community.ts refusedWholeDirectory).
     openMembership: false,
     // What `GET /api/community/info` answers: a local community, the worldwide one (members on demand, where anyone can
-    // join), or nothing (the node busy or the network gone: 503).
-    info: 'local' as 'local' | 'global' | 'down',
+    // join), or nothing (the node busy or the network gone: 503). And the two switches apart (they are set one by one,
+    // apps/server config/node-profile.ts): members on demand alone, and anyone can join alone (review of #1999, NB2, NB3).
+    info: 'local' as 'local' | 'global' | 'down' | 'onDemandOnly' | 'openOnly',
     requests: [] as string[],
 };
 function answer(status: number, body: string) {
@@ -104,6 +106,8 @@ const fetchMock = vi.fn(async (url: string) => {
         if (node.info === 'down') return answer(503, '{}');
         return answer(200, JSON.stringify(node.info === 'global'
             ? { profile: 'global', features: { membersOnDemand: true, openMembership: true } }
+            : node.info === 'onDemandOnly' ? { profile: 'local', features: { membersOnDemand: true } }
+            : node.info === 'openOnly' ? { profile: 'global', features: { openMembership: true } }
             : { profile: 'local', features: {} }));
     }
     if (u.pathname === '/api/marketplace/posts') return answer(200, JSON.stringify([listing('L1', AUTHOR)]));
@@ -580,5 +584,102 @@ describe('no copy of the profile, and the node does not answer for it', () => {
         expect((await performSync()).success).toBe(true);
         expect(node.requests.some(r => new URL(r).pathname === '/api/community/info')).toBe(false);
         expect(node.requests.some(r => new URL(r).pathname === '/api/marketplace/posts')).toBe(true);
+    });
+});
+
+// Review of #1999 (NB1–NB3): one rule. Members are read by key where the node says `membersOnDemand` or `openMembership`
+// (it refuses every whole form there); nothing reads the directory whole without a copy of the profile; and a copy an
+// hour old or more is asked again before a cycle reads anything, so a copy from before a switch can't read whole.
+describe('review of #1999: members by key where the node says either switch, never whole without a current copy', () => {
+    const profileCopy = () => JSON.parse(store.get('beanpool_node_profiles') ?? '{}')[A_URL] ?? null;
+    const copyOf = (profile: 'local' | 'global', features: Record<string, unknown>, ageMs: number) =>
+        store.set('beanpool_node_profiles', JSON.stringify({ [A_URL]: { profile, features, checkedAt: new Date(Date.now() - ageMs).toISOString() } }));
+    const HOURS_2 = 2 * 60 * 60 * 1000;
+    const paths = () => node.requests.map(r => new URL(r).pathname);
+
+    it('NB3: anyone can join, members on demand not said: no whole read in any cycle, the tab strip asking for the profile at each start', async () => {
+        node.openMembership = true;
+        node.info = 'openOnly';
+        partners(3);
+        await holdCards([OWN, hexKey(1)]);
+        for (let i = 0; i < 3; i++) {
+            // The tab strip's read at every app start and community switch ((tabs)/_layout.tsx): the node's own answer,
+            // which doesn't say membersOnDemand.
+            expect((await fetchNodeProfile(A_URL))?.features).toEqual({ openMembership: true });
+            expect((await performSync()).success).toBe(true);
+            await syncMessages(OWN);
+        }
+        expect(wholeReads()).toEqual([]);
+        expect(membersRequests().length).toBeGreaterThan(0);
+        expect(held().sort()).toEqual([OWN, ...[1, 2, 3].map(hexKey)].sort());
+    });
+
+    it('NB2: no copy of the profile, members on demand without openMembership (the node answers a whole read): the chats\' read asks none, the sync asks the profile, then by key', async () => {
+        node.info = 'onDemandOnly';
+        partners(2);
+        await syncMessages(OWN);
+        expect(wholeReads()).toEqual([]);
+        expect(held()).toEqual([]);
+        expect(paths()).toContain(`/api/messages/conversations/${OWN}`);
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        expect(paths()[0]).toBe('/api/community/info');
+        await syncMessages(OWN);
+        expect(wholeReads()).toEqual([]);
+        expect(held().sort()).toEqual([OWN, hexKey(1), hexKey(2)].sort());
+    });
+
+    it('NB2: a local community with a copy: the chats\' read reads the directory whole, as before', async () => {
+        onDemandProfile(undefined);
+        await syncMessages(OWN);
+        expect(wholeReads()).toEqual([`${A_URL}/api/members`]);
+        expect(held().length).toBe(2001);
+    });
+
+    it('NB2: a local community with no copy: the chats\' read waits; the sync asks the profile, then reads the directory whole', async () => {
+        await syncMessages(OWN);
+        expect(wholeReads()).toEqual([]);
+        expect(paths()).not.toContain('/api/community/info');
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        expect(paths()[0]).toBe('/api/community/info');
+        expect(wholeReads()[0]).toBe(`${A_URL}/api/members`);
+        expect(held().length).toBe(2001);
+    });
+
+    it('NB1: a copy an hour old from before the switch is asked again first: by key, never whole, and the fresh copy kept', async () => {
+        node.openMembership = true;
+        node.info = 'global';
+        copyOf('local', {}, HOURS_2);
+        partners(2);
+        await holdCards([OWN]);
+        expect((await performSync()).success).toBe(true);
+        expect(paths()[0]).toBe('/api/community/info');
+        expect(paths().filter(p => p === '/api/community/info')).toHaveLength(1);
+        expect(wholeReads()).toEqual([]);
+        expect(profileCopy()).toMatchObject({ profile: 'global', features: { membersOnDemand: true, openMembership: true } });
+        expect(held().sort()).toEqual([OWN, hexKey(1), hexKey(2)].sort());
+        // Now under an hour old: the next cycle asks nothing more of it.
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        expect(paths()).not.toContain('/api/community/info');
+    });
+
+    it('NB1: a copy under an hour old is used as it is, asking nothing more (a local community: exactly the requests of before)', async () => {
+        copyOf('local', {}, 59 * 60 * 1000);
+        expect((await performSync()).success).toBe(true);
+        expect(paths()).not.toContain('/api/community/info');
+        expect(wholeReads()[0]).toBe(`${A_URL}/api/members`);
+    });
+
+    it('NB1: a copy an hour old that the node does not answer for is used, never a stop: a local community reads as before', async () => {
+        node.info = 'down';
+        copyOf('local', {}, HOURS_2);
+        const result = await performSync();
+        expect(result.success).toBe(true);
+        expect(paths()[0]).toBe('/api/community/info');
+        expect(wholeReads()[0]).toBe(`${A_URL}/api/members`);
+        expect(paths()).toContain('/api/marketplace/posts');
+        expect(held().length).toBe(2001);
     });
 });

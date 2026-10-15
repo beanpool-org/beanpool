@@ -251,8 +251,9 @@ async function main(): Promise<void> {
     // The cancelled 3rd is behind the series' date now, but it stays on the list until it has ended (it can be brought
     // back till then; the confirmation of #1993, B1); the 17th stays.
     assert(row(skId).event_start_local === '2027-12-10T19:00' && JSON.stringify(cur.skips) === '["2027-12-03","2027-12-17"]'
-        && cur.post.eventNextDates?.[0]?.date === '2027-12-10',
-        `cancelling the current date rolls it at once to Fri 10 Dec (got ${row(skId).event_start_local} ${JSON.stringify(cur.skips)})`);
+        && cur.post.eventNextDates?.[0]?.date === '2027-12-03' && cur.post.eventNextDates?.[0]?.cancelled === true
+        && cur.post.eventNextDates?.[1]?.date === '2027-12-10' && cur.post.eventNextDates?.[1]?.cancelled === false,
+        `cancelling the current date rolls it at once to Fri 10 Dec, the cancelled 3 Dec listed before it (got ${row(skId).event_start_local} ${JSON.stringify(cur.skips)} ${JSON.stringify(cur.post.eventNextDates?.slice(0, 2))})`);
     assert(pushes.length === 1 && pushes[0].to.includes(regular.pubKeyHex) && pushes[0].title === DATE_CANCELLED_PUSH_TITLE
         && pushes[0].body === 'Friday dinner: Fri 3 Dec is cancelled. Next: Fri 10 Dec.',
         `Going for it are told (got ${JSON.stringify(pushes)})`);
@@ -391,6 +392,47 @@ async function main(): Promise<void> {
         && nextOf(jfRead?.eventNextDates) === '2027-10-29, 2027-11-05, 2027-11-12, 2027-11-19',
         `(e) edit Starts forward onto the cancelled 29 Oct: it is on, and Next dates don't mark it (got ${jfMoved.status} ${jfMoved.error ?? ''} ${row(jfId).event_start_local} ${row(jfId).event_repeat_skips}; ${nextOf(jfRead?.eventNextDates)})`);
 
+    // (f) Bring it back survives a reload and reaches every device (the confirmation 2 of #1993, NB2): a fresh read lists a
+    // cancelled date the series has passed, first and marked, with its end, while it hasn't ended; the host brings it back
+    // from that list. 15 Oct 19:00–21:00 Sydney (AEDT) ends at 10:00Z.
+    const reloader = makeIdentity('ReloadRia');
+    const jg = await create(reloader, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jgId = jg.body?.post?.id as string;
+    await signed('POST', `/api/events/${jgId}/skip`, { date: '2027-10-15' }, reloader);
+    const jgHost = await readEvent(jgId, reloader);
+    const jgMember = await readEvent(jgId, regular);
+    assert(row(jgId).event_start_local === '2027-10-22T19:00' && nextOf(jgHost?.eventNextDates) === '2027-10-15 cancelled, 2027-10-22, 2027-10-29, 2027-11-05'
+        && jgHost?.eventNextDates?.[0]?.endAt === '2027-10-15T10:00:00.000Z' && nextOf(jgMember?.eventNextDates) === nextOf(jgHost?.eventNextDates),
+        `(f) after the cancel, a fresh read lists the cancelled 15 Oct first, marked, with its end, for the host and a member (got ${row(jgId).event_start_local}; ${JSON.stringify(jgHost?.eventNextDates?.[0])}; member ${nextOf(jgMember?.eventNextDates)})`);
+    const jgBack = await signed('DELETE', `/api/events/${jgId}/skip`, { date: '2027-10-15' }, reloader);
+    const jgAfter = await readEvent(jgId, regular);
+    assert(jgBack.status === 200 && row(jgId).event_start_local === '2027-10-15T19:00' && nextOf(jgAfter?.eventNextDates) === '2027-10-15, 2027-10-22, 2027-10-29, 2027-11-05',
+        `(f) Bring it back from the listed date: the series is on 15 Oct again, listed once and not marked (got ${jgBack.status} ${jgBack.error ?? ''} ${row(jgId).event_start_local}; ${nextOf(jgAfter?.eventNextDates)})`);
+    // Once a cancelled date has ended it is neither listed nor brought back: Fri 9 Oct 2026 has, Fri 8 Oct 2027 hasn't, both
+    // in the cell as it keeps them until the roll.
+    db.prepare('UPDATE posts SET event_repeat_skips = ? WHERE id = ?').run('["2026-10-09","2027-10-08"]', jgId);
+    const jgEnded = await readEvent(jgId, reloader);
+    const jgLate = await signed('DELETE', `/api/events/${jgId}/skip`, { date: '2026-10-09' }, reloader);
+    assert(nextOf(jgEnded?.eventNextDates) === '2027-10-08 cancelled, 2027-10-15, 2027-10-22, 2027-10-29'
+        && jgLate.status === 400 && jgLate.error === REPEAT_ERRORS.skipDate && row(jgId).event_start_local === '2027-10-15T19:00',
+        `(f) an ended cancelled date is not listed and can't be brought back; one not ended is (got ${nextOf(jgEnded?.eventNextDates)}; ${jgLate.status} ${jgLate.error})`);
+
+    // (g) A date an edit moved the series past was never cancelled: it can't be "brought back", which moved the series back
+    // to it with no notice and left Going on the later date, nor cancelled (the confirmation 2 of #1993, NB1).
+    const passer = makeIdentity('PasserPia');
+    const jh = await create(passer, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jhId = jh.body?.post?.id as string;
+    rsvpEvent(() => {}, jhId, regular.pubKeyHex, 'going');
+    const jhMoved = await signed('POST', '/api/marketplace/posts/update', {
+        id: jhId, authorPublicKey: passer.pubKeyHex, eventStartLocal: '2027-10-29T19:00', eventEndLocal: '2027-10-29T21:00', eventRepeat: weeklyFri,
+    }, passer);
+    const jhBack = await signed('DELETE', `/api/events/${jhId}/skip`, { date: '2027-10-22' }, passer);
+    const jhCancel = await signed('POST', `/api/events/${jhId}/skip`, { date: '2027-10-22' }, passer);
+    const jhRead = await readEvent(jhId, regular);
+    assert(jhMoved.status === 200 && jhBack.status === 400 && jhBack.error === REPEAT_ERRORS.skipDate && jhCancel.status === 400 && jhCancel.error === REPEAT_ERRORS.skipDate
+        && row(jhId).event_start_local === '2027-10-29T19:00' && row(jhId).event_repeat_skips === null && jhRead?.myRsvp === 'going',
+        `(g) after an edit to 29 Oct, the passed 22 Oct is refused both ways; the series stays on 29 Oct with Going on it (got ${jhMoved.status} ${jhBack.status} ${jhBack.error} / ${jhCancel.status} ${jhCancel.error}; ${row(jhId).event_start_local} ${row(jhId).event_repeat_skips} ${jhRead?.myRsvp})`);
+
     // ── 6. Reminders ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. Reminders once per date ──');
     const rs = await create(remind, { eventStartLocal: '2028-01-07T20:50', eventTz: SYD, eventRepeat: weeklyFri });
@@ -472,7 +514,10 @@ async function main(): Promise<void> {
 
     // ── 10. The copy ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 10. A copy carries the series ──');
-    await signed('POST', `/api/events/${rsId}/skip`, { date: row(rsId).event_start_local.slice(0, 10) === '2028-01-21' ? '2028-02-04' : '2028-02-11' }, remind);
+    // A later date: one the series has passed was never cancelled, and can't be (the confirmation 2 of #1993, NB1).
+    const weekOn = new Date(Date.parse(`${row(rsId).event_start_local.slice(0, 10)}T00:00:00Z`) + 7 * DAY).toISOString().slice(0, 10);
+    const copySkip = await signed('POST', `/api/events/${rsId}/skip`, { date: weekOn }, remind);
+    assert(copySkip.status === 200, `a later date is cancelled before the copy (got ${copySkip.status} ${copySkip.error ?? ''})`);
     const src = row(rsId);
     const payload = await exportSyncState(nodeId);
     const exported = (payload.posts ?? []).find((p: any) => p.id === rsId) as any;

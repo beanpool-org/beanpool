@@ -17,7 +17,7 @@ import { avatarUrlOf, tierForCredit } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
-import { readRepeatRule, readRepeatSkips, upcoming, type EventRepeatRule } from './event-series.js';
+import { readRepeatRule, readRepeatSkips, restorableBefore, upcoming, type EventRepeatRule } from './event-series.js';
 
 type Db = Database.Database;
 
@@ -55,12 +55,17 @@ export interface EventRsvpRecord {
 /** How many of a repeating event's dates a by-id read lists (DESIGN-event-times §4, "Next dates"). */
 export const EVENT_NEXT_DATES = 6;
 
-/** One of a repeating event's next dates, as the detail lists them; a cancelled one is marked, so its host can undo it. */
+/**
+ * One of a repeating event's next dates, as the detail lists them; a cancelled one is marked, so its host can undo it. A
+ * cancelled date before the event's current one comes first while it hasn't ended (restorableBefore): it can be brought
+ * back until `endAt`.
+ */
 export interface EventNextDate {
     /** "YYYY-MM-DD" in the event's zone. */
     date: string;
     startLocal: string;
     startAt: string;
+    endAt: string;
     cancelled: boolean;
 }
 
@@ -2041,10 +2046,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
             if (myStale) post.myLastRsvp = { status: myStale.status as EventRsvpStatus, occurrenceAt: myStale.occurrence_at };
             if (filter?.id && post.eventRepeat && post.eventTz && post.eventStartLocal) {
-                post.eventNextDates = upcoming({
+                const walk = {
                     rule: post.eventRepeat, anchorDate: post.eventStartLocal.slice(0, 10), tz: post.eventTz,
                     skips: post.eventRepeatSkips, until: post.eventRepeatUntil ?? null,
-                }, EVENT_NEXT_DATES, nowIso).map(o => ({ date: o.date, startLocal: o.startLocal, startAt: o.startAt, cancelled: o.skipped }));
+                };
+                // A cancelled date the series has passed but which hasn't ended comes first: its host can bring it back.
+                post.eventNextDates = [...restorableBefore(walk, EVENT_NEXT_DATES, nowIso), ...upcoming(walk, EVENT_NEXT_DATES, nowIso)]
+                    .map(o => ({ date: o.date, startLocal: o.startLocal, startAt: o.startAt, endAt: o.endAt, cancelled: o.skipped }));
             }
             // Where the host lets people in, Going alone opens nothing: the note waits for the host (mayReadEventPrivate).
             // On a repeating event that is the viewer's one RSVP row, for this date or an earlier one (`going` above): a

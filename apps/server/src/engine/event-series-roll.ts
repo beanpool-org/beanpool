@@ -352,6 +352,10 @@ export function setSeriesDateSkipped(
 
     // Every cancelled date that can still be brought back is kept, an earlier one too (keptSkips): `day` itself hasn't ended.
     const skips = keptSkips(readRepeatSkips(row.event_repeat_skips), currentDate, rule, tz, nowMs);
+    // A date the series has passed is one it passed for its cancelling, which can come back. One an edit moved it past was
+    // never cancelled: it can be neither cancelled nor "brought back", which moved the series back to it with no notice
+    // and left Going on the later date (the confirmation 2 of #1993, NB1).
+    if (day < currentDate && !skips.includes(day)) throw new Error(REPEAT_ERRORS.skipDate);
     const nextSkips = skipped ? [...new Set([...skips, day])].sort() : skips.filter(d => d !== day);
     if (nextSkips.length > EVENT_REPEAT_SKIPS_MAX) throw new Error(SKIPS_TOO_MANY);
 

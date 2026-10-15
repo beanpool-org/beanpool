@@ -129,7 +129,8 @@ export function seriesOnCreate(rawRepeat: unknown, rawUntil: unknown, askedStart
 /**
  * An edit's series columns, or undefined when they stay as they are. `askedStart` / `askedEnd` are the clocks this edit
  * set (null when it set none: the rule keeps its own clock and length, which a gap-day's stored clock would not say);
- * `nextStartLocal` / `nextEndLocal` the date the event will have. Cancelled dates no longer on the rule are dropped.
+ * `nextStartLocal` / `nextEndLocal` the date the event will have. Cancelled dates no longer on the rule are dropped, and
+ * those before the new date once they have ended (keptSkips).
  */
 export function seriesOnEdit(
     existing: MarketplacePost,
@@ -158,7 +159,7 @@ export function seriesOnEdit(
     const walk = { rule, anchorDate: firstDate, tz: next.tz, until };
     // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back.
     const final = lastSeriesDate(walk);
-    const skips = (existing.eventRepeatSkips ?? []).filter(d => d >= firstDate && d !== final && isSeriesDate(walk, d));
+    const skips = keptSkips(existing.eventRepeatSkips ?? [], firstDate, rule, next.tz, Date.now()).filter(d => d !== final && isSeriesDate(walk, d));
     return { repeat: repeatRuleCell(rule), until, skips: repeatSkipsCell(skips) };
 }
 
@@ -242,14 +243,29 @@ function broadcastSeries(broadcast: BroadcastFn | undefined, row: SeriesRow): vo
     }
 }
 
-/** Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips left. */
-function writeCurrentDate(row: SeriesRow, occ: ReturnType<typeof occurrenceOn> & object, skips: string[], nowIso: string): boolean {
+/**
+ * The cancelled dates a series keeps: those from `fromDate` on, and an earlier one until it has ended. A cancelled date the
+ * row has passed (its own cancelling, or the roll jumping it) can still be brought back until then, which moves the series
+ * back to it, so a later cancelled date between must still read cancelled (the confirmation of #1993, B1). The minute roll
+ * lets each go once it has ended.
+ */
+function keptSkips(skips: string[], fromDate: string, rule: EventRepeatRule, tz: string, nowMs: number): string[] {
+    return skips.filter(d => {
+        if (d >= fromDate) return true;
+        const occ = occurrenceOn(rule, d, tz);
+        return !!occ && Date.parse(occ.endAt) > nowMs;
+    });
+}
+
+/** Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips kept. */
+function writeCurrentDate(row: SeriesRow, rule: EventRepeatRule, occ: ReturnType<typeof occurrenceOn> & object, skips: string[], nowIso: string): boolean {
+    const kept = keptSkips(skips, occ.date, rule, row.event_tz!, Date.parse(nowIso));
     return db.prepare(`
         UPDATE posts
            SET event_start_at = ?, event_end_at = ?, event_start_local = ?, event_end_local = ?,
                event_state = 'scheduled', event_repeat_skips = ?, updated_at = ?
          WHERE id = ? AND event_start_at = ?`)
-        .run(occ.startAt, occ.endAt, occ.startLocal, occ.endLocal, repeatSkipsCell(skips.filter(d => d >= occ.date)), nowIso, row.id, row.event_start_at)
+        .run(occ.startAt, occ.endAt, occ.startLocal, occ.endLocal, repeatSkipsCell(kept), nowIso, row.id, row.event_start_at)
         .changes > 0;
 }
 
@@ -282,7 +298,7 @@ export function rollDueSeries(broadcast?: BroadcastFn, nowMs = Date.now()): numb
             const currentDate = row.event_start_local!.slice(0, 10);
             const next = nextOccurrence({ rule, anchorDate: currentDate, tz: row.event_tz!, skips, until: row.event_repeat_until }, nowIso);
             const changed = next
-                ? writeCurrentDate(row, next, skips, nowIso)
+                ? writeCurrentDate(row, rule, next, skips, nowIso)
                 // No date left: it ends as a one-off does, its last date its `until`, out of the roll for good.
                 : db.prepare(`UPDATE posts SET event_repeat_until = ?, updated_at = ? WHERE id = ? AND event_start_at = ?`)
                     .run(currentDate, nowIso, row.id, row.event_start_at).changes > 0;
@@ -332,7 +348,8 @@ export function setSeriesDateSkipped(
     // be restored up to the end (the deciding review of #1945, finding 7). Moving the end is an edit of `until`.
     if (skipped && day === lastSeriesDate(walk)) throw new Error(SKIP_LAST_DATE);
 
-    const skips = readRepeatSkips(row.event_repeat_skips).filter(d => d >= currentDate || d === day);
+    // Every cancelled date that can still be brought back is kept, an earlier one too (keptSkips): `day` itself hasn't ended.
+    const skips = keptSkips(readRepeatSkips(row.event_repeat_skips), currentDate, rule, tz, nowMs);
     const nextSkips = skipped ? [...new Set([...skips, day])].sort() : skips.filter(d => d !== day);
     if (nextSkips.length > EVENT_REPEAT_SKIPS_MAX) throw new Error(SKIPS_TOO_MANY);
 
@@ -343,12 +360,12 @@ export function setSeriesDateSkipped(
             const next = nextOccurrence({ ...walk, skips: nextSkips }, nowIso);
             if (!next) throw new Error(SKIP_LAST_DATE);
             const going = eventGoingPubkeys(postId);
-            writeCurrentDate(row, next, nextSkips, nowIso);
+            writeCurrentDate(row, rule, next, nextSkips, nowIso);
             notify = { going, title: DATE_CANCELLED_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is cancelled. Next: ${localDateWords(next.date)}.` };
         } else if (!skipped && day < currentDate) {
             // A date the roll passed because it was cancelled, restored: it is the next date again, and those whose RSVP is
             // for it (stamped with it, so Going again now) hear it is on, as they heard it was off.
-            if (writeCurrentDate(row, occ, nextSkips, nowIso)) {
+            if (writeCurrentDate(row, rule, occ, nextSkips, nowIso)) {
                 notify = { going: eventGoingPubkeys(postId), title: DATE_BACK_ON_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is back on.` };
             }
         } else {

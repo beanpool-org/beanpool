@@ -16,7 +16,9 @@
  *  5. Cancel a date (POST/DELETE /api/events/:id/skip): host only; a date that is not the series' refused; cancelling the
  *     current date rolls at once and tells Going "… is cancelled. Next: …"; restoring it moves the series back and tells them
  *     "… is back on", but not once that date has ended, and a later date restored tells nobody; the final date can't be
- *     cancelled, while earlier dates are left or when it is the only one (a series ends on it). Your events (GET
+ *     cancelled, while earlier dates are left or when it is the only one (a series ends on it). A cancelled date stays
+ *     cancelled until it has ended: bringing back the current date leaves a later one the roll jumped cancelled (with a
+ *     date cancelled, or an edit, in between), and the roll lets it go once it has ended. Your events (GET
  *     /api/events/mine) carries the pattern and last date, a one-off's neither.
  *  6. Reminders fire once per date: a regular is reminded for this week's date and next week's, once each; an RSVP for
  *     last week's date gets no reminder for this week's; a one-off moved by an edit sends nothing twice.
@@ -125,6 +127,7 @@ async function main(): Promise<void> {
     const onlineHost = makeIdentity('OnlineOla');
     const undatedHost = makeIdentity('UndatedUma');
     const gapHost = makeIdentity('GapGil');
+    const jumper = makeIdentity('JumperJo');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
         type: 'event', title: 'Friday dinner', description: 'Bring a plate', authorPublicKey: who.pubKeyHex, ...SYDNEY, ...body,
     }, who);
@@ -245,8 +248,9 @@ async function main(): Promise<void> {
     const pushes: Array<{ to: string[]; title: string; body: string }> = [];
     const push = ((to: string[], _from: string, title: string, body: string) => { pushes.push({ to, title, body }); }) as any;
     const cur = setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', true);
-    // The cancelled 3rd is behind the series' date now, so it leaves the list (the roll never looks back); the 17th stays.
-    assert(row(skId).event_start_local === '2027-12-10T19:00' && JSON.stringify(cur.skips) === '["2027-12-17"]'
+    // The cancelled 3rd is behind the series' date now, but it stays on the list until it has ended (it can be brought
+    // back till then; the confirmation of #1993, B1); the 17th stays.
+    assert(row(skId).event_start_local === '2027-12-10T19:00' && JSON.stringify(cur.skips) === '["2027-12-03","2027-12-17"]'
         && cur.post.eventNextDates?.[0]?.date === '2027-12-10',
         `cancelling the current date rolls it at once to Fri 10 Dec (got ${row(skId).event_start_local} ${JSON.stringify(cur.skips)})`);
     assert(pushes.length === 1 && pushes[0].to.includes(regular.pubKeyHex) && pushes[0].title === DATE_CANCELLED_PUSH_TITLE
@@ -284,6 +288,75 @@ async function main(): Promise<void> {
     assert(row(skId).event_start_local === '2027-12-24T19:00', `the roll passes the cancelled 10th and 17th (got ${row(skId).event_start_local})`);
     const lastOne = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-24' }, skipper);
     assert(lastOne.status === 400 && lastOne.error === SKIP_LAST_DATE, `the only date left can't be cancelled (got ${lastOne.status} ${lastOne.error})`);
+
+    // A later cancelled date the roll jumps stays cancelled until it has ended, so Bring it back on the current date finds it
+    // still cancelled, and nobody is told it is on (the confirmation of #1993, B1: the undo wrote only the dates from the
+    // current one on, and the row had dropped those it passed). (a) Monthly, the third Friday: 19 Nov cancelled, then the
+    // current 15 Oct, which rolls past 19 Nov to 17 Dec.
+    const nextOf = (dates: any[] | undefined) => (dates ?? []).slice(0, 4).map((d: any) => `${d.date}${d.cancelled ? ' cancelled' : ''}`).join(', ');
+    const ja = await create(jumper, { eventStartLocal: '2027-10-15T18:50', eventEndLocal: '2027-10-15T20:50', eventTz: SYD,
+        eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: 3 }, eventRepeatUntil: '2028-12-15' });
+    const jaId = ja.body?.post?.id as string;
+    await signed('POST', `/api/events/${jaId}/skip`, { date: '2027-11-19' }, jumper);
+    rsvpEvent(() => {}, jaId, regular.pubKeyHex, 'going');
+    const jaCancel = await signed('POST', `/api/events/${jaId}/skip`, { date: '2027-10-15' }, jumper);
+    assert(jaCancel.status === 200 && row(jaId).event_start_local === '2027-12-17T18:50' && JSON.stringify(jaCancel.body?.skips) === '["2027-10-15","2027-11-19"]',
+        `(a) cancelling the current 15 Oct rolls past the cancelled 19 Nov to 17 Dec, and both stay cancelled (got ${jaCancel.status} ${row(jaId).event_start_local} ${JSON.stringify(jaCancel.body?.skips)})`);
+    pushes.length = 0;
+    const jaBack = setSeriesDateSkipped(undefined, push, jaId, jumper.pubKeyHex, '2027-10-15', false);
+    const jaRead = await readEvent(jaId, regular);
+    assert(row(jaId).event_start_local === '2027-10-15T18:50' && JSON.stringify(jaBack.skips) === '["2027-11-19"]'
+        && nextOf(jaRead?.eventNextDates) === '2027-10-15, 2027-11-19 cancelled, 2027-12-17, 2028-01-21',
+        `(a) Bring it back on 15 Oct: 19 Nov is still cancelled, and the next dates say so (got ${row(jaId).event_start_local} ${JSON.stringify(jaBack.skips)}; ${nextOf(jaRead?.eventNextDates)})`);
+    assert(pushes.length === 1 && pushes[0].body === 'Friday dinner: Fri 15 Oct is back on.' && !pushes.some(p => p.body.includes('19 Nov')),
+        `(a) the one notice is "Fri 15 Oct is back on"; none says 19 Nov is on (got ${JSON.stringify(pushes.map(p => p.body))})`);
+
+    // (b) Another later date cancelled between the cancel and the undo (its write kept only the dates from the current one
+    // on): weekly, 22 Oct cancelled, then the current 15 Oct (→ 29 Oct), then 5 Nov; Bring it back over HTTP.
+    const jb = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jbId = jb.body?.post?.id as string;
+    await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-10-22' }, jumper);
+    await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-10-15' }, jumper);
+    const jbBetween = await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-11-05' }, jumper);
+    assert(row(jbId).event_start_local === '2027-10-29T19:00' && JSON.stringify(jbBetween.body?.skips) === '["2027-10-15","2027-10-22","2027-11-05"]',
+        `(b) a later date cancelled after the current one keeps the dates the roll passed (got ${row(jbId).event_start_local} ${JSON.stringify(jbBetween.body?.skips)})`);
+    const jbBack = await signed('DELETE', `/api/events/${jbId}/skip`, { date: '2027-10-15' }, jumper);
+    assert(jbBack.status === 200 && row(jbId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jbBack.body?.skips) === '["2027-10-22","2027-11-05"]'
+        && nextOf(jbBack.body?.post?.eventNextDates) === '2027-10-15, 2027-10-22 cancelled, 2027-10-29, 2027-11-05 cancelled',
+        `(b) Bring it back on 15 Oct: 22 Oct and 5 Nov are still cancelled (got ${jbBack.status} ${JSON.stringify(jbBack.body?.skips)}; ${nextOf(jbBack.body?.post?.eventNextDates)})`);
+
+    // (c) The weekly case from the review: 22 Oct cancelled, Going told the current 15 Oct is off; Bring it back tells them it
+    // is on, and 22 Oct stays cancelled through the minute roll, which lets it go only once it has ended.
+    const jc = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jcId = jc.body?.post?.id as string;
+    await signed('POST', `/api/events/${jcId}/skip`, { date: '2027-10-22' }, jumper);
+    rsvpEvent(() => {}, jcId, regular.pubKeyHex, 'going');
+    pushes.length = 0;
+    setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, '2027-10-15', true);
+    const jcBack = setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, '2027-10-15', false);
+    assert(row(jcId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jcBack.skips) === '["2027-10-22"]'
+        && jcBack.post.eventNextDates?.[1]?.date === '2027-10-22' && jcBack.post.eventNextDates?.[1]?.cancelled === true,
+        `(c) weekly: Bring it back on 15 Oct leaves 22 Oct cancelled (got ${JSON.stringify(jcBack.skips)}; ${nextOf(jcBack.post.eventNextDates)})`);
+    assert(JSON.stringify(pushes.map(p => p.body)) === JSON.stringify(['Friday dinner: Fri 15 Oct is cancelled. Next: Fri 29 Oct.', 'Friday dinner: Fri 15 Oct is back on.']),
+        `(c) Going hear 15 Oct is off, then back on, and nothing of 22 Oct (got ${JSON.stringify(pushes.map(p => p.body))})`);
+    rollDueSeries(undefined, Date.parse(row(jcId).event_end_at) + 1000);
+    assert(row(jcId).event_start_local === '2027-10-29T19:00' && row(jcId).event_repeat_skips === '["2027-10-22"]',
+        `(c) the roll passes the cancelled 22 Oct to 29 Oct and keeps it cancelled until it ends (got ${row(jcId).event_start_local} ${row(jcId).event_repeat_skips})`);
+    rollDueSeries(undefined, Date.parse(row(jcId).event_end_at) + 1000);
+    assert(row(jcId).event_start_local === '2027-11-05T19:00' && row(jcId).event_repeat_skips === null,
+        `(c) once 22 Oct has ended the roll lets it go (got ${row(jcId).event_start_local} ${row(jcId).event_repeat_skips})`);
+
+    // (d) An edit between the cancel and the undo (here the last date) keeps the dates the roll passed as well.
+    const jd = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: '2028-03-31' });
+    const jdId = jd.body?.post?.id as string;
+    await signed('POST', `/api/events/${jdId}/skip`, { date: '2027-10-22' }, jumper);
+    await signed('POST', `/api/events/${jdId}/skip`, { date: '2027-10-15' }, jumper);
+    const jdEdit = await signed('POST', '/api/marketplace/posts/update', { id: jdId, authorPublicKey: jumper.pubKeyHex, eventRepeatUntil: '2028-06-30' }, jumper);
+    assert(jdEdit.status === 200 && row(jdId).event_repeat_until === '2028-06-30' && row(jdId).event_repeat_skips === '["2027-10-15","2027-10-22"]',
+        `(d) an edit of the last date keeps the cancelled dates the roll passed (got ${jdEdit.status} ${jdEdit.error ?? ''} ${row(jdId).event_repeat_skips})`);
+    const jdBack = await signed('DELETE', `/api/events/${jdId}/skip`, { date: '2027-10-15' }, jumper);
+    assert(jdBack.status === 200 && row(jdId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jdBack.body?.skips) === '["2027-10-22"]',
+        `(d) after the edit, Bring it back on 15 Oct leaves 22 Oct cancelled (got ${jdBack.status} ${JSON.stringify(jdBack.body?.skips)})`);
 
     // ── 6. Reminders ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. Reminders once per date ──');

@@ -84,7 +84,7 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
-// G4 built distance search: every profile answers it (test-distance-search). G6 built knocks: on for a local
+// G4 built distance search: every profile answers it (test-distance-search). Online events: every profile carries them (test-online-events-nearby). G6 built knocks: on for a local
 // community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
 // cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
@@ -92,8 +92,8 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). Members on demand (the phone holds the cards it needs): global only (test-members-on-demand). The
 // showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, door: 'open' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, door: 'open' },
 };
 
 async function main() {

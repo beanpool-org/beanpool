@@ -292,6 +292,9 @@ CREATE TABLE IF NOT EXISTS posts (
     event_place_name TEXT,
     -- Shown only to the host and members marked Going; never in a public listing.
     event_private_note TEXT,
+    -- "Host lets people in" (scratch/global-node/DESIGN-global-member-privacy-fable.md §2): 1, a Going member reads the
+    -- note and the chat only once the host has let them in (event_rsvps.let_in_at); 0 or NULL, everyone Going does.
+    event_host_lets_in INTEGER,
     event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled')),
     event_conversation_id TEXT,
     -- Event times (DESIGN-event-times §2): the clock the host typed, "YYYY-MM-DDTHH:MM", in event_tz (a canonical IANA id).
@@ -348,6 +351,10 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
     -- lives on the RSVP because it is meaningless without one, and so it travels with the RSVP through
     -- delta sync and dies with it when the RSVP is withdrawn.
     reminder_offsets TEXT,
+    -- When the host let this member in, and which host, on an event whose host lets people in (posts.event_host_lets_in).
+    -- A host's write on the member's row: it bumps updated_at like the RSVP itself, and dies with the row on Not going.
+    let_in_at DATETIME,
+    let_in_by TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (post_id, member_pubkey)
 );

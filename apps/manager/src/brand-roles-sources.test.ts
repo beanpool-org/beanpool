@@ -89,6 +89,17 @@ describe('manager controls take brand and status colours from the library, never
         expect(wrong).toEqual([]);
     });
 
+    it('every terra, oat or nature shade a class names is one tailwind.config.js defines (an undefined one emits no CSS, silently)', () => {
+        const colours = (tailwindConfig as { theme: { extend: { colors: Record<string, Record<string, string>> } } }).theme.extend.colors;
+        const missing: string[] = [];
+        for (const { at, text } of STRINGS) {
+            for (const m of text.matchAll(/(?:^|[\s:])[a-z]+-(terra|oat|nature)-(\d+)(?:\/\d+)?(?=\s|$)/g)) {
+                if (!(m[2] in colours[m[1]])) missing.push(`${at} ${m[0].trim()}`);
+            }
+        }
+        expect(missing).toEqual([]);
+    });
+
     it('tailwind.config.js names the roles and declares their values from the library, light and dark', () => {
         const colours = (tailwindConfig as { theme: { extend: { colors: Record<string, unknown> } } }).theme.extend.colors;
         expect(colours.bp).toEqual(brandTailwindColours().bp);

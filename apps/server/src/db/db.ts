@@ -7,7 +7,7 @@ import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migrati
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
-import { registerGeoFunctions, installNameFold, foldName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -62,8 +62,9 @@ const pendingPostCommitHooks: (() => void)[] = [];
  * "олег", both allowed before this): both are kept, neither is renamed, boot goes on, and one line per such name tells
  * the operator. A unique index would fail to build there, and on a standby it would refuse the copy of that pair.
  * isCallsignAvailable (engine/members.ts) refuses a new one at registration and at a member's rename, and better-sqlite3
- * runs them one at a time. Some writers of names do not ask it (yet): a project's or a crowdfund's title edit, and a
- * federation visitor's row (review of #1956, N3).
+ * runs them one at a time. The other writers of a name take the same rule: a project's row at its create and at each title
+ * edit (the engine's projectRowName), and a visitor's row, whose name from a peer is kept only while free (engine/members.ts
+ * writeVisitorRow) (review of #1956, N3). A standby's import writes its main server's names as they are.
  */
 export function migrateCallsignFold(conn: Database.Database): void {
     try {
@@ -78,7 +79,7 @@ export function migrateCallsignFold(conn: Database.Database): void {
             GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
         for (const c of clashes) {
             const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
-            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, a sign-in restore by this name is refused as ambiguous until one of them renames, and their 12 words still work.`);
+            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, the web restore lists each of them and restores the one chosen; the phone restores the one with a sign-in copy, and refuses when both have one; their 12 words still work.`);
         }
     } catch (e) {
         console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);
@@ -1381,6 +1382,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row reads as off.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_host_lets_in INTEGER`).run(); } catch { }
     // Event times (DESIGN-event-times §2): the host's clock and its zone beside the instant, and online events. NULL on
     // every non-event row, and on an event from before them until it is next edited.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_local TEXT`).run(); } catch { }
@@ -1417,6 +1420,10 @@ export function initSchema() {
     // is not the failure we want to discover at boot. NULL on every existing row means "my default
     // applies", which is exactly the behaviour a node that upgrades into this should have.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
+    // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
+    // matters only on an event whose host lets people in, and no existing event is one.
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_by TEXT`).run(); } catch { }
 
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
@@ -2814,11 +2821,7 @@ export function createCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     const now = new Date().toISOString();
-    const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-    const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-    ).get(foldName(baseCallsign), id) as any;
-    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
+    const callsign = projectRowName(db, title, id);
 
     // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
     db.transaction(() => {
@@ -2897,6 +2900,8 @@ export function updateCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     photos = ownAvatarUrlsAsStored(id, project.photos, photos);
+    // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
+    const rowName = projectRowName(db, title, id);
 
     db.transaction(() => {
         if (deadline_at !== undefined) {
@@ -2910,7 +2915,7 @@ export function updateCrowdfundProject(
                 UPDATE members
                 SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, goal_amount, deadline_at, now, id);
+            `).run(rowName, description, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -2922,7 +2927,7 @@ export function updateCrowdfundProject(
                 UPDATE members
                 SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, goal_amount, now, id);
+            `).run(rowName, description, description, goal_amount, now, id);
         }
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();

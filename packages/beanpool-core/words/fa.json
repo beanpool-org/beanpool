@@ -1,0 +1,46 @@
+{
+  "_meta": {
+    "language": "fa",
+    "name": "Persian",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "لوبیا",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "just now": "همین حالا",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} روز پیش",
+    "other": "{n} روز پیش"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} ساعت پیش",
+    "other": "{n} ساعت پیش"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} دقیقه پیش",
+    "other": "{n} دقیقه پیش"
+  },
+  "Roughly where are you?": "تقریباً کجا هستید؟",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "ما منطقه شما را فقط تا حدود 10 کیلومتر نگه می‌داریم، نه مکان دقیقتان را. اعضای دیگر می‌بینند چقدر با شما فاصله دارند، و نظرسنجی‌ای که می‌سازید در منطقه شما نمایش داده می‌شود.",
+  "Use my location": "استفاده از مکان من",
+  "Type a town or suburb": "نام یک شهر یا محله را بنویسید",
+  "Skip for now": "فعلاً رد کردن",
+  "You can change or clear this any time in Settings → Your area.": "هر وقت خواستید می‌توانید این را در تنظیمات → منطقه شما عوض یا پاک کنید.",
+  "Your area": "منطقه شما",
+  "Not set": "تنظیم نشده",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "جامعه جهانی نشان می‌دهد در نزدیکی شما چه چیزهایی عرضه می‌شود: {max} آگهی نزدیک‌تر در محدوده {km} کیلومتر.",
+  "About 10 km around {place}": "حدود 10 کیلومتر دور و بر {place}",
+  "Find your town or suburb": "شهر یا محله خود را پیدا کنید",
+  "Town or suburb": "شهر یا محله",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "جستجوی شهر فعلاً کار نمی‌کند. به جای آن از مکان من استفاده کنید، یا فعلاً رد کنید.",
+  "No matches. Try the name of a town or suburb nearby.": "موردی پیدا نشد. نام یک شهر یا محله در همین نزدیکی را امتحان کنید.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "مکان‌ها از OpenStreetMap می‌آیند. آنچه اینجا می‌نویسید برای OpenStreetMap فرستاده می‌شود.",
+  "Choose {place}": "انتخاب {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "این جامعه پیش از ارسال پست، عکس پروفایل می‌خواهد. بعداً می‌توانید آن را از پروفایل خود اضافه کنید.",
+  "A picture is optional here. You can add one later from your profile.": "اینجا عکس اختیاری است. اگر خواستید، بعداً می‌توانید از پروفایل خود یکی اضافه کنید."
+}

@@ -4,6 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { languageHeaders } from './language';
 import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -144,6 +145,8 @@ export async function request<T>(method: string, path: string, body?: any, signa
         cache: 'no-cache',
         headers: {
             'Content-Type': 'application/json',
+            // The member's language, so the node's sentences can come back in it (lib/language.ts; outside the signed bytes).
+            ...languageHeaders(getNodeApiUrl()),
         } as Record<string, string>,
     };
     if (signal) opts.signal = signal;
@@ -181,7 +184,7 @@ export async function request<T>(method: string, path: string, body?: any, signa
  */
 export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...languageHeaders(getNodeApiUrl()) };
     const identity = await loadIdentity();
     if (identity && identity.privateKey) {
         Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
@@ -299,6 +302,8 @@ export interface CommunityInfo {
      */
     features?: {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
+        /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
+        onlineEvents?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
         /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
@@ -323,6 +328,11 @@ export interface CommunityInfo {
     primaryAddress?: string | null;
     /** The BeanPool names it had before, still accepted: the web app opened at one says it has moved. */
     formerAddresses?: string[];
+    /**
+     * The node's default language (design M5: an operator setting, global's English), one of core's LANGS. It applies to
+     * a browser with no choice of its own and a language BeanPool doesn't write (lib/language.ts). Absent: English.
+     */
+    language?: string;
 }
 
 export interface Member {
@@ -1090,15 +1100,30 @@ export interface MarketplacePost {
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
-    /** Sent only to the host and to members marked Going. */
+    /** Sent only to the host and to members marked Going (where the host lets people in, the ones let in). */
     eventPrivateNote?: string;
+    /** The host lets people in to the note and the chat (DESIGN-global-member-privacy-fable.md §2); absent where not. */
+    eventHostLetsIn?: true;
+    /** Where the host lets people in: whether they have let this viewer in; null with no RSVP. */
+    myLetIn?: boolean | null;
     eventState?: 'scheduled' | 'updated' | 'cancelled';
+    /**
+     * The clock the host set, "YYYY-MM-DDTHH:MM", and the zone it is in (an IANA id). The node made the instants above
+     * from them (DESIGN-event-times §1-§2). Absent from a node that predates them.
+     */
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    /** An online event: no pin and no place. */
+    eventOnline?: boolean;
+    /** Where to join an online event. Sent only to the host and to members marked Going, like the note. */
+    eventLink?: string;
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
     myRsvp?: EventRsvpStatus | null;
-    /** Host only: who has RSVPd. */
-    eventRsvps?: Array<{ memberPubkey: string; memberCallsign?: string; status: EventRsvpStatus; updatedAt: string }>;
+    /** Host only: who has RSVPd, and (where the host lets people in) when each was let in. */
+    eventRsvps?: Array<{ memberPubkey: string; memberCallsign?: string; status: EventRsvpStatus; updatedAt: string; letInAt?: string | null }>;
 }
 
 export interface MarketplaceTransaction {
@@ -1140,6 +1165,8 @@ export async function getMarketplacePosts(filter?: {
     lng?: number;
     radiusKm?: number;
     sort?: 'distance' | 'recent';
+    /** Online events only, wherever they are (DESIGN-event-times §9): a read by radius never meets them. Needs events in `types`. */
+    online?: boolean;
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1160,6 +1187,7 @@ export async function getMarketplacePosts(filter?: {
         if (filter.radiusKm != null) params.set('radiusKm', String(filter.radiusKm));
     }
     if (filter?.sort) params.set('sort', filter.sort);
+    if (filter?.online) params.set('online', '1');
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
@@ -1193,7 +1221,14 @@ export async function createMarketplacePost(post: {
     eventEndAt?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
-}): Promise<{ success: boolean; post: MarketplacePost }> {
+    eventHostLetsIn?: boolean;
+    /** The clock the host typed and its zone: the node works out the instants from these (DESIGN-event-times §2). */
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    eventOnline?: boolean;
+    eventLink?: string;
+}): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
     return request('POST', '/api/marketplace/posts', post);
 }
 
@@ -1374,6 +1409,14 @@ export async function rsvpEvent(postId: string, status: EventRsvpStatus | null):
 }
 
 /**
+ * The host lets a Going member in to the note and the chat, takes it back (`letIn` false), or lets everyone waiting in
+ * (DESIGN-global-member-privacy-fable.md §2.2). Answers the event as the host sees it.
+ */
+export async function letInToEvent(postId: string, who: { memberPublicKey: string } | { everyone: true }, letIn = true): Promise<{ success: boolean; post: MarketplacePost; changed: number }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/let-in`, { ...who, letIn });
+}
+
+/**
  * The signer's own upcoming RSVPs, soonest first — what "Your events" shows (the shared contract).
  * A node older than this route answers 404; `isRouteMissing` is how the row hides itself there.
  */
@@ -1484,9 +1527,35 @@ export async function updateMarketplacePost(
         eventEndAt?: string;
         eventPlaceName?: string;
         eventPrivateNote?: string;
+        eventHostLetsIn?: boolean;
+        eventStartLocal?: string;
+        eventEndLocal?: string;
+        eventTz?: string;
+        eventOnline?: boolean;
+        eventLink?: string;
     },
-): Promise<{ success: boolean; post: MarketplacePost }> {
+): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
     return request('POST', '/api/marketplace/posts/update', { id, authorPublicKey, ...updates });
+}
+
+// ===================== EVENT TIME ZONES (DESIGN-event-times §2) =====================
+
+/** A clock the node moved (DST gap) or chose between (DST overlap) when it saved: asked for one, saved the other. */
+export interface EventClockAdjustment { kind: 'gap' | 'overlap'; asked: string; saved: string }
+/** Answered next to the post by create and edit, only when something was adjusted. */
+export interface EventTimeAdjusted { start: EventClockAdjustment | null; end: EventClockAdjustment | null }
+
+/** A zone as the node describes it: its id, its words ("Lagos time") and its offset from UTC now, in minutes. */
+export interface EventZone { tz: string; label: string; offsetMinutes: number }
+
+/** The zone a pin is in, looked up offline by the node. */
+export async function getEventZone(lat: number, lng: number): Promise<EventZone> {
+    return request('GET', `/api/events/zone?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`);
+}
+
+/** Every zone this node accepts, for the form's picker. */
+export async function getEventZones(): Promise<{ zones: EventZone[] }> {
+    return request('GET', '/api/events/zones');
 }
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
@@ -2179,17 +2248,24 @@ export async function treasuryPostNeed(treasury: string, body: { category: strin
 export async function treasuryPostEvent(treasury: string, body: {
     title: string;
     description?: string;
-    lat: number;
-    lng: number;
+    /** Absent for an online event, which has no pin. */
+    lat?: number;
+    lng?: number;
     photos?: string[];
     /** ISO UTC. The end is optional; the node sets start + 2 hours. */
     eventStartAt: string;
     eventEndAt?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
+    eventHostLetsIn?: boolean;
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    eventOnline?: boolean;
+    eventLink?: string;
     audienceScope?: 'public' | 'group';
     targetGroupId?: string;
-}): Promise<{ success: boolean; post: MarketplacePost }> {
+}): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/event`, body);
 }
 export async function treasuryApprove(treasury: string, transactionId: string): Promise<{ success: boolean }> {
@@ -2427,6 +2503,8 @@ export interface EventThreadMessage {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** A system line's kind, e.g. 'event_opened_to_going' (lib/events.ts eventChatSystemText). */
+    systemType?: string;
 }
 
 export interface EventThreadView {

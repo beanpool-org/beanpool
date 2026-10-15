@@ -39,7 +39,9 @@ const LOCAL = { profile: 'local', features: { beans: true } };
 const AREA = { lat: -28.5, lng: 153.5, updatedAt: '2026-10-01T00:00:00Z' };
 
 /** The feed's reads of the node (not the viewer's own, which names an author). */
-const feedReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id);
+// The read for online events beside a radius read (DESIGN-event-times §9) is its own: `onlineReads`.
+const feedReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id && !f?.online);
+const onlineReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.online);
 const ownReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.author);
 
 describe('MarketplacePage: where the list is read from (S5)', () => {
@@ -66,6 +68,17 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(ownReads()).toEqual([{ types: CLIENT_POST_TYPES, author: 'member-me' }]);
         expect(screen.getByTestId('card-distance')).toHaveTextContent('12 km');
         expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+    });
+
+    it('beside a read by radius, reads online events wherever they are, and shows them (DESIGN-event-times §9)', async () => {
+        info.current = GLOBAL;
+        const online = { ...offer, id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', lat: undefined, lng: undefined,
+            eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventOnline: true, eventState: 'scheduled' };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : f?.online ? [online] : [{ ...offer, distanceKm: 12.3 }]) as any);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        expect(onlineReads()).toEqual([{ types: CLIENT_POST_TYPES, online: true }]);
+        expect(await screen.findByText('Vibe coding')).toBeInTheDocument();
     });
 
     it('the member\'s distance setting wins over their area', async () => {
@@ -110,6 +123,8 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(api.getCommunityMe).not.toHaveBeenCalled();
         expect(screen.queryByTestId('market-near-line')).toBeNull();
         expect(screen.queryByTestId('card-distance')).toBeNull();
+        // No radius, so no read for online events beside it: the one read has them.
+        expect(onlineReads()).toEqual([]);
     });
 
     it('a visitor on a by-area node reads the lobby\'s list as before', async () => {

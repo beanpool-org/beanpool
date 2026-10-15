@@ -46,7 +46,7 @@ import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
-import { isNodeOwner, noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
+import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
@@ -71,6 +71,7 @@ import {
     dispatchPushNotification,
     isNodeAdmin,
     isSoleOwner,
+    SOLE_OWNER_SUSPEND_REFUSAL,
     persistDecayEvents,
     persistCommonsBalance,
     promoteOrPauseAfterLeadLeft,
@@ -1836,7 +1837,8 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
  */
 export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;
-    if (action === 'suspend') return isNodeOwner(target);
+    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test).
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
     if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
@@ -1863,7 +1865,7 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
 export function adminActionRemovesOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;
     const removesOwner = (pk: string) => pruneNeedsOwner(pk, actor) && heldPrivilegedRole(pk) === 'owner';
-    if (action === 'suspend') return isNodeOwner(target);
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
     if (action === 'prune') return removesOwner(target);
     if (action === 'prune-branch') return inviteBranchOf(target).some(removesOwner);
     if (action === 'report-suspend') return reportSuspensionTakesRole(target) === 'owner';
@@ -1999,11 +2001,13 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
         return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
     }
-    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
+    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: SOLE_OWNER_SUSPEND_REFUSAL };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
     // who thinks an owner must go asks another owner: no community vote removes an owner (§3.8, NODE_OPERATOR_EFFECTS).
-    if (isNodeOwner(subjectPubkey) && !isOwnerLevelActor(adminActor)) {
+    // An owner whose key waits on a re-key code is one too (heldPrivilegedRole reads their role row): the code made them
+    // 'suspended', not an admin (the deciding review of #1992, BLOCKING 1).
+    if (heldPrivilegedRole(subjectPubkey) === 'owner' && !isOwnerLevelActor(adminActor)) {
         return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
     }
 

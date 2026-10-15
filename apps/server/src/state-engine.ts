@@ -89,10 +89,12 @@ import {
     getNodeRoleBreakGlassHash,
     NODE_ROLE_ACTS,
     dropNodeRoleRow,
+    isOwnerWaitingOnRekey,
     type MemberNodeRole,
     type NodeRoleRecord,
     type RoleChangeBy,
 } from './engine/node-roles.js';
+import { KEY_HELD_FOR_REKEY } from './engine/owner-sql.js';
 export {
     nodeRoleOf,
     heldNodeRoleOf,
@@ -7199,6 +7201,13 @@ export function actionReport(
         // so the report stays as it was; actioning it without suspendUser is untouched. `actor` is the authenticated
         // admin actor (routes/admin.ts resolveAdminActor), a pubkey or 'owner:password'; none given counts as no owner.
         const subjectToSuspend = suspendUser ? reportSubjectOf(report) : null;
+        // Nor the node's only owner, by anyone (adminEmergencySuspend's 400): the role goes with no vote to give it back,
+        // and the first admin to ask makes themselves owner (the deciding review of #1992, NB 2).
+        if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && isSoleOwner(subjectToSuspend)) {
+            const err: any = new Error(SOLE_OWNER_SUSPEND_REFUSAL);
+            err.status = 400;
+            throw err;
+        }
         if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && heldPrivilegedRole(subjectToSuspend) && !isOwnerLevelActor(opts?.actor)) {
             const err: any = new Error('Only an owner can suspend an owner or admin');
             err.status = 403;
@@ -8030,8 +8039,17 @@ const moderationNoticeCb = {
     dispatchPushNotification: (...args: Parameters<typeof dispatchPushNotification>) => dispatchPushNotification(...args),
 };
 
+/** The refusal to suspend the node's only owner (isSoleOwner): an emergency suspension's and a report's. */
+export const SOLE_OWNER_SUSPEND_REFUSAL = "The node's only owner cannot be suspended";
+
+/**
+ * Whether this member is the node's only owner: an owner, and no other owner whose role acts. An owner whose key waits on
+ * a re-key code is still an owner here (engine/node-roles.ts isOwnerWaitingOnRekey): the only owner recovering a lost
+ * phone is not suspended, removed or offboarded meanwhile, which would leave the node to the first admin who makes
+ * themselves owner (the deciding review of #1992). The other owners are still only those who can act now.
+ */
 export function isSoleOwner(publicKey: string): boolean {
-    if (!isNodeOwner(publicKey)) return false;
+    if (!isNodeOwner(publicKey) && !isOwnerWaitingOnRekey(publicKey)) return false;
     // Other owners whose role acts (NODE_ROLE_ACTS): a visitor's row's owner role can't keep the node.
     const ownerCount = (db.prepare(
         `SELECT COUNT(*) as c FROM node_roles nr
@@ -8492,13 +8510,14 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     for (const pubkey of branch) assertMayPrune(pubkey, actor);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.
-    // Same terms as isSoleOwner: an active owner in the branch, and none left outside it.
+    // Same terms as isSoleOwner: an owner in the branch (an active one, or one whose key waits on a re-key code), and no
+    // active owner left outside it.
     const inBranch = new Set(branch);
-    const activeOwners = (db.prepare(
-        `SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
-    ).all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
-    if (activeOwners.some(pk => inBranch.has(pk)) && !activeOwners.some(pk => !inBranch.has(pk))) {
+    const owners = db.prepare(
+        `SELECT nr.member_pubkey, (${NODE_ROLE_ACTS}) AS acts FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND ((${NODE_ROLE_ACTS}) OR (${KEY_HELD_FOR_REKEY}))`
+    ).all() as { member_pubkey: string; acts: number }[];
+    if (owners.some(o => inBranch.has(o.member_pubkey)) && !owners.some(o => o.acts && !inBranch.has(o.member_pubkey))) {
         throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");
     }
     for (const pubkey of branch) adminPruneUser(pubkey, actor);

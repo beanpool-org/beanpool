@@ -17,6 +17,7 @@ import Database from 'better-sqlite3';
 import { foldName, getMember, installNameFold, isInvalidatedKey, isMemberKeySpelling, isVisitorKey } from '@beanpool/engine';
 import { generateBreakGlassCode, hashBreakGlassCode } from './break-glass-code.js';
 import type { ClaimIo } from './claim-command.js';
+import { NODE_HAS_OWNER_SQL } from './engine/owner-sql.js';
 
 export async function claimFromShell(rawKey: string, rawCallsign: string, claimId: string, io: ClaimIo, dir: string): Promise<number> {
     const key = String(rawKey).trim();
@@ -32,8 +33,7 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
         if (isInvalidatedKey(conn as any, key)) { io.err('Nothing was changed. That key was replaced by a new one.'); return 1; }
         const refusal = conn.transaction((): string | null => {
             // As engine/node-roles.ts nodeHasOwner: the database says whether the claim is still open.
-            const owned = conn.prepare(`SELECT 1 FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-                WHERE nr.role = 'owner' AND m.status = 'active' UNION ALL SELECT 1 FROM suspended_node_roles WHERE role = 'owner' LIMIT 1`).get();
+            const owned = conn.prepare(NODE_HAS_OWNER_SQL).get();
             if (owned) return 'This community already has an owner. Use beanpool recover.';
             if (conn.prepare('SELECT 1 FROM node_roles WHERE member_pubkey = ?').get(key)) return 'That key already holds a role here.';
             const member = getMember(conn as any, key);

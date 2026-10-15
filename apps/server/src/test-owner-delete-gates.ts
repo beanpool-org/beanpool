@@ -17,8 +17,10 @@
  *     session enrol no owner key; a current code does. Re-keying an owner or admin (making the code and binding it) asks
  *     the same, and each refusal leaves their key, status and role as they were; cancelling, and a member's or a
  *     moderator's re-key, ask nothing more. Removing or suspending an owner (pruning, offboarding, a branch with one in
- *     it, an emergency suspension, one through a report) asks the same, and each refusal leaves them an active owner; an
- *     admin or a member as target asks what it asked before. Keeping fewer snapshots (a lower keep, turning them off, an
+ *     it, an emergency suspension, one through a report, cutting short one's removal) asks the same, and each refusal
+ *     leaves them an active owner; an owner whose key waits on a re-key code is one too (nothing held aside, no vote
+ *     opened); the only owner is suspended by neither route, even with the code; an admin or a member as target asks
+ *     what it asked before. Keeping fewer snapshots (a lower keep, turning them off, an
  *     interval past their 14-day age) asks the same; keeping more, turning them on, a shorter interval do not.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
@@ -108,6 +110,8 @@ async function main(): Promise<void> {
     const MIN_OFFBOX_RETENTION_DAYS: number = offbox.MIN_OFFBOX_RETENTION_DAYS ?? 7;
     const { getConnectors } = await import('./connector-manager.js');
     const { nodeRoleOf, revokeNodeRole } = await import('./engine/node-roles.js');
+    const { removalInGraceFromBefore } = await import('./decisions-from-before-test-fixture.js');
+    const { cancelRekeyCode } = await import('./engine/member-wizards.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
 
@@ -546,6 +550,17 @@ async function main(): Promise<void> {
                 .run(id, admin, pk, 'gates suite', new Date().toISOString());
             return id;
         };
+        // Nor through a report (the deciding review of #1992, NB 2): it would take her role with no vote to give it back.
+        const oliveRow = db.prepare('SELECT * FROM node_roles WHERE member_pubkey = ?').get(owner) as Record<string, unknown>;
+        const soleReport = await call('POST', `/api/local/admin/reports/${reportOn(owner)}/action`, pwSession(), { suspendUser: true, code: tfa.code() });
+        assert(soleReport.status === 400 && intact(owner), `suspend the only owner through a report, with a current code → 400, still an owner (${short(soleReport)})`);
+        if (!intact(owner)) {
+            // A server without that guard took the only owner's role: it is put back as it was, so the run goes on and
+            // reports every row after this one, not the sessions it ended.
+            db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(owner);
+            const cols = Object.keys(oliveRow);
+            db.prepare(`INSERT OR REPLACE INTO node_roles (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => oliveRow[c]));
+        }
         /** A branch whose root is a member, with an owner invited by them. */
         const ownerInBranch = (): [string, string] => {
             const root = addMember('Root');
@@ -594,6 +609,68 @@ async function main(): Promise<void> {
             assert(header.status === 200 && row.done(target3) && roleRow(ownerKey3) === null,
                 `${row.what}, a current code in X-Fresh-Proof → 200, done (${short(header)})`);
         }
+        // An owner whose key waits on a re-key code is still an owner (the deciding review of #1992, BLOCKING 1): the code
+        // made them 'suspended', and an emergency suspension may be made over it. Every credential above is refused, and
+        // the role stays on their key: nothing held aside, no vote opened. An owner's fresh proof suspends them.
+        console.log('  · emergency-suspend an owner whose key waits on a re-key code');
+        const keepVotesOn = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(pk) as any).c;
+        const waitsOnCode = (pk: string) => statusOf(pk) === 'suspended' && keyHeld(pk) && roleRow(pk) === 'owner' && heldAside(pk) === null && keepVotesOn(pk) === 0;
+        const rekeyingOwner = async (): Promise<string> => {
+            const pk = coOwner('Rekeyee');
+            const issued = await call('POST', rekeyRoute(pk, 'issue-code'), pwSession(), { code: tfa.code() });
+            assert(issued.status === 200 && waitsOnCode(pk), `setup: a co-owner given a re-key code waits on it, still holding the owner row (${short(issued)}; ${statusOf(pk)}, ${roleRow(pk)})`);
+            return pk;
+        };
+        const suspendOwner = (pk: string, headers: Record<string, string>, extra: Record<string, unknown> = {}) =>
+            call('POST', `/api/local/admin/users/${pk}/suspend`, headers, { reason: 'gates suite', ...extra });
+        const suspendedAside = (pk: string) => statusOf(pk) === 'disabled' && roleRow(pk) === null && heldAside(pk) === 'owner' && keepVotesOn(pk) === 1;
+        // One owner per credential, so each is measured on an owner still waiting on the code.
+        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+            const rekeyee = await rekeyingOwner();
+            const r = await suspendOwner(rekeyee, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+            assert(refused(r), `emergency-suspend an owner whose key waits on a re-key code, ${who}: refused (${short(r)})`);
+            assert(waitsOnCode(rekeyee), `emergency-suspend an owner whose key waits on a re-key code, ${who}: nothing held aside, no vote, the role on their key (${statusOf(rekeyee)}, ${roleRow(rekeyee)}, held ${heldAside(rekeyee)}, votes ${keepVotesOn(rekeyee)})`);
+            // Their code cancelled, so they are an active owner again, whose role the end of this section takes back.
+            if (waitsOnCode(rekeyee)) cancelRekeyCode(rekeyee, owner);
+        }
+        const rekeyee = await rekeyingOwner();
+        const rekeyeeProof = await suspendOwner(rekeyee, pwSession(), { code: tfa.code() });
+        assert(rekeyeeProof.status === 200 && suspendedAside(rekeyee),
+            `emergency-suspend an owner whose key waits on a re-key code, a password session with a current code → 200, the role held aside, a vote open (${short(rekeyeeProof)})`);
+        const rekeyee2 = await rekeyingOwner();
+        const rekeyeePhone = await suspendOwner(rekeyee2, asPhone());
+        assert(rekeyeePhone.status === 200 && suspendedAside(rekeyee2),
+            `emergency-suspend an owner whose key waits on a re-key code, Manage pressed just now → 200, the role held aside, a vote open (${short(rekeyeePhone)})`);
+
+        // Cutting short an owner's removal in its grace window (the deciding review of #1992, NB 4), over real HTTP: the
+        // owner is suspended with the role held aside until the removal runs. Each refusal leaves it waiting.
+        console.log("  · cut short an owner's removal");
+        const decisionStatus = (id: string) => (db.prepare('SELECT status FROM decisions WHERE id = ?').get(id) as any)?.status ?? null;
+        const ownerInGrace = (): [string, string] => { const pk = coOwner('Graced'); return [removalInGraceFromBefore(owner, pk, 'Remove a co-owner'), pk]; };
+        const accelerate = (id: string, headers: Record<string, string>, extra: Record<string, unknown> = {}) =>
+            call('POST', `/api/local/admin/decisions/${id}/accelerate`, headers, extra);
+        const inGrace = (id: string, pk: string) => decisionStatus(id) === 'execution_pending_grace' && statusOf(pk) === 'disabled' && heldAside(pk) === 'owner';
+        const removalRan = (id: string, pk: string) => decisionStatus(id) === 'executed' && statusOf(pk) === 'pruned' && heldAside(pk) === null && roleRow(pk) === null;
+        const [graceId, gracedOwner] = ownerInGrace();
+        assert(inGrace(graceId, gracedOwner), `setup: an owner's removal waits in its grace window, the role held aside (${decisionStatus(graceId)}, ${statusOf(gracedOwner)})`);
+        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+            const r = await accelerate(graceId, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+            assert(refused(r), `cut short an owner's removal, ${who}: refused (${short(r)})`);
+            assert(inGrace(graceId, gracedOwner), `cut short an owner's removal, ${who}: still in its grace window (${decisionStatus(graceId)}, ${statusOf(gracedOwner)}, held ${heldAside(gracedOwner)})`);
+        }
+        const graceCode = tfa.code();
+        const graceWithCode = await accelerate(graceId, pwSession(), { code: graceCode });
+        assert(graceWithCode.status === 200 && removalRan(graceId, gracedOwner),
+            `cut short an owner's removal, a password session with a current code → 200, removed (${short(graceWithCode)}; ${decisionStatus(graceId)}, ${statusOf(gracedOwner)})`);
+        const [graceId2, gracedOwner2] = ownerInGrace();
+        const graceSpent = await accelerate(graceId2, pwSession(), { code: graceCode });
+        assert(graceSpent.status === 401 && inGrace(graceId2, gracedOwner2), `cut short an owner's removal, the same code again → 401, still in its grace window (${short(graceSpent)})`);
+        const gracePhone = await accelerate(graceId2, asPhone());
+        assert(gracePhone.status === 200 && removalRan(graceId2, gracedOwner2), `cut short an owner's removal, Manage pressed just now → 200, removed (${short(gracePhone)})`);
+        const [graceId3, gracedOwner3] = ownerInGrace();
+        const graceHeader = await accelerate(graceId3, { ...pwSession(), 'x-fresh-proof': tfa.code() });
+        assert(graceHeader.status === 200 && removalRan(graceId3, gracedOwner3), `cut short an owner's removal, a current code in X-Fresh-Proof → 200, removed (${short(graceHeader)})`);
+
         // An admin or a member as target: the step-up, as before. The password with an earlier 2FA session, an owner's
         // computer, an admin's computer: no code asked.
         const asked = (r: any) => r.status === 401 || r.json?.code === 'phone_required' || r.json?.code === 'step_up_required';

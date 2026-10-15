@@ -34,6 +34,11 @@
  *      node honestly reports no owner, and the bootstrap works again. `nodeHasOwner()` only tells the
  *      truth while nothing can orphan a parked row; `purgeMemberSelf` used to leave one behind, which
  *      would have blocked the admin-key bootstrap on a genuinely ownerless node forever.
+ *   7. The only owner's key waits on a re-key code (the deciding review of #1992, note 2): the code makes them
+ *      'suspended' with their owner row kept for the new key, which read as ownerless. The node still has an owner
+ *      (nodeHasOwner, and the shell's claim command), an admin key session asking for owner for itself -> 403, and
+ *      the password with a current code can neither suspend them (directly or through a report) nor prune them: they
+ *      are its only owner. The re-key completes, and the owner role is on the new key.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-suspended-owner-bootstrap.ts
  */
@@ -52,6 +57,9 @@ import {
     purgeMemberSelf,
 } from './state-engine.js';
 import { nodeHasOwner } from './engine/node-roles.js';
+import { issueRekeyCode } from './engine/member-wizards.js';
+import { readNodeView } from './claim-command.js';
+import { createPasswordSession } from './admin-key-auth.js';
 import { adminEmergencySuspend, adminLiftSuspension } from './decisions-engine.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
@@ -314,6 +322,60 @@ async function main() {
         });
         assert(rebootstrap.status === 200, `an admin key session bootstraps an owner again on the now genuinely ownerless node (got ${rebootstrap.status})`);
         assert(isNodeOwner(adam.pub) === true, 'and that admin is the node owner');
+
+        // — 7. The only owner's key waits on a re-key code: the node still has an owner —
+        console.log("\nTesting a node whose only owner's key waits on a re-key code...");
+
+        const zara = createKeyPair();   // an admin while the only owner recovers a lost phone
+        seedMember(zara.pub, 'ZaraAdmin');
+        grantNodeRole(zara.pub, 'admin', adam.pub);
+        const rekey = issueRekeyCode(adam.pub, 'owner:password');
+        const roleRow = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as { role: string } | undefined)?.role ?? null;
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status ?? null;
+        const stillWaiting = () => statusOf(adam.pub) === 'suspended' && roleRow(adam.pub) === 'owner' && parkedOwners().length === 0;
+        assert(stillWaiting() && activeOwners().length === 0 && isNodeOwner(adam.pub) === false,
+            "the only owner's key waits on a re-key code: suspended, the owner row kept, no owner whose role acts");
+        assert(nodeHasOwner() === true, 'and the node still has an owner: the one recovering their phone');
+        const view = readNodeView();
+        assert(!('missing' in view) && view.owner === true && view.claim === null, "the shell's claim command reads it the same way: an owner, no claim");
+
+        const zaraSession = await openKeySession(zara);
+        const zaraSelf = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-admin-session': zaraSession },
+            body: JSON.stringify({ pubkey: zara.pub, role: 'owner' }),
+        });
+        assert(zaraSelf.status === 403, `an admin key session asking for owner for itself is refused with 403 (got ${zaraSelf.status})`);
+        assert(nodeRoleOf(zara.pub) === 'admin' && activeOwners().length === 0 && stillWaiting(), 'that admin still holds only the admin role, and no owner row was written');
+
+        // The only owner: neither suspended (directly or through a report) nor pruned, even by the password with a current code.
+        // A password session (signed in with the password and a code), as Settings holds one; each change sends a current code.
+        const asPassword = () => ({ 'Content-Type': 'application/json', 'x-admin-session': createPasswordSession().sessionId });
+        const suspendSole = await fetch(`${base}/api/local/admin/users/${adam.pub}/suspend`, {
+            method: 'POST', headers: asPassword(), body: JSON.stringify({ reason: 'The only owner, while they re-key.', code: twoFactor.code() }),
+        });
+        assert(suspendSole.status === 400 && stillWaiting(), `suspending the only owner while they re-key, the password with a current code -> 400, nothing changed (got ${suspendSole.status})`);
+        const reportId = `rpt-${randomBytes(6).toString('hex')}`;
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)`)
+            .run(reportId, zara.pub, adam.pub, 'bootstrap suite', new Date().toISOString());
+        const reportSole = await fetch(`${base}/api/local/admin/reports/${reportId}/action`, {
+            method: 'POST', headers: asPassword(), body: JSON.stringify({ suspendUser: true, code: twoFactor.code() }),
+        });
+        assert(reportSole.status === 400 && stillWaiting(), `suspending them through a report, the password with a current code -> 400, nothing changed (got ${reportSole.status})`);
+        const pruneSole = await fetch(`${base}/api/local/admin/users/${adam.pub}/prune`, {
+            method: 'POST', headers: asPassword(), body: JSON.stringify({ code: twoFactor.code() }),
+        });
+        assert(pruneSole.status === 400 && stillWaiting(), `pruning them, the password with a current code -> 400, nothing changed (got ${pruneSole.status})`);
+
+        // Their new key bound: the owner role is on it, and the admin is still an admin.
+        const adamNew = createKeyPair();
+        const bind = await fetch(`${base}/api/local/admin/members/${adam.pub}/rekey/complete`, {
+            method: 'POST', headers: { ...asPassword(), 'x-fresh-proof': twoFactor.code() }, body: JSON.stringify({ code: rekey.code, newPubkey: adamNew.pub }),
+        });
+        assert(bind.status === 200 && isNodeOwner(adamNew.pub) === true && roleRow(adam.pub) === null,
+            `the re-key completes, and the owner role is on the new key (got ${bind.status})`);
+        assert(JSON.stringify(activeOwners()) === JSON.stringify([adamNew.pub]) && nodeRoleOf(zara.pub) === 'admin',
+            'the node has exactly one owner, the one who re-keyed, and the admin is still an admin');
     } finally {
         server.close();
     }

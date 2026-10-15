@@ -14,6 +14,7 @@ import {
     eventEditForm, eventEditPayload, eventRepeatCreate, movedCopyContext, parseCopyEventContext, withMovedFromLine,
 } from '../lib/events';
 import { homeEventRepeats } from '../lib/home-cards';
+import { myEventAsPost } from './YourEvents';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -43,10 +44,21 @@ function at320(ui: React.ReactElement) {
     return render(<div style={{ width: 320 }}>{ui}</div>);
 }
 
-function Fields({ start, initial = 'never' as RepeatChoiceKey, initialUntil = '' }: { start: string; initial?: RepeatChoiceKey; initialUntil?: string }) {
+function Fields({ start, end = '', initial = 'never' as RepeatChoiceKey, initialUntil = '' }: { start: string; end?: string; initial?: RepeatChoiceKey; initialUntil?: string }) {
     const [repeat, setRepeat] = useState<RepeatChoiceKey>(initial);
     const [until, setUntil] = useState(initialUntil);
-    return <EventRepeatFields start={start} repeat={repeat} until={until} onRepeatChange={setRepeat} onUntilChange={setUntil} />;
+    return <EventRepeatFields start={start} end={end} repeat={repeat} until={until} onRepeatChange={setRepeat} onUntilChange={setUntil} />;
+}
+
+/** Every button's accessible name starts with the words it shows (WCAG 2.5.3, label in name). */
+function expectLabelInName(buttons: HTMLElement[]) {
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) {
+        const shown = (b.textContent ?? '').trim();
+        const name = b.getAttribute('aria-label') ?? shown;
+        expect(shown).not.toBe('');
+        expect(name.startsWith(shown), `"${name}" starts with "${shown}"`).toBe(true);
+    }
 }
 
 afterEach(() => { document.documentElement.style.fontSize = ''; });
@@ -83,6 +95,52 @@ describe('the form: Repeats and Until', () => {
         expect(eventRepeatProblem('2026-10-16T20:50', 'monthly-last', '')).toBe('repeat');
         expect(eventRepeatProblem('2026-10-30T20:50', 'monthly-last', '')).toBeNull();
         expect(eventRepeatProblem('2026-10-30T20:50', 'weekly', '2032-01-01')).toBe('until');
+    });
+
+    it("a date as long as the gap to the next is said before Save, in the node's sentence (review of #1993, N7)", () => {
+        at320(<Fields start="2026-10-16T20:50" end="2026-10-23T20:50" initial="weekly" />);
+        expect(screen.getByTestId('event-repeat-length-problem')).toHaveTextContent('An event that repeats must end before its next date starts');
+        expect(eventRepeatProblem('2026-10-16T20:50', 'weekly', '', '2026-10-23T20:50')).toBe('length');
+        expect(eventRepeatProblem('2026-10-16T20:50', 'weekly', '', '2026-10-23T20:49')).toBeNull();
+        expect(eventRepeatProblem('2026-10-16T20:50', 'monthly-day', '', '2026-11-13T20:50')).toBe('length');
+        expect(eventRepeatProblem('2026-10-16T20:50', 'monthly-day', '', '')).toBeNull();
+        fireEvent.change(screen.getByTestId('event-repeat-select'), { target: { value: 'monthly-day' } });
+        expect(screen.queryByTestId('event-repeat-length-problem')).not.toBeInTheDocument();
+    });
+});
+
+describe('a rule the form cannot make: every 3 weeks, every 3 months (review of #1993, N3)', () => {
+    const threeWeekly = { ...series, eventRepeat: { freq: 'weekly', interval: 3, byDay: 'FR', time: '18:50', minutes: 120 } };
+    const quarterly = { ...series, eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 15, time: '18:50', minutes: 120 } };
+
+    it('the card says it as it is', () => {
+        at320(<EventCard post={quarterly} identity={identity} />);
+        expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every 3 months on the 15th');
+    });
+
+    it('the form reads it as none of its choices and asks', () => {
+        expect(eventEditForm(threeWeekly).repeat).toBe('other');
+        expect(eventEditForm(quarterly).repeat).toBe('other');
+        at320(<Fields start="2027-10-15T18:50" initial="other" />);
+        expect(screen.getByTestId('event-repeat-problem')).toHaveTextContent('Choose how the event repeats from the list');
+    });
+
+    it('editing the date keeps the rule or asks: never re-sends a different one', () => {
+        for (const post of [threeWeekly, quarterly]) {
+            const before = eventEditForm(post);
+            const kept = { repeat: before.repeat!, firstDate: before.start.slice(0, 10) };
+            // A title fix: nothing about the series goes, so the node keeps it.
+            expect(eventEditPayload(before, { ...before, title: 'Dinner' })).toEqual({ title: 'Dinner' });
+            expect(eventRepeatProblem(before.start, 'other', '', before.end, kept)).toBeNull();
+            // The date moved a week on: the form asks for a choice, and what it would send still names no rule.
+            const moved = { ...before, start: '2027-10-22T18:50', end: '2027-10-22T20:50' };
+            expect(eventRepeatProblem(moved.start, 'other', '', moved.end, kept)).toBe('repeat');
+            const out = eventEditPayload(before, moved);
+            expect('eventRepeat' in out).toBe(false);
+            expect(out.eventStartLocal).toBe('2027-10-22T18:50');
+            // Choosing from the list sends that choice, on purpose.
+            expect(eventEditPayload(before, { ...moved, repeat: 'weekly' }).eventRepeat).toEqual({ freq: 'weekly', interval: 1, byDay: 'FR' });
+        }
     });
 });
 
@@ -140,6 +198,16 @@ describe('the ↻ caption: card, map popup (the same card) and Home', () => {
         expect(screen.queryByTestId('event-repeat-caption')).not.toBeInTheDocument();
     });
 
+    it("Your events shows the caption from the node's row (review of #1993, N5)", () => {
+        const row = { postId: 'ev-s', title: 'Friday dinner', startAt: series.eventStartAt, endAt: series.eventEndAt, placeName: 'Bangalow Hall',
+            rsvp: 'going' as const, photo: null, reminderOffsets: null, startLocal: series.eventStartLocal, endLocal: series.eventEndLocal, tz: series.eventTz,
+            repeat: { freq: 'weekly' as const, interval: 1, byDay: 'FR' as const }, repeatUntil: '2027-12-17' };
+        at320(<EventCard post={myEventAsPost(row)} identity={identity} />);
+        expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec 2027');
+        const { repeat: _r, repeatUntil: _u, ...oneOff } = row;
+        expect(myEventAsPost(oneOff).eventRepeat).toBeUndefined();
+    });
+
     it('Home reads the pattern the node sends', () => {
         expect(homeEventRepeats({ repeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: -1 } })).toBe('Monthly, last Friday');
         expect(homeEventRepeats({})).toBe('');
@@ -175,6 +243,49 @@ describe('the detail: Next dates', () => {
         at320(<EventDetail post={hostView} identity={identity} />);
         fireEvent.click(screen.getByTestId('event-date-restore'));
         await waitFor(() => expect(api.setEventDateCancelled).toHaveBeenCalledWith('ev-s', '2027-10-22', false));
+    });
+
+    it('each host control is named from the words it shows (WCAG 2.5.3; review of #1993, N1)', () => {
+        at320(<EventDetail post={hostView} identity={identity} onChangeThisDateOnly={() => {}} />);
+        const list = screen.getByTestId('event-next-dates');
+        expectLabelInName([...within(list).getAllByTestId('event-date-cancel'), ...within(list).getAllByTestId('event-date-move'), within(list).getByTestId('event-date-restore')]);
+        expect(within(list).getAllByTestId('event-date-cancel')[0]).toHaveAccessibleName('Cancel this date: Fri 15 Oct');
+        expect(within(list).getAllByTestId('event-date-move')[0]).toHaveAccessibleName('Change this date only: Fri 15 Oct');
+        expect(within(list).getByTestId('event-date-restore')).toHaveAccessibleName('Bring it back: Fri 22 Oct');
+    });
+
+    it('the cancelled current date can be brought back until it ends: DELETE skip, and "… is back on" (review of #1993, N2)', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const rolled = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
+        vi.mocked(api.setEventDateCancelled).mockResolvedValueOnce({ success: true, post: rolled, skips: ['2027-10-15', '2027-10-22'] });
+        vi.mocked(api.setEventDateCancelled).mockResolvedValueOnce({ success: true, post: hostView, skips: ['2027-10-22'] });
+        at320(<EventDetail post={hostView} identity={identity} />);
+        fireEvent.click(screen.getAllByTestId('event-date-cancel')[0]);
+        const back = await screen.findByTestId('event-date-restore-current');
+        expectLabelInName([back]);
+        expect(back).toHaveAccessibleName('Bring it back: Fri 15 Oct');
+        fireEvent.click(back);
+        await waitFor(() => expect(api.setEventDateCancelled).toHaveBeenLastCalledWith('ev-s', '2027-10-15', false));
+        await waitFor(() => expect(screen.getByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is back on'));
+        expect(screen.queryByTestId('event-date-restore-current')).not.toBeInTheDocument();
+    });
+
+    it('once the cancelled current date has ended, no Bring it back on its line', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const end = Date.parse(hostView.eventEndAt);
+        const now = vi.spyOn(Date, 'now').mockReturnValue(end - 1000);
+        try {
+            const rolled = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
+            vi.mocked(api.setEventDateCancelled).mockResolvedValue({ success: true, post: rolled, skips: ['2027-10-15', '2027-10-22'] });
+            at320(<EventDetail post={hostView} identity={identity} />);
+            fireEvent.click(screen.getAllByTestId('event-date-cancel')[0]);
+            expect(await screen.findByTestId('event-date-restore-current')).toBeInTheDocument();
+            now.mockReturnValue(end + 1000);
+            await waitFor(() => expect(screen.queryByTestId('event-date-restore-current')).not.toBeInTheDocument(), { timeout: 3000 });
+            expect(screen.getByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
+        } finally {
+            now.mockRestore();
+        }
     });
 
     it("the node's refusal shows in its own words", async () => {

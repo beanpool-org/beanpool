@@ -165,8 +165,8 @@ export function localInputToIso(value: string): string | null {
 // ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
 
 /**
- * What "Copy to a new date" carries into the create form. One-off events plus this is the whole of repeats in
- * v1: there are no repeat rules and no materialiser (§5).
+ * What "Copy to a new date" carries into the create form: a new event on another date, alongside the series' own
+ * repeating (DESIGN-event-times §8) and "Change this date only".
  *
  * The dates are NOT here, on purpose — the form opens with Starts and Ends blank, because picking the new date
  * is the one thing the host is here to do, and a prefilled old date is the one value that must never be
@@ -372,13 +372,15 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
  * series moved from a Friday to a Saturday goes as "every Saturday", which is what the select then says; it is sent when the
  * choice changed or the first date moved. A choice the new date does not offer goes as it was chosen on the old date, and
  * the node refuses it in its own words ("The first date must be one of the repeating dates"). "Does not repeat" sends null.
+ * A rule the form cannot make ('other': every 3 weeks, every 3 months) is never sent: the node keeps it as it is, and
+ * re-checks it falls on a moved date (the form asks for a choice first; the deciding review of #1993, N3).
  */
 export function eventRepeatEdit(before: EventEditForm, after: EventEditForm): Pick<EventEditPayload, 'eventRepeat' | 'eventRepeatUntil'> {
     const out: Pick<EventEditPayload, 'eventRepeat' | 'eventRepeatUntil'> = {};
     const was = before.repeat ?? 'never';
     const now = after.repeat ?? 'never';
     const dateMoved = after.start.slice(0, 10) !== before.start.slice(0, 10);
-    if (now !== was || (now !== 'never' && dateMoved)) {
+    if (now !== 'other' && (now !== was || (now !== 'never' && dateMoved))) {
         out.eventRepeat = now === 'never'
             ? null
             : repeatPatternFor(now, after.start.slice(0, 10)) ?? repeatPatternFor(now, before.start.slice(0, 10));

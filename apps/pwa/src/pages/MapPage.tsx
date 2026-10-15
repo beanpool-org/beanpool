@@ -915,7 +915,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
-        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil)) errors.add('event_repeat');
+        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil, eventEnd, { repeat: eventEdit.before.repeat ?? 'never', firstDate: eventEdit.before.start.slice(0, 10) })) errors.add('event_repeat');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -964,7 +964,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
-        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil)) errors.add('event_repeat');
+        if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil, eventEnd)) errors.add('event_repeat');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -2455,6 +2455,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         <EventRepeatFields
                             start={eventStart}
+                            end={eventEnd}
                             repeat={eventRepeat}
                             until={eventRepeatUntil}
                             onRepeatChange={key => { setEventRepeat(key); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_repeat'); return n; }); }}

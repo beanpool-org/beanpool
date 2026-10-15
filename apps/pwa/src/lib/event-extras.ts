@@ -11,6 +11,8 @@
  * .ics) are each covered by the same tests on both sides.
  */
 
+import type { RepeatPattern } from '@beanpool/core';
+
 /** Minutes before the start. The only values the node accepts (the shared contract). */
 export const REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
 
@@ -302,6 +304,9 @@ export interface MyEvent {
     endLocal?: string;
     tz?: string;
     online?: boolean;
+    /** A repeating event's pattern and last date, for the card's ↻ caption (the deciding review of #1993, N5). */
+    repeat?: RepeatPattern | null;
+    repeatUntil?: string | null;
 }
 
 /**

@@ -341,8 +341,8 @@ interface EventDetailProps {
     /** Opens the event's chat — the host and everyone Going (docs/events-on-the-map.md §3). */
     onOpenChat?: (post: MarketplacePost) => void;
     /**
-     * Host only: open the create form filled from this event with the dates blank (§3, slice 5). This is the
-     * whole of repeats in v1 — there are no repeat rules (§5).
+     * Host only: open the create form filled from this event with the dates blank (§3, slice 5): a new event on
+     * another date. A repeating event's own dates are its rule's (DESIGN-event-times §8; "Change this date only").
      */
     onCopyToNewDate?: (post: MarketplacePost) => void;
     /** Host only, a repeating event: "Change this date only" cancelled `date`; open the copy form with the moved-from line. */

@@ -21,7 +21,7 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, t, type TierName } from '@beanpool/core';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
@@ -38,7 +38,6 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITL
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
 const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
-const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 /** The balance before the member's own has been read. */
 const NO_BALANCE = {
     balance: 0, floor: 0,
@@ -716,9 +715,8 @@ export default function LedgerScreen() {
 
     // ─── Wallet Tab ───────────────────────────────────────────────────────────
     const renderActivityHeader = () => {
-        const brackets = [{ m: 200, r: 0.0 }, { m: 300, r: 0.010 }, { m: 500, r: 0.015 }, { m: 1000, r: 0.020 }, { m: Infinity, r: 0.025 }];
-        let rem = balanceState.balance, monthly = 0;
-        for (const b of brackets) { if (rem <= 0) break; monthly += Math.min(rem, b.m) * b.r; rem -= b.m; }
+        // The ledger's own monthly demurrage: core's one copy of the brackets (circulation.ts), never a copy here.
+        const monthly = monthlyCirculation(balanceState.balance);
         const amber = balanceState.balance > 1000;
         const now = new Date();
         const nextRun = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -790,14 +788,24 @@ export default function LedgerScreen() {
                                 <MaterialCommunityIcons name="leaf" size={15} color={amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg} />
                                 <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>Community Circulation ⓘ</Text>
                             </View>
-                            <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly.toFixed(2)} />
+                            {monthly > 0 && (
+                                // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
+                                <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly < 0.005 ? '<0.01' : monthly.toFixed(2)} />
+                            )}
                         </View>
-                        <View style={styles.circRow}>
-                            <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }}>per month → commons pool</Text>
-                            <Text style={[styles.circNextDate, { color: amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg }]}>
-                                {nextRun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · {daysUntil}d
+                        {monthly > 0 ? (
+                            <View style={styles.circRow}>
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }}>per month → commons pool</Text>
+                                <Text style={[styles.circNextDate, { color: amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg }]}>
+                                    {nextRun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · {daysUntil}d
+                                </Text>
+                            </View>
+                        ) : (
+                            // At or under the fee-free line: say so in words, not "0.00 per month".
+                            <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }} testID="ledger-circulation-free">
+                                {t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })}
                             </Text>
-                        </View>
+                        )}
                         {amber && (
                             <Text style={{ color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontSize: 11, marginTop: 6, fontWeight: '600' }}>
                                 ⚠️ Balance above 1000 — consider spending!

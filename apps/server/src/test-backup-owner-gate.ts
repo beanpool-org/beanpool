@@ -8,7 +8,8 @@
  *     and clear (the standby's token still works), replication-config/save, a
  *     change to the snapshot settings, a copy through the admin-password path
  *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
- *     list, download). A moderator's session too. An owner's key session and the node password get each of them. No
+ *     list, download). A moderator's session too. An owner's key session and the node password get each of them (the copy
+ *     source asks a fresh proof, design case 18 S2b: a computer's session is sent to the phone, which saves it). No
  *     route deletes a snapshot (design case 18, A3): 404 to an owner, an admin and a moderator, the file still there. The
  *     fleet manager's backup downloads are gone (deleted 2026-10-02): nobody gets a database there, an owner neither.
  *  2. The replication token alone, on every /api/local/admin/* route the node serves: it gets what
@@ -16,7 +17,8 @@
  *     and the take-over envelope), where it is taken. With backups readable (no recovery code) and locked (one).
  *  3. A readable backup's node_config.json carries no credential (the admin hash and salt, the 2FA secret, the token's
  *     hash, a standby's token, a legacy plain-text password), from a legacy data/node_config.json too; nor do its bytes.
- *  4. A restore refuses, the live database and the data folder as they were: a gzip bomb past the unpacked cap, past the
+ *  4. A restore (of a sealed file, opened with the recovery code: Settings restores no plain archive, design case 18 §3.1)
+ *     refuses, the live database and the data folder as they were: a gzip bomb past the unpacked cap, past the
  *     member cap, and a member whose header alone is past the real 4 GB cap; a hard link (busybox's case: out to
  *     ../local-config.json), a symlink and a fifo; a state.db that is not a database, one that fails integrity_check, and
  *     one carrying a trigger this server's database does not have.
@@ -143,7 +145,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig, setReplicationToken, verifyReplicationToken, hasReplicationToken } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { createSnapshot, writeDbSnapshot, getAutoSnapshotConfig } = await import('./services/snapshot-scheduler.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
@@ -328,7 +330,16 @@ async function main(): Promise<void> {
         const cfg = await call('POST', '/api/local/admin/snapshots/config', credsOf(), JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
         assert(cfg.status === 200, `1. a snapshot settings change: ${who} makes it (${cfg.status})`);
         const save = await call('POST', '/api/local/admin/replication-config/save', credsOf(), JSON.stringify({ primaryUrl: '' }));
-        assert(save.status === 200, `1. replication-config/save: ${who} saves it (${save.status})`);
+        if (who === 'the node password') {
+            assert(save.status === 200, `1. replication-config/save: ${who}, with a current code, saves it (${save.status})`);
+        } else {
+            // Which server a standby copies from asks a fresh proof (S2b): the computer's session is sent to the phone.
+            assert(save.status === 403 && save.json?.code === 'phone_required' && !getLocalConfig().backupPrimaryUrl,
+                `1. replication-config/save: ${who} from a computer is sent to the phone, nothing changed (${save.status})`);
+            const ex = consumeHandshakeToken(mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+            const fromPhone = await call('POST', '/api/local/admin/replication-config/save', { 'x-admin-session': ex.sessionId! }, JSON.stringify({ primaryUrl: '' }));
+            assert(fromPhone.status === 200, `1. replication-config/save: the owner's phone, Manage pressed just now, saves it (${fromPhone.status})`);
+        }
         const mode = await call('POST', '/api/local/admin/replication-token/mode', credsOf(), JSON.stringify({ tokenOnly: false }));
         assert(mode.status === 200, `1. replication-token/mode: ${who} sets it (${mode.status})`);
         const gen = await call('POST', '/api/local/admin/replication-token/generate', credsOf());
@@ -439,14 +450,29 @@ async function main(): Promise<void> {
     }
 
     // Locked backups from here on, and the sweep again.
-    await makeRecoveryCode();
+    const recovery = await makeRecoveryCode();
     const lockedNow = await call('POST', '/api/local/admin/backup', asOwner);
     assert(lockedNow.status === 200 && lockedNow.headers.get('x-backup-locked') === 'yes', '2. setup: with a recovery code, backups are locked');
     await sweep('backups locked (a recovery code)');
 
     // ── 4. A restore refuses what it should, and changes nothing ─────────────────────────────────────────────────
     console.log('\n— 4. what a restore refuses —');
-    const restore = (bytes: Buffer) => call('POST', '/api/local/admin/restore', asOwner, bytes);
+    // Settings restores sealed files only (design case 18 §3.1): each archive below is locked as this node locks its
+    // backups (its own key signs, to the owner and the recovery code) and opened with the code, so it reaches the checks.
+    const core = await import('@beanpool/core');
+    const { privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+    const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+    const nodeKey = privateKeyFromProtobuf(fs.readFileSync(path.join(dataDir!, 'libp2p_key')));
+    const communityId = JSON.parse(fs.readFileSync(path.join(dataDir!, 'genesis.json'), 'utf-8')).communityId;
+    const sealed = async (tarGzBytes: Buffer): Promise<Buffer> => Buffer.from(await core.sealEnvelope(new Uint8Array(tarGzBytes), {
+        kind: 'backup', communityId, nodePeerId: peerIdFromPrivateKey(nodeKey).toString(),
+        recipients: { owners: [], codes: [getLocalConfig().recoveryCode as any] },
+        signingKey: new Uint8Array(nodeKey.raw.subarray(0, 32)),
+    }));
+    const withCode = { ...asOwner, 'X-Recovery-Code': recovery.code };
+    const plainRefused = await call('POST', '/api/local/admin/restore', asOwner, plainArchive(databaseCopy()));
+    assert(plainRefused.status === 400 && plainRefused.json?.notLocked === true, `4. a plain archive is refused before any check (${plainRefused.status})`);
+    const restore = async (bytes: Buffer) => call('POST', '/api/local/admin/restore', withCode, await sealed(bytes));
     const liveRoles = roles();
     const liveMembers = memberCount();
     const good = databaseCopy();
@@ -520,7 +546,7 @@ async function main(): Promise<void> {
             .run(pubkey(), new Date().toISOString(), owner);
         h.exec(`DROP TRIGGER ${TRIGGER}; ${rewritten};`);
     }));
-    const r = await call('POST', '/api/local/admin/restore', asOwner, backup);
+    const r = await call('POST', '/api/local/admin/restore', withCode, await sealed(backup));
     assert(r.status === 200 && r.json?.success === true, `5. an owner's key session restores a backup (${r.status}: ${JSON.stringify(r.json)?.slice(0, 160)})`);
     // This server served its standby's copies above (sync-snapshot), which opens a second connection. With it open, the
     // old database's -wal stayed beside the restored file and was played over it at the next open: the old members,

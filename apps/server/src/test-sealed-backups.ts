@@ -5,26 +5,29 @@
  *     its own node key) with the recovery code, through the real HTTPS server as the operator manual's curl line
  *     sends it: the database, the node key, community key, genesis, connectors, the admin/2FA credentials, the
  *     roles and the recovery code record all come back.
- *  2. A legacy plain `.tar.gz` still restores (database only; its fresh keys stay — a plain archive's keys are
- *     never installed).
+ *  2. A plain `.tar.gz` is refused 400, naming `beanpool restore --unlocked`: nothing extracted, the live database
+ *     untouched (design case 18 §3.1). The images and shortfall rows (2–2d) restore the same archives sealed.
  *  3. The hostile-archive suite through the sealed path: a `../` member, a symlink, a hardlink and an absolute
  *     member, each sealed properly to the recovery code and signed by the node itself, are refused whole, nothing
  *     lands outside the extraction folder, and the live database is untouched.
  *  4. The code: none → 400 with who can open it; typo → 400 before any guess; wrong code number → 400; a
  *     well-formed wrong code → 403; a take-over envelope is not a backup; a cut-short file is refused.
  *  5. The signature, where this server holds a pin (966 follow-up #2): a file of this community signed by another
- *     key is refused 409 and names the signer; confirming that signer by name lets it through to the next check;
- *     a header whose signature does not match the server it names is refused 400.
- *  6. A file let through by naming its signer (X-Accept-Signer) restores its database only: a take-over bundle inside
- *     it — which anyone who has seen a header can forge — is never applied (seal review round 1).
+ *     key is refused 409, names the signer and `beanpool restore --accept-signer`; naming that signer in an
+ *     X-Accept-Signer header changes nothing (the header is gone, design case 18 D3); a header whose signature does
+ *     not match the server it names is refused 400.
+ *  6. A file signed by another key, carrying a forged take-over bundle, sent with X-Accept-Signer: 409, and nothing
+ *     changes: no key, no password, not the database.
+ *  7. On a main server a `mirror` link's key is not a pin (a file signed by it: 409); on a standby it is (standby
+ *     review F2).
  *
  * Recovery seal S2 (the key that opens members' sign-in recovery copies travels only inside a sealed backup):
  *  1. @Dee deposits a sign-in copy on the main server over HTTPS. The sealed backup's bundle carries
  *     data/recovery-seal.key byte for byte; the restore on a fresh data dir installs it (the fresh server's own key is
  *     kept beside it), says the copy opens, and after the restart a device with only @Dee's sign-in recovers their seed
  *     and 12 words over HTTPS.
- *  2e. A plain backup (no recovery code) lists no recovery-seal.key and holds none of its bytes; a restore from it says
- *     the copy will not open there, with the missing-key line, and after the restart it does not.
+ *  2e. A plain backup (no recovery code) lists no recovery-seal.key and holds none of its bytes; Settings refuses to
+ *     restore it, and the fresh server keeps its own key.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sealed-backups.ts
@@ -337,6 +340,16 @@ async function main(): Promise<void> {
     }
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
+    /** Seal a tar exactly as the node does: its own key signs, locked to the owner and the code. */
+    const sealAsNode = async (payload: Buffer, opts: { signingKey?: Uint8Array; nodePeerId?: string; kind?: 'backup' | 'takeover' } = {}) => {
+        const peerId = opts.nodePeerId ?? peerIdFromPrivateKey(privateKeyFromProtobuf(nodeKeyBytes)).toString();
+        return Buffer.from(await core.sealEnvelope(new Uint8Array(payload), {
+            kind: opts.kind ?? 'backup', communityId: main.communityId, nodePeerId: peerId,
+            recipients: { owners: [{ pubkey: ownerPub, callsign: 'Olive' }], codes: [(await import('./config/local-config.js')).getLocalConfig().recoveryCode as any] },
+            signingKey: opts.signingKey ?? nodeSeed,
+        }));
+    };
+
     // ── 1. Round trip onto a fresh server ──
     console.log('\n— 1. seal → restore on a fresh data dir —');
     const rt = runChild('sealed', backupFile, code.code, { thenRecover: true });
@@ -359,6 +372,8 @@ async function main(): Promise<void> {
     assert(JSON.stringify(rt.after.roles) === JSON.stringify(main.roles), '1. the roles are back');
     assert(rt.after.members === main.members && rt.after.marker, '1. the database is back (members, and the marker row)');
     assert(rt.after.leftovers.length === 0, `1. no restore temp files left (${rt.after.leftovers.join(', ')})`);
+    assert(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z-before-restore$/.test(rt.body.restorePoint?.name || '') && rt.body.restartNote === 'The server restarts now; sign in again.',
+        `1. the answer names the restore point kept first, and the restart (${rt.body.restorePoint?.name})`);
     assert(rt.before.sealKey && rt.before.sealKey !== mainSealKey && rt.after.sealKey === mainSealKey && rt.after.sealKeyMode === '600',
         "1. S2: the restore installs the community's recovery-seal key, byte for byte, 0600 (the fresh server had made its own)");
     assert(rt.after.doorKey === sha(mainDoorKeyBytes) && rt.after.doorKeyMode === '600',
@@ -375,8 +390,8 @@ async function main(): Promise<void> {
         `1. S2: after the restart, a device with only @Dee's sign-in recovers their seed and 12 words over HTTPS (${rec1?.released.status} ${rec1?.error ?? 'opened'})`);
     assert(!/cannot be opened here/.test(rt.afterRestart.logs), '1. S2: …and the restarted server names no copy it cannot open');
 
-    // ── 2. A legacy plain tar still restores ──
-    console.log('\n— 2. legacy .tar.gz —');
+    // ── 2. The images and shortfall rows, sealed (a plain tar is refused, below) ──
+    console.log('\n— 2. a sealed archive with its images —');
     const legacyDir = path.join(work, 'legacy');
     fs.mkdirSync(legacyDir);
     const snapPath = path.join(legacyDir, 'state.db');
@@ -412,17 +427,15 @@ async function main(): Promise<void> {
     const legacyTar = makeTarGz([
         { name: './state.db', content: fs.readFileSync(snapPath) },
         { name: './node_config.json', content: Buffer.from('{}') },
-        // A plain archive's keys are never installed, even when it carries a bundle.
-        { name: './takeover-bundle.json', content: Buffer.from(JSON.stringify({ v: 1, files: {}, localConfig: {} })) },
         ...objectMembers,
     ]);
-    const legacyFile = path.join(work, 'legacy.tar.gz');
-    fs.writeFileSync(legacyFile, legacyTar);
-    const lg = runChild('legacy', legacyFile);
-    assert(lg.status === 200 && lg.body.success === true && lg.body.sealed === false && lg.body.restoredKeys === false,
-        `2. a legacy plain backup still restores (got ${lg.status}: ${JSON.stringify(lg.body).slice(0, 200)})`);
+    const legacyFile = path.join(work, 'images.bpsealed');
+    fs.writeFileSync(legacyFile, await sealAsNode(legacyTar));
+    const lg = runChild('sealed', legacyFile, code.code);
+    assert(lg.status === 200 && lg.body.success === true && lg.body.sealed === true && lg.body.restoredKeys === false,
+        `2. a sealed backup with no take-over bundle restores (got ${lg.status}: ${JSON.stringify(lg.body).slice(0, 200)})`);
     assert(lg.after.members === main.members && lg.after.marker, '2. …its database is restored');
-    assert(lg.after.key === lg.before.key && lg.after.communityId === lg.before.communityId, "2. …and the fresh server keeps its own keys (a plain archive's are never installed)");
+    assert(lg.after.key === lg.before.key && lg.after.communityId === lg.before.communityId, "2. …and the fresh server keeps its own keys (no bundle came with it)");
     const sameShas = (a: Record<string, string>, b: Record<string, string>) => {
         const ka = Object.keys(a).sort();
         const kb = Object.keys(b).sort();
@@ -453,9 +466,9 @@ async function main(): Promise<void> {
             })),
         },
     ]);
-    const shortFile = path.join(work, 'short.tar.gz');
-    fs.writeFileSync(shortFile, shortTar);
-    const sh = runChild('legacy', shortFile);
+    const shortFile = path.join(work, 'short.bpsealed');
+    fs.writeFileSync(shortFile, await sealAsNode(shortTar));
+    const sh = runChild('sealed', shortFile, code.code);
     assert(sh.status === 200 && sh.body.success === true,
         `2b. a short backup still restores — the database is in and the node restarts (${sh.status})`);
     assert(sh.body.complete === false && sh.body.images?.missing === 1
@@ -483,9 +496,9 @@ async function main(): Promise<void> {
         { name: './state.db', content: fs.readFileSync(snapPath) },
         { name: './node_config.json', content: Buffer.from('{}') },
     ]);
-    const strippedFile = path.join(work, 'stripped.tar.gz');
-    fs.writeFileSync(strippedFile, strippedTar);
-    const st = runChild('legacy', strippedFile);
+    const strippedFile = path.join(work, 'stripped.bpsealed');
+    fs.writeFileSync(strippedFile, await sealAsNode(strippedTar));
+    const st = runChild('sealed', strippedFile, code.code);
     assert(st.status === 200 && st.body.success === true,
         `2c. the database still restores, and the node still restarts (${st.status})`);
     assert(st.body.complete === false,
@@ -515,12 +528,12 @@ async function main(): Promise<void> {
             .run(cipherObject.toString('base64'));
         legacyShape.close();
     }
-    const inlineFile = path.join(work, 'inline.tar.gz');
-    fs.writeFileSync(inlineFile, makeTarGz([
+    const inlineFile = path.join(work, 'inline.bpsealed');
+    fs.writeFileSync(inlineFile, await sealAsNode(makeTarGz([
         { name: './state.db', content: fs.readFileSync(inlineDb) },
         { name: './node_config.json', content: Buffer.from('{}') },
-    ]));
-    const inl = runChild('legacy', inlineFile);
+    ])));
+    const inl = runChild('sealed', inlineFile, code.code);
     assert(inl.status === 200 && inl.body.complete === true && inl.body.images?.missing === 0
         && inl.body.images?.referenced === 0 && !inl.body.warning,
         `2d. a backup from before the image store restores COMPLETE — it references no objects (${JSON.stringify(inl.body.images)})`);
@@ -540,16 +553,6 @@ async function main(): Promise<void> {
     const liveMembers = () => (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
     const membersBefore = liveMembers();
     const noLeftovers = () => fs.readdirSync(dataDir!).filter((f) => f.startsWith('.restore') || f.startsWith('uploaded-backup'));
-
-    /** Seal a tar exactly as the node does: its own key signs, locked to the owner and the code. */
-    const sealAsNode = async (payload: Buffer, opts: { signingKey?: Uint8Array; nodePeerId?: string; kind?: 'backup' | 'takeover' } = {}) => {
-        const peerId = opts.nodePeerId ?? peerIdFromPrivateKey(privateKeyFromProtobuf(nodeKeyBytes)).toString();
-        return Buffer.from(await core.sealEnvelope(new Uint8Array(payload), {
-            kind: opts.kind ?? 'backup', communityId: main.communityId, nodePeerId: peerId,
-            recipients: { owners: [{ pubkey: ownerPub, callsign: 'Olive' }], codes: [(await import('./config/local-config.js')).getLocalConfig().recoveryCode as any] },
-            signingKey: opts.signingKey ?? nodeSeed,
-        }));
-    };
 
     // ── 2e. S2: a plain backup never carries the recovery-seal key ──
     console.log('\n— 2e. S2: a plain backup carries no recovery-seal key —');
@@ -577,17 +580,22 @@ async function main(): Promise<void> {
         };
         walk(out);
         assert(hits.length === 0 && !fs.readFileSync(plainFile).includes(mainSealKeyBytes), `2e. …and no file in it holds the key's bytes, in any form (${hits.join(', ') || 'none'})`);
-        const pr = runChild('legacy', plainFile, undefined, { thenRecover: true });
-        assert(pr.status === 200 && pr.body.success === true && pr.body.sealed === false, `2e. the plain backup restores (${pr.status})`);
-        const NO_KEY_LINE = "No recovery-seal key in this backup: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
-        assert(pr.body.recoverySeal?.copies === 1 && pr.body.recoverySeal.open === 0 && pr.body.recoverySeal.carriedKey === false
-            && pr.logs.includes(`[Restore] ⚠️ ${NO_KEY_LINE} The sign-in recovery copy in it will not open on this server.`),
-            `2e. the restore from it logs the missing-key line, and says the copy will not open (${JSON.stringify(pr.body.recoverySeal)})`);
-        assert(pr.after.sealKey === pr.before.sealKey && Object.keys(pr.after.retired).length === 0,
-            "2e. …and the fresh server keeps its own key: nothing came to replace it");
-        const rec2 = pr.afterRestart?.recovered;
-        assert(rec2?.seedHex === null && rec2.released.body?.enough !== true && /cannot be opened here/.test(pr.afterRestart.logs),
-            `2e. after the restart @Dee's copy does not open there, and its boot says so (${rec2?.released.status})`);
+        const pr = runChild('legacy', plainFile);
+        assert(pr.status === 400 && pr.body.notLocked === true && pr.body.command === 'beanpool restore --unlocked FILE',
+            `2e. Settings refuses to restore the plain backup, naming the command (${pr.status} ${pr.body.error})`);
+        assert(pr.after.sealKey === pr.before.sealKey && pr.after.key === pr.before.key && Object.keys(pr.after.retired).length === 0 && pr.after.leftovers.length === 0,
+            "2e. …and the fresh server keeps its own keys, with nothing left behind");
+    }
+
+    // ── 2. A plain tar is refused: nothing extracted, the live database untouched ──
+    console.log('\n— 2. a plain .tar.gz is refused —');
+    {
+        const plain = await restore(legacyTar);
+        assert(plain.status === 400 && plain.body.notLocked === true && plain.body.command === 'beanpool restore --unlocked FILE'
+            && /^Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked\. An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE` \(coming in the next update\)\. Nothing was changed\.$/.test(plain.body.error),
+            `2. a plain .tar.gz: 400, naming the command (${plain.status} ${plain.body.error})`);
+        assert(liveMembers() === membersBefore && noLeftovers().length === 0 && !fs.existsSync(path.join(dataDir!, 'restore-points')),
+            '2. …nothing extracted, no restore point, the live database untouched');
     }
 
     // ── 3. Hostile archives, through the sealed path ──
@@ -642,24 +650,25 @@ async function main(): Promise<void> {
     const forgerPeer = peerIdFromPrivateKey(forgerKey).toString();
     const forged = await sealAsNode(Buffer.from('not even a tar'), { signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)), nodePeerId: forgerPeer });
     const pinned = await restore(forged, { 'X-Recovery-Code': code.code });
-    assert(pinned.status === 409 && pinned.body.signerNotPinned === true && pinned.body.signer === forgerPeer,
-        `5. a file of this community signed by another key is refused 409, naming the signer (got ${pinned.status})`);
+    assert(pinned.status === 409 && pinned.body.signerNotPinned === true && pinned.body.signer === forgerPeer
+        && pinned.body.command === `beanpool restore --accept-signer ${forgerPeer}` && pinned.body.error.includes(`beanpool restore --accept-signer ${forgerPeer}\` (coming in the next update).`),
+        `5. a file of this community signed by another key is refused 409, naming the signer and the command (got ${pinned.status}: ${pinned.body.error})`);
     const confirmed = await restore(forged, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': forgerPeer });
-    assert(confirmed.status === 500 && /Restore failed/.test(confirmed.body.error),
-        `5. confirming that signer by name passes the pin, and the next check (the archive) still applies (got ${confirmed.status}: ${confirmed.body.error})`);
+    assert(confirmed.status === 409 && confirmed.body.signerNotPinned === true,
+        `5. naming that signer in X-Accept-Signer changes nothing: still 409 (got ${confirmed.status}: ${confirmed.body.error})`);
     const wrongConfirm = await restore(forged, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': 'someone-else' });
-    assert(wrongConfirm.status === 409, '5. confirming a different signer does not');
+    assert(wrongConfirm.status === 409, '5. nor does naming a different signer');
     // A header that names the node but was signed by someone else: altered.
     const lying = await sealAsNode(Buffer.from('x'), { signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)) });
     const lie = await restore(lying, { 'X-Recovery-Code': code.code });
     assert(lie.status === 400 && lie.body.badSignature === true, `5. a signature that does not match the server it names: 400 (got ${lie.status})`);
     assert(liveMembers() === membersBefore && noLeftovers().length === 0, '5. nothing was restored and nothing left behind');
 
-    // ── 6. Accepted by its signer's name: the database only, never the bundle (seal review round 1, #2) ──
+    // ── 6. A forged file sent with its signer's name: refused, nothing changed (design case 18 §3.1, D3) ──
     // Anyone who has seen a header can lock a tar to the same recovery code and sign it with their own key, with a
     // bundle whose node key is that same key and whose genesis names this community: every bundle check passes.
-    // Naming the signer must still not install that key, nor the admin password inside. Last: it swaps the database.
-    console.log('\n— 6. X-Accept-Signer restores the database only —');
+    // Naming the signer used to let its database through; nothing does now.
+    console.log('\n— 6. X-Accept-Signer lets nothing through —');
     const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
     const snapDb = path.join(work, 'forged-state.db');
     writeDbSnapshot(snapDb);
@@ -685,8 +694,8 @@ async function main(): Promise<void> {
     const genesisBefore = sha(fs.readFileSync(path.join(dataDir!, 'genesis.json')));
     const configBefore = JSON.parse(fs.readFileSync(path.join(dataDir!, 'local-config.json'), 'utf-8'));
     const byName = await restore(forgedFull, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': forgerPeer });
-    assert(byName.status === 200 && byName.body.success === true && byName.body.restoredKeys === false && byName.body.keysIgnored === true,
-        `6. accepted by name: the database comes back, the keys inside are ignored (got ${byName.status}: ${JSON.stringify(byName.body).slice(0, 200)})`);
+    assert(byName.status === 409 && byName.body.signerNotPinned === true,
+        `6. named by its signer, the forged file is refused 409 (got ${byName.status}: ${JSON.stringify(byName.body).slice(0, 200)})`);
     assert(sha(fs.readFileSync(path.join(dataDir!, 'libp2p_key'))) === keyBefore
         && sha(fs.readFileSync(path.join(dataDir!, 'community.key'))) === communityKeyBefore
         && sha(fs.readFileSync(path.join(dataDir!, 'genesis.json'))) === genesisBefore,
@@ -694,7 +703,31 @@ async function main(): Promise<void> {
     const configAfter = JSON.parse(fs.readFileSync(path.join(dataDir!, 'local-config.json'), 'utf-8'));
     assert(configAfter.adminHash === configBefore.adminHash && configAfter.salt === configBefore.salt && configAfter.adminHash !== 'forged-hash',
         '6. …and so is its admin password');
-    assert(sha(fs.readFileSync(path.join(dataDir!, 'state.db'))) === sha(fs.readFileSync(snapDb)), '6. …while the database itself was restored');
+    assert(liveMembers() === membersBefore && noLeftovers().length === 0 && !fs.existsSync(path.join(dataDir!, 'restore-points')),
+        '6. …and so is the database: nothing restored, no restore point, nothing left behind');
+
+    // ── 7. A mirror link's key: a pin on a standby only (standby review F2) ──
+    console.log('\n— 7. a mirror link is a pin on a standby, not on a main server —');
+    {
+        const { setNodeRole, getNodeRole } = await import('./config/node-role.js');
+        const connectorsBefore = fs.readFileSync(path.join(dataDir!, 'connectors.json'));
+        fs.writeFileSync(path.join(dataDir!, 'connectors.json'), JSON.stringify([{ address: `/ip4/127.0.0.1/tcp/4001/p2p/${forgerPeer}`, trustLevel: 'mirror', enabled: true, callsign: 'mirror', addedAt: 1 }]));
+        const wasRole = getNodeRole();
+        try {
+            setNodeRole('primary');
+            const onMain = await restore(forged, { 'X-Recovery-Code': code.code });
+            assert(onMain.status === 409 && onMain.body.signerNotPinned === true && !(onMain.body.pins || []).includes(forgerPeer),
+                `7. on a main server, a file signed by its mirror link's key: 409, not a pin (got ${onMain.status}: ${JSON.stringify(onMain.body.pins)})`);
+            setNodeRole('backup');
+            const onStandby = await restore(forged, { 'X-Recovery-Code': code.code });
+            assert(onStandby.status === 500 && /Restore failed/.test(onStandby.body.error || ''),
+                `7. on a standby the same file passes the pin, and the next check (the archive) still applies (got ${onStandby.status}: ${onStandby.body.error})`);
+            assert(liveMembers() === membersBefore && noLeftovers().length === 0, '7. nothing was restored and nothing left behind');
+        } finally {
+            setNodeRole(wasRole);
+            fs.writeFileSync(path.join(dataDir!, 'connectors.json'), connectorsBefore);
+        }
+    }
 
     server.close();
     fs.rmSync(work, { recursive: true, force: true });

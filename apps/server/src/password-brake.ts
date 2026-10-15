@@ -377,7 +377,7 @@ export function settlePasswordAttempt(key: string, ok: boolean, reset = true, no
     for (const w of wake) w();
 }
 
-/** Answer a request the brake refused. */
+/** Answer a request the brake refused. A recovery code's caller sets its own words after (the take-over, the restore). */
 export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: number; reason: 'source' | 'node' }): void {
     const wait = refusal.retryAfter;
     ctx.status = 429;
@@ -387,6 +387,8 @@ export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: numb
             ? `Too many wrong admin passwords from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`
             : `This node is getting a lot of wrong admin passwords from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network, or sign in with your key.`,
         retryAfter: wait,
+        // Which rule held it: this source's own count, or the node-wide one (design case 18 §9 S2 reads it).
+        reason: refusal.reason,
         passwordBackoff: true,
     };
 }

@@ -26,7 +26,9 @@
  *   9. The harvester keeps that label beside its copy, and the manager's download of the copy repeats it.
  *  10. Restore: an s3 backup onto an s3 node comes back complete, measured against the bucket; a short one
  *      says which; onto a DISK node it says plainly that the photos stay in the bucket; and a disk backup
- *      carrying images/ is REFUSED by an s3 node before anything is touched.
+ *      carrying images/ is REFUSED by an s3 node before anything is touched. Settings restores locked files only
+ *      (design case 18 §3.1): each archive is locked as this node locks its backups (its own key signs, to its
+ *      recovery code) and the fresh server opens it with the code.
  *  11. The secret access key appears in no log line of this process or of any child.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-store-s3-http.ts
@@ -99,7 +101,8 @@ function untar(file: string): string {
 // ── The fresh server (child process) ───────────────────────────────────────────────────────
 
 async function child(): Promise<void> {
-    // argv: --child <s3|disk> <file>. The mode is carried by the environment the parent built (IMAGE_STORE set or not).
+    // argv: --child <s3|disk> <file>. The mode is carried by the environment the parent built (IMAGE_STORE set or not),
+    // and the code that opens the locked file by TEST_RECOVERY_CODE.
     const file = process.argv[4];
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     const { initStateEngine } = await import('./state-engine.js');
@@ -132,7 +135,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, {
         method: 'POST',
-        headers: { ...twoFa.headers(), 'Content-Type': 'application/octet-stream' },
+        headers: { ...twoFa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE!, 'Content-Type': 'application/octet-stream' },
         body: new Uint8Array(fs.readFileSync(file)),
     });
     const body = await res.json();
@@ -157,9 +160,9 @@ async function child(): Promise<void> {
     process.exit(0);
 }
 
-function runChild(mode: 's3' | 'disk', file: string, fake: FakeS3): { result: any; output: string } {
+function runChild(mode: 's3' | 'disk', file: string, fake: FakeS3, code: string): { result: any; output: string } {
     const freshDir = fs.mkdtempSync(path.join(os.tmpdir(), 's3-restore-fresh-'));
-    const env: Record<string, string> = { ...process.env as Record<string, string>, BEANPOOL_DATA_DIR: freshDir };
+    const env: Record<string, string> = { ...process.env as Record<string, string>, BEANPOOL_DATA_DIR: freshDir, TEST_RECOVERY_CODE: code };
     for (const k of Object.keys(fake.env())) delete env[k];
     if (mode === 's3') Object.assign(env, fake.env());
     try {
@@ -512,9 +515,32 @@ async function main(): Promise<void> {
 
     // ── 10. restore ────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 10. Restore ---');
+    // This node's key and a recovery code, made only now: the backups above were readable, as an s3 node's are with no
+    // code. Each archive is then locked as the node locks its backups, with nothing else added to the tar inside.
+    const core = await import('@beanpool/core');
+    const { generateKeyPair, privateKeyToProtobuf, privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+    const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+    const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
+    const keyFile = path.join(dataDir, 'libp2p_key');
+    if (!fs.existsSync(keyFile)) fs.writeFileSync(keyFile, privateKeyToProtobuf(await generateKeyPair('Ed25519')), { mode: 0o600 });
+    const nodeKey = privateKeyFromProtobuf(fs.readFileSync(keyFile));
+    const recovery = await makeRecoveryCode();
+    const communityId = JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId;
+    const locked = async (file: string): Promise<string> => {
+        const out = file.replace(/\.tar\.gz$/, '.bpsealed');
+        fs.writeFileSync(out, await core.sealEnvelope(new Uint8Array(fs.readFileSync(file)), {
+            kind: 'backup', communityId, nodePeerId: peerIdFromPrivateKey(nodeKey).toString(),
+            recipients: { owners: [], codes: [getLocalConfig().recoveryCode as any] },
+            signingKey: new Uint8Array(nodeKey.raw.subarray(0, 32)),
+        }));
+        return out;
+    };
+    const wholeLocked = await locked(whole.file);
+    const shortLocked = await locked(short.file);
     await fake.seed(rowB.storage_key, photoB, 'image/jpeg'); // the bucket is whole again for the whole backup
     {
-        const { result, output } = runChild('s3', whole.file, fake);
+        const { result, output } = runChild('s3', wholeLocked, fake, recovery.code);
         childOutputs.push(output);
         assert(result.status === 200 && result.body.success === true && result.marker === true, 's3 → s3: the database is restored');
         assert(result.body.complete === true && result.body.images.missing === 0 && result.body.images.referenced === referenced,
@@ -525,7 +551,7 @@ async function main(): Promise<void> {
     }
     await fake.remove(rowB.storage_key);
     {
-        const { result, output } = runChild('s3', short.file, fake);
+        const { result, output } = runChild('s3', shortLocked, fake, recovery.code);
         childOutputs.push(output);
         assert(result.status === 200 && result.body.complete === false && result.body.images.missing === 1,
             's3 → s3, with a key the bucket lacks: not complete, short by exactly one');
@@ -533,7 +559,7 @@ async function main(): Promise<void> {
             `and the warning says so: "${result.body.warning}"`);
     }
     {
-        const { result, output } = runChild('disk', whole.file, fake);
+        const { result, output } = runChild('disk', wholeLocked, fake, recovery.code);
         childOutputs.push(output);
         assert(result.status === 200 && result.body.success === true && result.marker === true, 's3 backup → DISK node: the database is restored');
         assert(result.body.complete === false, 'but it is not called complete');
@@ -550,7 +576,7 @@ async function main(): Promise<void> {
         fs.writeFileSync(path.join(stage, 'images', 'posts', 'disk-post', '0-12345678.jpg'), makePhoto('disk'));
         const diskFile = path.join(work, 'disk-backup.tar.gz');
         execFileSync('tar', ['-czf', diskFile, '-C', stage, '.']);
-        const { result, output } = runChild('s3', diskFile, fake);
+        const { result, output } = runChild('s3', await locked(diskFile), fake, recovery.code);
         childOutputs.push(output);
         assert(result.status === 409, `a disk backup carrying images/ is refused by an s3 node (HTTP ${result.status})`);
         assert(/carries its photos and attachments inside it.*migration tool.*Nothing was changed/.test(result.body.error || ''),

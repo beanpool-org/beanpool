@@ -6,7 +6,8 @@
  * then had the main server's admin password. Checked here:
  *
  *   1. A fresh install is token-only; an existing install keeps its setting.
- *   2. Live Backup Server (replication-config/save) refuses the admin password, accepts a token.
+ *   2. Live Backup Server (replication-config/save) refuses the admin password, accepts a token; it asks the owner's
+ *      fresh proof (design case 18 S2b): an owner's computer session is sent to the phone, nothing stored.
  *   3. Warning path: a legacy standby whose main server already has a token keeps copying with
  *      the password (no other standby is cut off), warns, and Settings carries the warning.
  *      With token-only on as well, the banner says it is NOT copying, and the pull does fail.
@@ -66,7 +67,7 @@ for (const m of ['log', 'info', 'warn', 'error'] as const) {
 }
 
 const { initStateEngine, setNodeRole, getReplicationAccessLog, seedGenesisMember } = await import('./state-engine.js');
-const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
 const { startP2P } = await import('./p2p.js');
 const { addConnector, removeConnector } = await import('./connector-manager.js');
 const {
@@ -239,14 +240,23 @@ async function main() {
         setNodeRole('backup');
 
         // ---------- 2. Live Backup Server route ----------
-        const refused = await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryPassword: ADMIN_PW });
+        // Which server a standby copies from is a fresh proof's: the owner's phone, Manage pressed just now.
+        const fromPhone = (): Record<string, string> => {
+            const s = consumeHandshakeToken(mintHandshakeToken(ownerPk, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+            if (!s.ok || !s.sessionId) throw new Error(`setup: no phone session: ${s.error}`);
+            return { 'x-admin-session': s.sessionId };
+        };
+        const fromComputer = await post('/api/local/admin/replication-config/save', { primaryUrl: base, primaryToken: 'a-pasted-token' });
+        assert(fromComputer.status === 403 && fromComputer.json?.code === 'phone_required' && !getLocalConfig().backupReplicationToken,
+            `2. from the owner's computer it is sent to the phone, nothing stored (${fromComputer.status})`);
+        const refused = await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryPassword: ADMIN_PW }, fromPhone());
         assert(refused.status === 400, '2. saving the main server admin password is refused (400)');
         assert(/replication token/i.test(refused.json?.error || ''), '2. the refusal says to use a replication token');
         assert(!getLocalConfig().backupAdminPassword, '2. nothing was stored');
-        const accepted = await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryToken: 'a-pasted-token' });
+        const accepted = await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryToken: 'a-pasted-token' }, fromPhone());
         assert(accepted.status === 200 && accepted.json?.success, '2. saving a token is accepted');
         assert(getLocalConfig().backupReplicationToken === 'a-pasted-token', '2. the token is stored');
-        await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryToken: '' });
+        await post('/api/local/admin/replication-config/save', { password: ADMIN_PW, primaryUrl: base, primaryToken: '' }, fromPhone());
         assert(!getLocalConfig().backupReplicationToken, '2. an empty token clears it');
 
         // ---------- 3. Warning path: main server already has a token ----------

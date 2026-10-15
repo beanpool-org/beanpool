@@ -830,3 +830,18 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Claim:** `syncChannelVideos` passes the Instagram token as `?access_token=` in the URL.
 - **Why not to re-file as is:** whether graph.instagram.com accepts the token as a Bearer header can't be verified offline, and a rejection there is silent (`if (mediaRes.ok)` else nothing synced, no log, no test). Shield: re-file only with a measured call against the real API and a test that fails when the sync gets nothing.
 
+
+### 2026-10-15 — Watchman: raise the test-door-work timing bound a third time, 2 → 10 ms + SERIAL (#1972) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (re-file of #1730, #1759)
+- **Claim:** test-door-work's solution-check timing assertion fails, so the bound should be 10 ms and the suite serial.
+- **Why not to re-file:** main ef0c8aa2 passes it 3/3 (median 0.201 ms, 10x under the 2 ms bound) and none of the last 12 failed Test-All runs shows this assertion. A looser bound would hide a real regression and serial adds runtime. Watchman: re-file only with a failing CI log from main for this exact line.
+
+### 2026-10-15 — Sentinel: rate limit on /api/pair/cancel (#1970) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the pairing cancellation endpoint needs a rate limit.
+- **Why not to re-file:** cancel needs the session's 64+-bit id and does one in-memory map delete: no guessing or amplification path. The PR called `deps.rateLimit(ctx)` with no bucket, which falls back to `admin`, so web pairing cancels would spend (and be blocked by) the admins' 15/min budget — the cross-route coupling the 14 Oct bucket split removed. Sentinel: re-file only with a demonstrated abuse path, and on a pairing-specific bucket.
+
+### 2026-10-15 — Bolt: Map lookups for keepers/people in EnterpriseDecisions (#1968) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11; see #1703, #1723, #1754)
+- **Claim:** `.find()` over keepers is O(n) per decision row; a Map makes it O(1).
+- **Why not to re-file:** an enterprise has a handful of keepers and `nameOf` runs about twice a row: measured 4.4 µs vs 1.6 µs per render at 10 keepers × 20 decisions. A Map also keeps the LAST of a repeated key where `.find()` keeps the first (the #1754 reason). Bolt: re-file only with a profile of a real screen showing a perceptible cost.

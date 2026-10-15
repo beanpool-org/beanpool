@@ -192,7 +192,10 @@ try {
             if (pg === 'index.html') {
                 await page.waitForSelector('.leaflet-marker-icon', { timeout: 5000 }).catch(() => {});
                 await page.evaluate(() => document.querySelector('.leaflet-marker-icon')?.click());
-                await page.waitForTimeout(200);
+                // Leaflet fades a popup in over 0.2 s (it ignores reduced motion): judge it at rest, not part way in, and
+                // fail if it never opens, so the popup can't drop out of the check unseen.
+                const open = await page.waitForFunction(() => { const p = document.querySelector('.leaflet-popup'); return p && getComputedStyle(p).opacity === '1'; }, null, { timeout: 5000 }).then(() => true, () => false);
+                if (!open) failures.push({ line: `${theme} ${width}px index.html: the directory map's popup did not open, so it was not judged` });
             }
             if (pg === 'help.html' && width === 320) {
                 await page.evaluate(() => { const p = document.createElement('p'); p.textContent = 'contrast canary'; p.style.color = 'var(--pattern-bg)'; document.querySelector('main, .container, body').prepend(p); });

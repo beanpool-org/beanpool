@@ -506,29 +506,6 @@ async function main(): Promise<void> {
     assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
     const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession });
 
-    // ── 8. The plain archive naming a new owner ──
-    console.log('\n── 8. a plain archive naming a new owner, by the password and an earlier 2FA session ──');
-    {
-        const copy = path.join(work, 'mallory-state.db');
-        db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
-        const Database = (await import('better-sqlite3')).default;
-        const mallory = crypto.randomBytes(32).toString('hex');
-        const edit = new Database(copy);
-        edit.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Mallory', ?, ?, 'TEST')`).run(mallory, new Date().toISOString(), owner);
-        edit.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by, granted_at) VALUES (?, 'owner', ?, ?)`).run(mallory, owner, new Date().toISOString());
-        edit.close();
-        const plain = makeTarGz([{ name: './state.db', content: fs.readFileSync(copy) }, { name: './node_config.json', content: Buffer.from('{}') }]);
-        const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey, role').all());
-        const rolesBefore = roles();
-        const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
-        assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
-            && /no longer restore from Settings/.test(r.json?.error || ''),
-            `8. refused 400, naming the command (${r.status} ${r.text.slice(0, 200)})`);
-        assert(roles() === rolesBefore && !db.prepare(`SELECT 1 FROM node_roles WHERE member_pubkey = ?`).get(mallory), '8. no role moved: Mallory is no owner');
-        assert(!fs.existsSync(path.join(dataDir!, '.restore-tmp')) && !fs.existsSync(path.join(dataDir!, '.restore-candidate'))
-            && fs.readdirSync(dataDir!).filter((f) => f.startsWith('uploaded-backup')).length === 0, '8. nothing extracted, nothing left behind');
-    }
-
     // ── 7. The code brake ──
     console.log('\n── 7. wrong codes from one source, each with the right password, meet the source rule ──');
     {
@@ -617,6 +594,7 @@ async function main(): Promise<void> {
             fs.writeFileSync(path.join(pointsDir, n, 'state.db'), 'x', { mode: 0o600 });
             return n;
         };
+        fs.mkdirSync(pointsDir, { recursive: true, mode: 0o700 });
         for (const n of fs.readdirSync(pointsDir)) fs.rmSync(path.join(pointsDir, n), { recursive: true, force: true });
         const oneDay = plant(now - DAY);
         const week = [2, 3, 4, 5, 6].map((h) => plant(now - h * 3_600_000));
@@ -643,6 +621,29 @@ async function main(): Promise<void> {
         const left3 = fs.readdirSync(pointsDir);
         assert(pastWeek.slice(0, 5).every((n) => left3.includes(n)) && !left3.includes(pastWeek[5]),
             `6. past a week the newest five stay and the sixth goes (${left3.length} left)`);
+    }
+
+    // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──
+    console.log('\n── 8. a plain archive naming a new owner, by the password and an earlier 2FA session ──');
+    {
+        const copy = path.join(work, 'mallory-state.db');
+        db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
+        const Database = (await import('better-sqlite3')).default;
+        const mallory = crypto.randomBytes(32).toString('hex');
+        const edit = new Database(copy);
+        edit.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Mallory', ?, ?, 'TEST')`).run(mallory, new Date().toISOString(), owner);
+        edit.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by, granted_at) VALUES (?, 'owner', ?, ?)`).run(mallory, owner, new Date().toISOString());
+        edit.close();
+        const plain = makeTarGz([{ name: './state.db', content: fs.readFileSync(copy) }, { name: './node_config.json', content: Buffer.from('{}') }]);
+        const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey, role').all());
+        const rolesBefore = roles();
+        const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
+        assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
+            && /no longer restore from Settings/.test(r.json?.error || ''),
+            `8. refused 400, naming the command (${r.status} ${r.text.slice(0, 200)})`);
+        assert(roles() === rolesBefore && !db.prepare(`SELECT 1 FROM node_roles WHERE member_pubkey = ?`).get(mallory), '8. no role moved: Mallory is no owner');
+        assert(!fs.existsSync(path.join(dataDir!, '.restore-tmp')) && !fs.existsSync(path.join(dataDir!, '.restore-candidate'))
+            && fs.readdirSync(dataDir!).filter((f) => f.startsWith('uploaded-backup')).length === 0, '8. nothing extracted, nothing left behind');
     }
 
     registrar.close();

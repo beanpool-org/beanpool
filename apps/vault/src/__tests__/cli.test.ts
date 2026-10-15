@@ -180,12 +180,15 @@ describe('vault-custodian', () => {
         const lines = [`BEANPOOL_VAULT_TICKET_KEYS=${waiting.ticket[0]},${oldTicket}`, `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`];
         for (const line of lines) expect(second.out).toContain(`\n${line}\n`);
         expect(second.out).toContain('stops signing at the switch');
+        // Listed before any new custodian fetches: fetch-share confirms, and the second confirmation is the switch.
+        expect(second.out).toContain('now, before any new custodian runs fetch-share: fetch-share also confirms');
 
         // The new custodian sees the same, read before their confirmation switches the vault.
         const fetched = await cli(['fetch-share', '--url', v.baseUrl, '--key', keyFile('p-n2.json', n2), '--out', path.join(dir, 'p-n2')]);
         expect(fetched.code).toBe(0);
         expect(fetched.out).toMatch(/confirmed: 200 .*"switched":true/);
         for (const line of lines) expect(fetched.out).toContain(`\n${line}\n`);
+        expect(fetched.out).toContain('had to list before this: your share is confirmed above, and the second new custodian\'s confirmation is the switch');
         expect((await get(v, '/v1/report')).body.ticketKey).toBe(waiting.ticket[0]);
     });
 

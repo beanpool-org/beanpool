@@ -1349,6 +1349,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/replication-token/generate', 'POST /api/local/admin/replication-token/mode',
             'POST /api/local/admin/replication-token/status', 'GET /api/local/admin/reports', 'POST /api/local/admin/reports/:id/action',
             'POST /api/local/admin/reports/:id/dismiss', 'POST /api/local/admin/restore', 'POST /api/local/admin/restore/phone/wait',
+            'GET /api/local/admin/restore-points', 'POST /api/local/admin/restore-points/roll-back',
             'GET /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status/acknowledge',
             'POST /api/local/admin/snapshots/config', 'POST /api/local/admin/snapshots/create',
             'GET /api/local/admin/snapshots/download', 'POST /api/local/admin/snapshots/list',

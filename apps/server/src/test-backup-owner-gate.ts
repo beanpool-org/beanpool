@@ -16,7 +16,8 @@
  *     and the take-over envelope), where it is taken. With backups readable (no recovery code) and locked (one).
  *  3. A readable backup's node_config.json carries no credential (the admin hash and salt, the 2FA secret, the token's
  *     hash, a standby's token, a legacy plain-text password), from a legacy data/node_config.json too; nor do its bytes.
- *  4. A restore refuses, the live database and the data folder as they were: a gzip bomb past the unpacked cap, past the
+ *  4. A restore (of a sealed file, opened with the recovery code: Settings restores no plain archive, design case 18 §3.1)
+ *     refuses, the live database and the data folder as they were: a gzip bomb past the unpacked cap, past the
  *     member cap, and a member whose header alone is past the real 4 GB cap; a hard link (busybox's case: out to
  *     ../local-config.json), a symlink and a fifo; a state.db that is not a database, one that fails integrity_check, and
  *     one carrying a trigger this server's database does not have.
@@ -439,14 +440,29 @@ async function main(): Promise<void> {
     }
 
     // Locked backups from here on, and the sweep again.
-    await makeRecoveryCode();
+    const recovery = await makeRecoveryCode();
     const lockedNow = await call('POST', '/api/local/admin/backup', asOwner);
     assert(lockedNow.status === 200 && lockedNow.headers.get('x-backup-locked') === 'yes', '2. setup: with a recovery code, backups are locked');
     await sweep('backups locked (a recovery code)');
 
     // ── 4. A restore refuses what it should, and changes nothing ─────────────────────────────────────────────────
     console.log('\n— 4. what a restore refuses —');
-    const restore = (bytes: Buffer) => call('POST', '/api/local/admin/restore', asOwner, bytes);
+    // Settings restores sealed files only (design case 18 §3.1): each archive below is locked as this node locks its
+    // backups (its own key signs, to the owner and the recovery code) and opened with the code, so it reaches the checks.
+    const core = await import('@beanpool/core');
+    const { privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+    const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+    const nodeKey = privateKeyFromProtobuf(fs.readFileSync(path.join(dataDir!, 'libp2p_key')));
+    const communityId = JSON.parse(fs.readFileSync(path.join(dataDir!, 'genesis.json'), 'utf-8')).communityId;
+    const sealed = async (tarGzBytes: Buffer): Promise<Buffer> => Buffer.from(await core.sealEnvelope(new Uint8Array(tarGzBytes), {
+        kind: 'backup', communityId, nodePeerId: peerIdFromPrivateKey(nodeKey).toString(),
+        recipients: { owners: [], codes: [getLocalConfig().recoveryCode as any] },
+        signingKey: new Uint8Array(nodeKey.raw.subarray(0, 32)),
+    }));
+    const withCode = { ...asOwner, 'X-Recovery-Code': recovery.code };
+    const plainRefused = await call('POST', '/api/local/admin/restore', asOwner, plainArchive(databaseCopy()));
+    assert(plainRefused.status === 400 && plainRefused.json?.notLocked === true, `4. a plain archive is refused before any check (${plainRefused.status})`);
+    const restore = async (bytes: Buffer) => call('POST', '/api/local/admin/restore', withCode, await sealed(bytes));
     const liveRoles = roles();
     const liveMembers = memberCount();
     const good = databaseCopy();
@@ -520,7 +536,7 @@ async function main(): Promise<void> {
             .run(pubkey(), new Date().toISOString(), owner);
         h.exec(`DROP TRIGGER ${TRIGGER}; ${rewritten};`);
     }));
-    const r = await call('POST', '/api/local/admin/restore', asOwner, backup);
+    const r = await call('POST', '/api/local/admin/restore', withCode, await sealed(backup));
     assert(r.status === 200 && r.json?.success === true, `5. an owner's key session restores a backup (${r.status}: ${JSON.stringify(r.json)?.slice(0, 160)})`);
     // This server served its standby's copies above (sync-snapshot), which opens a second connection. With it open, the
     // old database's -wal stayed beside the restored file and was played over it at the next open: the old members,

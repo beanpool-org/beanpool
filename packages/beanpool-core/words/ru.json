@@ -2,11 +2,15 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "бобы",
+      "BeanPool": "BeanPool"
+    }
   },
   "just now": "только что",
   "{n} day ago|{n} days ago": {
@@ -26,5 +30,23 @@
     "few": "{n} минуты назад",
     "many": "{n} минут назад",
     "other": "{n} минуты назад"
-  }
+  },
+  "Roughly where are you?": "Где вы примерно находитесь?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Мы храним ваш район с точностью около 10 км, но не ваше точное местоположение. Другие участники видят, как далеко вы находитесь, а созданный вами опрос показывается в вашем районе.",
+  "Use my location": "Использовать моё местоположение",
+  "Type a town or suburb": "Введите город или район",
+  "Skip for now": "Пока пропустить",
+  "You can change or clear this any time in Settings → Your area.": "Это можно изменить или очистить в любое время в Настройках → Ваш район.",
+  "Your area": "Ваш район",
+  "Not set": "Не указан",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Всемирное сообщество показывает, что предлагают рядом с вами: ближайшие объявления в радиусе {km} км (не больше {max}).",
+  "About 10 km around {place}": "Около 10 км вокруг: {place}",
+  "Find your town or suburb": "Найдите свой город или район",
+  "Town or suburb": "Город или район",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Поиск города сейчас не работает. Используйте своё местоположение или пока пропустите этот шаг.",
+  "No matches. Try the name of a town or suburb nearby.": "Ничего не найдено. Попробуйте название ближайшего города или района.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Места из OpenStreetMap. То, что вы вводите здесь, отправляется им.",
+  "Choose {place}": "Выбрать: {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Это сообщество просит фото профиля перед публикацией. Добавить его можно позже в своём профиле.",
+  "A picture is optional here. You can add one later from your profile.": "Здесь фото необязательно. Добавить его можно позже в своём профиле."
 }

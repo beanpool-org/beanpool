@@ -131,9 +131,10 @@ describe('registering the push token', () => {
         const [req] = sent;
         expect(req.url).toBe(`${MULLUM}/api/push-tokens`);
         expect(req.method).toBe('POST');
-        // With the phone's push stamp, written down before the request went out (push-leave.ts orders a leave after it).
+        // With the phone's push stamp, written down before the request went out (push-leave.ts orders a leave after it),
+        // and the language the phone writes in, for the node's pushes (Marty's call M6; English here).
         expect(JSON.parse(req.body)).toEqual({
-            publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android', registeredAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)),
+            publicKey: kim.publicKey, token: PHONE_TOKEN, platform: 'android', registeredAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)), lang: 'en',
         });
         expect(await signedBy(req, kim)).toBe(true);
         expect(JSON.parse(req.recordAtSend ?? 'null')).toEqual([MULLUM]);

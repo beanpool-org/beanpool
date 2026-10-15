@@ -5,7 +5,7 @@ import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } f
 export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler } from 'react-native';
+import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler, I18nManager } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
@@ -25,6 +25,7 @@ import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboa
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { memberRedirect } from '../utils/member-landing';
 import { ThemeProvider, useTheme } from './ThemeContext';
+import { LanguageProvider } from '../components/LanguageProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -64,6 +65,11 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Every request to the anchor also names this build (X-BeanPool-App), so the community
 // can count who runs what before it raises its floor (utils/force-update.ts).
 installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
+
+// Left to right in every language until the RTL audit (translation design §2.5 rule 3): an Arabic, Urdu or Persian
+// phone sees a straight app, not a half-mirrored one. plugins/withAppLanguages.js also turns Android's supportsRtl off,
+// which holds from the first launch; this holds on iOS and from the next launch wherever it was on.
+try { I18nManager.allowRTL(false); I18nManager.forceRTL(false); } catch { /* an older module: nothing mirrored */ }
 
 // Cap OS font scaling app-wide so enlarged system fonts (common on low-end
 // devices in our target markets) can't shatter row layouts.
@@ -940,6 +946,7 @@ export default function RootLayout() {
         <SafeAreaProvider>
             <KeyboardProvider>
                 <ThemeProvider>
+                    <LanguageProvider>
                     <IdentityProvider>
                         <NodeStatusProvider>
                             <RootLayoutNav />
@@ -951,6 +958,7 @@ export default function RootLayout() {
                             <ForceUpdateBlock />
                         </NodeStatusProvider>
                     </IdentityProvider>
+                    </LanguageProvider>
                 </ThemeProvider>
             </KeyboardProvider>
         </SafeAreaProvider>

@@ -192,12 +192,21 @@ export interface MyEvent {
     rsvp: 'going' | 'interested';
     photo: string | null;
     reminderOffsets: number[] | null;
+    /**
+     * The host's clock and its zone (DESIGN-event-times §4), so the list reads as the event's card does ("20:50–22:50" /
+     * "Lagos time · 14:50 your time"), and `online` for an event with no place. Absent on an event from before them.
+     */
+    startLocal?: string;
+    endLocal?: string;
+    tz?: string;
+    online?: true;
 }
 
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
         SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
+               p.event_start_local, p.event_end_local, p.event_tz, p.event_online,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -229,6 +238,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
             ? null
             : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at, r.audience_scope),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
+        ...(r.event_start_local && r.event_tz ? { startLocal: r.event_start_local, tz: r.event_tz } : {}),
+        ...(r.event_end_local && r.event_tz ? { endLocal: r.event_end_local } : {}),
+        ...(r.event_online === 1 ? { online: true as const } : {}),
     }));
 }
 

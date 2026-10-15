@@ -2,11 +2,15 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "боби",
+      "BeanPool": "BeanPool"
+    }
   },
   "just now": "щойно",
   "{n} day ago|{n} days ago": {
@@ -26,5 +30,23 @@
     "few": "{n} хвилини тому",
     "many": "{n} хвилин тому",
     "other": "{n} хвилини тому"
-  }
+  },
+  "Roughly where are you?": "Приблизно де ви?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Ми зберігаємо вашу місцевість з точністю до 10 км, але ніколи не точне місце. Інші учасники бачать, як далеко ви, а створене вами опитування показується у вашій місцевості.",
+  "Use my location": "Використати моє місцезнаходження",
+  "Type a town or suburb": "Введіть місто або район",
+  "Skip for now": "Пропустити",
+  "You can change or clear this any time in Settings → Your area.": "Змінити чи очистити це можна будь-коли в Налаштуваннях → Ваша місцевість.",
+  "Your area": "Ваша місцевість",
+  "Not set": "Не вказано",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Світова спільнота показує, що пропонують поруч: найближчі {max} оголошень у межах {km} км.",
+  "About 10 km around {place}": "Близько 10 км навколо {place}",
+  "Find your town or suburb": "Знайдіть своє місто або район",
+  "Town or suburb": "Місто або район",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Пошук міста зараз не працює. Скористайтеся своїм місцезнаходженням або поки що пропустіть.",
+  "No matches. Try the name of a town or suburb nearby.": "Нічого не знайдено. Спробуйте назву міста або району поблизу.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Місця з OpenStreetMap. Те, що ви вводите тут, надсилається до OpenStreetMap.",
+  "Choose {place}": "Обрати {place}",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "Ця спільнота просить фото профілю, перш ніж ви щось опублікуєте. Додати його можна пізніше у своєму профілі.",
+  "A picture is optional here. You can add one later from your profile.": "Тут фото необов’язкове. За бажанням додати його можна пізніше у своєму профілі."
 }

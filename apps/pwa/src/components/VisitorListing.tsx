@@ -150,8 +150,11 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                         {post.type === 'event' && (
                             <div data-testid="visitor-detail-when" className="mb-3">
                                 <p className="m-0 text-lg font-black text-violet-800 dark:text-violet-200">{formatEventWhen(post)}</p>
-                                <p className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                    <span aria-hidden="true">📍 </span>{PLACE_AFTER_JOIN}
+                                {/* An online event has no place to hold back (the node sends visitors eventOnline): it says so, as its card does. */}
+                                <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                                    {post.eventOnline
+                                        ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
+                                        : <><span aria-hidden="true">📍 </span>{PLACE_AFTER_JOIN}</>}
                                 </p>
                             </div>
                         )}

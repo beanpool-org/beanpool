@@ -25,7 +25,8 @@ let activeAnchor: string | null = ANCHOR;
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(async () => adapter) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? activeAnchor : null)),
+        // A local community, as the phone knows it (utils/node-profile.ts): with no copy, a sync asks the node first.
+        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? activeAnchor : k === 'beanpool_node_profiles' ? JSON.stringify({ [ANCHOR]: { profile: 'local', features: {}, checkedAt: new Date().toISOString() } }) : null)),
         setItem: vi.fn(async () => {}),
         removeItem: vi.fn(async () => {}),
         getAllKeys: vi.fn(async () => []),

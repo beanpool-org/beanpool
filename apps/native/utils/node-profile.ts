@@ -244,6 +244,27 @@ async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: num
     }
 }
 
+/**
+ * A node that refused a whole read of its directory with 403 `members_on_demand` (members-on-demand.ts
+ * isMembersOnDemandRefusal) reads members by key, whatever this phone's copy of its profile says: that copy is from
+ * before the switch. The profile is asked again (one small read), so whatever changed with it is known too (listings by
+ * area); a copy that still doesn't say so is marked, so no later sync asks for the directory whole. With no copy and no
+ * answer nothing is written: the next sync asks for the profile before it reads anything. Never throws.
+ */
+export async function noteMembersOnDemand(url: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+    try {
+        const fresh = await fetchNodeProfile(url, fetchImpl);
+        if (fresh?.features.membersOnDemand === true) return;
+        const all = await readCache();
+        const held = all[cacheKey(url)];
+        if (!held || typeof held !== 'object') return;
+        all[cacheKey(url)] = { ...held, features: { ...(held.features ?? {}), membersOnDemand: true } };
+        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(all));
+    } catch {
+        // Not written: the next whole read is refused the same way and noted then.
+    }
+}
+
 /** Why the worldwide community can't be joined from here right now. */
 export type GlobalDoorRefusal =
     /** No answer: offline, the node is down, or it timed out. */

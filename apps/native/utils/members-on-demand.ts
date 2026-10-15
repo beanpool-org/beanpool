@@ -17,6 +17,15 @@ export const MISSING_BATCHES_PER_CYCLE = 3;
 /** Past this many held cards the oldest unreferenced ones are dropped. A referenced card and the own card never are. */
 export const HELD_CARDS_MAX = 1000;
 
+/**
+ * The node's refusal of a whole read of its directory, or of everyone who changed (apps/server routes/community.ts
+ * refusedWholeDirectory, where anyone can join in a minute): 403 `members_on_demand`. That node reads members by key, so
+ * a phone told this switches to it (node-profile.ts noteMembersOnDemand) rather than hold no cards.
+ */
+export function isMembersOnDemandRefusal(status: number, body: unknown): boolean {
+    return status === 403 && !!body && typeof body === 'object' && (body as { code?: unknown }).code === 'members_on_demand';
+}
+
 /** A key as the node spells member keys: 64 lower-case hexadecimal characters. Anything else (a project or escrow
  *  account, a typo) is never asked for: the node answers 400 to a batch with one in it. */
 const MEMBER_KEY = /^[0-9a-f]{64}$/;

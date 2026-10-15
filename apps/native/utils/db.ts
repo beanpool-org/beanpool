@@ -21,7 +21,8 @@ import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
-import { getCachedNodeProfile } from './node-profile';
+import { getCachedNodeProfile, noteMembersOnDemand } from './node-profile';
+import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -4176,6 +4177,11 @@ export async function syncMessages(publicKey: string) {
                     await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                 }
             } catch (e) {}
+        } else if (dirRes && dirRes.status === 403) {
+            // Refused as `members_on_demand`: this phone's copy of the profile is from before the node's switch. Noted, so
+            // the sync reads the members by key from now on (pillar-sync syncMembersOnDemand) and nothing here asks whole.
+            const refusal = await dirRes.json().catch(() => null);
+            if (isMembersOnDemandRefusal(dirRes.status, refusal)) await noteMembersOnDemand(anchorUrl);
         }
 
         if (!convRes.ok) return;

@@ -48,6 +48,8 @@ vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ publicKey: 'e
 vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
     addSavedNode: vi.fn(async () => {}),
+    // What an info answer says of the node's request format (node-profile.ts fetchNodeProfile).
+    recordRequestSigning: vi.fn(async () => {}),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
@@ -59,7 +61,7 @@ const realLoad = (Module as any)._load;
 afterAll(() => { (Module as any)._load = realLoad; });
 
 import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings, syncMessages } from '../db';
-import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { PROFILE_UNREAD, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const DB = 'beanpool_a.beanpool.org.db';
 const KEY = (id: string) => `pillar_sync_${DB}_${id}`;
@@ -74,6 +76,9 @@ const node = {
     // A node where anyone can join in a minute (features.openMembership, the global node): every whole form of the
     // directory is refused, as the server refuses it (routes/community.ts refusedWholeDirectory).
     openMembership: false,
+    // What `GET /api/community/info` answers: a local community, the worldwide one (members on demand, where anyone can
+    // join), or nothing (the node busy or the network gone: 503).
+    info: 'local' as 'local' | 'global' | 'down',
     requests: [] as string[],
 };
 function answer(status: number, body: string) {
@@ -95,6 +100,12 @@ const AUTHOR = hexKey(0xa0a0);
 const fetchMock = vi.fn(async (url: string) => {
     node.requests.push(url);
     const u = new URL(url);
+    if (u.pathname === '/api/community/info') {
+        if (node.info === 'down') return answer(503, '{}');
+        return answer(200, JSON.stringify(node.info === 'global'
+            ? { profile: 'global', features: { membersOnDemand: true, openMembership: true } }
+            : { profile: 'local', features: {} }));
+    }
     if (u.pathname === '/api/marketplace/posts') return answer(200, JSON.stringify([listing('L1', AUTHOR)]));
     if (u.pathname === '/api/members') {
         const keys = u.searchParams.get('keys');
@@ -117,12 +128,16 @@ const fetchMock = vi.fn(async (url: string) => {
 
 const membersRequests = () => node.requests.filter(r => new URL(r).pathname === '/api/members');
 const keysOf = (r: string) => new URL(r).searchParams.get('keys')?.split(',') ?? [];
+/** The reads of the directory in a whole form: everyone, or everyone who changed (no `keys=`). */
+const wholeReads = () => membersRequests().filter(r => keysOf(r).length === 0);
 const held = () => (sql.prepare('SELECT public_key FROM members').all() as any[]).map(r => r.public_key as string);
 const cardStamp = (pk: string) => (sql.prepare('SELECT card_fetched_at FROM members WHERE public_key = ?').get(pk) as any)?.card_fetched_at ?? null;
 function onDemandProfile(on: boolean | undefined) {
     const features = on === undefined ? {} : { membersOnDemand: on };
     store.set('beanpool_node_profiles', JSON.stringify({ [A_URL]: { profile: on ? 'global' : 'local', features, checkedAt: new Date().toISOString() } }));
 }
+/** Cards this phone already holds (a restore, or a node it used before the switch). */
+const holdCards = (keys: string[]) => applyDelta({ members: keys.map(pk => node.cards.get(pk)!) }, DB);
 function partners(n: number) {
     const keys: string[] = [];
     for (let i = 1; i <= n; i++) {
@@ -143,6 +158,7 @@ beforeEach(async () => {
     node.cards.clear();
     node.keysReads = 'ok';
     node.openMembership = false;
+    node.info = 'local';
     node.requests = [];
     node.cards.set(OWN, { publicKey: OWN, callsign: 'Me', avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z' });
     for (let i = 1; i <= 2000; i++) {
@@ -420,7 +436,7 @@ describe('NB-2: a held card is the author\'s face, even when it has none', () =>
 });
 
 describe('a community that does not say membersOnDemand', () => {
-    it('gets exactly the requests it got before: the same with no profile, a local profile, or the switch off', async () => {
+    it('gets exactly the requests it got before with a local profile or the switch off; with no copy, the profile first, then the same', async () => {
         const runs: string[][] = [];
         for (const profile of ['none', 'local', 'off'] as const) {
             store.clear();
@@ -435,10 +451,12 @@ describe('a community that does not say membersOnDemand', () => {
             await performSync();
             runs.push(node.requests.map(r => r.replace(/updatedAfter=[^&]+/, 'updatedAfter=<cursor>')));
         }
-        expect(runs[1]).toEqual(runs[0]);
-        expect(runs[2]).toEqual(runs[0]);
+        expect(runs[2]).toEqual(runs[1]);
+        // No copy of the profile (a restore on a fresh install): the node is asked once, before anything is read, and then
+        // every request is the same (REPORT-1792-first-sync-2026-10-16.md, result 3).
+        expect(runs[0]).toEqual([`${A_URL}/api/community/info`, ...runs[1]]);
         // The whole directory first, then the members delta; never a keys read.
-        const members = runs[0].filter(r => new URL(r).pathname === '/api/members');
+        const members = runs[1].filter(r => new URL(r).pathname === '/api/members');
         expect(members[0]).toBe(`${A_URL}/api/members`);
         expect(members.some(r => r.includes('keys='))).toBe(false);
         expect(held().length).toBe(2001);
@@ -447,9 +465,9 @@ describe('a community that does not say membersOnDemand', () => {
 
 // The global node with `openMembership` (DESIGN-global-member-privacy-fable.md §3, §7 slice 1b): the whole directory, a
 // delta of everyone and a point without a limit answer 403 members_on_demand. A phone that knows the profile never asks
-// for one; a phone that doesn't yet (its first sync, before the node's info is cached) is refused and loses nothing.
+// for one; a phone that doesn't yet (its first sync, before the node's info is cached) asks for the profile first. A copy
+// from before the node's switch is refused once, and the phone reads by key from then on.
 describe('a node that refuses the whole directory (openMembership)', () => {
-    const wholeReads = () => membersRequests().filter(r => keysOf(r).length === 0);
 
     it('knowing the profile, neither sync (performSync, syncMessages) asks for a whole form, over several cycles', async () => {
         node.openMembership = true;
@@ -464,18 +482,103 @@ describe('a node that refuses the whole directory (openMembership)', () => {
         expect(held().sort()).toEqual([OWN, ...[1, 2, 3, 4, 5].map(hexKey)].sort());
     });
 
-    it('not knowing it yet: the refused whole read leaves every held card, and the sync goes on', async () => {
+    const profileCopy = () => JSON.parse(store.get('beanpool_node_profiles') ?? '{}')[A_URL] ?? null;
+
+    it('not knowing it yet (no copy of the profile): the sync asks the node first, and nothing asks for a whole form', async () => {
         node.openMembership = true;
+        node.info = 'global';
         partners(3);
         // Cards this phone already holds (a restore, or a node it used before the switch).
-        await applyDelta({ members: [OWN, hexKey(1), hexKey(2), hexKey(3)].map(pk => node.cards.get(pk)!) }, DB);
-        const before = held().sort();
-        expect(before.length).toBe(4);
+        await holdCards([OWN, hexKey(1)]);
         expect((await performSync()).success).toBe(true);
         await syncMessages(OWN);
-        // Each asked for the whole directory and was refused; nothing was taken as the complete list.
-        expect(wholeReads().length).toBeGreaterThan(0);
-        expect(held().sort()).toEqual(before);
+        const info = node.requests.findIndex(r => new URL(r).pathname === '/api/community/info');
+        expect(info).toBeGreaterThanOrEqual(0);
+        expect(info).toBeLessThan(node.requests.findIndex(r => new URL(r).pathname === '/api/marketplace/posts'));
+        expect(wholeReads()).toEqual([]);
+        // The held cards stay, and the partners' come by key.
+        expect(held().sort()).toEqual([OWN, ...[1, 2, 3].map(hexKey)].sort());
         expect(node.requests.some(r => r.includes('/api/messages/conversations/'))).toBe(true);
+    });
+
+    it('a copy from before the switch: the refused whole read switches the phone to reads by key in that cycle, and none asks whole again', async () => {
+        node.openMembership = true;
+        node.info = 'global';
+        // The copy says a local community: it was kept before the node's switch.
+        onDemandProfile(undefined);
+        partners(3);
+        await holdCards([OWN, hexKey(1)]);
+        expect((await performSync()).success).toBe(true);
+        // One whole read, refused 403 members_on_demand; then the profile asked again, and the partners' cards by key.
+        expect(wholeReads()).toHaveLength(1);
+        expect(node.requests.filter(r => new URL(r).pathname === '/api/community/info')).toHaveLength(1);
+        expect(held().sort()).toEqual([OWN, ...[1, 2, 3].map(hexKey)].sort());
+        expect(profileCopy()?.features).toMatchObject({ membersOnDemand: true, openMembership: true });
+        node.requests = [];
+        for (let i = 0; i < 2; i++) {
+            expect((await performSync()).success).toBe(true);
+            await syncMessages(OWN);
+        }
+        expect(wholeReads()).toEqual([]);
+    });
+
+    it('the same, with the profile not answered again: the copy is marked members on demand, and none asks whole again', async () => {
+        node.openMembership = true;
+        onDemandProfile(undefined);
+        node.info = 'down';
+        partners(2);
+        expect((await performSync()).success).toBe(true);
+        expect(wholeReads()).toHaveLength(1);
+        expect(profileCopy()?.features.membersOnDemand).toBe(true);
+        expect(held().sort()).toEqual([OWN, hexKey(1), hexKey(2)].sort());
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        await syncMessages(OWN);
+        expect(wholeReads()).toEqual([]);
+    });
+
+    it('the chats\' members read refused the same way (syncMessages, before any sync): noted, and the next sync reads by key', async () => {
+        node.openMembership = true;
+        node.info = 'global';
+        onDemandProfile(undefined);
+        partners(2);
+        await syncMessages(OWN);
+        expect(wholeReads()).toHaveLength(1);
+        expect(profileCopy()?.features.membersOnDemand).toBe(true);
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        expect(wholeReads()).toEqual([]);
+        expect(held().sort()).toEqual([OWN, hexKey(1), hexKey(2)].sort());
+    });
+});
+
+// A phone with no copy of the profile whose node doesn't answer for it: never the old whole read on a node that may be by
+// area or members on demand, and never a stop. The cycle ends having read nothing and says why; the next one asks again.
+describe('no copy of the profile, and the node does not answer for it', () => {
+    it('the cycle ends quietly with nothing read; once the node answers, the next cycle reads as its profile says', async () => {
+        node.openMembership = true;
+        node.info = 'down';
+        partners(3);
+        await holdCards([OWN]);
+        const first = await performSync();
+        expect(first).toMatchObject({ success: false, aborted: false, errorMessage: PROFILE_UNREAD });
+        expect(node.requests.map(r => new URL(r).pathname)).toEqual(['/api/community/info']);
+        expect(store.has('beanpool_node_profiles')).toBe(false);
+        expect(held()).toEqual([OWN]);
+        node.info = 'global';
+        node.requests = [];
+        expect((await performSync()).success).toBe(true);
+        expect(node.requests[0]).toBe(`${A_URL}/api/community/info`);
+        expect(wholeReads()).toEqual([]);
+        expect(held().sort()).toEqual([OWN, ...[1, 2, 3].map(hexKey)].sort());
+    });
+
+    it('without the phone\'s key (nothing reads by area or by key), the sync goes on as before and asks nothing more', async () => {
+        const { loadIdentity } = await import('../identity');
+        vi.mocked(loadIdentity).mockResolvedValueOnce(null as any);
+        node.info = 'down';
+        expect((await performSync()).success).toBe(true);
+        expect(node.requests.some(r => new URL(r).pathname === '/api/community/info')).toBe(false);
+        expect(node.requests.some(r => new URL(r).pathname === '/api/marketplace/posts')).toBe(true);
     });
 });

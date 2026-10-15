@@ -18,14 +18,14 @@ const nodesMap = L.map('nodes-map', {
     scrollWheelZoom: false,
 });
 
+// The tiles' credit (ODbL), said once: the attribution control shows each layer's own attribution, so it is given
+// here and nowhere else (an addAttribution as well showed it twice).
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
-    attribution: '© OSM',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(nodesMap);
 
-L.control.attribution({ position: 'bottomright', prefix: false })
-    .addAttribution('© <a href="https://openstreetmap.org">OSM</a>')
-    .addTo(nodesMap);
+L.control.attribution({ position: 'bottomright', prefix: false }).addTo(nodesMap);
 
 // ======================== NODE POLLING ========================
 const nodeIcon = L.divIcon({

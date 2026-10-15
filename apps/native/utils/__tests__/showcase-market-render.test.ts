@@ -97,7 +97,12 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: me
 const { none } = vi.hoisted(() => ({ none: () => null }));
 vi.mock('../../components/RadiusPickerModal', () => ({ RadiusPickerModal: none }));
 vi.mock('../../components/TrustPickerSheet', () => ({ TrustPickerSheet: none, TRUST_FILTERS: [] }));
-vi.mock('../../components/PostAuthorTrust', () => ({ PostAuthorTrust: none, isElder: () => false }));
+// The author chip draws what it is given: its props are recorded, so a card's tier and founding key can be checked.
+vi.mock('../../components/PostAuthorTrust', () => ({
+    PostAuthorTrust: ({ callsign, showTier = true, isFounding = false }: { callsign: string; showTier?: boolean; isFounding?: boolean }) =>
+        createElement('span', { 'data-author': callsign, 'data-show-tier': String(showTier), 'data-founding': String(!!isFounding) }),
+    isElder: () => false,
+}));
 vi.mock('../../components/ActivityWaterfall', () => ({ ActivityWaterfall: none }));
 vi.mock('../../components/PollCard', () => ({ PollCard: none }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: none }));
@@ -191,6 +196,32 @@ describe('the Market on the worldwide community, its profile on the phone', () =
         expect(host.querySelector('[data-testid="deals-preview-head"]')).not.toBeNull();
         expect(text()).toContain(SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!.what);
         for (const call of PREVIEWED) expect(net.calls, call).not.toContain(call);
+    });
+});
+
+// Global previews audit, item 2: the cards hid the price on the worldwide community but still drew the 🌱 tier chip (and the
+// founding key) beside every author, a badge no one can earn there.
+describe("the listing cards' author chip", () => {
+    const LISTING = { id: 'l1', title: 'Pottery lessons on Sundays', type: 'offer', status: 'active', author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 0, authorFoundingNeeded: true, credits: 0, photos: '[]', created_at: new Date().toISOString() };
+    const withListing = (name: string) => (name === 'getPosts' ? Promise.resolve([LISTING]) : emptyAnswer(name));
+    const chip = () => host.querySelector('[data-author="Kofi"]');
+
+    it('the worldwide community: no tier chip and no founding key', async () => {
+        rememberProfile('global', WORLDWIDE);
+        net.answer = withListing;
+        await render(createElement(MarketScreen));
+        expect(text()).toContain('Pottery lessons on Sundays');
+        expect(chip()?.getAttribute('data-show-tier')).toBe('false');
+        expect(chip()?.getAttribute('data-founding')).toBe('false');
+    });
+
+    it('a local community: the tier chip and the founding key, as before', async () => {
+        rememberProfile('local', { beans: true, escrow: true, showcase: false });
+        net.answer = withListing;
+        await render(createElement(MarketScreen));
+        expect(text()).toContain('Pottery lessons on Sundays');
+        expect(chip()?.getAttribute('data-show-tier')).toBe('true');
+        expect(chip()?.getAttribute('data-founding')).toBe('true');
     });
 });
 

@@ -681,6 +681,8 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         };
 
         afterEach(() => { vi.unstubAllGlobals(); });
+        // The address matches only: the form's Repeats select has options of its own (DESIGN-event-times §8).
+        const addressMatches = (panel: HTMLElement) => Array.from(panel.querySelectorAll<HTMLElement>('[role=listbox][aria-label="Address matches"] [role=option]'));
 
         it('picking a match places the pin there, fills an empty Place name, and Approximate still rounds it', async () => {
             const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
@@ -690,7 +692,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             expect((globalThis.fetch as any).mock.calls.map((c: unknown[]) => c[0])).toContain(
                 'https://nominatim.openstreetmap.org/search?format=json&q=bindarrabi%20hall&limit=5');
 
-            const options = within(panel).getAllByRole('option');
+            const options = addressMatches(panel);
             expect(options).toHaveLength(2);
             expect(options[1]).toHaveTextContent('12 Main Street');
             await act(async () => { fireEvent.click(options[0]); });
@@ -714,7 +716,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const panel = await openEventForm(async () => ({ ok: true, json: async () => nominatim }));
             fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The old bowls club' } });
             await search(panel, '12 main street');
-            await act(async () => { fireEvent.click(within(panel).getAllByRole('option')[1]); });
+            await act(async () => { fireEvent.click(addressMatches(panel)[1]); });
             expect((within(panel).getByLabelText('Place name') as HTMLInputElement).value).toBe('The old bowls club');
             expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
         });
@@ -723,7 +725,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const panel = await openEventForm(async () => { throw new TypeError('Failed to fetch'); });
             await search(panel, 'bindarrabi hall');
             expect(within(panel).getByText(/Address search isn.t working right now/)).toBeInTheDocument();
-            expect(within(panel).queryAllByRole('option')).toHaveLength(0);
+            expect(addressMatches(panel)).toHaveLength(0);
 
             await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
             const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;

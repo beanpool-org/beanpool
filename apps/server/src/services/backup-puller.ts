@@ -66,7 +66,7 @@ import {
 import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere, takeoverUnderWay } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
-import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, updateLocalConfig, clampBackupPullSeconds, clampBackupReconcileMinutes } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull, clearCopiesDroppedBeforeSeal, noteWholeCopyThisProcess } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
@@ -1462,14 +1462,16 @@ export async function requestResync(): Promise<{ ok: boolean; error?: string; re
 // Cadence is operator-tunable (fleet manager → local-config) and read LIVE here, so a
 // change takes effect on the next tick without restarting the node. Config wins; else
 // env; else the built-in default.
+// A stored value is read through the route's bounds (config/local-config.ts, #1984 review N2): one written before them, or
+// brought back by a restore, can neither stop the copying nor overflow the timer into a loop with no wait.
 function getPullMs(): number {
     const s = getLocalConfig().backupPullSeconds;
-    if (typeof s === 'number' && s > 0) return Math.max(5, s) * 1000;
+    if (typeof s === 'number' && Number.isFinite(s) && s > 0) return clampBackupPullSeconds(s) * 1000;
     return Number(process.env.BACKUP_PULL_INTERVAL_MS) || DEFAULT_INTERVAL_MS;
 }
 function getReconcileMs(): number {
     const m = getLocalConfig().backupReconcileMinutes;
-    if (typeof m === 'number') return Math.max(0, m) * 60_000; // 0 → routine reconcile off
+    if (typeof m === 'number' && Number.isFinite(m)) return clampBackupReconcileMinutes(m) * 60_000; // 0 → routine reconcile off
     return Number(process.env.BACKUP_RECONCILE_EVERY_MS) || DEFAULT_RECONCILE_EVERY_MS;
 }
 

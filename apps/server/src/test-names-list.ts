@@ -548,7 +548,7 @@ async function main(): Promise<void> {
     await beaP.open();
 
     // ── 8. No readable name anywhere ─────────────────────────────────────────────────────────────
-    const snap = createSnapshot();
+    const snap = createSnapshot('scheduled');
     const copy = { text: JSON.stringify(await exportSyncState('test-names-list')) };
     const sealedC = JSON.parse(persRow.ciphertext).c as string;
     assert(copy.text.includes(sealedC) && ['names_generations', 'names_shares', 'names_dropped_holders', 'names_access_log', 'confirmations'].every((t) => copy.text.includes(t)),

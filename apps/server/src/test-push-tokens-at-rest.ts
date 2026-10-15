@@ -154,7 +154,7 @@ async function child(): Promise<void> {
         /** A snapshot now (services/snapshot-scheduler.ts), as the Backup tab takes one: its file. */
         snapshot: async () => {
             const { createSnapshot, SNAPSHOTS_DIR } = await import('./services/snapshot-scheduler.js');
-            return path.join(SNAPSHOTS_DIR, createSnapshot().name);
+            return path.join(SNAPSHOTS_DIR, createSnapshot('scheduled').name);
         },
         /** A plain backup (no recovery code: a .tar.gz), written to `to`. */
         'plain-backup': async (a: { to: string }) => {

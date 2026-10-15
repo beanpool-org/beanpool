@@ -41,7 +41,7 @@ import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../../utils/reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -1812,11 +1812,12 @@ export default function PostDetailModal() {
                                         try {
                                             setSubmittingReport(true);
                                             const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;
-                                            await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
+                                            const sent = await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
                                             setShowReportForm(false);
                                             setReportDetails('');
                                             setReportReason('');
-                                            Alert.alert('Reported', "Thanks. Your community's moderators will review it.");
+                                            // The thanks, and why the member's words were left out when they were (case 14).
+                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, finalReason));
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message);
                                         } finally {

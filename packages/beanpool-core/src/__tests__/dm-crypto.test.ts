@@ -324,3 +324,29 @@ describe('the rest of the thread', () => {
         expect(dmConversationIdsToTry('c', 'not json')).toEqual(['c']);
     });
 });
+
+describe('a thread whose other person moved to a new key (DM peer key pin, pick 3)', () => {
+    // Ana continued past a key change: her phone now seals to Ben's new key, and keeps his old one as former. The node, on
+    // an honest re-key, names his old lines as the new key's (engine/key-move.ts). They still read on her phone; a line
+    // the node names as anyone else's still doesn't.
+    const benNew = person('Ben, new phone');
+    const texts = (views: Map<string, { text: string | null }>, lines: DmThreadLine[]) => lines.map((l) => views.get(l.id)?.text ?? null);
+
+    it('Ben\'s old lines, named as his new key\'s or his old one\'s, and Ana\'s own old lines open under the former key', () => {
+        const q = line(ana, ben, 'Shall I cancel the order?');
+        const a = line(ben, ana, 'No', q.id);
+        const moved = { ...a, authorPubkey: benNew.publicKey };
+        const fresh = line(ana, benNew, 'Welcome back', a.id);
+        const withFormer = checkDmThread([q, moved, fresh], keysOf(ana, benNew), CONV, [ben.publicKey]);
+        expect(texts(withFormer, [q, moved, fresh])).toEqual(['Shall I cancel the order?', 'No', 'Welcome back']);
+        expect(texts(checkDmThread([q, a], keysOf(ana, benNew), CONV, [ben.publicKey]), [q, a])).toEqual(['Shall I cancel the order?', 'No']);
+        // without the former key, only the new line opens
+        expect(texts(checkDmThread([q, moved, fresh], keysOf(ana, benNew), CONV), [q, moved, fresh])).toEqual([null, null, 'Welcome back']);
+    });
+
+    it('a line the node names as a third person\'s never opens under a former key, though it was sealed to it', () => {
+        const a = line(ben, ana, 'No');
+        const asCat = { ...a, authorPubkey: cat.publicKey };
+        expect(checkDmThread([asCat], keysOf(ana, benNew), CONV, [ben.publicKey]).get(a.id)).toMatchObject({ text: null, mark: 'not-verified' });
+    });
+});

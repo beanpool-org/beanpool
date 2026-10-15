@@ -257,12 +257,15 @@ async function main(): Promise<void> {
         const [eggs, plums, honey] = setup.posts;
         const del = await post(base, `/api/local/admin/posts/${eggs}/delete`, {}, admin);
         // Follow-up A: a mixed bulk removal is refused whole, up front, naming the held listing: Plums (no deal) stays up too.
-        const mixed = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums, setup.heldPost] }, admin);
+        // Bulk removal is an owner's (design case 18, D1), which no token reaches: an owner's key session, asked for now
+        // (sessions live in the node's memory).
+        const owner: Record<string, string> = await node.send('owner-session');
+        const mixed = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums, setup.heldPost] }, owner);
         const afterMixed = await node.send('state', { k, setup });
         assert(mixed.status === 503 && String(mixed.body?.error).startsWith(PAUSED) && /"Chard"/.test(String(mixed.body?.error)) && !/"Plums"/.test(String(mixed.body?.error))
             && live(afterMixed.posts[plums]) && live(afterMixed.posts[setup.heldPost]),
             `a bulk removal mixing a no-deal listing and a held deal is refused whole, naming the held one; nothing is removed (${brief(mixed)})`);
-        const bulk = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums] }, admin);
+        const bulk = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums] }, owner);
         const action = await post(base, `/api/local/admin/reports/${setup.report}/action`, { deletePost: true }, admin);
         const heldDel = await post(base, `/api/local/admin/posts/${setup.heldPost}/delete`, {}, admin);
         const afterPosts = await node.send('state', { k, setup });

@@ -104,10 +104,24 @@ interface EventRow {
     event_private_note: string | null;
     event_host_lets_in: number | null;
     hidden_by_reports_at: string | null;
+    /** A repeating event's rule (DESIGN-event-times §8): its date ending is not the event ending while a date is left. */
+    event_repeat?: string | null;
+    event_repeat_until?: string | null;
+    event_start_local?: string | null;
 }
 
 const EVENT_COLUMNS = `id, title, active, status, event_state, event_end_at, author_pubkey, created_by,
-                       audience_scope, target_group_id, event_private_note, event_host_lets_in, hidden_by_reports_at, type`;
+                       audience_scope, target_group_id, event_private_note, event_host_lets_in, hidden_by_reports_at, type,
+                       event_repeat, event_repeat_until, event_start_local`;
+
+/**
+ * A repeating event between one date's end and the roll that brings the next (≤ 60 s, DESIGN-event-times §7.9): still on,
+ * so its regulars can type in that minute. One whose last date is behind it (its `until` is that date) has ended.
+ */
+function seriesContinues(row: EventRow): boolean {
+    if (!row.event_repeat) return false;
+    return !row.event_repeat_until || !row.event_start_local || row.event_repeat_until > row.event_start_local.slice(0, 10);
+}
 
 /** The event row behind a chat, or a refusal. The chat id IS the post id (§2.1). */
 export function loadEventForThread(postId: string): EventRow {
@@ -121,7 +135,7 @@ export function eventThreadReadOnlyReason(row: EventRow, nowMs = Date.now()): st
     if (row.event_state === 'cancelled' || row.status === 'cancelled' || !row.active) {
         return 'This event was cancelled. The chat is read-only.';
     }
-    if (row.event_end_at && Date.parse(row.event_end_at) <= nowMs) {
+    if (row.event_end_at && Date.parse(row.event_end_at) <= nowMs && !seriesContinues(row)) {
         return 'This event has ended. The chat is read-only.';
     }
     return null;

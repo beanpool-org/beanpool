@@ -50,6 +50,7 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             eventHostLetsIn: b.eventHostLetsIn,
             eventStartLocal: b.eventStartLocal, eventEndLocal: b.eventEndLocal, eventTz: b.eventTz,
             eventOnline: b.eventOnline, eventLink: b.eventLink,
+            eventRepeat: b.eventRepeat, eventRepeatUntil: b.eventRepeatUntil,
             createdBy,
             beforeWrite,
             out,

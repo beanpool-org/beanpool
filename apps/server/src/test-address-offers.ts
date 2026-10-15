@@ -90,7 +90,7 @@ async function child(): Promise<void> {
     const { normaliseRegistryRow, writeDirectoryRows } = await import('./engine/directory-cache.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { ownerTokenHeaders, ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
 
     initAdminPassword();
     await initTls();
@@ -137,6 +137,8 @@ async function child(): Promise<void> {
         // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' report and its
         // confirm/remove are sent with an automation token made from the seeded owner's key.
         adminToken: (a: { owner: string }) => ownerTokenHeaders('admin', a.owner),
+        // Removing an app address is an owner's (design case 18, B6), which no token reaches.
+        ownerSession: (a: { owner: string }) => ownerSessionHeaders(a.owner),
         staffRow: () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(STAFF_ROW) as { value: string } | undefined)?.value ?? null,
     };
 
@@ -615,8 +617,9 @@ async function main(): Promise<void> {
             assert(!listedAnywhere(await report('hillside.example')).includes('hillside.example'), 'a named node does not hold back the page\'s host');
             // Removing its confirmed names leaves it none again: the remove's own answer holds the page's host back.
             let removed: Reply | null = null;
+            const ownerU: Record<string, string> = await U.send('ownerSession', { owner: owner.pk });
             for (const address of ['home.example.org', 'kept.beanpool.org']) {
-                removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove?host=hillside.example', adminPw, j({ address }));
+                removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove?host=hillside.example', ownerU, j({ address }));
             }
             const hill = held(removed!.body, 'hillside.example');
             assert(removed!.status === 200 && removed!.body?.named === false && hill?.directory?.name === 'Hillside Co-op' && !offered(removed!.body, 'hillside.example'),

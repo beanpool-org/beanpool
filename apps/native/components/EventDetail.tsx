@@ -30,6 +30,7 @@ import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { ReportReasonBox } from './ReportReasonBox';
+import { reportedAlertBody } from '../utils/reportReasons';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -193,9 +194,10 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
     const report = async (reason: string) => {
         if (!identity?.publicKey) return;
         try {
-            await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
+            const sent = await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
             setReporting(false);
-            Alert.alert('Reported', "Thanks. This community's moderators will take a look.");
+            // The thanks, and why the member's words were left out when they were (case 14).
+            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
         } catch (e: any) {
             Alert.alert('Not sent', e?.message || 'Could not reach the node.');
             throw e; // the box keeps the choice and the words

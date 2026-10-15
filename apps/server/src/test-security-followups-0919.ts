@@ -36,6 +36,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { authRateLimit } from './auth-rate-limit.js';
+import { nodeRoleOf } from './engine/node-roles.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedGroupLine } from './group-test-payload.js';
@@ -62,7 +63,13 @@ function assert(cond: any, msg: string): void {
 const NAT_IP = '203.0.113.7';
 
 const deps: RouteDeps = {
-    checkAdminAuth: async () => true, // password-authenticated admin unless a test passes a signed actor
+    // Password-authenticated (owner level) unless a test passes a signed actor, whose role is their live node role: what the
+    // real checkAdminAuth sets, which the owner-only gates read (design case 18: a whole branch is an owner's).
+    checkAdminAuth: async (ctx: any) => {
+        ctx.state ??= {};
+        ctx.state.adminRole ??= ctx.state.actor ? nodeRoleOf(ctx.state.actor) : 'owner';
+        return true;
+    },
     rateLimit: authRateLimit,         // the real per-IP auth limiter
     clampLimit: (_v: unknown, def = 20) => def,
     clampOffset: () => 0,

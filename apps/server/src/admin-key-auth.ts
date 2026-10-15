@@ -375,9 +375,21 @@ export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, n
     return { handshakeToken, expiresAt };
 }
 
+/**
+ * How young the phone's unlock must be for an owner's fresh proof on the key path (requireFreshProof, admin-auth.ts): the
+ * rare actions that can lose the community's data or address, or lock an owner out, ask for Manage pressed again within
+ * this, not the step-up's five minutes. Design case 18 §5 (D9, the director's call: 90 seconds).
+ */
+export const FRESH_PROOF_WINDOW_MS = 90 * 1000;
+
+/** Whether this key session was opened by the phone app's Manage hand-off (its idle limit says so), not a computer's QR. */
+export function isPhoneHandoffSession(session: AdminSession): boolean {
+    return session.kind === 'key' && session.idleTtlMs <= PHONE_HANDOFF_IDLE_TTL_MS;
+}
+
 /** Whether this session is a phone hand-off whose unlock is older than PHONE_STEP_UP_WINDOW_MS (owner-only changes wait). */
 export function phoneStepUpDue(session: AdminSession, now = Date.now()): boolean {
-    return session.kind === 'key' && session.idleTtlMs <= PHONE_HANDOFF_IDLE_TTL_MS && now - session.createdAt > PHONE_STEP_UP_WINDOW_MS;
+    return isPhoneHandoffSession(session) && now - session.createdAt > PHONE_STEP_UP_WINDOW_MS;
 }
 
 /** Tests only: make a session look `ms` older, as if opened that long ago (the step-up window). */

@@ -17,11 +17,13 @@ import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
+import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     canonicalZone,
+    parseRepeatPattern,
     zonedToInstant,
     instantToLocal,
     type ZonedInstant,
@@ -219,14 +221,15 @@ export function eventPushBody(kind: 'updated' | 'cancelled', eventTitle: string)
 }
 
 /**
- * Everyone marked Going who can still see the event. Interested is deliberately not notified (decision 10). A member
+ * Everyone marked Going for the event's current date (a repeating event's regulars for last week are not; engine/event-series-roll.ts)
+ * who can still see the event. Interested is deliberately not notified (decision 10). A member
  * removed from the event's group, or who left it or was banned, keeps their RSVP, and is told nothing of the event
  * (engine/event-thread.ts canReadEventThread).
  */
 export function eventGoingPubkeys(postId: string): string[] {
     return (db.prepare(`
         SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-         WHERE r.post_id = ? AND r.status = 'going' AND ${postInSightSql('p', 'r.member_pubkey')}
+         WHERE r.post_id = ? AND r.status = 'going' AND ${RSVP_IS_CURRENT('r', 'p')} AND ${postInSightSql('p', 'r.member_pubkey')}
     `).all(postId) as any[]).map(r => r.member_pubkey as string);
 }
 
@@ -464,6 +467,9 @@ export function createPost(
         eventTz?: unknown;
         eventOnline?: unknown;
         eventLink?: unknown;
+        /** A repeating event's rule and its last date (DESIGN-event-times §8; engine/event-series-roll.ts seriesOnCreate). */
+        eventRepeat?: unknown;
+        eventRepeatUntil?: unknown;
         /** Filled when a clock the host set was adjusted (a DST gap or overlap); the route answers it next to the post. */
         out?: EventTimeOut;
         /**
@@ -566,6 +572,7 @@ export function createPost(
     let eventTz: string | null = null;
     let eventOnline = false;
     let eventLink: string | null = null;
+    let series: { repeat: string | null; until: string | null; skips: string | null } = { repeat: null, until: null, skips: null };
 
     if (type === 'poll') {
         const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
@@ -626,6 +633,9 @@ export function createPost(
         if (eventOnline && !sentTz && (clockSent(options?.eventStartLocal) || clockSent(options?.eventEndLocal))) {
             throw new Error(EVENT_ZONE_REFUSED);
         }
+        // A repeating online event's zone anchors every date's clock: one the app did not name is refused, not read as
+        // UTC (§3: "a REPEATING online event refuses to save until one is picked").
+        if (eventOnline && !sentTz && parseRepeatPattern(options?.eventRepeat)) throw new Error(EVENT_ZONE_REFUSED);
         eventTz = sentTz ?? defaultEventTz(eventOnline, lat, lng);
         let startAdjusted: EventClockAdjustment | null = null;
         let endAdjusted: EventClockAdjustment | null = null;
@@ -648,6 +658,10 @@ export function createPost(
         noteTimeAdjusted(options?.out, startAdjusted, endAdjusted);
         eventStartLocal = instantToLocal(eventStartAt, eventTz);
         eventEndLocal = instantToLocal(eventEndAt, eventTz);
+        // A repeating event's rule takes its date, time and length from the clocks the host set, before a gap moved them.
+        series = seriesOnCreate(options?.eventRepeat, options?.eventRepeatUntil,
+            clockSent(options?.eventStartLocal) ? options!.eventStartLocal as string : eventStartLocal,
+            clockSent(options?.eventEndLocal) ? options!.eventEndLocal as string : eventEndLocal);
         eventLink = eventOnline ? cleanEventLink(options?.eventLink) : null;
         eventPlaceName = eventOnline ? null : cleanPlaceName(options?.eventPlaceName);
         eventPrivateNote = cleanPrivateNote(options?.eventPrivateNote);
@@ -713,8 +727,9 @@ export function createPost(
         db.prepare(`INSERT INTO posts (
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
-            event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
+            event_repeat, event_repeat_until, event_repeat_skips
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -731,6 +746,7 @@ export function createPost(
             type === 'event' ? 'scheduled' : null,
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
             eventHostLetsIn,
+            series.repeat, series.until, series.skips
         );
 
         if (photoColumns.length > 0) {
@@ -1022,6 +1038,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const eventValues: any[] = [];
     // Set when this edit moved the time or the pin/place name — the only edits that notify (decision 29).
     let eventTimeOrPlaceChanged = false;
+    // The event's date moved: its RSVPs and reminder marks go with it (engine/event-series-roll.ts moveOccurrence).
+    let occurrenceMove: { from: string; to: string } | null = null;
+    // The edit leaves the event repeating: its undated RSVPs (from before occurrence_at) get its date (stampUndatedRsvps).
+    let stampSeriesAt: string | null = null;
     // Set when the host ticked or unticked "Only people I let in": who sits in the chat follows (syncEventThreadMembership).
     let hostLetsInChanged = false;
     // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
@@ -1132,6 +1152,21 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             eventFields.push('event_start_local = ?', 'event_end_local = ?', 'event_tz = ?', 'event_online = ?');
             eventValues.push(instantToLocal(nextStart, nextTz), instantToLocal(nextEnd, nextTz), nextTz, nextOnline ? 1 : 0);
         }
+        // A repeating event's rule, its last date and its cancelled dates (§8): written when the rule, the date or the time
+        // changed; a rule the new first date is not on is refused. A rule taken off makes it a one-off.
+        const seriesCells = seriesOnEdit(existingPost, raw.eventRepeat, raw.eventRepeatUntil,
+            {
+                start: clockSent(raw.eventStartLocal) ? raw.eventStartLocal : raw.eventStartAt !== undefined ? instantToLocal(nextStart, nextTz) : null,
+                end: clockSent(raw.eventEndLocal) ? raw.eventEndLocal : raw.eventEndAt !== undefined ? instantToLocal(nextEnd, nextTz) : null,
+            },
+            { startLocal: instantToLocal(nextStart, nextTz), endLocal: instantToLocal(nextEnd, nextTz), tz: nextTz, timeChanged });
+        if (seriesCells) {
+            if (seriesCells.repeat && nextOnline && !keptTz) throw new Error(EVENT_ZONE_REFUSED);
+            eventFields.push('event_repeat = ?', 'event_repeat_until = ?', 'event_repeat_skips = ?');
+            eventValues.push(seriesCells.repeat, seriesCells.until, seriesCells.skips);
+        }
+        if (nextStart !== prevStart) occurrenceMove = { from: prevStart, to: nextStart };
+        if (seriesCells ? !!seriesCells.repeat : !!existingPost.eventRepeat) stampSeriesAt = nextStart;
         noteTimeAdjusted(out, startAdjusted, endAdjusted);
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
@@ -1265,6 +1300,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
+        if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);
+        if (stampSeriesAt) stampUndatedRsvps(id, stampSeriesAt);
         if (hostLetsInChanged) {
             // Ticked: everyone Going whom the host hasn't let in leaves the chat; unticked: everyone Going is in it.
             const going = db.prepare("SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'").all(id) as { member_pubkey: string }[];
@@ -1348,7 +1385,7 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
     // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
     // its cancellation or its end can say it exists.
@@ -1411,14 +1448,18 @@ export function rsvpEvent(
                 db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('event_rsvps', ?, ?)`).run(rowKey, writeAt);
             }
         } else {
+            // For the date the card showed (DESIGN-event-times §2): the event's current start, stamped here, never sent. Read
+            // inside the transaction the open-check above holds, so the roll cannot slip between.
+            const occurrenceAt = (db.prepare('SELECT event_start_at FROM posts WHERE id = ?').get(postId) as { event_start_at: string | null }).event_start_at;
             db.prepare(`
-                INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, occurrence_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
                     status = excluded.status,
                     signature = excluded.signature,
+                    occurrence_at = excluded.occurrence_at,
                     updated_at = excluded.updated_at
-            `).run(postId, memberPublicKey, status, signature || '', writeAt);
+            `).run(postId, memberPublicKey, status, signature || '', occurrenceAt, writeAt);
             if (status === 'going' && row.event_host_lets_in === 1) {
                 const friendOf = hostFriendOf(row, memberPublicKey);
                 if (friendOf) {
@@ -1471,11 +1512,16 @@ export function resetEventWaitingPushes(): void {
     waitingPushSentAt.clear();
 }
 
-/** How many Going members wait for the host to let them in (never the host, never a visitor). */
+/**
+ * How many Going members wait for the host to let them in (never the host, never a visitor). On a repeating event, Going
+ * for the date it has now (RSVP_IS_CURRENT), as the host's list of who is going reads (getPosts): a regular Going last week
+ * and never let in waits again only once they tap Going for this date.
+ */
 export function eventWaitingCount(row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }): number {
     const waiting = db.prepare(`
         SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${postInSightSql('p', 'r.member_pubkey')}
+         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${RSVP_IS_CURRENT('r', 'p')}
+           AND ${postInSightSql('p', 'r.member_pubkey')}
     `).all(row.id) as { member_pubkey: string }[];
     return waiting.filter(w => !isVisitorKey(db, w.member_pubkey) && !isEventHost(db, row, w.member_pubkey)).length;
 }
@@ -1551,7 +1597,10 @@ export function letInEvent(
     ).get(postId, pk));
     let members: string[];
     if (target.everyone === true) {
-        members = (db.prepare(`SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going' AND let_in_at IS ${letIn ? 'NULL' : 'NOT NULL'}`)
+        // Everyone waiting is everyone eventWaitingCount counts: on a repeating event, Going for its current date, never a
+        // regular's RSVP for last week, whom the host's list no longer shows. A take-back reaches everyone let in, any date.
+        members = (db.prepare(`SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
+            WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS ${letIn ? `NULL AND ${RSVP_IS_CURRENT('r', 'p')}` : 'NOT NULL'}`)
             .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey).filter(mayBeLetIn);
     } else {
         const who = target.memberPublicKey;

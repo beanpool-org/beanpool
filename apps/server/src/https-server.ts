@@ -168,6 +168,7 @@ import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
+import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import {
@@ -1315,13 +1316,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
             if (isAdminSurfacePath(ctx.path)) {
-                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
-                    const norm = allowedIp.trim();
-                    if (realIp === norm || norm === '*') return true;
-                    if ((norm === '127.0.0.1' || norm === 'localhost') && (realIp === '127.0.0.1' || realIp === '::1')) return true;
-                    if (norm.endsWith('*') && realIp.startsWith(norm.slice(0, -1))) return true;
-                    return false;
-                });
+                const isAllowed = adminIpAllowed(gwConfig.adminIpAllowlist, realIp);
                 if (!isAllowed) {
                     ctx.status = 403;
                     ctx.body = { error: 'Access denied by Gateway Admin IP allowlist' };

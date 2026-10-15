@@ -2296,6 +2296,43 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
 }
 
 /**
+ * "Cancel this date" of a repeating event (`cancelled` true, POST), or "Bring it back" (false, DELETE): the host only,
+ * signed (DESIGN-event-times §8). Cancelling the current date moves the event to its next date at once; the answer is the
+ * event as the host reads it by id, with its next dates. A refusal throws the node's own sentence.
+ */
+export async function setEventDateCancelled(postId: string, date: string, cancelled: boolean): Promise<{ success: boolean; post: any; skips: string[] }> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are currently offline.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const method = cancelled ? 'POST' : 'DELETE';
+    const path = `/api/events/${encodeURIComponent(postId)}/skip`;
+    const bodyString = JSON.stringify({ date });
+    const headers = await buildSignedHeaders(method, `${anchorUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...headers },
+        body: bodyString,
+    });
+    if (res.status === 404) {
+        const txt = await res.text().catch(() => '');
+        let message = '';
+        try { message = JSON.parse(txt)?.error || ''; } catch { /* not the node's JSON */ }
+        if (!message) throw new RouteMissingError(path);
+        throw new Error(message);
+    }
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let message = 'Could not change that date';
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        throw new Error(message);
+    }
+    const out = await res.json();
+    if (out?.post) await persistEventView(out.post, identity.publicKey).catch(() => {});
+    return out;
+}
+
+/**
  * Save a host's edit to an event (events round 2, decision 29). Only the changed fields travel, signed with
  * the member's OWN key: the node checks it against the host set (author, keeper, convenor), so a keeper or a
  * convenor who did not post the event can edit it too. The node decides UPDATED and who is told.

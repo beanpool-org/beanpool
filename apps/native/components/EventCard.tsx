@@ -19,7 +19,7 @@ import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext'
 import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import {
-    formatEventWhenFor, eventWhen, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
@@ -55,6 +55,8 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
     // (DESIGN-event-times §4).
     const when = formatEventWhenFor(post);
     const timeNote = eventWhen(post)?.note ?? null;
+    // A repeating event: still only its next date, and the rule under it (DESIGN-event-times §4, §8).
+    const repeats = eventRepeatCaption(post);
     const badge = eventBadge(post);
     const closed = eventStateOf(post) === 'cancelled' || isEventEnded(post);
     const distance = myLocation && post.lat != null && post.lng != null
@@ -157,6 +159,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                         <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
                     </View>
                     {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}
+                    {!!repeats && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {repeats}</Text>}
                     <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
                     {!!placeLine && <Text style={styles.meta} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
                     {countsKnown && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
@@ -222,6 +225,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.secondary,
             marginBottom: 4,
         },
+        repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
         hosting: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT, marginTop: 8 },
         whenCancelled: {
             textDecorationLine: 'line-through',

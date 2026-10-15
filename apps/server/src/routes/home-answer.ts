@@ -199,6 +199,14 @@ export interface MarketItem { id: string; type: 'offer' | 'need'; title: string;
 export interface EventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     startLocal?: string; tz?: string; online?: true;
+    /** A repeating event's pattern (no clock, no length) and its last date, for the ↻ caption (DESIGN-event-times §4, §8). */
+    repeat?: { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number }; repeatUntil?: string;
+}
+
+/** A stored rule as the caption needs it: the pattern's own keys, never the host's clock or each date's length. */
+function repeatPatternOf(rule: { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number }): NonNullable<EventItem['repeat']> {
+    const { freq, interval, byDay, byMonthDay, pos } = rule;
+    return { freq, interval, ...(byDay ? { byDay } : {}), ...(byMonthDay != null ? { byMonthDay } : {}), ...(pos != null ? { pos } : {}) };
 }
 
 export interface HomeCards {
@@ -633,6 +641,7 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
             ...(p.eventStartLocal && p.eventTz ? { startLocal: bounded(p.eventStartLocal, ID_CHARS)!, tz: bounded(p.eventTz, ID_CHARS)! } : {}),
             ...(p.eventOnline ? { online: true as const } : {}),
+            ...(p.eventRepeat ? { repeat: repeatPatternOf(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
 }

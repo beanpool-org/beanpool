@@ -8,7 +8,7 @@
  * date's length (`time`, `minutes`) from the form's start and end, and refuses a first date that is not one of the rule's.
  */
 
-import { formatDate, t } from './words.js';
+import { formatDate, t, word, type WordKey } from './words.js';
 
 /** Weekday codes, Sunday first, like Date#getUTCDay (the node's EVENT_REPEAT_WEEKDAYS). */
 export const REPEAT_WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
@@ -214,4 +214,29 @@ export function seriesMovedFromLine(rule: Partial<RepeatPattern> | null | undefi
     const r = (rule ?? {}) as Record<string, unknown>;
     const byDay = (REPEAT_WEEKDAYS as readonly unknown[]).includes(r.byDay) ? (r.byDay as RepeatWeekdayCode) : null;
     return byDay ? t('Moved from the regular {weekday}', { weekday: weekdayName(byDay) }) : t('Moved from the regular date');
+}
+
+/**
+ * The node's refusals for a repeating event (@beanpool/engine REPEAT_ERRORS, apps/server engine/event-series-roll.ts), marked
+ * for the words layer, so the form and the detail can show the node's own sentence in the reader's language.
+ */
+const REPEAT_REFUSALS: readonly WordKey[] = [
+    word('Choose how the event repeats from the list'),
+    word('An event can repeat every 1 to 12 weeks or months'),
+    word('The first date must be one of the repeating dates'),
+    word('The last date must be a date on or after the first one'),
+    word('The last date can be at most 5 years after the first one'),
+    word('An event that repeats must end before its next date starts'),
+    word('Pick one of the dates this event repeats on'),
+    word('This event does not repeat'),
+    word('Only the host can cancel or restore a date'),
+    word('This is the last date: change when the event ends, or cancel the event'),
+    word('At most 100 dates can be cancelled'),
+];
+
+/** A node's refusal of a series write, in the reader's language when it is one of the node's repeat sentences; else as sent. */
+export function repeatRefusalText(message: string | null | undefined): string {
+    const m = typeof message === 'string' ? message.trim() : '';
+    const key = REPEAT_REFUSALS.find((k) => k === m);
+    return key ? t(key) : m;
 }

@@ -37,7 +37,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import {
-    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, dealsLine,
+    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, homeEventRepeats, dealsLine,
     decideLine, distanceText, findBody, findListed, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
@@ -1309,9 +1309,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const rsvp = item.rsvp === 'going' ? t('Going') : item.rsvp === 'interested' ? t('Interested') : null;
                             const km = item.online ? null : distanceText(item.distanceKm);
                             const when = homeEventWhen(item);
+                            const repeats = homeEventRepeats(item);
                             return (
                                 <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-event"
-                                    label={[when, item.title, where, km, rsvp].filter(Boolean).join(', ')}>
+                                    label={[when, repeats, item.title, where, km, rsvp].filter(Boolean).join(', ')}>
                                     <span className="min-w-0 flex-1">
                                         {/* The time on a line of its own (with a zone named, run into the title it read as one phrase), each piece whole. */}
                                         {when && (
@@ -1319,6 +1320,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                                 {when.split(' · ').map((piece, i, all) => <span key={i} className="whitespace-nowrap">{piece}{i < all.length - 1 ? ' ·' : ''}</span>)}
                                             </span>
                                         )}
+                                        {repeats && <span data-testid="home-event-repeats" className="block break-words text-xs font-bold text-violet-800 dark:text-violet-200"><span aria-hidden="true">↻ </span>{repeats}</span>}
                                         <span dir="auto" className="block break-words font-semibold">{item.title}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>

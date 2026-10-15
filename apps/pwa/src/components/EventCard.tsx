@@ -21,7 +21,7 @@ import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventRepeatCaption, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -161,6 +161,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
 function EventWhen({ post, className, testId, hostLine = false }: { post: MarketplacePost; className: string; testId?: string; hostLine?: boolean }) {
     const parts = eventWhenParts(post);
     const noteAt = parts?.note ? parts.note.indexOf(' · ') : -1;
+    const repeats = eventRepeatCaption(post);
     return (
         <>
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
@@ -192,6 +193,12 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
                             <span className="whitespace-nowrap">{parts.note.slice(noteAt + 3)}</span>
                         </>
                     ) : parts.note}
+                </span>
+            )}
+            {/* A repeating event: still only its next date above, and the rule under it (DESIGN-event-times §4, §8). */}
+            {repeats && (
+                <span data-testid="event-repeat-caption" className="block w-full min-w-0 break-words text-sm font-bold text-violet-800 dark:text-violet-200 leading-snug">
+                    <span aria-hidden="true">↻ </span>{repeats}
                 </span>
             )}
             {hostLine && parts?.hostLine && (

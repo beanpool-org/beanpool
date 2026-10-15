@@ -20,7 +20,7 @@
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, type FindCommunityState } from '@beanpool/core';
-import { deviceLocalClock, eventWhenParts } from '@beanpool/core';
+import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
@@ -116,6 +116,8 @@ export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock and its zone, and an online event (DESIGN-event-times §4); absent from a node before them. */
     startLocal?: string; tz?: string; online?: boolean;
+    /** A repeating event's pattern and last date, for the ↻ caption (DESIGN-event-times §8); absent on a one-off. */
+    repeat?: RepeatPattern; repeatUntil?: string;
 }
 
 export interface HomeCards {
@@ -371,6 +373,11 @@ export function homeEventWhen(item: Pick<HomeEventItem, 'startsAt' | 'startLocal
     const line = `${parts.first}${parts.sep}${parts.second}`;
     const zone = parts.note ? parts.note.slice(0, parts.note.indexOf(' · ')) : '';
     return zone ? `${line} · ${zone}` : line;
+}
+
+/** A "Coming up" line's ↻ caption ("Every Friday"), '' for a one-off. */
+export function homeEventRepeats(item: Pick<HomeEventItem, 'repeat' | 'repeatUntil'>): string {
+    return repeatCaption(item.repeat ?? null, item.repeatUntil ?? null);
 }
 
 /** "Sat 3 Oct", in the member's own time. */

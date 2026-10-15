@@ -8,7 +8,10 @@
  * the same on every browser at 320px, and no zone arithmetic runs here: the viewer's clock comes from the Date getters.
  */
 
-import { deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, t, tn, type EventWhenParts } from '@beanpool/core';
+import {
+    deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, repeatCaption, repeatChoiceKeyOf, repeatPatternFor,
+    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern,
+} from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
 /** Every post type this client can render. Sent as `types=` so the node includes events (§2.6). */
@@ -271,6 +274,9 @@ export interface EventEditForm {
     link?: string;
     /** The zone the times are in; null when the event has no stored clock. */
     tz?: string | null;
+    /** How it repeats, a choice computed from the first date (DESIGN-event-times §8), and its last date ('' = until cancelled). */
+    repeat?: RepeatChoiceKey;
+    repeatUntil?: string;
 }
 
 /** The form, filled from the event as it is now — every field the create form has. */
@@ -290,6 +296,8 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
         online: post.eventOnline === true,
         link: post.eventLink || '',
         tz: clocks ? post.eventTz! : null,
+        repeat: repeatChoiceKeyOf(post.eventRepeat),
+        repeatUntil: post.eventRepeatUntil || '',
     };
 }
 
@@ -309,6 +317,8 @@ export interface EventEditPayload {
     lng?: number;
     photos?: string[];
     eventHostLetsIn?: boolean;
+    eventRepeat?: RepeatPattern | null;
+    eventRepeatUntil?: string | null;
 }
 
 /**
@@ -353,7 +363,40 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
     if (after.photos.length !== before.photos.length || after.photos.some((p, i) => p !== before.photos[i])) out.photos = after.photos;
     // Silent like the note: who reads the note is the host's to change.
     if (after.hostLetsIn !== before.hostLetsIn) out.eventHostLetsIn = after.hostLetsIn;
+    Object.assign(out, eventRepeatEdit(before, after));
     return out;
+}
+
+/**
+ * The series fields an edit sends (DESIGN-event-times §8 Edit). The pattern is the choice read on the NEW first date, so a
+ * series moved from a Friday to a Saturday goes as "every Saturday", which is what the select then says; it is sent when the
+ * choice changed or the first date moved. A choice the new date does not offer goes as it was chosen on the old date, and
+ * the node refuses it in its own words ("The first date must be one of the repeating dates"). "Does not repeat" sends null.
+ */
+export function eventRepeatEdit(before: EventEditForm, after: EventEditForm): Pick<EventEditPayload, 'eventRepeat' | 'eventRepeatUntil'> {
+    const out: Pick<EventEditPayload, 'eventRepeat' | 'eventRepeatUntil'> = {};
+    const was = before.repeat ?? 'never';
+    const now = after.repeat ?? 'never';
+    const dateMoved = after.start.slice(0, 10) !== before.start.slice(0, 10);
+    if (now !== was || (now !== 'never' && dateMoved)) {
+        out.eventRepeat = now === 'never'
+            ? null
+            : repeatPatternFor(now, after.start.slice(0, 10)) ?? repeatPatternFor(now, before.start.slice(0, 10));
+    }
+    if (now !== 'never' && (after.repeatUntil ?? '') !== (before.repeatUntil ?? '')) out.eventRepeatUntil = after.repeatUntil || null;
+    return out;
+}
+
+/** The series fields a new event sends: none for a one-off. */
+export function eventRepeatCreate(choice: RepeatChoiceKey, start: string, until: string): Pick<EventEditPayload, 'eventRepeat' | 'eventRepeatUntil'> {
+    const pattern = choice === 'never' ? null : repeatPatternFor(choice, start.slice(0, 10));
+    if (!pattern) return {};
+    return { eventRepeat: pattern, ...(until ? { eventRepeatUntil: until } : {}) };
+}
+
+/** The ↻ caption beside a repeating event's date ("Every Friday · until 18 Dec"); '' for a one-off. */
+export function eventRepeatCaption(post: Pick<MarketplacePost, 'eventRepeat' | 'eventRepeatUntil'>): string {
+    return repeatCaption(post.eventRepeat ?? null, post.eventRepeatUntil ?? null);
 }
 
 // ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================

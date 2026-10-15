@@ -4,6 +4,7 @@ import {
     repeatChoiceKeyOf,
     repeatChoicesFor,
     repeatPatternFor,
+    repeatRefusalText,
     repeatSkipNote,
     repeatUntilMax,
     repeatUntilProblem,
@@ -143,5 +144,13 @@ describe('the detail\'s Next dates and the host\'s lines', () => {
     it('Change this date only: "Moved from the regular Friday"', () => {
         expect(seriesMovedFromLine({ freq: 'weekly', interval: 1, byDay: 'FR' })).toBe('Moved from the regular Friday');
         expect(seriesMovedFromLine({ freq: 'monthly', interval: 1, byMonthDay: 16 })).toBe('Moved from the regular date');
+    });
+});
+
+describe('repeatRefusalText: the node\'s sentence, through t()', () => {
+    it('a known refusal comes back as the words layer has it; anything else as sent', () => {
+        expect(repeatRefusalText('The first date must be one of the repeating dates')).toBe('The first date must be one of the repeating dates');
+        expect(repeatRefusalText('Something else entirely')).toBe('Something else entirely');
+        expect(repeatRefusalText(undefined)).toBe('');
     });
 });

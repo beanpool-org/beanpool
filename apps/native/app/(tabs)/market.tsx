@@ -1415,7 +1415,8 @@ export default function MarketScreen() {
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
-        const elderCard = !isPulse && isElder(item.author_energy_cycled);
+        // Elder is a tier, and a tier is Beans: no Elder look where the community shows none (as the tier chip below).
+        const elderCard = !isPulse && showsBeans && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
         const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
         const groupName = item.target_group_name || item.targetGroupName || 'Group';
@@ -1495,7 +1496,7 @@ export default function MarketScreen() {
                         <Text style={styles.gridCardTitle} numberOfLines={1}>
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={item.authorFoundingNeeded} />
+                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
                         {groupScopeBadgeText && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                                 <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
@@ -1648,7 +1649,7 @@ export default function MarketScreen() {
                             {item.title}
                         </Text>
 
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={item.authorFoundingNeeded} />
+                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
                     </View>
                 </View>
             </Pressable>

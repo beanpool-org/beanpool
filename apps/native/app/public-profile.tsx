@@ -774,15 +774,21 @@ export default function PublicProfileScreen() {
                     <ChannelChips channels={channels} />
                 </View>
 
-                {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel */}
+                {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
+                    Trust Points, track record, vouch and Vouch action are all Beans: gated like the own card (`showsBeans`).
+                    On a community with Beans off (the worldwide one) every member reads "🌱 Newcomer · 0 Trust Points" and is
+                    told to trade to build trust, which can't happen there (global previews audit, item 2); the line below
+                    says where badges and Beans are earned. Collaboration Chemistry and connections in common are not Beans:
+                    they stay. */}
                 {!isSelf && (
-                    trustLoading ? (
+                    trustLoading ? (showsBeans && (
                         <View style={{ marginHorizontal: 16, marginTop: 16, padding: 20, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' }}>
                             <ActivityIndicator size="small" color={colors.brand.primary} />
                             <Text style={{ marginTop: 8, color: colors.text.muted, fontSize: 12, fontWeight: '600' }}>Calculating trust signals...</Text>
                         </View>
-                    ) : trust ? (
+                    )) : trust ? (
                         <>
+                            {showsBeans && (<>
                             {/* Safety recommendation */}
                             {(() => {
                                 const band = RISK_BAND[trust.risk?.band] || RISK_BAND.yellow;
@@ -852,6 +858,7 @@ export default function PublicProfileScreen() {
                                     </View>
                                 </View>
                             </View>
+                            </>)}
 
                             {/* ─── Collaboration Chemistry ─── */}
                             {(() => {
@@ -972,7 +979,8 @@ export default function PublicProfileScreen() {
                             })()}
 
                             {/* Track record */}
-                            <View style={styles.statStrip}>
+                            {showsBeans && (
+                            <View style={styles.statStrip} testID="trust-track-record">
                                 <View style={styles.statTile}>
                                     <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.tradeCount ?? 0}</Text>
                                     <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
@@ -988,6 +996,7 @@ export default function PublicProfileScreen() {
                                     <Text style={styles.statTileLabel} numberOfLines={1}>Completion</Text>
                                 </View>
                             </View>
+                            )}
 
                             {/* Mutual connections — the line that calms nerves */}
                             {trust.mutualCount > 0 && (
@@ -1008,6 +1017,7 @@ export default function PublicProfileScreen() {
                                 </View>
                             )}
 
+                            {showsBeans && (<>
                             {/* Vouched in by */}
                             {trust.vouchedInBy && (
                                 <View style={styles.vouchCard}>
@@ -1062,6 +1072,7 @@ export default function PublicProfileScreen() {
                                     <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
                                 </Pressable>
                             )}
+                            </>)}
                         </>
                     ) : null
                 )}

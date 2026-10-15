@@ -21,13 +21,18 @@ interface PostAuthorTrustProps {
     navigable?: boolean;
     /** Whether author needs a founding trade (no prior trades completed) */
     isFounding?: boolean;
+    /**
+     * False where the community shows no Beans (the worldwide one: `marketShowsBeans`): no tier badge. A tier is earned
+     * through Beans, so there every author would read Newcomer for good (global previews audit, item 2). Default true.
+     */
+    showTier?: boolean;
 }
 
 /**
  * Hybrid Trust Display: Tier Badge + Star Rating / Founding Trade indicator
- * Tier badge always shows. Star rating shows when count > 0; otherwise founding badge shows if isFounding is true.
+ * Tier badge shows unless `showTier` is false. Star rating shows when count > 0; otherwise founding badge shows if isFounding is true.
  */
-export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl, mode = 'full', navigable = true, isFounding = false }: PostAuthorTrustProps) {
+export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl, mode = 'full', navigable = true, isFounding = false, showTier = true }: PostAuthorTrustProps) {
     const [ratingInfo, setRatingInfo] = useState<{ average: number; count: number } | null>(null);
     const tier = getTrustTier(energyCycled);
     const { colors } = useTheme();
@@ -58,9 +63,11 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
-                <View style={[styles.tierBadgeCompact, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
-                    <Text style={styles.tierEmojiCompact}>{tier.emoji}</Text>
-                </View>
+                {showTier && (
+                    <View testID="author-tier" style={[styles.tierBadgeCompact, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
+                        <Text style={styles.tierEmojiCompact}>{tier.emoji}</Text>
+                    </View>
+                )}
                 {/* Callsign */}
                 <Text style={styles.compactCallsign} numberOfLines={1}>{callsign}</Text>
                 {/* Stars / Founding key indicator */}
@@ -83,10 +90,12 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}
-            <View style={[styles.tierBadgeFull, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
-                <Text style={styles.tierEmojiFull}>{tier.emoji}</Text>
-                <Text style={[styles.tierLabelFull, { color: tierColors.fg }]}>{tier.label}</Text>
-            </View>
+            {showTier && (
+                <View testID="author-tier" style={[styles.tierBadgeFull, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
+                    <Text style={styles.tierEmojiFull}>{tier.emoji}</Text>
+                    <Text style={[styles.tierLabelFull, { color: tierColors.fg }]}>{tier.label}</Text>
+                </View>
+            )}
             {/* Callsign */}
             <Text style={styles.fullCallsign} numberOfLines={1}>
                 {callsign}

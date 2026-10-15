@@ -36,7 +36,7 @@
     --accent-success: #10b981; /* Emerald */
     --accent-success-glow: rgba(16, 185, 129, 0.2);
     --success-ink: #10b981;
-    --bp-ink-brand: #34d399;   /* ink.brand */
+    --green-ink: #34d399;   /* ink.brand.dark */
     --danger-ink: #f87171;
     --error-ink: #ef4444;
     --red: #ef4444;
@@ -53,6 +53,7 @@
     --reddit-ink: #FF7043;
     --reddit-ink-strong: #FF8555;
 
+    --logo-gradient-start: #f59e0b;   /* gold.fill */
     --logo-gradient-end: #fb923c;
     --btn-primary-end: #d97706;
     --rainbow-1: #f59e0b;
@@ -68,6 +69,7 @@
     --terminal-header: #111827;
     --code-bg: #030712;
     --input-bg: #030712;
+    --footer-bg: rgba(3, 7, 18, 0.4);
 
     --rgb-overlay: 255, 255, 255;
     --rgb-shadow: 0, 0, 0;
@@ -111,9 +113,9 @@
         --accent-ink-hover: #1d231d;   /* gold.on */
         --on-accent: #1d231d;   /* gold.on */
 
-        --success-ink: #047857;   /* ink.success */
-        --bp-ink-brand: #047857;   /* ink.brand */
-        --danger-ink: #b91c1c;   /* ink.danger */
+        --success-ink: #065f46;   /* chip.ok.ink */
+        --green-ink: #065f46;   /* chip.ok.ink */
+        --danger-ink: #991b1b;   /* danger.hover */
         --error-ink: #b91c1c;   /* ink.danger */
 
         --border: #dce3dc;   /* chip.accent.border */
@@ -123,6 +125,7 @@
         --reddit-ink: #9a3412;   /* chip.need.ink */
         --reddit-ink-strong: #9a3412;   /* chip.need.ink */
 
+        --logo-gradient-start: #92400e;   /* ink.warning */
         --logo-gradient-end: #c2410c;   /* action.fill */
         --btn-primary-end: #f59e0b;   /* gold.fill */
         --rainbow-1: #92400e;   /* ink.warning */
@@ -137,6 +140,7 @@
         --terminal-header: #eef1ee;   /* chip.accent.tint */
         --code-bg: #f6f4f0;   /* ground */
         --input-bg: #ffffff;   /* ground */
+        --footer-bg: rgba(251, 250, 248, 0.88);   /* ground */
 
         --rgb-overlay: 29, 35, 29;   /* gold.on */
         --rgb-shadow: 100, 118, 100;   /* accent.fill */
@@ -146,18 +150,24 @@
         --rgb-popup: 255, 255, 255;   /* ground */
         --rgb-modal: 255, 255, 255;   /* ground */
     }
-    /* The light doodle (the web app's own tile, apps/pwa/public). Not a var(): a var() here would void the
-       -webkit-image-set fallback on old Android WebViews, and the page would lose its ground.
+    /* The light doodle (the web app's own tile, apps/pwa/public) under a 55 % oat wash (the third layer): bare,
+       its darkest stroke (#a7a797) leaves the site's words at 4.4:1 and its links at 2.9; washed it is #d5d5cc,
+       and as faint against its ground as the dark doodle is against its own. Not a var(): a var() here would void
+       the -webkit-image-set fallback on old Android WebViews, and the page would lose its ground.
        `:root body` and `:root .leaflet-container` outrank the plain rules further down the file. */
     :root body {
         background-image:
             radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
             radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
+            linear-gradient(rgba(251, 250, 248, 0.55), rgba(251, 250, 248, 0.55)),
             -webkit-image-set(url('assets/pattern-light.webp') 1x, url('assets/pattern-light-2x.webp') 2x);
         background-image:
             radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
             radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
+            linear-gradient(rgba(251, 250, 248, 0.55), rgba(251, 250, 248, 0.55)),
             image-set(url('assets/pattern-light.webp') 1x, url('assets/pattern-light-2x.webp') 2x);
+        background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+        background-size: auto, auto, auto, 890px 890px;
     }
     /* The map's tiles are drawn as they come: the dusk filter below is for the dark page. */
     :root .leaflet-container .leaflet-tile-pane { filter: none; }
@@ -311,7 +321,7 @@ section {
 /* the link is the tap target: at least 44px tall, though the picture stays its size (40px on a phone) */
 a.logo { min-height: 44px; }
 .logo span { 
-    background: linear-gradient(135deg, var(--accent), var(--logo-gradient-end));
+    background: linear-gradient(135deg, var(--logo-gradient-start), var(--logo-gradient-end));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -1561,7 +1571,7 @@ a.logo { min-height: 44px; }
 footer {
     padding: 3rem 0 2rem;
     border-top: 1px solid var(--border);
-    background: rgba(var(--rgb-ground), 0.4);
+    background: var(--footer-bg);
 }
 .footer-inner {
     display: flex;
@@ -1780,8 +1790,8 @@ footer {
 .hero-example-row { max-width: 1040px; width: 100%; margin: 1.25rem auto 0; }
 .hero-example { border-color: rgba(var(--rgb-accent), 0.22); }
 .hero-example::before { background: linear-gradient(90deg, var(--accent), var(--accent-success)); }
-.hero-example .not-card-tag { color: var(--accent); }
-.hero-example .not-item-icon { background: rgba(var(--rgb-accent), 0.15); color: var(--accent); }
+.hero-example .not-card-tag { color: var(--accent-ink); }
+.hero-example .not-item-icon { background: rgba(var(--rgb-accent), 0.15); color: var(--accent-ink); }
 .hero-example .not-card-item:hover { background: rgba(var(--rgb-accent), 0.05); border-color: rgba(var(--rgb-accent), 0.2); }
 .hero-example .not-item-content strong { font-size: 0.92rem; }
 .hero-example .not-item-content p { font-size: 0.86rem; line-height: 1.45; }
@@ -1955,11 +1965,11 @@ footer {
     color: var(--text-heading);
     margin: 0 0 0.45rem;
 }
-.help-card h3::after { content: '→'; margin-left: auto; color: var(--accent); transition: var(--transition); }
+.help-card h3::after { content: '→'; margin-left: auto; color: var(--accent-ink); transition: var(--transition); }
 .help-card:hover h3::after { transform: translateX(3px); }
 .help-card .help-icon { width: 22px; height: 22px; flex-shrink: 0; fill: currentColor; }
 .help-centre .help-card p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--text-secondary); }
-.help-centre .help-card p.help-who { color: var(--accent); font-weight: 600; font-size: 0.88rem; margin-bottom: 0.4rem; }
+.help-centre .help-card p.help-who { color: var(--accent-ink); font-weight: 600; font-size: 0.88rem; margin-bottom: 0.4rem; }
 .help-centre .help-card p.help-note {
     margin-top: 0.75rem;
     padding: 0.7rem 0.9rem;

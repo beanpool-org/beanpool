@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { pairingRequestUrls, parsePairingQr, transferTarget } from '../pair-device-target';
+import { isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, transferTarget } from '../pair-device-target';
 
 const SESSION = 'a1'.repeat(16);
 const PUB = 'b2'.repeat(32);
@@ -73,6 +73,47 @@ describe('hostile spellings of a server: refused, nothing sent', () => {
     for (const [name, raw] of hostile) {
         it(name, () => expect(decide(raw)).toBe('refused'));
     }
+});
+
+describe('a pairing code that fails the grammar is said so, not ignored (confirmation review, NON-BLOCKING 2)', () => {
+    // Before, the camera kept scanning and the member saw nothing: a bad code looked like a camera that had not focused.
+    const unreadable: Array<[string, string]> = [
+        ["the review's case: backslash then @", qr('https://mullum.example\\@evil.test')],
+        ['a login before the host', qr('https://evil@mullum.example')],
+        ['upper case host', qr('https://MULLUM.example')],
+        ['http (a dev page)', qr('http://localhost:5173')],
+        ['a path (a custom node URL)', qr('https://mullum.example/evil')],
+        ['an extra parameter', `${qr(OWN)}&x=1`],
+        ['node given twice', `${qr('https://attacker.example')}&node=${encodeURIComponent(OWN)}`],
+        ['a short session', `beanpool://pair?session=abc&pub=${PUB}`],
+        ['the prefix alone', 'beanpool://pair?'],
+        ['the QR in other case', qr(OWN).replace('beanpool://pair', 'BEANPOOL://PAIR')],
+        ['a leading space', ` ${qr(OWN)}`],
+        ['padded past 600 characters', `${qr(OWN)}&x=${'0'.repeat(600)}`],
+    ];
+    for (const [name, raw] of unreadable) {
+        it(name, () => {
+            expect(parsePairingQr(raw)).toBeNull();
+            expect(isUnreadablePairingQr(raw)).toBe(true);
+        });
+    }
+
+    it('a code that reads is not refused here (the sheet decides where it may go)', () => {
+        for (const raw of [qr(OWN), qr('https://attacker.example'), qr('https://mullum.example:443'), `beanpool://pair?session=${SESSION}&pub=${PUB}`]) {
+            expect(isUnreadablePairingQr(raw)).toBe(false);
+        }
+    });
+
+    it('any other QR is still ignored, as before', () => {
+        for (const raw of [
+            '', 'hello', 'https://mullum.example/', `https://mullum.example/?session=${SESSION}&pub=${PUB}`,
+            'beanpool://claim?node=mullum.example&code=x', 'beanpool://join?code=x', `beanpool:pair?session=${SESSION}&pub=${PUB}`,
+        ]) {
+            expect(isUnreadablePairingQr(raw)).toBe(false);
+        }
+        expect(isUnreadablePairingQr(undefined)).toBe(false);
+        expect(isUnreadablePairingQr(42)).toBe(false);
+    });
 });
 
 describe("the phone's own servers: reached at exactly their saved origin", () => {
@@ -171,6 +212,20 @@ describe('pair-device: the rule is wired in (the screen cannot be rendered here,
         expect(dismiss).toMatch(/if \(confirmCode && scannedData && target\?\.kind === 'ok'\) \{\s*fetch\(pairingRequestUrls\(target, scannedData\.sessionId\)\.cancel/);
         expect(pair()).toContain("tap Cancel and the other device gets nothing");
         expect(pair()).toMatch(/onPress=\{handleDismissSheet\} accessibilityRole="button">\s*<Text style=\{styles\.cancelBtnText\}>\{t\('Cancel'\)\}/);
+    });
+
+    it('a pairing code that fails the grammar: one sentence, the scanner held until OK, nothing sent', () => {
+        const scan = pair().slice(pair().indexOf('async function handleBarcodeScanned('), pair().indexOf('function targetRefusal('));
+        const from = scan.indexOf('if (!parsed) {');
+        const to = scan.indexOf('Haptics.NotificationFeedbackType.Success');
+        expect(from).toBeGreaterThan(-1);
+        expect(to).toBeGreaterThan(from);
+        const refused = scan.slice(from, to);
+        expect(refused).toContain('if (isUnreadablePairingQr(result.data)) {');
+        expect(refused).toContain('isScanningLocked.current = true;');
+        expect(refused).toMatch(/Alert\.alert\('', t\('This code can\\'t be read safely, so nothing was sent: make a new code on the other device and scan that one\.'\), \[\{ text: t\('OK'\), onPress: resumeScanning \}\], \{ cancelable: false \}\)/);
+        expect(refused).toContain('return;');
+        for (const never of ['fetch(', 'setScannedData(', 'transferTarget(', 'getMnemonic(']) expect(refused).not.toContain(never);
     });
 
     it('the Confirm button shows only for a server this phone uses', () => {

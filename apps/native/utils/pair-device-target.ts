@@ -58,6 +58,14 @@ export function parsePairingQr(raw: unknown): PairingQr | null {
     return { sessionId, desktopPubHex, nodeUrl };
 }
 
+/**
+ * A code meant for this screen (`beanpool://pair`, in any case, around any spaces) that the grammar refuses: the
+ * screen says so, so a bad code doesn't look like a camera that hasn't focused. Any other QR is not one: ignored.
+ */
+export function isUnreadablePairingQr(raw: unknown): boolean {
+    return typeof raw === 'string' && raw.trim().toLowerCase().startsWith('beanpool://pair') && parsePairingQr(raw) === null;
+}
+
 export type TransferTarget =
     /** `nodeUrl`: the phone's own saved address for that server, in its canonical origin. Where the account goes. */
     | { kind: 'ok'; nodeUrl: string }

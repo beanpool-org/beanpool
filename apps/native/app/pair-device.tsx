@@ -18,6 +18,7 @@ import {
     Platform,
     Modal,
     Linking,
+    Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, ErrorBoundary } from 'expo-router';
@@ -32,7 +33,7 @@ import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
-import { pairingRequestUrls, parsePairingQr, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -299,17 +300,31 @@ export default function PairDeviceScreen() {
         }
         // Read by a strict grammar (utils/pair-device-target.ts): any other spelling is refused here, nothing sent.
         const parsed = parsePairingQr(result.data);
-        if (parsed) {
-            isScanningLocked.current = true;
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // The key and the 12 words go only to a server this phone already uses: a QR naming any other could come from
-            // a server that skips the digits. Said at once, and nothing is sent.
-            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-            const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
-            const target = transferTarget(parsed.nodeUrl, anchor, saved);
-            setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
-            setScannedData({ ...parsed, target });
+        if (!parsed) {
+            // A pairing code it refuses is said so, in one sentence, and the camera waits for OK. Any other QR: ignored.
+            if (isUnreadablePairingQr(result.data)) {
+                isScanningLocked.current = true;
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+                Alert.alert('', t('This code can\'t be read safely, so nothing was sent: make a new code on the other device and scan that one.'), [{ text: t('OK'), onPress: resumeScanning }], { cancelable: false });
+            }
+            return;
         }
+        isScanningLocked.current = true;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // The key and the 12 words go only to a server this phone already uses: a QR naming any other could come from
+        // a server that skips the digits. Said at once, and nothing is sent.
+        const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
+        const target = transferTarget(parsed.nodeUrl, anchor, saved);
+        setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
+        setScannedData({ ...parsed, target });
+    }
+
+    /** After the refusal's OK: a moment first, so the same code still in view isn't read again at once. */
+    function resumeScanning() {
+        setTimeout(() => {
+            isScanningLocked.current = false;
+        }, 600);
     }
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {

@@ -261,12 +261,25 @@ const node = {
     online: true,
     members: [nodeMember(RIVER, 'Riverstone Bakehouse and Community Kitchen Collective', 1), nodeMember(ROSA, 'Rosa', 3), nodeMember(KOFI, 'Kofi', 12)],
     requests: [] as string[],
+    // POST /api/trust/profile's answer; null (the default) answers 404, as before this was added.
+    trust: null as null | Record<string, unknown>,
 };
+/** Another member's trust profile as the worldwide node answers it (measured on it, 16 Oct audit): Newcomer, nothing earned. */
+const NEWCOMER_TRUST = {
+    tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
+    risk: { band: 'red', headline: 'New & unvouched — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
+    vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
+    mutualCount: 1, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }],
+    joinedAt: '2026-10-01T00:00:00.000Z', lastActiveAt: null, elderVouch: null,
+};
+/** Words only the Beans half of the Trust & safety panel draws. */
+const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited directly by the system admin', 'Completion', 'Vouch for Member', 'Calculating trust signals'];
 async function nodeFetch(input: unknown): Promise<Response> {
     const url = new URL(String(input));
     if (!node.online) throw new TypeError('Network request failed');
     node.requests.push(`${url.pathname}${url.search}`);
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    if (url.pathname === '/api/trust/profile' && node.trust) return json(node.trust);
     if (url.pathname === '/api/members') {
         const keys = url.searchParams.get('keys');
         const q = url.searchParams.get('q');
@@ -308,6 +321,7 @@ beforeEach(async () => {
     mem.store.set('beanpool_anchor_url', NODE_URL);
     node.online = true;
     node.requests.length = 0;
+    node.trust = null;
     nav.params = {};
     nav.pushed.length = 0;
     community.membersOnDemand = true;
@@ -819,6 +833,28 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).not.toContain('Connect to see more');
                 await fits([OWN, ROSA]);
             });
+
+            it("another member on the worldwide community without the showcase: no Beans half of the trust panel, and no line", async () => {
+                node.trust = NEWCOMER_TRUST;
+                nav.params = { publicKey: KOFI, callsign: "Kofi" };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                for (const w of TRUST_PANEL_WORDS) expect(text(), w).not.toContain(w);
+                expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.profile);
+                expect(text()).toContain("1 connection in common");
+            });
+
+            it("another member on a local community (Beans on): the whole Trust & safety panel, as before, and no line", async () => {
+                community.membersOnDemand = false;
+                node.trust = NEWCOMER_TRUST;
+                nav.params = { publicKey: KOFI, callsign: "Kofi" };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                for (const w of ["Newcomer", "0 Trust Points", "New Member:", "take normal precautions", "Invited directly by the system admin", "Completion"]) expect(text(), w).toContain(w);
+                expect(host.querySelector("[data-testid=\"trust-track-record\"]")).not.toBeNull();
+                expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.profile);
+                expect(text()).toContain("Collaboration Chemistry");
+            });
         });
 
         // Both switches on, as the worldwide community ships: members on demand's live lists and the showcase's
@@ -850,6 +886,22 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(membersRequests()).toEqual([`/api/members?keys=${KOFI}`]);
                 expect(text()).toContain('Kofi');
                 expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                await fits([OWN, KOFI]);
+            });
+
+            // Global previews audit, item 2: the panel had no Beans check, so a stranger read "🌱 Newcomer · 0 Trust Points"
+            // and "complete a marketplace trade with them", which can't happen here. Gated like the own card now.
+            it('Public profile, another member: no tier, Trust Points, verdict, track record or vouch; the trust line in their place; chemistry and connections in common stay', async () => {
+                node.trust = NEWCOMER_TRUST;
+                nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(node.requests).toContain('/api/trust/profile');
+                for (const w of TRUST_PANEL_WORDS) expect(text(), w).not.toContain(w);
+                expect(host.querySelector('[data-testid="trust-track-record"]')).toBeNull();
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                expect(text()).toContain('Collaboration Chemistry');
+                expect(text()).toContain('1 connection in common');
                 await fits([OWN, KOFI]);
             });
 

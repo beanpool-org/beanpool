@@ -16,7 +16,7 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
 
-Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool's key vault keeps one copy for all your communities.
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool's key vault keeps one copy for all your communities.
 
 ## Joining the global community from your account
 

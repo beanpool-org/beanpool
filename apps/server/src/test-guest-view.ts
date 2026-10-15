@@ -1277,6 +1277,8 @@ async function main(): Promise<void> {
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
             // The event form's zone of a pin and its picker list (routes/events.ts): members' signed reads, a zone and no listing.
             'GET /api/events/zone', 'GET /api/events/zones',
+            // Cancel or restore one date of a repeating event (routes/events.ts): its host's signed write, members only.
+            'POST /api/events/:postId/skip', 'DELETE /api/events/:postId/skip',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',

@@ -17,8 +17,11 @@
  *     payloads a standby pulls (a whole copy and a delta, their bytes as sent), a plain backup (the tar inside its gzip),
  *     and a standby's database after it copied the main server, which holds no key file either and records which key
  *     the rows were made with.
- *  3. A plain backup restored on a new server that had made a key of its own. The restore says in one line that the
- *     backup does not carry the key, and the boot that the door cannot check a sign-in. Failing closed: Ada (a known
+ *  3. The main server's backup restored on a new server that had made a key of its own. Settings restores locked files
+ *     only (design case 18 §3.1), so the new server locks it as it locks its own backups (its key signs, to its recovery
+ *     code) with no take-over bundle inside: a locked file that carries no door key, as one locked before the key
+ *     travelled. The restore says in one line that the backup does not carry the key, and the boot that the door
+ *     cannot check a sign-in. Failing closed: Ada (a known
  *     sign-in) and a new account are both refused 503 door_key_missing, before the sign-in is checked, and no member or
  *     record is added. With the main server's key file put back by hand, and no restart, Ada is 409 already_joined and
  *     the new account joins.
@@ -149,6 +152,25 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');
             return true;
+        },
+        // A recovery code for this server, and `file` locked as it locks its backups: its own node key signs, to that
+        // code, for this server's community. The tar inside goes in as it is (no take-over bundle is added).
+        'lock-file': async (a: { file: string; out: string }) => {
+            const core = await import('@beanpool/core');
+            const { privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+            const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
+            const { getLocalConfig } = await import('./config/local-config.js');
+            const dataDir = process.env.BEANPOOL_DATA_DIR!;
+            const recovery = await makeRecoveryCode();
+            const nodeKey = privateKeyFromProtobuf(fs.readFileSync(path.join(dataDir, 'libp2p_key')));
+            const communityId = JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId;
+            fs.writeFileSync(a.out, await core.sealEnvelope(new Uint8Array(fs.readFileSync(a.file)), {
+                kind: 'backup', communityId, nodePeerId: peerIdFromPrivateKey(nodeKey).toString(),
+                recipients: { owners: [], codes: [getLocalConfig().recoveryCode as any] },
+                signingKey: new Uint8Array(nodeKey.raw.subarray(0, 32)),
+            }));
+            return { code: recovery.code };
         },
     });
 }
@@ -443,8 +465,8 @@ async function main(): Promise<void> {
             `its database, its WAL and every other file in its data folder hold none of the key (${standbyHits.join('; ') || 'none'})`);
         await standby.kill();
 
-        // ── 3. A plain backup restored on a new server ──
-        console.log('\n— 3. a plain backup restored on a new server that made a key of its own —');
+        // ── 3. The backup restored on a new server ──
+        console.log('\n— 3. the backup, locked with no door key in it, restored on a new server that made a key of its own —');
         fs.mkdirSync(dirs.restored, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.restored, 'genesis.json'));
         const restoredEnv = { ADMIN_PASSWORD: PW_RESTORED, NODE_ROLE: 'primary', ...GLOBAL };
@@ -453,11 +475,22 @@ async function main(): Promise<void> {
         const ownKey = Buffer.from(await restored.send('make-own-key') as string, 'base64');
         require_(ownKey.length === 32 && !ownKey.equals(key), 'the new server made a key of its own at the door\'s first use');
         const restoredOwner: Record<string, string> = await restored.send('owner-session');
-        const answer = await fetch(`${restored.base}/api/local/admin/restore`, {
+        const plainRefused = await fetch(`${restored.base}/api/local/admin/restore`, {
             method: 'POST', headers: { ...restoredOwner, 'Content-Type': 'application/octet-stream' }, body: fs.readFileSync(plainBackup),
         });
+        const plainRefusedBody = await plainRefused.json() as any;
+        assert(plainRefused.status === 400 && plainRefusedBody.notLocked === true,
+            `the plain file itself is refused: Settings restores locked files only (${plainRefused.status} ${plainRefusedBody.error ?? ''})`);
+        const lockedBackup = path.join(root, 'locked-backup.bpsealed');
+        const { code: restoredCode } = await restored.send('lock-file', { file: plainBackup, out: lockedBackup }) as { code: string };
+        const answer = await fetch(`${restored.base}/api/local/admin/restore`, {
+            method: 'POST',
+            headers: { ...restoredOwner, 'X-Recovery-Code': restoredCode, 'Content-Type': 'application/octet-stream' },
+            body: fs.readFileSync(lockedBackup),
+        });
         const restoreBody = await answer.json() as any;
-        require_(answer.status === 200 && restoreBody.success === true && restoreBody.sealed === false, `the plain backup restores (${answer.status} ${restoreBody.error ?? ''})`);
+        require_(answer.status === 200 && restoreBody.success === true && restoreBody.sealed === true,
+            `the locked backup restores with the new server's recovery code (${answer.status} ${restoreBody.error ?? ''})`);
         const RESTORE_LINE = 'Open door: this server holds 2 sign-in records of members who joined through the open door, but this backup does not carry the key they were made with';
         assert(restoreBody.openDoor?.records === 2 && restoreBody.openDoor.message.startsWith(RESTORE_LINE),
             `the restore says, in its answer, that the door cannot check a sign-in (${restoreBody.openDoor?.message})`);

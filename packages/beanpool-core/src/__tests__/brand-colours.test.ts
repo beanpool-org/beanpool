@@ -11,6 +11,11 @@ import { fileURLToPath } from 'node:url';
 import {
     BRAND_COLOURS,
     INK_GROUNDS,
+    WEB_INK_GROUNDS,
+    DEAL_TINT_ALPHA,
+    blendOver,
+    rgbaOf,
+    WEB_ONLY_INKS,
     LARGE_TEXT_ROLES,
     brandColourLeaves,
     brandColours,
@@ -49,15 +54,16 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
             expect(roles, role).toContain(role);
         }
-        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme.
-        const inks = Object.keys(BRAND_COLOURS.ink).length;
+        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
+        const inkNames = Object.keys(BRAND_COLOURS.ink);
         const chips = Object.keys(BRAND_COLOURS.chip).length;
-        const fills = Object.keys(BRAND_COLOURS).length - 2;
+        const fills = Object.keys(BRAND_COLOURS).length - 3;
+        const deals = Object.keys(BRAND_COLOURS.deal).length;
         for (const theme of ['light', 'dark'] as const) {
-            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + inks * INK_GROUNDS[theme].length);
+            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + deals * WEB_INK_GROUNDS[theme].length + inkNames.reduce((n, name) => n + (WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS : INK_GROUNDS)[theme].length, 0));
         }
     });
 
@@ -71,6 +77,20 @@ describe('brand colours are readable in both themes', () => {
             expect(values.length, `--bg-${name} declarations in index.css`).toBe(2);
             expect(INK_GROUNDS.light, `light --bg-${name}`).toContain(values[0]);
             expect(INK_GROUNDS.dark, `dark --bg-${name}`).toContain(values[1]);
+        }
+    });
+
+    it("judges a web-only ink on exactly the web app's page, card and sunken grounds, and the phone never reads one", () => {
+        const css = readFileSync(WEB_CSS, 'utf8');
+        const declared = (i: number) => ['primary', 'secondary', 'card']
+            .map((name) => [...css.matchAll(new RegExp(`--bg-${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))][i][1].toLowerCase()).sort();
+        expect([...WEB_INK_GROUNDS.light].sort()).toEqual(declared(0));
+        expect([...WEB_INK_GROUNDS.dark].sort()).toEqual(declared(1));
+        for (const theme of ['light', 'dark'] as const) for (const g of WEB_INK_GROUNDS[theme]) expect(INK_GROUNDS[theme]).toContain(g);
+        const phone = readFileSync(resolve(ROOT, 'apps/native/constants/colors.ts'), 'utf8');
+        for (const name of WEB_ONLY_INKS) {
+            expect(Object.keys(BRAND_COLOURS.ink), name).toContain(name);
+            expect(phone, `the phone reads ink.${name}`).not.toMatch(new RegExp(`\\bink\\.${name}\\b`));
         }
     });
 
@@ -96,7 +116,7 @@ describe('brand colours are readable in both themes', () => {
     it('presses darker, never lighter, on white-word fills', () => {
         // Option C: hover/pressed deepens a white-word fill. Gold (charcoal words) is the one that lightens.
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
-            if (role === 'chip' || role === 'ink' || role === 'gold') continue;
+            if (role === 'chip' || role === 'ink' || role === 'deal' || role === 'gold') continue;
             const fill = node as { fill: { light: string }; hover: { light: string } };
             expect(contrastRatio('#ffffff', fill.hover.light), role).toBeGreaterThan(contrastRatio('#ffffff', fill.fill.light));
         }
@@ -105,7 +125,7 @@ describe('brand colours are readable in both themes', () => {
     it('presses toward more contrast with its own words, in both themes', () => {
         // Darker under white words, lighter under charcoal (gold; the sage accent in dark, Marty 14 Oct 2026).
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
-            if (role === 'chip' || role === 'ink') continue;
+            if (role === 'chip' || role === 'ink' || role === 'deal') continue;
             const fill = node as { fill: Record<'light' | 'dark', string>; hover: Record<'light' | 'dark', string>; on: Record<'light' | 'dark', string> };
             for (const theme of ['light', 'dark'] as const) {
                 expect(contrastRatio(fill.on[theme], fill.hover[theme]), `${theme} ${role}`).toBeGreaterThan(contrastRatio(fill.on[theme], fill.fill[theme]));
@@ -117,6 +137,37 @@ describe('brand colours are readable in both themes', () => {
         expect(BRAND_COLOURS.accent.fill.light).toBe('#647664');
         expect(BRAND_COLOURS.accent.on).toEqual({ light: '#ffffff', dark: '#1d231d' });
         expect(BRAND_COLOURS.ink.accent.dark).toBe(BRAND_COLOURS.accent.fill.dark);
+    });
+});
+
+describe("a trade's lines in a direct message (deal.*)", () => {
+    it('light is the web as it was: its old tints, words and outlines (Marty, 15 Oct: light as is)', () => {
+        const light = Object.fromEntries(Object.entries(BRAND_COLOURS.deal).map(([name, line]) => [name, [rgbaOf(line.tint.light, DEAL_TINT_ALPHA), line.ink.light, line.border.light]]));
+        expect(light).toEqual({
+            held: ['rgba(209, 250, 229, 0.4)', '#065f46', '#10b981'],
+            released: ['rgba(167, 243, 208, 0.4)', '#065f46', '#059669'],
+            cancelled: ['rgba(254, 226, 226, 0.4)', '#991b1b', '#ef4444'],
+        });
+    });
+
+    it("the phone's tints are the same colours (colors.ts lays them at 0.7)", () => {
+        const phone = readFileSync(resolve(ROOT, 'apps/native/constants/colors.ts'), 'utf8');
+        for (const name of ['held', 'released', 'cancelled']) expect(phone).toMatch(new RegExp(`rgbaOf\\(brand(?:Light|Dark)\\.deal\\.${name}\\.tint, 0\\.7\\)`));
+    });
+
+    it('in dark, each outline shows: 3:1 or more on the page and on its own pill', () => {
+        for (const [name, line] of Object.entries(BRAND_COLOURS.deal)) {
+            for (const ground of WEB_INK_GROUNDS.dark) {
+                expect(contrastRatio(line.border.dark, ground), `${name} on ${ground}`).toBeGreaterThanOrEqual(3);
+                expect(contrastRatio(line.border.dark, blendOver(line.tint.dark, DEAL_TINT_ALPHA, ground)), `${name} pill on ${ground}`).toBeGreaterThanOrEqual(3);
+            }
+        }
+    });
+
+    it('blendOver and rgbaOf', () => {
+        expect(blendOver('#ffffff', 0.5, '#000000')).toBe('#808080');
+        expect(blendOver('#d1fae5', 0, '#1d231d')).toBe('#1d231d');
+        expect(rgbaOf('#022c22', 0.7)).toBe('rgba(2, 44, 34, 0.7)');
     });
 });
 
@@ -162,6 +213,11 @@ describe('CSS for the web app and the manager', () => {
     it('maps names to values per theme, and Tailwind names to the variables', () => {
         expect(brandCssVariableMap('light')['--bp-gold-on']).toBe('#1d231d');
         expect(brandCssVariableMap('dark')['--bp-chip-danger-ink']).toBe('#fca5a5');
+        // The deal tints as the web lays them: plain rgba, light exactly the old web values.
+        expect(brandCssVariableMap('light')['--bp-deal-held-wash']).toBe('rgba(209, 250, 229, 0.4)');
+        expect(brandCssVariableMap('light')['--bp-deal-released-wash']).toBe('rgba(167, 243, 208, 0.4)');
+        expect(brandCssVariableMap('light')['--bp-deal-cancelled-wash']).toBe('rgba(254, 226, 226, 0.4)');
+        expect(brandCssVariableMap('dark')['--bp-deal-held-wash']).toBe('rgba(2, 44, 34, 0.4)');
         const { bp } = brandTailwindColours();
         expect(bp['cta-fill']).toBe('var(--bp-cta-fill)');
         expect(bp['chip-warn-tint']).toBe('var(--bp-chip-warn-tint)');

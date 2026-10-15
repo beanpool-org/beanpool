@@ -43,6 +43,7 @@ import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, 
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
+import { systemLineColours } from '../lib/systemLineColours';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -1626,14 +1627,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {/* Sticky Marketplace Header */}
                 {activeConv.postId && (
                     <div style={{
-                        background: '#ecfdf5', padding: '0.75rem 1rem', borderBottom: '1px solid #d1fae5',
+                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
                     }} onClick={() => {}}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontSize: '1.2rem' }}>🛍️</span>
                             <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#065f46' }}>View Attached Listing</div>
-                                <div style={{ fontSize: '0.75rem', color: '#059669' }}>Marketplace Transaction Thread</div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>View Attached Listing</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>Marketplace Transaction Thread</div>
                             </div>
                         </div>
                     </div>
@@ -1657,7 +1658,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             gap: '0.75rem'
                         }}>
                             <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? '#10b981' : '#f59e0b' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
                                     🔒 Trust Hold: {pendingTx.credits} Beans
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -1670,8 +1671,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
                                         disabled={actionLoading}
                                         style={{
-                                            background: '#10b981',
-                                            color: '#fff',
+                                            background: 'var(--bp-commit-fill)',
+                                            color: 'var(--bp-commit-on)',
                                             border: 'none',
                                             borderRadius: '8px',
                                             padding: '0.4rem 0.75rem',
@@ -1761,7 +1762,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             return (
                                 <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" data-removed-count={run ? run.ids.length : undefined} style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
                                     {run?.ids.slice(1).map((id) => <span key={id} id={`msg-${id}`} />)}
-                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
+                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted-on-hover)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
                                         {run ? removedRunText(run.kind, run.ids.length) : groupLine.text}
                                     </div>
                                 </div>
@@ -1817,33 +1818,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         
                         if (isSystem) {
                             let icon = 'ℹ️';
-                            let bgColor = 'var(--bg-hover)';
-                            let textColor = 'var(--text-secondary)';
-                            let borderColor = 'transparent';
+                            // A trade's lines take the colour library's deal roles; others the page's grey.
+                            const { background: bgColor, color: textColor, border: borderColor } = systemLineColours(msg.systemType);
                             let metaObj: any;
                             
                             try {
                                 if (msg.metadata) metaObj = JSON.parse(msg.metadata);
                             } catch {}
 
-                            if (msg.systemType === 'ESCROW_FUNDED') {
-                                icon = '🔐';
-                                bgColor = 'rgba(209, 250, 229, 0.4)';
-                                textColor = '#065f46';
-                                borderColor = '#10b981';
-                            }
-                            if (msg.systemType === 'ESCROW_RELEASED') {
-                                icon = '✅';
-                                bgColor = 'rgba(167, 243, 208, 0.4)';
-                                textColor = '#065f46';
-                                borderColor = '#059669';
-                            }
-                            if (msg.systemType === 'ESCROW_CANCELLED') {
-                                icon = '🚫';
-                                bgColor = 'rgba(254, 226, 226, 0.4)';
-                                textColor = '#991b1b';
-                                borderColor = '#ef4444';
-                            }
+                            if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
+                            if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
+                            if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
 
                             return (
                                 <div key={msg.id} style={{
@@ -1864,7 +1849,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <button
                                             onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                             style={{
-                                                marginTop: '0.5rem', background: '#fff', color: '#10b981', border: '1px solid #10b981',
+                                                marginTop: '0.5rem', background: 'var(--bg-card)', color: 'var(--bp-ink-success)', border: '1px solid var(--bp-ink-success)',
                                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -1885,9 +1870,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     ? onNavigate?.('marketplace-review', relatedTx!.id)
                                                     : onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
-                                                    marginTop: '0.5rem', background: '#fff',
-                                                    color: canRate ? '#f59e0b' : '#10b981',
-                                                    border: `1px solid ${canRate ? '#f59e0b' : '#10b981'}`,
+                                                    marginTop: '0.5rem', background: 'var(--bg-card)',
+                                                    color: canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)',
+                                                    border: `1px solid ${canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}

@@ -25,6 +25,11 @@ Buttons keep the same deep fill in both themes; only inks and chips change with 
   (between nature-600 and 700), because `#647664` reaches only 4.23:1 on the phone's sunken rows and 4.43 on the web's
   page; and the accent's border is `chip.accent.border` (nature-200 in light, nature-800 in dark).
 
+- Director, 16 Oct 2026 (PR #1997, the web app opens dark): a sage **button with words** is `sage`, the accent's light
+  values in both themes, so it is a deep button in dark as every other button is (the accent's light sage drew a light
+  block on the dark page). The accent's light sage in dark stays for the send button, unread and count badges,
+  progress and selected toggles.
+
 On the phone, words and icons on `accent.fill` use `text.onAccent`, never `text.inverse` or white
 (`accent-fill-words.test.ts` fails on any other).
 
@@ -68,6 +73,9 @@ matches the file.
 | `accent.fill` | `#647664` | `#c0ccc0` |
 | `accent.hover` | `#526052` | `#dce3dc` |
 | `accent.on` | `#ffffff` | `#1d231d` |
+| `sage.fill` | `#647664` | `#647664` |
+| `sage.hover` | `#526052` | `#526052` |
+| `sage.on` | `#ffffff` | `#ffffff` |
 | `chip.ok.tint` | `#d1fae5` | `#022c22` |
 | `chip.ok.ink` | `#065f46` | `#6ee7b7` |
 | `chip.need.tint` | `#ffedd5` | `#7c2d12` |
@@ -108,6 +116,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `neutral` | grey: a web button while it sends; the install banner's How? while open (hover) | 7.46 / hover 12.63 | same |
 | `gold` | Vouch, Approve, rating (charcoal words) | 7.46 / 9.60 | same |
 | `accent` | chat's send and unread badge, progress, selected toggles | 4.86 / hover 6.66 | 9.65 / 12.26 (charcoal words) |
+| `sage` | the sage accent as a button with words (web: + Create Group, + Propose, + Propose Decision, Submit Decision) | 4.86 / hover 6.66 | same |
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
 | `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |

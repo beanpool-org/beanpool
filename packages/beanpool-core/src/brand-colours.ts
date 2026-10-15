@@ -135,6 +135,12 @@ export const BRAND_COLOURS = {
      * nature-600 in light; charcoal words on a light sage in dark (pressed goes lighter there, as gold does).
      */
     accent: { fill: themed(NATURE_600, NATURE_300), hover: themed(NATURE_700, NATURE_200), on: themed(WHITE, CHARCOAL) },
+    /**
+     * The sage accent as a button with words: the web's + Create Group, + Propose, Submit Decision. Light is the accent's
+     * own (white words on nature-600); dark keeps that deep fill, as every other button does, where the accent's light
+     * sage drew a light block on the dark page (director, 16 Oct 2026, PR #1997: the web app now opens dark).
+     */
+    sage: { fill: same(NATURE_600), hover: same(NATURE_700), on: same(WHITE) },
     /** Small badges and chips. `ok` is also the Offer chip, `need` the Need chip, `accent` a selected sage chip. */
     chip: {
         ok: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300) },

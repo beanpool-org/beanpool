@@ -54,7 +54,7 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
             expect(roles, role).toContain(role);
         }
         // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
@@ -137,6 +137,15 @@ describe('brand colours are readable in both themes', () => {
         expect(BRAND_COLOURS.accent.fill.light).toBe('#647664');
         expect(BRAND_COLOURS.accent.on).toEqual({ light: '#ffffff', dark: '#1d231d' });
         expect(BRAND_COLOURS.ink.accent.dark).toBe(BRAND_COLOURS.accent.fill.dark);
+    });
+
+    it('a sage button is the accent in light, and stays that deep fill in dark, drawn apart from the dark page', () => {
+        // Director, 16 Oct 2026 (PR #1997): the accent's light sage drew + Create Group as a light block on the dark page.
+        for (const part of ['fill', 'hover', 'on'] as const) {
+            expect(BRAND_COLOURS.sage[part].light, part).toBe(BRAND_COLOURS.accent[part].light);
+            expect(BRAND_COLOURS.sage[part].dark, part).toBe(BRAND_COLOURS.sage[part].light);
+        }
+        expect(contrastRatio(BRAND_COLOURS.sage.fill.dark, WEB_INK_GROUNDS.dark[0])).toBeGreaterThanOrEqual(3);
     });
 });
 

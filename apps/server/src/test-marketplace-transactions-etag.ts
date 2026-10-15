@@ -250,7 +250,7 @@ async function main() {
     assert(confirmGz.status === 304 && confirmRaw.status === 304, `a revalidation with either form of the tag is a 304 (${confirmGz.status}, ${confirmRaw.status})`);
     console.log(`\n  bytes per cycle, Rae (50 deals): before, a 200 every cycle: ${Buffer.byteLength(full.text)} B raw body`
         + ` (+ ${headerBytes(full)} B headers), ~${zipped} B gzipped body (+ ${headerBytes(gzFull)} B headers);`
-        + ` after, nothing changed: a 304, 0 B body + ${headerBytes(confirmGz)} B headers\n`);
+        + ` after, nothing changed: a ${confirmGz.status}, ${Buffer.byteLength(confirmGz.text)} B body + ${headerBytes(confirmGz)} B headers\n`);
 
     console.log(`\n${passed}/${run} checks passed`);
     if (passed !== run) process.exitCode = 1;

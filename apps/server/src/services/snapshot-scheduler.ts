@@ -81,6 +81,7 @@ import { getNodeRole, onNodeRoleChange } from '../config/node-role.js';
 import { assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import { copyWithoutAddresses } from './address-retention.js';
+import { expireRestorePoints } from './restore-points.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 export const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -393,6 +394,9 @@ function prune(keep: number, which: SnapshotKind | 'both', now = Date.now()): nu
  * with its schedule off still holds the last ones it took. Never throws. Returns how many went.
  */
 export function expireSnapshots(now = Date.now()): number {
+    // The restore points ride the same hourly tick, on their own fixed rule: no setting here reaches them
+    // (services/restore-points.ts). Never throws.
+    expireRestorePoints(now);
     if (creating) return 0; // the snapshot being taken prunes when it is done
     try {
         return prune(getAutoSnapshotConfig().keep, 'both', now);

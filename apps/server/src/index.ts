@@ -69,6 +69,7 @@ import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
 import { startRecoverNoticeWatch } from './recover-command.js';
+import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -156,6 +157,12 @@ async function main() {
         log: message => logger.security('AUTH', message),
         changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
         burnClaim: burnClaimFromShell,
+    });
+    // Step 2.52: a restore or a roll-back replaced the database before this start, and left a notice: everyone is told,
+    // on the database now in place, and the log keeps it (services/restore-points.ts). Never blocks the boot.
+    startRestoreNoticeWatch({
+        announce: adminBroadcastAnnouncement,
+        log: message => logger.security('ADMIN', message),
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: the admin password works as before either way.

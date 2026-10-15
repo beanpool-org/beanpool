@@ -89,6 +89,7 @@ import { getLocalConfig, redactLocalConfig, readLocalConfigFileIn, writeLocalCon
 import { writeFileAtomic } from '../write-file-atomic.js';
 import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
+import { getNodeRole } from '../config/node-role.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
@@ -762,8 +763,11 @@ export async function sealFileVerified(
 
 /**
  * The keys this server can hold a restore to (966 follow-up #2): its own node key when the file is from its own
- * community, and a standby's pinned main server (the `mirror` connector). A fresh server restoring someone's
- * community has none, and then opening is the whole proof, as §2.2 allows for an owner.
+ * community, and, on a standby only, its pinned main server (the `mirror` connector). A fresh server restoring
+ * someone's community has none, and then opening is the whole proof, as §2.2 allows for an owner.
+ *
+ * On a main server a `mirror` link is not a pin (design case 18 §3.1, standby review F2): a mirror link there is a key
+ * someone added, and its key must not become one a restore trusts for the keys and passwords inside a file.
  */
 export function restorePins(header: SealedEnvelopeHeader): string[] {
     const pins = new Set<string>();
@@ -774,6 +778,7 @@ export function restorePins(header: SealedEnvelopeHeader): string[] {
             if (me) pins.add(me.peerId);
         }
     } catch { /* no genesis: no own pin */ }
+    if (getNodeRole() !== 'backup') return [...pins];
     try {
         const connectors = JSON.parse(fs.readFileSync(path.join(dataDir(), 'connectors.json'), 'utf-8'));
         for (const c of Array.isArray(connectors) ? connectors : []) {
@@ -796,24 +801,20 @@ function publicKeyOfPeerId(peerId: string): Uint8Array | null {
 }
 
 export type SignerCheck =
-    /** `acceptedByName`: this server has pins, the signer is not one, and the operator named it (X-Accept-Signer).
-     *  Such a file restores its database only; its bundle is never applied (see {@link signerCheck}). */
-    | { ok: true; pinned: boolean; acceptedByName: boolean }
+    | { ok: true; pinned: boolean }
     | { ok: false; status: number; body: Record<string, unknown> };
 
 /**
  * Does the header's signature hold up? Always: it must verify against the key its own `nodePeerId` names — no
- * sealer this code ships writes anything else. Where this server has pins, the signer must also be one of them,
- * unless the operator has named that exact signer (`acceptSigner`): a backup the fleet manager locked (its
- * seal-old pass signs with its own key) is legitimate, and the screen asks rather than refuses.
+ * sealer this code ships writes anything else. Where this server has pins, the signer must also be one of them.
  *
- * Who can make a file that passes by name: ANYONE who has seen one header of this community. Sealing needs only
- * the public stanzas (owner public keys, the code's public record), so they can lock any tar to the same
- * recovery code and sign it with a key of their own. The code opens it cleanly. Naming the signer therefore
- * vouches for nothing but "I know this machine", so such a file brings back its database only: its take-over
- * bundle (node key, admin password hash, 2FA) is never applied. Harvester-sealed files never carry one anyway.
+ * Nothing lets a file signed by another key through from Settings (design case 18 §3.1, D3; the X-Accept-Signer
+ * header is gone). ANYONE who has seen one header of this community can lock a tar to the same recovery code and sign
+ * it with a key of their own, and the code opens it cleanly; the one honest case left, a backup locked by this
+ * community's previous server after a key loss, is restored on the server by whoever holds its data folder
+ * (`beanpool restore --accept-signer`), which is a stronger position than any session.
  */
-export function signerCheck(header: SealedEnvelopeHeader, acceptSigner?: string | null): SignerCheck {
+export function signerCheck(header: SealedEnvelopeHeader): SignerCheck {
     const signerKey = publicKeyOfPeerId(header.nodePeerId);
     if (!signerKey || !verifySealedHeader(header, signerKey)) {
         return {
@@ -822,16 +823,16 @@ export function signerCheck(header: SealedEnvelopeHeader, acceptSigner?: string 
         };
     }
     const pins = restorePins(header);
-    if (pins.length === 0) return { ok: true, pinned: false, acceptedByName: false };
-    if (pins.includes(header.nodePeerId)) return { ok: true, pinned: true, acceptedByName: false };
-    if (acceptSigner && acceptSigner === header.nodePeerId) return { ok: true, pinned: false, acceptedByName: true };
+    if (pins.length === 0) return { ok: true, pinned: false };
+    if (pins.includes(header.nodePeerId)) return { ok: true, pinned: true };
     return {
         ok: false, status: 409,
         body: {
-            error: `This backup of your community was locked by ${header.nodePeerId}, not by this community's server. `
-                + "If you know that machine (the fleet manager locks old backups with its own key), restore again and "
-                + 'confirm it by name; its database comes back, never keys or passwords from inside it. Otherwise do not '
-                + 'restore it: anyone who has seen one of your backup files can make one like it.',
+            error: `This backup of your community was locked by another machine, ${header.nodePeerId}, not by this community's server. `
+                + "If this file was locked by this community's previous server, restore it on the server with "
+                + `\`beanpool restore --accept-signer ${header.nodePeerId}\`. Otherwise do not restore it: anyone who has seen one `
+                + 'of your backup files can make one like it. Nothing was changed.',
+            command: `beanpool restore --accept-signer ${header.nodePeerId}`,
             signerNotPinned: true,
             signer: header.nodePeerId,
             pins,

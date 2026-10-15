@@ -6,6 +6,7 @@ export * from './passport.js';
 export * from './router.js';
 export * from './gossip.js';
 export * from './ledger.js';
+export * from './circulation.js';
 export * from './trade.js';
 export * from './simulator.js';
 export * from './config.js';

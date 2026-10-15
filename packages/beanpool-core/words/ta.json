@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "பயறு",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "இடங்கள் OpenStreetMap-இலிருந்து வருகின்றன. இங்கே நீங்கள் உள்ளிடுவது அவர்களுக்கு அனுப்பப்படும்.",
   "Choose {place}": "{place} என்பதைத் தேர்ந்தெடுங்கள்",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "நீங்கள் இடுகையிடும் முன் இந்தச் சமூகம் ஒரு சுயவிவரப் படத்தைக் கேட்கிறது. அதைப் பிறகு உங்கள் சுயவிவரத்திலிருந்து சேர்க்கலாம்.",
-  "A picture is optional here. You can add one later from your profile.": "இங்கே படம் விருப்பத்திற்குரியது. விரும்பினால் பிறகு உங்கள் சுயவிவரத்திலிருந்து சேர்க்கலாம்."
+  "A picture is optional here. You can add one later from your profile.": "இங்கே படம் விருப்பத்திற்குரியது. விரும்பினால் பிறகு உங்கள் சுயவிவரத்திலிருந்து சேர்க்கலாம்.",
+  "{n}st\u0004day of the month": "{n} ஆம் தேதி",
+  "{n}nd\u0004day of the month": "{n} ஆம் தேதி",
+  "{n}rd\u0004day of the month": "{n} ஆம் தேதி",
+  "{n}th\u0004day of the month": "{n} ஆம் தேதி",
+  "Every month on the first {weekday}": "ஒவ்வொரு மாதமும் முதல் {weekday}",
+  "Every month on the second {weekday}": "ஒவ்வொரு மாதமும் இரண்டாவது {weekday}",
+  "Every month on the third {weekday}": "ஒவ்வொரு மாதமும் மூன்றாவது {weekday}",
+  "Every month on the fourth {weekday}": "ஒவ்வொரு மாதமும் நான்காவது {weekday}",
+  "Every month on the last {weekday}": "ஒவ்வொரு மாதமும் கடைசி {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "மாதந்தோறும், முதல் {weekday}",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும், முதல் {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "மாதந்தோறும், இரண்டாவது {weekday}",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும், இரண்டாவது {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "மாதந்தோறும், மூன்றாவது {weekday}",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும், மூன்றாவது {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "மாதந்தோறும், நான்காவது {weekday}",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும், நான்காவது {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "மாதந்தோறும், கடைசி {weekday}",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும், கடைசி {weekday}"
+  },
+  "Monthly, first {weekday}": "மாதந்தோறும், முதல் {weekday}",
+  "Monthly, second {weekday}": "மாதந்தோறும், இரண்டாவது {weekday}",
+  "Monthly, third {weekday}": "மாதந்தோறும், மூன்றாவது {weekday}",
+  "Monthly, fourth {weekday}": "மாதந்தோறும், நான்காவது {weekday}",
+  "Monthly, last {weekday}": "மாதந்தோறும், கடைசி {weekday}",
+  "Does not repeat": "மீண்டும் நிகழாது",
+  "Every week on {weekday}": "ஒவ்வொரு வாரமும் {weekday} அன்று",
+  "Every 2 weeks on {weekday}": "2 வாரங்களுக்கு ஒருமுறை {weekday} அன்று",
+  "Every month on the {day}": "ஒவ்வொரு மாதமும் {day} அன்று",
+  "An event that repeats must end before its next date starts": "மீண்டும் நிகழும் நிகழ்வு அதன் அடுத்த தேதி தொடங்குவதற்கு முன்பே முடிவடைய வேண்டும்",
+  "(months without a {day} are skipped)": "({day} இல்லாத மாதங்கள் தவிர்க்கப்படும்)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "ஒவ்வொரு {weekday}",
+    "other": "ஒவ்வொரு {n} வாரங்களுக்கும் {weekday} அன்று"
+  },
+  "Every {weekday}": "ஒவ்வொரு {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "மாதந்தோறும் {day} அன்று",
+    "other": "ஒவ்வொரு {n} மாதங்களுக்கும் {day} அன்று"
+  },
+  "Monthly on the {day}": "மாதந்தோறும் {day} அன்று",
+  "{repeats} · until {date}": "{repeats} · {date} வரை",
+  "The last date must be a date on or after the first one": "கடைசித் தேதி முதல் தேதி அல்லது அதற்குப் பிந்தைய தேதியாக இருக்க வேண்டும்",
+  "The last date can be at most {n} years after the first one": "கடைசித் தேதி முதல் தேதிக்கு அதிகபட்சம் {n} ஆண்டுகளுக்குப் பிறகு இருக்கலாம்",
+  "{date} is cancelled. Next: {next}": "{date} ரத்துசெய்யப்பட்டது. அடுத்தது: {next}",
+  "{date} is cancelled.": "{date} ரத்துசெய்யப்பட்டது.",
+  "{date} is back on": "{date} மீண்டும் திட்டமிடப்பட்டுள்ளது",
+  "Moved from the regular {weekday}": "வழக்கமான {weekday}-இலிருந்து மாற்றப்பட்டது",
+  "Moved from the regular date": "வழக்கமான தேதியிலிருந்து மாற்றப்பட்டது",
+  "Choose how the event repeats from the list": "பட்டியலிலிருந்து நிகழ்வு எவ்வாறு மீண்டும் நிகழ்கிறது என்பதைத் தேர்ந்தெடுக்கவும்",
+  "An event can repeat every 1 to 12 weeks or months": "ஒரு நிகழ்வு 1 முதல் 12 வாரங்கள் அல்லது மாதங்களுக்கு ஒருமுறை மீண்டும் நிகழலாம்",
+  "The first date must be one of the repeating dates": "முதல் தேதி மீண்டும் நிகழும் தேதிகளில் ஒன்றாக இருக்க வேண்டும்",
+  "The last date can be at most 5 years after the first one": "கடைசித் தேதி முதல் தேதிக்கு அதிகபட்சம் 5 ஆண்டுகளுக்குப் பிறகு இருக்கலாம்",
+  "Pick one of the dates this event repeats on": "இந்த நிகழ்வு மீண்டும் நிகழும் தேதிகளில் ஒன்றைத் தேர்ந்தெடுக்கவும்",
+  "This event does not repeat": "இந்த நிகழ்வு மீண்டும் நிகழாது",
+  "Only the host can cancel or restore a date": "நிகழ்ச்சி நடத்துபவர் மட்டுமே ஒரு தேதியை ரத்துசெய்யவோ மீட்டமைக்கவோ முடியும்",
+  "This is the last date: change when the event ends, or cancel the event": "இதுவே கடைசித் தேதி: நிகழ்வு எப்போது முடிவடைகிறது என்பதை மாற்றவும் அல்லது நிகழ்வை ரத்துசெய்யவும்",
+  "At most 100 dates can be cancelled": "அதிகபட்சம் 100 தேதிகளை ரத்துசெய்யலாம்",
+  "This event has been cancelled": "இந்த நிகழ்வு ரத்துசெய்யப்பட்டது",
+  "Pick a time zone from the list": "பட்டியலிலிருந்து ஒரு நேர மண்டலத்தைத் தேர்ந்தெடுக்கவும்",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "சுமார் 1 கி.மீ. வரம்பில் காட்டப்படும். சந்திப்பை ஏற்பாடு செய்யும்போது {name}-இடம் சரியான இடத்தைக் கேட்கவும்.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "நிகழ்வைப் பார்க்கக்கூடிய அனைவருக்கும் காட்டப்படும். சரியான முகவரியைக் கீழே உள்ள குறிப்பில் இடவும்.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "இது தெரு முகவரி போல் தெரிகிறது. நிகழ்வைப் பார்க்கக்கூடிய அனைவரும் இதைப் படிப்பார்கள், எனவே கீழே உள்ள குறிப்பில் வைப்பது பாதுகாப்பானது.",
+  "An earlier message was removed when this chat was locked": "இந்த அரட்டை பூட்டப்பட்டபோது முந்தைய செய்தி அகற்றப்பட்டது",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "இந்த அரட்டை பூட்டப்பட்டபோது முந்தைய {n} செய்தி அகற்றப்பட்டது",
+    "other": "இந்த அரட்டை பூட்டப்பட்டபோது முந்தைய {n} செய்திகள் அகற்றப்பட்டன"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "ஒருங்கிணைப்பாளரால் {n} செய்தி அகற்றப்பட்டது",
+    "other": "ஒருங்கிணைப்பாளரால் {n} செய்திகள் அகற்றப்பட்டன"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} செய்தி நீக்கப்பட்டது",
+    "other": "{n} செய்திகள் நீக்கப்பட்டன"
+  }
 }

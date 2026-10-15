@@ -108,7 +108,7 @@ test('our servers\' names are reserved (0010): vault and the rest answer 403, Cl
             assert.equal((await w.available(name)).body.available, false, name);
         }
         assert.deepEqual(w.cf.dns.get(before.id), before);
-        // `test` stays claimable: its own node claims it through the registrar.
+        // `test` is not one of 0010's: 0001 already blocks it on a fresh database (the live one has no such row).
         assert.equal((await w.claim(stranger, { name: 'test' })).status, 403, 'test is blocked by 0001 on a fresh database');
     } finally { w.restore(); }
 });

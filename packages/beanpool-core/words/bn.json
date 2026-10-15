@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "শিম",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "জায়গাগুলো OpenStreetMap থেকে নেওয়া। আপনি এখানে যা লেখেন তা তাদের কাছে পাঠানো হয়।",
   "Choose {place}": "{place} বেছে নিন",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "পোস্ট করার আগে এই কমিউনিটি একটি প্রোফাইল ছবি চায়। আপনি পরে নিজের প্রোফাইল থেকে ছবিটি যোগ করতে পারবেন।",
-  "A picture is optional here. You can add one later from your profile.": "এখানে ছবি দেওয়া ঐচ্ছিক। আপনি পরে নিজের প্রোফাইল থেকে একটি ছবি যোগ করতে পারবেন।"
+  "A picture is optional here. You can add one later from your profile.": "এখানে ছবি দেওয়া ঐচ্ছিক। আপনি পরে নিজের প্রোফাইল থেকে একটি ছবি যোগ করতে পারবেন।",
+  "{n}st\u0004day of the month": "{n}",
+  "{n}nd\u0004day of the month": "{n}",
+  "{n}rd\u0004day of the month": "{n}",
+  "{n}th\u0004day of the month": "{n}",
+  "Every month on the first {weekday}": "প্রতি মাসের প্রথম {weekday}-এ",
+  "Every month on the second {weekday}": "প্রতি মাসের দ্বিতীয় {weekday}-এ",
+  "Every month on the third {weekday}": "প্রতি মাসের তৃতীয় {weekday}-এ",
+  "Every month on the fourth {weekday}": "প্রতি মাসের চতুর্থ {weekday}-এ",
+  "Every month on the last {weekday}": "প্রতি মাসের শেষ {weekday}-এ",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "প্রতি {n} মাসে, প্রথম {weekday}",
+    "other": "প্রতি {n} মাসে, প্রথম {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "প্রতি {n} মাসে, দ্বিতীয় {weekday}",
+    "other": "প্রতি {n} মাসে, দ্বিতীয় {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "প্রতি {n} মাসে, তৃতীয় {weekday}",
+    "other": "প্রতি {n} মাসে, তৃতীয় {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "প্রতি {n} মাসে, চতুর্থ {weekday}",
+    "other": "প্রতি {n} মাসে, চতুর্থ {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "প্রতি {n} মাসে, শেষ {weekday}",
+    "other": "প্রতি {n} মাসে, শেষ {weekday}"
+  },
+  "Monthly, first {weekday}": "প্রতি মাসে, প্রথম {weekday}",
+  "Monthly, second {weekday}": "প্রতি মাসে, দ্বিতীয় {weekday}",
+  "Monthly, third {weekday}": "প্রতি মাসে, তৃতীয় {weekday}",
+  "Monthly, fourth {weekday}": "প্রতি মাসে, চতুর্থ {weekday}",
+  "Monthly, last {weekday}": "প্রতি মাসে, শেষ {weekday}",
+  "Does not repeat": "পুনরাবৃত্তি হয় না",
+  "Every week on {weekday}": "প্রতি সপ্তাহে {weekday}-এ",
+  "Every 2 weeks on {weekday}": "প্রতি 2 সপ্তাহে {weekday}-এ",
+  "Every month on the {day}": "প্রতি মাসে {day} তারিখে",
+  "An event that repeats must end before its next date starts": "পুনরাবৃত্তিমূলক ইভেন্ট তার পরবর্তী তারিখ শুরুর আগেই শেষ হতে হবে",
+  "(months without a {day} are skipped)": "(যেসব মাসে {day} তারিখ নেই সেগুলো বাদ যাবে)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "প্রতি {n} সপ্তাহে {weekday}-এ",
+    "other": "প্রতি {n} সপ্তাহে {weekday}-এ"
+  },
+  "Every {weekday}": "প্রতি {weekday}-এ",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "প্রতি {n} মাসে {day} তারিখে",
+    "other": "প্রতি {n} মাসে {day} তারিখে"
+  },
+  "Monthly on the {day}": "প্রতি মাসে {day} তারিখে",
+  "{repeats} · until {date}": "{repeats} · {date} পর্যন্ত",
+  "The last date must be a date on or after the first one": "শেষ তারিখটি প্রথম তারিখের দিন বা তার পরের হতে হবে",
+  "The last date can be at most {n} years after the first one": "শেষ তারিখটি প্রথম তারিখের সর্বোচ্চ {n} বছর পরের হতে পারে",
+  "{date} is cancelled. Next: {next}": "{date} বাতিল করা হয়েছে। পরবর্তী: {next}",
+  "{date} is cancelled.": "{date} বাতিল করা হয়েছে।",
+  "{date} is back on": "{date} আবার চালু হয়েছে",
+  "Moved from the regular {weekday}": "নিয়মিত {weekday} থেকে সরানো হয়েছে",
+  "Moved from the regular date": "নিয়মিত তারিখ থেকে সরানো হয়েছে",
+  "Choose how the event repeats from the list": "তালিকা থেকে ইভেন্টটি কীভাবে পুনরাবৃত্তি হবে তা বেছে নিন",
+  "An event can repeat every 1 to 12 weeks or months": "একটি ইভেন্ট প্রতি 1 থেকে 12 সপ্তাহ বা মাসে পুনরাবৃত্তি হতে পারে",
+  "The first date must be one of the repeating dates": "প্রথম তারিখটি পুনরাবৃত্তির তারিখগুলোর একটি হতে হবে",
+  "The last date can be at most 5 years after the first one": "শেষ তারিখটি প্রথম তারিখের সর্বোচ্চ 5 বছর পরের হতে পারে",
+  "Pick one of the dates this event repeats on": "এই ইভেন্টটি যে দিনগুলোতে হয় তার একটি বেছে নিন",
+  "This event does not repeat": "এই ইভেন্টটির পুনরাবৃত্তি হয় না",
+  "Only the host can cancel or restore a date": "কেবল হোস্টই কোনো তারিখ বাতিল বা ফিরিয়ে আনতে পারেন",
+  "This is the last date: change when the event ends, or cancel the event": "এটিই শেষ তারিখ: ইভেন্টটি কখন শেষ হবে তা পরিবর্তন করুন, অথবা ইভেন্টটি বাতিল করুন",
+  "At most 100 dates can be cancelled": "সর্বোচ্চ 100টি তারিখ বাতিল করা যেতে পারে",
+  "This event has been cancelled": "এই ইভেন্টটি বাতিল করা হয়েছে",
+  "Pick a time zone from the list": "তালিকা থেকে একটি টাইম জোন বেছে নিন",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "প্রায় 1 কিমির মধ্যে দেখানো হয়। দেখা করার সময় {name}-কে সঠিক জায়গা জেনে নিন।",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "যাঁরা এই ইভেন্ট দেখতে পারেন তাঁদের সবাইকে দেখানো হয়। নিচের নোটে সঠিক ঠিকানাটি লিখুন।",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "এটি একটি রাস্তার ঠিকানার মতো দেখাচ্ছে। যাঁরা এই ইভেন্ট দেখতে পারেন তাঁরা সবাই এটি পড়বেন, তাই এটি নিচের নোটে রাখা বেশি নিরাপদ।",
+  "An earlier message was removed when this chat was locked": "এই চ্যাটটি লক করার সময় আগের একটি বার্তা সরিয়ে দেওয়া হয়েছিল",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "এই চ্যাট লক করার সময় আগের {n}টি বার্তা সরানো হয়েছিল",
+    "other": "এই চ্যাট লক করার সময় আগের {n}টি বার্তা সরানো হয়েছিল"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "আহ্বায়ক দ্বারা {n}টি বার্তা সরানো হয়েছে",
+    "other": "আহ্বায়ক দ্বারা {n}টি বার্তা সরানো হয়েছে"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n}টি বার্তা মুছে ফেলা হয়েছে",
+    "other": "{n}টি বার্তা মুছে ফেলা হয়েছে"
+  }
 }

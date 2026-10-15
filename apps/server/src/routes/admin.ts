@@ -516,15 +516,15 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
 /**
  * The proof a role change that needs an owner asks for (roleChangeNeedsOwner). An owner: the fresh proof every time
  * (design case 18, C6 and C8), so a stolen session can neither leave an owner key of its own behind nor strip the other
- * owners. Anyone else (an admin, a break-glass code) is asked what they were asked before, the phone step-up, and the
- * engine decides as it always has: it refuses them unless the node has no acting owner (grantNodeRole's bootstrap, #1006),
- * and a break-glass code is the owners' recovery factor itself.
+ * owners. In break-glass mode too (#1984 review B2): the password and an earlier 2FA session are the stolen session C6 is
+ * for, and the owner recovering sends a current code with the password. Anyone else (an admin, a break-glass code) is
+ * asked what they were asked before, the phone step-up, and the engine decides as it always has: it refuses them unless
+ * the node has no acting owner (grantNodeRole's bootstrap, #1006), and a break-glass code is the owners' recovery factor
+ * itself.
  */
 async function roleChangeProof(ctx: any, code: unknown, action: string): Promise<boolean> {
     const state = ctx.state || {};
-    if (state.adminRole === 'owner' && !state.isBreakGlassAuth && !(isBreakGlassMode() && !state.isKeySession)) {
-        return requireFreshProof(ctx, code, action);
-    }
+    if (state.adminRole === 'owner' && !state.isBreakGlassAuth) return requireFreshProof(ctx, code, action);
     return requirePhoneStepUp(ctx);
 }
 
@@ -2181,7 +2181,7 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
     if (allowlistRefusal) {
         ctx.status = 400;
-        ctx.body = { error: allowlistRefusal, code: 'allowlist_excludes_you' };
+        ctx.body = allowlistRefusal;
         return;
     }
     const updated = updateGatewayConfig(body);

@@ -7,16 +7,21 @@
  *  1. The removed routes (factory reset, snapshot delete, the legacy settings page and its script) answer 404 to the
  *     owner's password (with a code), a password session, an owner's key session from a computer and from the phone, an
  *     admin's key session, an admin-scope automation token and no credential; local-config.json and the snapshot are as
- *     they were.
+ *     they were. The Dockerfile puts no legacy page in the image.
  *  2. Every OWNER ONLY row: an admin's key session is refused 403 in words, an admin-scope token 403 token_not_allowed,
  *     the live state as it was; an owner gets past the gate.
  *  3. Every OWNER + FRESH PROOF row: a password session with no code 401 totpRequired, with a current code passes and the
  *     code is spent (sent again: 401); a phone hand-off whose unlock is 91 s old 403 step_up_required, a fresh one passes;
- *     a computer's key session 403 phone_required; an admin 403; an admin token 403 token_not_allowed.
+ *     a computer's key session 403 phone_required; an admin 403; an admin token 403 token_not_allowed. Removing or
+ *     re-pointing an off-box destination is held on each refusal. In break-glass mode the password and an earlier 2FA
+ *     session enrol no owner key; a current code does.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
- *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken), the off-box retention floor (7 days),
- *     the gateway allow-list that would shut the caller out, mirror links owner-only, the first recovery code plain.
+ *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
+ *     an admin or backups token, the owner's button) never pushes out a scheduled one, and the manual ones keep their own
+ *     newest 3; the off-box retention floor (7 days, and a stored lower row read as 7); the standby's copy schedule
+ *     (owner-only, bounded, a stored value read through the bounds); the gateway allow-list that would shut the caller
+ *     out, or is no list; mirror links owner-only, the first recovery code plain.
  *
  * Run:
  *   SERVER_SUITES_ONLY=test-owner-delete-gates node scripts/run-server-suites.mjs
@@ -32,6 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { localFetch } from './keepalive-test-fetch.js';
 
@@ -96,6 +102,7 @@ async function main(): Promise<void> {
     const MIN_SNAPSHOTS_KEPT: number = snapshots.MIN_SNAPSHOTS_KEPT ?? 3;
     const MIN_OFFBOX_RETENTION_DAYS: number = offbox.MIN_OFFBOX_RETENTION_DAYS ?? 7;
     const { getConnectors } = await import('./connector-manager.js');
+    const { nodeRoleOf, revokeNodeRole } = await import('./engine/node-roles.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
 
@@ -204,6 +211,12 @@ async function main(): Promise<void> {
             'local-config.json still holds the password, its salt and the 2FA (nothing reset)');
         assert(listSnapshots().some((s: any) => s.name === snap.name) && fs.existsSync(path.join(dataDir!, 'snapshots', snap.name)),
             'the snapshot is still there');
+        // Nor does the image carry the legacy page (#1984 review N1): a node serves public/, and the Dockerfile copies nothing
+        // from apps/server/static (settings.html, settings.js) into it, so /settings.html and /settings.js are 404 there too.
+        const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+        const copiesLegacy = fs.readFileSync(path.join(repoRoot, 'Dockerfile'), 'utf8').split('\n')
+            .filter((l) => /^\s*COPY\b/i.test(l) && /apps\/server\/static|settings\.(html|js)\b/.test(l));
+        assert(copiesLegacy.length === 0, `the Dockerfile puts no legacy settings page in the image (${copiesLegacy.join(' | ') || 'no such COPY'})`);
 
         // ── 2. OWNER ONLY ─────────────────────────────────────────────────────────────────────────────────────────
         console.log('\n── 2. owner-only: an admin is refused in words, an admin token by its scope, an owner passes ──');
@@ -240,6 +253,8 @@ async function main(): Promise<void> {
                 ok: (r) => r.status !== 401 && r.status !== 403 },
             { what: 'a new ledger baseline (D2)', method: 'POST', route: '/api/local/admin/ledger-rebaseline', body: { reason: 'owner-delete gates suite baseline' },
                 unchanged: () => JSON.stringify(db.prepare(`SELECT value FROM node_config WHERE key LIKE '%baseline%'`).all()), ok: (r) => r.status !== 401 && r.status !== 403 },
+            { what: "the standby's copy schedule (#1984 review N2)", method: 'POST', route: '/api/local/admin/backup-config', body: { pullSeconds: 30 },
+                unchanged: () => String(getLocalConfig().backupPullSeconds ?? ''), ok: (r) => r.status === 200 && getLocalConfig().backupPullSeconds === 30 },
             { what: 'prune a whole invite branch (D3)', method: 'POST', route: `/api/local/admin/branches/${branchRoot}/prune`, body: {},
                 unchanged: () => JSON.stringify(db.prepare(`SELECT status FROM members WHERE public_key = ?`).get(branchRoot)),
                 ok: (r) => r.status !== 401 && r.status !== 403 },
@@ -265,6 +280,9 @@ async function main(): Promise<void> {
                 assert(inWords(adminDisconnect), `nor disconnect it (${short(adminDisconnect)})`);
             }
         }
+        const adminReadsCadence = await call('POST', '/api/local/admin/backup-config', asAdmin, {});
+        assert(adminReadsCadence.status === 200 && typeof adminReadsCadence.json?.status?.pullSeconds === 'number',
+            `an admin still reads the standby's copy schedule (${short(adminReadsCadence)})`);
         // Burst removal of established accounts is an owner's; the brand-new accounts of a burst stay an admin's. Bursts are
         // cleaned up where the open door is (the global profile), so for these calls this node runs that profile.
         process.env.NODE_PROFILE = 'global';
@@ -292,7 +310,18 @@ async function main(): Promise<void> {
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
 
         type Row = { what: string; method: string; route: string; body: (pw: boolean) => Record<string, unknown>; ok: (r: any) => boolean;
-            keyOnly?: boolean; before?: () => void };
+            keyOnly?: boolean; before?: () => void; held?: () => boolean };
+        // An off-box destination set in Settings, put back as it was before each request of its rows (#1984 review N5).
+        const gatesDest = { name: 'Gates store', endpoint: 'https://gates.example.invalid', bucket: 'gates-bucket', region: 'auto', prefix: 'g1',
+            accessKeyId: 'AKIDGATES', secretAccessKey: 'SECRETGATES' };
+        const storedDest = (): any => readOffboxSettings().destinations.find((d: any) => d.source !== 'env' && d.bucket === gatesDest.bucket);
+        const putDestBack = (): void => {
+            const d = storedDest();
+            const r = !d ? offbox.updateOffboxSettings({ destination: gatesDest })
+                : d.endpoint !== gatesDest.endpoint ? offbox.updateOffboxSettings({ destination: { ...gatesDest, id: d.id } }) : { ok: true };
+            if (!r.ok || storedDest()?.endpoint !== gatesDest.endpoint) throw new Error(`setup: no off-box destination: ${r.error}`);
+        };
+        const destHeld = (): boolean => storedDest()?.endpoint === gatesDest.endpoint;
         const passes = (r: any) => r.status !== 401 && r.status !== 403;
         let retention = 30;
         const fresh: Row[] = [
@@ -317,6 +346,11 @@ async function main(): Promise<void> {
                 ok: (r) => r.status === 200 },
             { what: 'shorten off-box retention (amendment 1)', method: 'POST', route: '/api/local/admin/offbox-backups/settings',
                 body: () => ({ retentionDays: retention - 1 }), ok: (r) => r.status === 200 && readOffboxSettings().retentionDays === --retention },
+            { what: 'remove an off-box destination (amendment 1)', method: 'POST', route: '/api/local/admin/offbox-backups/settings',
+                before: putDestBack, body: () => ({ removeId: storedDest()?.id }), ok: (r) => r.status === 200 && !storedDest(), held: destHeld },
+            { what: 're-point an off-box destination by its id (amendment 1)', method: 'POST', route: '/api/local/admin/offbox-backups/settings',
+                before: putDestBack, body: () => ({ destination: { ...gatesDest, id: storedDest()?.id, endpoint: 'https://elsewhere.example.invalid' } }),
+                ok: (r) => r.status === 200 && storedDest()?.endpoint === 'https://elsewhere.example.invalid', held: destHeld },
         ];
         // The 4-hour 2FA session a password sign-in hands out is no fresh proof.
         const signIn = await call('POST', '/api/local/verify-password', {}, { password: PW, totpCode: tfa.code() });
@@ -328,35 +362,67 @@ async function main(): Promise<void> {
                 row.before?.();
                 return call(row.method, row.route, headers, { ...row.body(pw), ...extra });
             };
+            /** A row whose state can be read back: as it was after a refusal. */
+            const held = (r: { status: number }, who: string) => {
+                if (row.held) assert(row.held(), `${row.what}, ${who}: nothing changed (${r.status})`);
+            };
             if (!row.keyOnly) {
                 const noCode = await send(pwSession(), {}, true);
                 assert(noCode.status === 401 && noCode.json?.totpRequired === true, `${row.what}: a password session without a code → 401 totpRequired (${short(noCode)})`);
+                held(noCode, 'a password session without a code');
                 const viaTfaSession = await send({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, {}, true);
                 assert(viaTfaSession.status === 401 && viaTfaSession.json?.totpRequired === true,
                     `${row.what}: the password with an earlier 2FA session and no code → 401 totpRequired (${short(viaTfaSession)})`);
+                held(viaTfaSession, 'the password with an earlier 2FA session');
                 const code = tfa.code();
                 const withCode = await send(pwSession(), { code }, true);
                 assert(row.ok(withCode), `${row.what}: with a current code it goes through (${short(withCode)})`);
                 const spent = await send(pwSession(), { code }, true);
                 assert(spent.status === 401, `${row.what}: the same code again is spent → 401 (${short(spent)})`);
+                held(spent, 'a spent code');
             } else {
                 const pw = await send(pwSession(), { code: tfa.code() }, true);
                 assert(pw.status === 403, `${row.what}: the password never does it, whatever the code (${short(pw)})`);
             }
             const stale = await send(asStalePhone());
             assert(stale.status === 403 && stale.json?.code === 'step_up_required', `${row.what}: Manage pressed 91 s ago → 403 step_up_required (${short(stale)})`);
+            held(stale, 'Manage pressed 91 s ago');
             const phone = await send(asPhone());
             assert(row.ok(phone), `${row.what}: Manage pressed just now goes through (${short(phone)})`);
             const computer = await send(asComputer, { code: tfa.code() });
             assert(computer.status === 403 && computer.json?.code === 'phone_required', `${row.what}: a computer's session is sent to the phone → 403 phone_required (${short(computer)})`);
+            held(computer, "a computer's session");
             const byAdmin = await send(asAdmin, { code: tfa.code() });
             // A role change by an admin goes to the engine as it always has, which refuses it (it grants only on a node with
             // no acting owner): 400 "Only an owner may grant …". Every other row: 403.
             assert(byAdmin.status === 403 || (byAdmin.status === 400 && /only an owner/i.test(byAdmin.json?.error || '')),
                 `${row.what}: an admin is refused (${short(byAdmin)})`);
+            held(byAdmin, 'an admin');
             const byToken = await send(asToken, { code: tfa.code() });
             assert(byToken.status === 403 && (byToken.json?.code === 'token_not_allowed' || row.keyOnly === true),
                 `${row.what}: an admin token → 403 token_not_allowed (${short(byToken)})`);
+            held(byToken, 'an admin token');
+        }
+        if (storedDest()) offbox.updateOffboxSettings({ removeId: storedDest().id });
+        // Break-glass mode changes none of that for an owner key (C6, #1984 review B2): the password with an earlier 2FA
+        // session is the stolen session the row is for, on either enrolment route. The owner recovering sends a current code.
+        updateLocalConfig({ breakGlassMode: true } as any);
+        const lockdownOwners: string[] = [];
+        try {
+            for (const route of ['/api/local/admin/auth/enrol', '/api/local/admin/auth/break-glass/enrol']) {
+                const target = addMember('Lockdown');
+                const r = await call('POST', route, { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, { memberPubkey: target, role: 'owner' });
+                assert(r.status === 401 && r.json?.totpRequired === true && nodeRoleOf(target) === null,
+                    `break-glass mode, ${route}: the password with an earlier 2FA session and no code → 401, no role (${short(r)}; role ${nodeRoleOf(target)})`);
+                const recovering = addMember('Recovering');
+                const withCode = await call('POST', route, { 'X-Admin-Password': PW, 'X-Admin-TOTP': tfa.code() }, { memberPubkey: recovering, role: 'owner' });
+                if (nodeRoleOf(recovering) === 'owner') lockdownOwners.push(recovering);
+                assert(withCode.status === 200 && nodeRoleOf(recovering) === 'owner',
+                    `break-glass mode, ${route}: the password with a current code (the owner recovering) → 200, an owner key (${short(withCode)})`);
+            }
+        } finally {
+            updateLocalConfig({ breakGlassMode: false } as any);
+            for (const pk of lockdownOwners) revokeNodeRole(pk, 'owner', owner);
         }
         // Taking a role: the DELETE carries its code as X-Fresh-Proof.
         const revokee = addMember('Revokee');
@@ -383,15 +449,96 @@ async function main(): Promise<void> {
         }
         const keep3 = await call('POST', '/api/local/admin/snapshots/config', asComputer, { keep: MIN_SNAPSHOTS_KEPT });
         assert(keep3.status === 200 && getAutoSnapshotConfig().keep === MIN_SNAPSHOTS_KEPT, `snapshots/config keep ${MIN_SNAPSHOTS_KEPT} is taken (${short(keep3)})`);
+        // A snapshot taken by hand never pushes out a scheduled one (#1984 review B1): `keep` counts the scheduler's own.
+        const keepNow: number = getAutoSnapshotConfig().keep;
+        const MANUAL_KEPT: number = snapshots.MANUAL_SNAPSHOTS_KEPT ?? 3;
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        // The scheduler's own, named to the second.
+        for (let i = 0; i < keepNow; i++) { await sleep(1100); createSnapshot(); }
+        const scheduled: string[] = listSnapshots().filter((s: any) => !s.manual).map((s: any) => s.name);
+        assert(scheduled.length === keepNow, `setup: ${keepNow} scheduled snapshots (${scheduled.length})`);
+        const onDisk = (name: string) => listSnapshots().some((s: any) => s.name === name) && fs.existsSync(path.join(dataDir!, 'snapshots', name));
+        // The same file, not only the same name: a snapshot taken in the same second as a scheduled one, under its name,
+        // would write over it.
+        const identity = (name: string) => {
+            try { const st = fs.statSync(path.join(dataDir!, 'snapshots', name)); return `${st.ino}:${st.mtimeMs}:${st.size}`; } catch { return 'gone'; }
+        };
+        const scheduledWas = new Map(scheduled.map((n) => [n, identity(n)]));
+        const takers: Array<[string, Record<string, string>, number]> = [
+            ['an admin key session', asAdmin, keepNow + 2],
+            ['an admin-scope automation token', asToken, keepNow + 2],
+            ['a backups-scope automation token', ownerTokenHeaders('backups', owner), keepNow + 2],
+            ['the owner pressing Take snapshot', asComputer, 5],
+        ];
+        for (const [who, headers, times] of takers) {
+            const answers: number[] = [];
+            const made: string[] = [];
+            // A second apart, as the scheduler names its own to the second: each one a new name on any server.
+            for (let i = 0; i < times; i++) {
+                await sleep(1100);
+                const r = await call('POST', '/api/local/admin/snapshots/create', headers, {});
+                answers.push(r.status);
+                if (typeof r.json?.snapshot?.name === 'string') made.push(r.json.snapshot.name);
+            }
+            assert(answers.every((a) => a === 200), `${who} takes ${times} snapshots (${answers.join(', ')})`);
+            const left = scheduled.filter((n) => onDisk(n) && identity(n) === scheduledWas.get(n));
+            assert(left.length === scheduled.length, `${who}, ${times} times: every scheduled snapshot is still there, as it was (${left.length} of ${scheduled.length})`);
+            const manual = listSnapshots().filter((s: any) => s.manual === true).map((s: any) => s.name);
+            assert(manual.length === MANUAL_KEPT && made.length === times && made.slice(-MANUAL_KEPT).every((n) => manual.includes(n)),
+                `and the ones taken by hand keep their own newest ${MANUAL_KEPT} (${manual.length} on disk, ${new Set(made).size} distinct made)`);
+        }
+        const manualNow: string[] = listSnapshots().filter((s: any) => s.manual === true).map((s: any) => s.name);
+        const expired = snapshots.expireSnapshots();
+        assert(expired === 0 && scheduled.every(onDisk) && manualNow.every(onDisk), `the hourly expiry keeps them all (${expired} removed)`);
+        await sleep(1100);
+        const nextScheduled = createSnapshot();
+        assert(onDisk(nextScheduled.name) && !onDisk(scheduled[scheduled.length - 1]) && scheduled.slice(0, -1).every(onDisk) && manualNow.every(onDisk),
+            "the scheduler's own next snapshot pushes out its oldest scheduled one, and no manual one");
+        const oldManual: string | undefined = manualNow[manualNow.length - 1];
+        const fifteenDaysAgo = (Date.now() - 15 * 86_400_000) / 1000;
+        if (oldManual) fs.utimesSync(path.join(dataDir!, 'snapshots', oldManual), fifteenDaysAgo, fifteenDaysAgo);
+        snapshots.expireSnapshots();
+        assert(!!oldManual && !onDisk(oldManual) && listSnapshots().filter((s: any) => !s.manual).length === keepNow,
+            `a manual snapshot still goes at ${snapshots.SNAPSHOT_MAX_AGE_DAYS ?? 14} days; the scheduled ones stay`);
         const underFloor = await call('POST', '/api/local/admin/offbox-backups/settings', asPhone(), { retentionDays: MIN_OFFBOX_RETENTION_DAYS - 1 });
         assert(underFloor.status === 400 && readOffboxSettings().retentionDays === retention, `off-box retention under ${MIN_OFFBOX_RETENTION_DAYS} days → 400, unchanged (${short(underFloor)})`);
         const longer = await call('POST', '/api/local/admin/offbox-backups/settings', asComputer, { retentionDays: 30 });
         assert(longer.status === 200 && readOffboxSettings().retentionDays === 30, `keeping off-box backups longer asks no proof (${short(longer)})`);
+        // A stored retention under the floor (saved before it, or brought back by a restore) is read as the floor, like
+        // .env's and like a low snapshot keep (#1984 review N6).
+        const offboxFile = path.join(dataDir!, offbox.OFFBOX_SETTINGS_FILE ?? 'offbox-backups.json');
+        const storedOffbox = JSON.parse(fs.readFileSync(offboxFile, 'utf8'));
+        fs.writeFileSync(offboxFile, JSON.stringify({ ...storedOffbox, retentionDays: 3 }), { mode: 0o600 });
+        const lowRead = readOffboxSettings();
+        assert(lowRead.retentionDays === MIN_OFFBOX_RETENTION_DAYS && lowRead.retentionFrom === 'settings',
+            `a stored off-box retention of 3 days is read as ${MIN_OFFBOX_RETENTION_DAYS}, from Settings (${lowRead.retentionDays}, ${lowRead.retentionFrom})`);
+        fs.writeFileSync(offboxFile, JSON.stringify(storedOffbox), { mode: 0o600 });
+        // The standby's copy schedule, within bounds (#1984 review N2): 5 s to an hour between pulls, a whole copy every 0
+        // (off) to 1,440 minutes; null goes back to the default.
+        const cadence = () => `${getLocalConfig().backupPullSeconds ?? ''}/${getLocalConfig().backupReconcileMinutes ?? ''}`;
+        const cadenceBefore = cadence();
+        for (const body of [{ pullSeconds: 3_000_000 }, { pullSeconds: 4 }, { pullSeconds: 3601 }, { pullSeconds: 30.5 }, { pullSeconds: '60' },
+            { reconcileMinutes: 1441 }, { reconcileMinutes: -1 }, { reconcileMinutes: 10_000_000 }]) {
+            const r = await call('POST', '/api/local/admin/backup-config', asComputer, body);
+            assert(r.status === 400 && /whole number/.test(r.json?.error || '') && cadence() === cadenceBefore,
+                `the standby's copy schedule ${JSON.stringify(body)} → 400 in words, unchanged (${short(r)})`);
+        }
+        for (const body of [{ pullSeconds: 3600, reconcileMinutes: 1440 }, { pullSeconds: 5, reconcileMinutes: 0 }]) {
+            const r = await call('POST', '/api/local/admin/backup-config', asComputer, body);
+            assert(r.status === 200 && cadence() === `${body.pullSeconds}/${body.reconcileMinutes}`, `${JSON.stringify(body)} is taken (${short(r)})`);
+        }
+        updateLocalConfig({ backupPullSeconds: 3_000_000, backupReconcileMinutes: 10_000_000 } as any);
+        const clamped = await call('POST', '/api/local/admin/backup-config', asAdmin, {});
+        assert(clamped.json?.status?.pullSeconds === 3600 && clamped.json?.status?.reconcileMinutes === 1440,
+            `a stored 3,000,000 s and 10,000,000 min are read as an hour and a day (${clamped.json?.status?.pullSeconds} s, ${clamped.json?.status?.reconcileMinutes} min)`);
+        const cleared = await call('POST', '/api/local/admin/backup-config', asComputer, { pullSeconds: null, reconcileMinutes: null });
+        assert(cleared.status === 200 && cadence() === '/', `null goes back to the default (${short(cleared)})`);
         const shutOut = await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: ['203.0.113.9'] });
         assert(shutOut.status === 400 && shutOut.json?.code === 'allowlist_excludes_you' && getGatewayConfig().adminIpAllowlist.length === 0,
             `a gateway allow-list without the caller's own address → 400, unchanged (${short(shutOut)})`);
         const garbage = await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: '127.0.0.1' });
-        assert(garbage.status === 400 && Array.isArray(getGatewayConfig().adminIpAllowlist), `an allow-list that is not a list → 400 (${short(garbage)})`);
+        assert(garbage.status === 400 && garbage.json?.code === 'allowlist_not_a_list' && Array.isArray(getGatewayConfig().adminIpAllowlist),
+            `an allow-list that is not a list → 400 allowlist_not_a_list, a shape error, not an exclusion (${short(garbage)})`);
         const withMe = await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: ['127.0.0.1'] });
         assert(withMe.status === 200 && getGatewayConfig().adminIpAllowlist.includes('127.0.0.1'), `one that holds the caller's address is taken (${short(withMe)})`);
         const reach = await call('GET', '/api/local/admin/gateway', asComputer);

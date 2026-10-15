@@ -68,15 +68,21 @@ export function adminIpAllowed(list: readonly string[], ip: string): boolean {
 }
 
 /**
- * Why a new admin IP allow-list is refused, or null (amendment 1 to design case 18): it must be a list of addresses, and
- * one that would shut out the address the change comes from is refused, so an owner never locks themselves out of
- * Settings. Left out (undefined) changes nothing and is never refused.
+ * Why a new admin IP allow-list is refused, or null (amendment 1 to design case 18): it must be a list of addresses
+ * (`allowlist_not_a_list`), and one that would shut out the address the change comes from is refused
+ * (`allowlist_excludes_you`), so an owner never locks themselves out of Settings. Left out (undefined) changes nothing and
+ * is never refused.
  */
-export function gatewayAllowlistRefusal(list: unknown, callerIp: string): string | null {
+export function gatewayAllowlistRefusal(list: unknown, callerIp: string): { error: string; code: 'allowlist_not_a_list' | 'allowlist_excludes_you' } | null {
     if (list === undefined) return null;
-    if (!Array.isArray(list) || !list.every(v => typeof v === 'string')) return 'adminIpAllowlist must be a list of addresses';
+    if (!Array.isArray(list) || !list.every(v => typeof v === 'string')) {
+        return { error: 'adminIpAllowlist must be a list of addresses', code: 'allowlist_not_a_list' };
+    }
     if (!adminIpAllowed(list, callerIp)) {
-        return `That allow-list would shut out the address you are using now (${callerIp}). Add it to the list, or leave the list empty.`;
+        return {
+            error: `That allow-list would shut out the address you are using now (${callerIp}). Add it to the list, or leave the list empty.`,
+            code: 'allowlist_excludes_you',
+        };
     }
     return null;
 }

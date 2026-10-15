@@ -246,11 +246,16 @@ const isRetention = (v: unknown): v is number =>
     Number.isInteger(v) && (v as number) >= MIN_OFFBOX_RETENTION_DAYS && (v as number) <= MAX_OFFBOX_RETENTION_DAYS;
 
 /**
- * How many days backups are kept, from what Settings stored (null: none) and .env: Settings wins, then .env (never longer
- * than the promise, never shorter than the floor), then the default.
+ * How many days backups are kept, from what Settings stored (null: none) and .env: Settings wins, then .env, then the
+ * default. Either one is read through the bounds, never longer than the promise, never shorter than the floor: a stored
+ * row under the floor (saved before it, or brought back by a restore) is read as the floor, as .env's is and as a low
+ * snapshot `keep` is (#1984 review N6).
  */
 export function offboxRetention(stored: unknown, env: NodeJS.ProcessEnv = process.env): { days: number; from: 'settings' | 'env' | 'default' } {
     if (isRetention(stored)) return { days: stored, from: 'settings' };
+    if (Number.isInteger(stored) && (stored as number) >= 1) {
+        return { days: Math.max(MIN_OFFBOX_RETENTION_DAYS, Math.min(stored as number, MAX_OFFBOX_RETENTION_DAYS)), from: 'settings' };
+    }
     const raw = String(env.BACKUP_OFFBOX_RETENTION_DAYS ?? '').trim();
     const envRetention = raw ? Number(raw) : null;
     if (envRetention !== null && Number.isInteger(envRetention) && envRetention >= 1) {

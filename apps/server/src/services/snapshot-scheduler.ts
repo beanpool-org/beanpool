@@ -25,6 +25,15 @@
  * turned off all go too. With the defaults, a deleted member's data is in snapshots for up to 7 days; never more
  * than 14.
  *
+ * ## A snapshot taken by hand never pushes out a scheduled one (design case 18, A3; #1984 review B1)
+ *
+ * `keep` counts the scheduler's own snapshots only. One taken by hand (the Backups tab's Take snapshot, an automation
+ * token, an assistant's take_backup) is named `snapshot-manual-…` and counts against its own cap,
+ * {@link MANUAL_SNAPSHOTS_KEPT}: the newest of those are kept, an older one goes, and it still goes at
+ * {@link SNAPSHOT_MAX_AGE_DAYS} days. So nobody, an admin or a token or the owner pressing the button again and again,
+ * can push the week's scheduled recovery points out by taking new ones; and a manual one can't land on a scheduled one's
+ * name in the same second and write over it.
+ *
  * ## The main server only
  *
  * The scheduler takes snapshots on the main server alone. A standby's database is its main server's, copied; its own
@@ -49,7 +58,7 @@
  * rewritten in place and a **hard link** is a true point-in-time copy of it: near-zero disk until the live
  * copy is unlinked, and nothing the live node does afterwards can reach it. Where a link cannot be made (a
  * different filesystem) the bytes are copied instead; if neither works the snapshot fails rather than
- * pretending. A snapshot's image directory is deleted with the snapshot, by pruning and by the delete route.
+ * pretending. A snapshot's image directory is deleted with the snapshot, by pruning (no route deletes one).
  *
  * The directory is a SIBLING of the `.db` file, named `<snapshot>.images`, so it never ends in `.db`:
  * {@link listSnapshots} and {@link resolveSnapshotPath} keep seeing snapshots and nothing else.
@@ -76,6 +85,8 @@ import { copyWithoutAddresses } from './address-retention.js';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 export const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
 const SNAPSHOT_PREFIX = 'snapshot-';
+/** A snapshot taken by hand: the scheduler's `keep` never counts it (see the note at the top). */
+const MANUAL_SNAPSHOT_PREFIX = `${SNAPSHOT_PREFIX}manual-`;
 const SNAPSHOT_EXT = '.db';
 
 export interface AutoSnapshotConfig {
@@ -105,6 +116,15 @@ export function isAutoSnapshotKeep(v: unknown): v is number {
 }
 /** A number of snapshots to keep, {@link MIN_SNAPSHOTS_KEPT} to {@link MAX_SNAPSHOTS_KEPT}. */
 const keptCount = (n: number): number => Math.min(MAX_SNAPSHOTS_KEPT, Math.max(MIN_SNAPSHOTS_KEPT, Math.round(n)));
+
+/**
+ * How many snapshots taken by hand a server keeps, apart from `keep` (#1984 review B1): the newest ones; an older one goes
+ * when a newer one is taken, and every one at {@link SNAPSHOT_MAX_AGE_DAYS} days.
+ */
+export const MANUAL_SNAPSHOTS_KEPT = 3;
+
+/** Who took a snapshot: the scheduler's timer, or someone by hand (a route, a token, an assistant). */
+export type SnapshotKind = 'scheduled' | 'manual';
 
 /** No snapshot is kept past this age, whatever `keep` says. */
 export const SNAPSHOT_MAX_AGE_DAYS = 14;
@@ -202,6 +222,8 @@ export interface SnapshotInfo {
     createdAt: number; // epoch ms (file mtime)
     /** Whether this snapshot carries its own copy of the image store. False for one taken before that landed. */
     hasImages: boolean;
+    /** Taken by hand: it counts against {@link MANUAL_SNAPSHOTS_KEPT}, never against `keep`. */
+    manual: boolean;
 }
 
 /** What a snapshot's image capture did, for the log and for the caller that has to decide it was enough. */
@@ -323,7 +345,7 @@ export function listSnapshots(): SnapshotInfo[] {
             .map(name => {
                 const full = path.join(SNAPSHOTS_DIR, name);
                 const st = fs.statSync(full);
-                return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: fs.existsSync(snapshotImagesDir(full)) };
+                return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: fs.existsSync(snapshotImagesDir(full)), manual: name.startsWith(MANUAL_SNAPSHOT_PREFIX) };
             })
             .sort((a, b) => b.createdAt - a.createdAt); // newest first
     } catch (e) {
@@ -333,13 +355,17 @@ export function listSnapshots(): SnapshotInfo[] {
 }
 
 /**
- * Delete the snapshots beyond the newest `keep`, and every one {@link SNAPSHOT_MAX_AGE_DAYS} days old or more by its file
- * time, which is when it was taken (the address scrub keeps it, services/address-retention.ts). Returns how many.
+ * Delete, of the `which` kind, the scheduled snapshots beyond the newest `keep` and the manual ones beyond the newest
+ * {@link MANUAL_SNAPSHOTS_KEPT}, and every one {@link SNAPSHOT_MAX_AGE_DAYS} days old or more by its file time, which is
+ * when it was taken (the address scrub keeps it, services/address-retention.ts). Each kind is counted on its own, so a
+ * manual snapshot never pushes out a scheduled one. Returns how many.
  */
-function prune(keep: number, now = Date.now()): number {
+function prune(keep: number, which: SnapshotKind | 'both', now = Date.now()): number {
     const all = listSnapshots(); // newest first
     const cutoff = now - SNAPSHOT_MAX_AGE_MS;
-    const stale = all.filter((s, i) => i >= keep || s.createdAt <= cutoff);
+    const past = (kind: SnapshotKind, cap: number) => which !== 'both' && which !== kind ? []
+        : all.filter(s => s.manual === (kind === 'manual')).filter((s, i) => i >= cap || s.createdAt <= cutoff);
+    const stale = [...past('scheduled', keep), ...past('manual', MANUAL_SNAPSHOTS_KEPT)];
     let removed = 0;
     for (const s of stale) {
         try {
@@ -367,7 +393,7 @@ function prune(keep: number, now = Date.now()): number {
 export function expireSnapshots(now = Date.now()): number {
     if (creating) return 0; // the snapshot being taken prunes when it is done
     try {
-        return prune(getAutoSnapshotConfig().keep, now);
+        return prune(getAutoSnapshotConfig().keep, 'both', now);
     } catch (e) {
         logger.warn('SYS', `[Snapshots] Could not remove old snapshots: ${(e as any)?.message || e}`);
         return 0;
@@ -375,16 +401,21 @@ export function expireSnapshots(now = Date.now()): number {
 }
 
 /**
- * Create a single timestamped snapshot now and prune to `keep`. Returns the new
- * snapshot's filename. Never overlaps with a concurrent create.
+ * Create a single timestamped snapshot now and prune its own kind: a scheduled one to `keep`, a manual one to
+ * {@link MANUAL_SNAPSHOTS_KEPT}. Returns the new snapshot's filename. Never overlaps with a concurrent create.
+ *
+ * `kind` is 'scheduled' for the scheduler's timer alone. Every route, token and assistant passes 'manual': a snapshot
+ * they take must never push a scheduled one out (see the note at the top).
  */
-export function createSnapshot(): SnapshotInfo {
+export function createSnapshot(kind: SnapshotKind = 'scheduled'): SnapshotInfo {
     if (creating) throw new Error('A snapshot is already being created');
     creating = true;
     try {
         ensureDir();
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const name = `${SNAPSHOT_PREFIX}${timestamp}${SNAPSHOT_EXT}`;
+        const manual = kind === 'manual';
+        // A manual one to the millisecond: one taken again within the second is another recovery point, not this one again.
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, manual ? 23 : 19);
+        const name = `${manual ? MANUAL_SNAPSHOT_PREFIX : SNAPSHOT_PREFIX}${timestamp}${SNAPSHOT_EXT}`;
         const dest = path.join(SNAPSHOTS_DIR, name);
         // The name is the timestamp to the second, so a second create inside the same second writes over the
         // first. `writeDbSnapshot` unlinks the old .db; its captured images have to go the same way, or the
@@ -395,10 +426,10 @@ export function createSnapshot(): SnapshotInfo {
         const bucket = bucketOf(getImageStore());
         if (bucket) {
             const st = fs.statSync(dest);
-            prune(getAutoSnapshotConfig().keep);
+            prune(getAutoSnapshotConfig().keep, kind);
             logger.info('SYS', `[Snapshots] Created snapshot ${name} (${st.size} bytes): the database only — its photos and `
                 + `attachments stay in ${bucket.where}, and one deleted from there after now does not come back from this snapshot`);
-            return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: false };
+            return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: false, manual };
         }
         // Immediately, and inside the same `creating` guard: the snapshot is a recovery point only if the
         // objects its rows name are captured before anything can unlink them (see the note at the top).
@@ -411,14 +442,14 @@ export function createSnapshot(): SnapshotInfo {
             throw new Error(`Snapshot failed: the image store could not be captured, so this would not be a recovery point (${(e as any)?.message || e})`);
         }
         const st = fs.statSync(dest);
-        prune(getAutoSnapshotConfig().keep);
+        prune(getAutoSnapshotConfig().keep, kind);
         logger.info('SYS', `[Snapshots] Created snapshot ${name} (${st.size} bytes) with ${images.captured}/${images.referenced} image object(s), ${images.linked} hard-linked`);
         if (images.missing.length > 0) {
             // Loud: these bytes were gone before the snapshot started, so every earlier backup is short too.
             logger.warn('SYS', `[Snapshots] ${name} references ${images.missing.length} object(s) the store no longer holds — `
                 + `those photos or attachments are already lost. First: ${images.missing.slice(0, 3).join(', ')}`);
         }
-        return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: images.referenced > 0 };
+        return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: images.referenced > 0, manual };
     } finally {
         creating = false;
     }
@@ -454,7 +485,7 @@ function arm(): void {
     snapshotTimer = setInterval(() => {
         // A role that changed without setNodeRole's announcement still stops it here, before a snapshot is taken.
         if (getNodeRole() !== 'primary') { arm(); return; }
-        try { createSnapshot(); failuresInARow = 0; }
+        try { createSnapshot('scheduled'); failuresInARow = 0; }
         catch (e) { failuresInARow++; logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
     }, intervalMs);
     armedHours = cfg.intervalHours;

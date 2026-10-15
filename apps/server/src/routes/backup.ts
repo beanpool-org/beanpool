@@ -21,7 +21,7 @@ import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
     clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
-    updateBackupCadence,
+    updateBackupCadence, backupCadenceRefusal,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
@@ -586,6 +586,7 @@ const COPY_FROM_OWNER_ONLY = 'Only an owner of this node can change the server i
 const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can change when snapshots are taken and kept';
 const RESYNC_OWNER_ONLY = 'Only an owner of this node can make its standby copy everything again';
 const COPY_OWNER_ONLY = 'Only an owner of this node can copy its whole ledger';
+const CADENCE_OWNER_ONLY = 'Only an owner of this node can change how often it copies from its main server';
 
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -965,10 +966,11 @@ router.post('/api/local/admin/snapshots/list', async (ctx) => {
     ctx.body = { success: true, snapshots: listSnapshots(), config: getAutoSnapshotConfig() };
 });
 
+// Any admin, and a backups-scope token: a snapshot taken here is a manual one, so it never pushes out a scheduled one.
 router.post('/api/local/admin/snapshots/create', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const info = createSnapshot();
+        const info = createSnapshot('manual');
         ctx.body = { success: true, snapshot: info };
     } catch (e: any) {
         ctx.status = 500;
@@ -977,7 +979,10 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
 });
 
 // No route deletes a snapshot (design case 18, A3): it is a recovery point, and a session that could delete them and then
-// restore a hostile file would leave the owner no way back. Pruning is the scheduler's alone (keep, and the age limit).
+// restore a hostile file would leave the owner no way back. Nor does any route push a scheduled one out (#1984 review B1):
+// one taken by snapshots/create above is a manual one, which counts against its own cap of the newest
+// MANUAL_SNAPSHOTS_KEPT manual ones, never against `keep`. A scheduled one goes only past the owner's `keep` (owner-only,
+// never under MIN_SNAPSHOTS_KEPT, snapshots/config below) or at the 14-day age limit (services/snapshot-scheduler.ts).
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
 // header (the name is in the query string, never the password). Locked like /backup when there is a code, and an
@@ -1073,10 +1078,19 @@ router.post('/api/local/admin/backup/verify', async (ctx) => {
 // them in local-config, read live by the backup puller on its next tick (no restart).
 // pullSeconds = how often to ask "what changed?" (cheap delta). reconcileMinutes =
 // how often to do a full re-read (0 = off; drift-triggered fulls still run).
+// Reading it is any admin's; changing it is an owner's, within bounds (#1984 review N2): an admin could otherwise stall the
+// standby's copying for weeks, or overflow its timer into a pull loop with no wait.
 router.post('/api/local/admin/backup-config', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
     if (body.pullSeconds !== undefined || body.reconcileMinutes !== undefined) {
+        if (!requireAdminRole(ctx, ['owner'], CADENCE_OWNER_ONLY)) return;
+        const refusal = backupCadenceRefusal(body);
+        if (refusal) {
+            ctx.status = 400;
+            ctx.body = { error: refusal };
+            return;
+        }
         updateBackupCadence({ pullSeconds: body.pullSeconds, reconcileMinutes: body.reconcileMinutes });
     }
     ctx.body = { success: true, status: getBackupStatus() };

@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { PSEUDO_LANG, setLanguage } from '../words.js';
 import {
     repeatCaption,
+    repeatLengthProblem,
+    repeatUntilLabel,
+    seriesBackOnLine,
     repeatChoiceKeyOf,
     repeatChoicesFor,
     repeatPatternFor,
@@ -86,6 +90,37 @@ describe('repeatPatternFor: what the form sends as eventRepeat (the node fills t
         expect(repeatChoiceKeyOf({ freq: 'monthly', interval: 1, byDay: 'FR', pos: 3 })).toBe('monthly-nth');
         expect(repeatChoiceKeyOf({ freq: 'monthly', interval: 1, byDay: 'FR', pos: -1 })).toBe('monthly-last');
     });
+
+    it('a rule the form cannot make (every 3 weeks, every 3 months, a frequency it does not know) reads as "other", never as a choice it would re-send', () => {
+        expect(repeatChoiceKeyOf({ freq: 'weekly', interval: 3, byDay: 'FR' })).toBe('other');
+        expect(repeatChoiceKeyOf({ freq: 'monthly', interval: 3, byMonthDay: 16 })).toBe('other');
+        expect(repeatChoiceKeyOf({ freq: 'monthly', interval: 6, byDay: 'FR', pos: 3 })).toBe('other');
+        expect(repeatChoiceKeyOf({ freq: 'monthly', interval: 2, byDay: 'FR', pos: -1 })).toBe('other');
+        expect(repeatChoiceKeyOf({ freq: 'daily', interval: 1 } as any)).toBe('other');
+        // "other" is never offered and never becomes a pattern, so nothing re-sends it as another rule.
+        expect(keys('2026-10-16')).not.toContain('other');
+        expect(repeatPatternFor('other', '2026-10-16')).toBeNull();
+    });
+});
+
+describe('repeatLengthProblem: a date must end before the next one starts (the node\'s tooLong)', () => {
+    const DAY = 1440;
+    it('says why before Save, in the node\'s own sentence', () => {
+        const why = 'An event that repeats must end before its next date starts';
+        expect(repeatLengthProblem('weekly', '2026-10-16', 7 * DAY)).toBe(why);
+        expect(repeatLengthProblem('weekly', '2026-10-16', 7 * DAY - 1)).toBeNull();
+        expect(repeatLengthProblem('fortnightly', '2026-10-16', 14 * DAY)).toBe(why);
+        expect(repeatLengthProblem('fortnightly', '2026-10-16', 8 * DAY)).toBeNull();
+        expect(repeatLengthProblem('monthly-day', '2026-10-16', 28 * DAY)).toBe(why);
+        expect(repeatLengthProblem('monthly-nth', '2026-10-16', 27 * DAY)).toBeNull();
+        expect(repeatLengthProblem('weekly', '2026-10-16', 120)).toBeNull();
+    });
+    it('nothing for a one-off, an unoffered choice or an unknown length', () => {
+        expect(repeatLengthProblem('never', '2026-10-16', 30 * DAY)).toBeNull();
+        expect(repeatLengthProblem('monthly-last', '2026-10-16', 30 * DAY)).toBeNull();
+        expect(repeatLengthProblem('other', '2026-10-16', 30 * DAY)).toBeNull();
+        expect(repeatLengthProblem('weekly', '2026-10-16', NaN)).toBeNull();
+    });
 });
 
 describe('repeatSkipNote: the 29th to 31st', () => {
@@ -109,6 +144,15 @@ describe('repeatCaption: the ↻ line on a card, Home and the map popup', () => 
         expect(repeatCaption({ freq: 'monthly', interval: 1, byDay: 'FR', pos: -1 })).toBe('Monthly, last Friday');
     });
 
+    it('says a monthly interval above 1, and a weekly one above 2, as whole sentences', () => {
+        expect(repeatCaption({ freq: 'monthly', interval: 3, byMonthDay: 16 })).toBe('Every 3 months on the 16th');
+        expect(repeatCaption({ freq: 'monthly', interval: 6, byDay: 'FR', pos: 3 })).toBe('Every 6 months, third Friday');
+        expect(repeatCaption({ freq: 'monthly', interval: 2, byDay: 'MO', pos: 1 })).toBe('Every 2 months, first Monday');
+        expect(repeatCaption({ freq: 'monthly', interval: 12, byDay: 'FR', pos: -1 }, '2030-12-27')).toBe('Every 12 months, last Friday · until 27 Dec 2030');
+        expect(repeatCaption({ freq: 'weekly', interval: 3, byDay: 'FR' })).toBe('Every 3 weeks on Friday');
+        expect(repeatCaption({ freq: 'weekly', interval: 12, byDay: 'FR' })).toBe('Every 12 weeks on Friday');
+    });
+
     it('adds the last date when there is one', () => {
         expect(repeatCaption({ freq: 'weekly', interval: 1, byDay: 'FR' }, '2026-12-18')).toBe('Every Friday · until 18 Dec 2026');
     });
@@ -129,6 +173,11 @@ describe('Until', () => {
         expect(repeatUntilProblem('2026-10-15', '2026-10-16')).toBe('The last date must be a date on or after the first one');
         expect(repeatUntilProblem('2031-10-17', '2026-10-16')).toBe('The last date can be at most 5 years after the first one');
     });
+
+    it('a last date reads with its year, as the caption has it ("15 Dec 2028", never "Fri 15 Dec")', () => {
+        expect(repeatUntilLabel('2028-12-15')).toBe('15 Dec 2028');
+        expect(repeatUntilLabel('not a date')).toBe('');
+    });
 });
 
 describe('the detail\'s Next dates and the host\'s lines', () => {
@@ -139,6 +188,10 @@ describe('the detail\'s Next dates and the host\'s lines', () => {
     it('cancelling the current date: "Fri 16 Oct is cancelled. Next: Fri 23 Oct"', () => {
         expect(seriesCancelledLine('2026-10-16', '2026-10-23T20:50')).toBe('Fri 16 Oct is cancelled. Next: Fri 23 Oct');
         expect(seriesCancelledLine('2026-10-16', null)).toBe('Fri 16 Oct is cancelled.');
+    });
+
+    it('bringing it back: "Fri 16 Oct is back on", as the node tells those going', () => {
+        expect(seriesBackOnLine('2026-10-16')).toBe('Fri 16 Oct is back on');
     });
 
     it('Change this date only: "Moved from the regular Friday"', () => {
@@ -152,5 +205,15 @@ describe('repeatRefusalText: the node\'s sentence, through t()', () => {
         expect(repeatRefusalText('The first date must be one of the repeating dates')).toBe('The first date must be one of the repeating dates');
         expect(repeatRefusalText('Something else entirely')).toBe('Something else entirely');
         expect(repeatRefusalText(undefined)).toBe('');
+    });
+
+    afterEach(() => setLanguage('en'));
+    it('the two refusals a host meets outside the form ("This event has been cancelled", "Pick a time zone from the list") go through t() too', () => {
+        setLanguage(PSEUDO_LANG);
+        for (const m of ['This event has been cancelled', 'Pick a time zone from the list', 'The first date must be one of the repeating dates']) {
+            expect(repeatRefusalText(m)).not.toBe(m);
+            expect(repeatRefusalText(m)).toContain('[');
+        }
+        expect(repeatRefusalText('Something else entirely')).toBe('Something else entirely');
     });
 });

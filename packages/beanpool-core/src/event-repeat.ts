@@ -8,7 +8,7 @@
  * date's length (`time`, `minutes`) from the form's start and end, and refuses a first date that is not one of the rule's.
  */
 
-import { formatDate, t, word, type WordKey } from './words.js';
+import { formatDate, t, tn, word, type WordKey } from './words.js';
 
 /** Weekday codes, Sunday first, like Date#getUTCDay (the node's EVENT_REPEAT_WEEKDAYS). */
 export const REPEAT_WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
@@ -20,8 +20,11 @@ export type RepeatPattern =
     | { freq: 'monthly'; interval: number; byMonthDay: number }
     | { freq: 'monthly'; interval: number; byDay: RepeatWeekdayCode; pos: 1 | 2 | 3 | 4 | -1 };
 
-/** The form's choices. */
-export type RepeatChoiceKey = 'never' | 'weekly' | 'fortnightly' | 'monthly-day' | 'monthly-nth' | 'monthly-last';
+/**
+ * The form's choices. 'other' is a stored rule the form cannot make (every 3 weeks, every 3 months: the node takes an
+ * interval of 1 to 12): never offered and never a pattern, so an edit keeps the rule as it is or asks the host to choose.
+ */
+export type RepeatChoiceKey = 'never' | 'weekly' | 'fortnightly' | 'monthly-day' | 'monthly-nth' | 'monthly-last' | 'other';
 
 export interface RepeatChoice {
     key: RepeatChoiceKey;
@@ -96,7 +99,15 @@ function nthWeekdayLabel(pos: 1 | 2 | 3 | 4 | -1, weekday: string): string {
     return t('Every month on the last {weekday}', { weekday });
 }
 
-function nthWeekdayCaption(pos: 1 | 2 | 3 | 4 | -1, weekday: string): string {
+function nthWeekdayCaption(pos: 1 | 2 | 3 | 4 | -1, weekday: string, interval: number): string {
+    if (interval > 1) {
+        // Every 3 months, third Friday: the count with its own plural forms, one whole sentence per position.
+        if (pos === 1) return tn(interval, 'Monthly, first {weekday}', 'Every {n} months, first {weekday}', { weekday });
+        if (pos === 2) return tn(interval, 'Monthly, second {weekday}', 'Every {n} months, second {weekday}', { weekday });
+        if (pos === 3) return tn(interval, 'Monthly, third {weekday}', 'Every {n} months, third {weekday}', { weekday });
+        if (pos === 4) return tn(interval, 'Monthly, fourth {weekday}', 'Every {n} months, fourth {weekday}', { weekday });
+        return tn(interval, 'Monthly, last {weekday}', 'Every {n} months, last {weekday}', { weekday });
+    }
     if (pos === 1) return t('Monthly, first {weekday}', { weekday });
     if (pos === 2) return t('Monthly, second {weekday}', { weekday });
     if (pos === 3) return t('Monthly, third {weekday}', { weekday });
@@ -106,7 +117,7 @@ function nthWeekdayCaption(pos: 1 | 2 | 3 | 4 | -1, weekday: string): string {
 
 /** The pattern a choice means on this first date; null for "Does not repeat" or a choice this date does not offer. */
 export function repeatPatternFor(key: RepeatChoiceKey, firstDate: string): RepeatPattern | null {
-    if (key === 'never' || !choiceKeysFor(firstDate).includes(key)) return null;
+    if (key === 'never' || key === 'other' || !choiceKeysFor(firstDate).includes(key)) return null;
     const byDay = weekdayCodeOf(firstDate);
     if (key === 'weekly') return { freq: 'weekly', interval: 1, byDay };
     if (key === 'fortnightly') return { freq: 'weekly', interval: 2, byDay };
@@ -129,16 +140,42 @@ export function repeatChoicesFor(firstDate: string): RepeatChoice[] {
     });
 }
 
-/** A stored rule (or pattern) back to its choice, for the edit form. Anything the form cannot show reads as weekly-ish never. */
+/**
+ * A stored rule (or pattern) back to its choice, for the edit form. A rule the form cannot make (every 3 weeks, every 3
+ * months, a frequency this build does not know) is 'other', never the nearest choice: the form would re-send that one and
+ * quietly turn a quarterly series monthly (the deciding review of #1993, N3).
+ */
 export function repeatChoiceKeyOf(rule: Partial<RepeatPattern> | null | undefined): RepeatChoiceKey {
     if (!rule || typeof rule !== 'object') return 'never';
     const r = rule as Record<string, unknown>;
-    if (r.freq === 'weekly') return r.interval === 2 ? 'fortnightly' : 'weekly';
-    if (r.freq === 'monthly') {
+    if (r.freq == null) return 'never';
+    const interval = r.interval ?? 1;
+    if (r.freq === 'weekly') return interval === 1 ? 'weekly' : interval === 2 ? 'fortnightly' : 'other';
+    if (r.freq === 'monthly' && interval === 1) {
         if (typeof r.byMonthDay === 'number') return 'monthly-day';
-        return r.pos === -1 ? 'monthly-last' : 'monthly-nth';
+        if (r.pos === -1) return 'monthly-last';
+        if ([1, 2, 3, 4].includes(r.pos as number)) return 'monthly-nth';
     }
-    return 'never';
+    return 'other';
+}
+
+/** The shortest gap between two dates of a choice, in minutes (the node's shortestGapMinutes); null for none. */
+function choiceGapMinutes(key: RepeatChoiceKey): number | null {
+    if (key === 'weekly') return 7 * 1440;
+    if (key === 'fortnightly') return 14 * 1440;
+    if (key === 'monthly-day' || key === 'monthly-nth' || key === 'monthly-last') return 28 * 1440;
+    return null;
+}
+
+/**
+ * Why a date this long (wall minutes, start to end) can't repeat this way, before Save, in the node's own sentence: each
+ * date must end before the next one starts (an 8-day event is never "Every week"). Null when it can, for "Does not
+ * repeat", a choice the first date does not offer (that has its own line) and an unknown length.
+ */
+export function repeatLengthProblem(key: RepeatChoiceKey, firstDate: string, minutes: number): string | null {
+    const gap = choiceGapMinutes(key);
+    if (gap == null || !Number.isFinite(minutes) || !choiceKeysFor(firstDate).includes(key)) return null;
+    return minutes >= gap ? t('An event that repeats must end before its next date starts') : null;
 }
 
 /** "(months without a 31st are skipped)", shown under the select for monthly on the 29th–31st; null otherwise. */
@@ -148,14 +185,18 @@ export function repeatSkipNote(key: RepeatChoiceKey, firstDate: string): string 
     return day >= 29 ? t('(months without a {day} are skipped)', { day: dayOrdinal(day) }) : null;
 }
 
-/** "18 Dec 2026": a local date, from the tables. With its year: a last date can be years away, and "until 15 Dec" reads as this one. */
-function untilDate(date: string): string {
-    return formatDate(dateOf(utcOf(date)), 'day-month-year', { utc: true });
+/**
+ * "18 Dec 2026": a series' last date, from the tables, for the caption and the phone's Until button. With its year: a
+ * last date can be years away, and "until 15 Dec" reads as this one. '' for an unreadable date.
+ */
+export function repeatUntilLabel(date: string): string {
+    return isDate(date) ? formatDate(dateOf(utcOf(date)), 'day-month-year', { utc: true }) : '';
 }
 
 /**
  * The ↻ caption beside a repeating event's date: "Every Friday", "Every 2 weeks on Friday", "Monthly on the 16th",
- * "Monthly, third Friday", and " · until 18 Dec 2026" when it has a last date. '' for a one-off or a rule this build cannot read.
+ * "Monthly, third Friday", "Every 3 months on the 16th" (the node takes an interval of 1 to 12, whoever wrote the rule), and
+ * " · until 18 Dec 2026" when it has a last date. '' for a one-off or a rule this build cannot read.
  */
 export function repeatCaption(rule: Partial<RepeatPattern> | null | undefined, until?: string | null): string {
     if (!rule || typeof rule !== 'object') return '';
@@ -169,12 +210,15 @@ export function repeatCaption(rule: Partial<RepeatPattern> | null | undefined, u
             ? t('Every {weekday}', { weekday })
             : t('Every {n} weeks on {weekday}', { n: String(interval), weekday });
     } else if (r.freq === 'monthly' && typeof r.byMonthDay === 'number') {
-        caption = t('Monthly on the {day}', { day: dayOrdinal(r.byMonthDay) });
+        const day = dayOrdinal(r.byMonthDay);
+        caption = interval > 1
+            ? tn(interval, 'Monthly on the {day}', 'Every {n} months on the {day}', { day })
+            : t('Monthly on the {day}', { day });
     } else if (r.freq === 'monthly' && byDay && [1, 2, 3, 4, -1].includes(r.pos as number)) {
-        caption = nthWeekdayCaption(r.pos as 1 | 2 | 3 | 4 | -1, weekdayName(byDay));
+        caption = nthWeekdayCaption(r.pos as 1 | 2 | 3 | 4 | -1, weekdayName(byDay), interval);
     }
     if (!caption) return '';
-    return isDate(until) ? t('{repeats} · until {date}', { repeats: caption, date: untilDate(until) }) : caption;
+    return isDate(until) ? t('{repeats} · until {date}', { repeats: caption, date: repeatUntilLabel(until) }) : caption;
 }
 
 /** The latest Until a first date allows ("YYYY-MM-DD"), the node's latestUntil. '' for an unreadable date. */
@@ -209,6 +253,11 @@ export function seriesCancelledLine(cancelledDate: string, nextStartLocal: strin
     return next ? t('{date} is cancelled. Next: {next}', { date, next }) : t('{date} is cancelled.', { date });
 }
 
+/** What the host reads after bringing back the date they cancelled, as the node tells those going: "Fri 16 Oct is back on". */
+export function seriesBackOnLine(date: string): string {
+    return t('{date} is back on', { date: seriesDateLabel(date) });
+}
+
 /** The one line "Change this date only" prefills the copy with: "Moved from the regular Friday". */
 export function seriesMovedFromLine(rule: Partial<RepeatPattern> | null | undefined): string {
     const r = (rule ?? {}) as Record<string, unknown>;
@@ -232,6 +281,10 @@ const REPEAT_REFUSALS: readonly WordKey[] = [
     word('Only the host can cancel or restore a date'),
     word('This is the last date: change when the event ends, or cancel the event'),
     word('At most 100 dates can be cancelled'),
+    // Not the series' own, but a host meets them here: a date changed on an event cancelled meanwhile (the skip route), and
+    // a repeating online event saved with no zone (the node's create and edit).
+    word('This event has been cancelled'),
+    word('Pick a time zone from the list'),
 ];
 
 /** A node's refusal of a series write, in the reader's language when it is one of the node's repeat sentences; else as sent. */

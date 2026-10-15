@@ -380,7 +380,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
     if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
-        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined)) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
         return;
@@ -460,6 +460,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
         : undefined;
     const wantsEvents = type === 'event' || !!types?.includes('event');
     const excludeEvents = !id && !ids && !wantsEvents;
+    // `online=1`: online events only, wherever they are (DESIGN-event-times §9). They have no place, so a read within a
+    // radius never meets them; an app reading by radius asks for them beside it. Only with events asked for.
+    const eventOnline = wantsEvents && ctx.query.online === '1' ? true : undefined;
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
     // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
@@ -559,7 +562,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // no author's trust profile, photo or trade count per post.
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
-        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,

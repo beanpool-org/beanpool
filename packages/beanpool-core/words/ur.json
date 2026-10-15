@@ -2,11 +2,15 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "پھلیاں",
+      "BeanPool": "BeanPool"
+    }
   },
   "just now": "ابھی ابھی",
   "{n} day ago|{n} days ago": {
@@ -20,5 +24,23 @@
   "{n} minute ago|{n} minutes ago": {
     "one": "{n} منٹ پہلے",
     "other": "{n} منٹ پہلے"
-  }
+  },
+  "Roughly where are you?": "آپ تقریباً کہاں ہیں؟",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "ہم آپ کا علاقہ تقریباً 10 کلومیٹر تک محفوظ رکھتے ہیں، آپ کی اصل جگہ کبھی نہیں۔ دوسرے ارکان دیکھتے ہیں کہ آپ کتنی دور ہیں، اور آپ کی بنائی ہوئی رائے شماری آپ کے علاقے پر دکھائی جاتی ہے۔",
+  "Use my location": "میری لوکیشن استعمال کریں",
+  "Type a town or suburb": "قصبے یا محلے کا نام لکھیں",
+  "Skip for now": "فی الحال چھوڑیں",
+  "You can change or clear this any time in Settings → Your area.": "آپ اسے کبھی بھی سیٹنگز → آپ کا علاقہ میں بدل یا صاف کر سکتے ہیں۔",
+  "Your area": "آپ کا علاقہ",
+  "Not set": "طے نہیں",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "عالمی کمیونٹی آپ کو دکھاتی ہے کہ آپ کے قریب کیا پیش کیا جا رہا ہے: {km} کلومیٹر کے اندر قریب ترین {max} پیشکشیں۔",
+  "About 10 km around {place}": "{place} کے گرد تقریباً 10 کلومیٹر",
+  "Find your town or suburb": "اپنا قصبہ یا محلہ تلاش کریں",
+  "Town or suburb": "قصبہ یا محلہ",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "قصبے کی تلاش ابھی کام نہیں کر رہی۔ اس کے بجائے میری لوکیشن استعمال کریں، یا فی الحال چھوڑیں۔",
+  "No matches. Try the name of a town or suburb nearby.": "کوئی نتیجہ نہیں ملا۔ قریبی کسی قصبے یا محلے کا نام آزمائیں۔",
+  "Places from OpenStreetMap. What you type here is sent to them.": "مقامات OpenStreetMap سے لیے گئے ہیں۔ آپ یہاں جو لکھتے ہیں وہ OpenStreetMap کو بھیجا جاتا ہے۔",
+  "Choose {place}": "{place} منتخب کریں",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "یہ کمیونٹی پوسٹ کرنے سے پہلے پروفائل تصویر مانگتی ہے۔ آپ اسے بعد میں اپنے پروفائل سے شامل کر سکتے ہیں۔",
+  "A picture is optional here. You can add one later from your profile.": "یہاں تصویر اختیاری ہے۔ چاہیں تو بعد میں اپنے پروفائل سے ایک تصویر شامل کر سکتے ہیں۔"
 }

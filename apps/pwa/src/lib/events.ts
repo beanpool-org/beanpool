@@ -277,6 +277,8 @@ export interface EventEditForm {
     /** How it repeats, a choice computed from the first date (DESIGN-event-times §8), and its last date ('' = until cancelled). */
     repeat?: RepeatChoiceKey;
     repeatUntil?: string;
+    /** The rule as stored, for the words of one the form can't make ('other': "Every 3 months on the 16th"). Never sent. */
+    repeatRule?: RepeatPattern | null;
 }
 
 /** The form, filled from the event as it is now — every field the create form has. */
@@ -298,6 +300,7 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
         tz: clocks ? post.eventTz! : null,
         repeat: repeatChoiceKeyOf(post.eventRepeat),
         repeatUntil: post.eventRepeatUntil || '',
+        repeatRule: post.eventRepeat ?? null,
     };
 }
 

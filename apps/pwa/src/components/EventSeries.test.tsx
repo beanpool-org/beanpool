@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import type { RepeatChoiceKey } from '@beanpool/core';
 import { EventCard, EventDetail } from './EventCard';
-import { EventRepeatFields, eventRepeatProblem } from './EventRepeatFields';
+import { EventRepeatFields, eventRepeatProblem, type KeptRepeat } from './EventRepeatFields';
 import * as api from '../lib/api';
 import {
     eventEditForm, eventEditPayload, eventRepeatCreate, movedCopyContext, parseCopyEventContext, withMovedFromLine,
@@ -44,10 +44,10 @@ function at320(ui: React.ReactElement) {
     return render(<div style={{ width: 320 }}>{ui}</div>);
 }
 
-function Fields({ start, end = '', initial = 'never' as RepeatChoiceKey, initialUntil = '' }: { start: string; end?: string; initial?: RepeatChoiceKey; initialUntil?: string }) {
+function Fields({ start, end = '', initial = 'never' as RepeatChoiceKey, initialUntil = '', kept = null }: { start: string; end?: string; initial?: RepeatChoiceKey; initialUntil?: string; kept?: KeptRepeat | null }) {
     const [repeat, setRepeat] = useState<RepeatChoiceKey>(initial);
     const [until, setUntil] = useState(initialUntil);
-    return <EventRepeatFields start={start} end={end} repeat={repeat} until={until} onRepeatChange={setRepeat} onUntilChange={setUntil} />;
+    return <EventRepeatFields start={start} end={end} repeat={repeat} until={until} onRepeatChange={setRepeat} onUntilChange={setUntil} kept={kept} />;
 }
 
 /** Every button's accessible name starts with the words it shows (WCAG 2.5.3, label in name). */
@@ -123,6 +123,29 @@ describe('a rule the form cannot make: every 3 weeks, every 3 months (review of 
         expect(eventEditForm(quarterly).repeat).toBe('other');
         at320(<Fields start="2027-10-15T18:50" initial="other" />);
         expect(screen.getByTestId('event-repeat-problem')).toHaveTextContent('Choose how the event repeats from the list');
+    });
+
+    it('on its own date the form names the kept rule in a plain line, with Until; red only once the date moves (confirmation of #1993, NB1)', () => {
+        const before = eventEditForm({ ...quarterly, eventRepeatUntil: '2028-12-15' });
+        const kept = { repeat: before.repeat!, firstDate: before.start.slice(0, 10), rule: before.repeatRule };
+        const view = at320(<Fields start={before.start} end={before.end} initial="other" initialUntil="2028-12-15" kept={kept} />);
+        expect(screen.getByTestId('event-repeat-kept')).toHaveTextContent('Every 3 months on the 15th — kept unless you choose another');
+        expect(screen.getByTestId('event-repeat-kept')).not.toHaveAttribute('role');
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByTestId('event-repeat-problem')).toBeNull();
+        const select = screen.getByTestId('event-repeat-select') as HTMLSelectElement;
+        expect(select.className).not.toContain('border-red-400');
+        expect(select.selectedOptions[0]?.textContent).toBe('Every 3 months on the 15th');
+        expect((screen.getByTestId('event-repeat-until') as HTMLInputElement).value).toBe('2028-12-15');
+        // Its Until is still checked: past five years it is said, and the form won't save it.
+        expect(eventRepeatProblem(before.start, 'other', '2033-01-01', before.end, kept)).toBe('until');
+        expect(eventRepeatProblem(before.start, 'other', '2028-12-15', before.end, kept)).toBeNull();
+        // The date moved a week on: now it asks, in red.
+        view.rerender(<div style={{ width: 320 }}><Fields start="2027-10-22T18:50" end="2027-10-22T20:50" initial="other" initialUntil="2028-12-15" kept={kept} /></div>);
+        expect(screen.queryByTestId('event-repeat-kept')).toBeNull();
+        expect(screen.getByTestId('event-repeat-problem')).toHaveTextContent('Choose how the event repeats from the list');
+        expect(screen.getByRole('alert')).toBe(screen.getByTestId('event-repeat-problem'));
+        expect((screen.getByTestId('event-repeat-select') as HTMLSelectElement).className).toContain('border-red-400');
     });
 
     it('editing the date keeps the rule or asks: never re-sends a different one', () => {

@@ -2460,6 +2460,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             until={eventRepeatUntil}
                             onRepeatChange={key => { setEventRepeat(key); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_repeat'); return n; }); }}
                             onUntilChange={date => { setEventRepeatUntil(date); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_repeat'); return n; }); }}
+                            kept={eventEdit ? { repeat: eventEdit.before.repeat ?? 'never', firstDate: eventEdit.before.start.slice(0, 10), rule: eventEdit.before.repeatRule } : null}
                         />
 
                         {/* Online only where the node carries it (features.onlineEvents), or for an event that already is one. */}

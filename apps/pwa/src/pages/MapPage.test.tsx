@@ -885,6 +885,39 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         expect(classes).toContain('supports-[height:100dvh]:max-h-[min(60vh,calc(100dvh_-_var(--bottom-nav-offset)_-_4.5rem))]');
     });
 
+    // The confirmation of #1993, NB1: a rule the form can't make (every 3 months) is named in a plain line and kept; a title
+    // edit saves only the title, and the red ask comes only once the date moves.
+    it('a series the form cannot make reads as kept, not as an error, and a title edit keeps it', async () => {
+        const quarterly = {
+            ...hosted, id: 'ev-q', eventStartLocal: '2030-09-28T09:00', eventEndLocal: '2030-09-28T12:00', eventTz: 'Australia/Sydney',
+            eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 28, time: '09:00', minutes: 180 },
+        };
+        setup(quarterly);
+        const view = await openEdit(quarterly);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        expect(within(panel).getByTestId('event-repeat-kept')).toHaveTextContent('Every 3 months on the 28th — kept unless you choose another');
+        expect(within(panel).queryByTestId('event-repeat-problem')).toBeNull();
+        expect(within(panel).getByTestId('event-repeat-until')).toBeTruthy();
+        fireEvent.change(within(panel).getByLabelText(/What's happening/i), { target: { value: 'Working bee and lunch' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-q', 'user-alice-pubkey', { title: 'Working bee and lunch' });
+    });
+
+    it('a series the form cannot make asks for a choice, in red, once its date moves', async () => {
+        const quarterly = {
+            ...hosted, id: 'ev-q', eventStartLocal: '2030-09-28T09:00', eventEndLocal: '2030-09-28T12:00', eventTz: 'Australia/Sydney',
+            eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 28, time: '09:00', minutes: 180 },
+        };
+        setup(quarterly);
+        const view = await openEdit(quarterly);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        fireEvent.change(within(panel).getByLabelText(/^Starts/i), { target: { value: '2030-10-05T09:00' } });
+        expect(within(panel).queryByTestId('event-repeat-kept')).toBeNull();
+        expect(within(panel).getByTestId('event-repeat-problem')).toHaveTextContent('Choose how the event repeats from the list');
+    });
+
     it('a title edit saves only the title, with the host\'s own key — silent, so no UPDATED warning', async () => {
         setup(hosted);
         const onNavigate = vi.fn();

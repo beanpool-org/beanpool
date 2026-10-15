@@ -976,8 +976,12 @@ describe('the syncMessages directory fetch goes through applyDelta', () => {
                 : /SELECT callsign, avatar_url FROM members/.test(sql)
                     ? { callsign: 'Damo', avatar_url: NODE_URL_VERSIONED }
                     : null);
+        // A local community, as the phone knows it (utils/node-profile.ts): with no copy, the chats' read leaves the
+        // directory to the sync, which asks the node first (review of #1999, NB2).
         h.asyncStorage.getItem.mockImplementation(async (k: string) =>
-            k === 'beanpool_anchor_url' ? 'https://test.beanpool.org' : null);
+            k === 'beanpool_anchor_url' ? 'https://test.beanpool.org'
+                : k === 'beanpool_node_profiles' ? JSON.stringify({ 'https://test.beanpool.org': { profile: 'local', features: {}, checkedAt: new Date().toISOString() } })
+                : null);
         globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
             if (url.includes('/api/members')) {
                 // The node's complete directory, saying it holds no photo for the viewer.

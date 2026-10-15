@@ -1817,9 +1817,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * §3.1), or null when there is none: the newest such header, since names sort by time and a generation never goes
      * down. A restore of a lower generation is refused for every key, pinned or listed: the older state unlocks with
      * the shares of custodians a later reshare retired. A file whose header can't be read has no generation and isn't
-     * counted, so damaging one file can't make every restore impossible (someone who can write to a store can remove
-     * the newer files anyway: README "Rebuild keys"). A file that can't be fetched from any store that lists it fails
-     * the check, to be tried again: it may be the newest.
+     * counted, so damaging one file can't make every restore impossible (someone who can write to a store can beat the
+     * rule anyway, by adding one older file under a newer name or removing the newer files: README "Rebuild keys"). A
+     * file that can't be fetched from any store that lists it fails the check, to be tried again: it may be the newest.
      */
     async function newestReadableGeneration(vaultId: string): Promise<number | null> {
         let listing: Awaited<ReturnType<typeof backupListing>>;

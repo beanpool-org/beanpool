@@ -704,7 +704,7 @@ describe('a restore never takes an older generation once a newer one is in the s
             for (const c of b.custodians.slice(0, 2)) expect((await sendSettings(b.baseUrl, c, settings, b.call())).status).toBe(200);
             return b;
         };
-        return { a, g, n, nShares, member, gen1, gen2a, gen2b, remove, garble, fresh };
+        return { a, g, n, nShares, member, stub, gen1, gen2a, gen2b, remove, garble, fresh };
     }
 
     /** `key` asks `b` to restore `name`: refused as an older generation, and `b` stays fresh. */
@@ -750,6 +750,33 @@ describe('a restore never takes an older generation once a newer one is in the s
         // No readable generation-2 file is left: the newest readable is generation 1, and the restore is taken.
         const b = await fresh();
         expect((await restoreFromBackup(b.baseUrl, a.custodians[0], gen1, b.call())).body).toMatchObject({ state: 'locked', generation: 1 });
+    });
+
+    it('stores that can\'t say whether a newer generation exists: the restore is refused 503 (never taken as older), the vault stays fresh, and it is refused 409 once they answer', async () => {
+        const { a, stub, gen1, gen2b, remove, fresh } = await twoGenerations();
+        const unknown = async (b: VaultUnderTest, name: string, file: string | null) => {
+            const r = await restoreFromBackup(b.baseUrl, a.custodians[0], name, b.call());
+            expect(r).toMatchObject({ status: 503, body: { code: 'stores_unreachable' } });
+            if (file) expect(String(r.body.error)).toContain(`The backup ${file} could not be fetched`);
+            expect(b.keyholder().status().state).toBe('fresh');
+            expect(b.keyholder().status().restorePending).toBeNull();
+        };
+
+        // A new machine, whose only store is off the box: the named file reads, the listing fails.
+        const cold = await fresh('new machine');
+        stub.failStep.list = 500;
+        await unknown(cold, gen1, null);
+        await unknown(cold, gen2b, null);
+        delete stub.failStep.list;
+        await refusedAsOlder(cold, a.custodians[0], gen1);
+
+        // The vault's own store holds the named file; the newest is only off the box, and fetching it fails.
+        remove.local(gen2b);
+        const own = await fresh();
+        stub.failStep.get = 500;
+        await unknown(own, gen1, gen2b);
+        delete stub.failStep.get;
+        await refusedAsOlder(own, a.custodians[0], gen1);
     });
 
     it('with every generation-2 file removed from both stores, a generation-1 restore is taken again: what store write could always do', async () => {

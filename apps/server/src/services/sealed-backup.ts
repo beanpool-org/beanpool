@@ -760,12 +760,6 @@ export async function sealFileVerified(
     }
 }
 
-/**
- * Said after every `beanpool` server command a restore's words name (design case 18 S2b, D4): the commands come with S3,
- * and until then an owner learns that a way back exists and its name. S3 deletes this.
- */
-export const SHELL_COMING_SUFFIX = ' (coming in the next update)';
-
 // ── Who may have signed it ─────────────────────────────────────────────────────────────────
 
 /**
@@ -869,9 +863,9 @@ export function signerCheck(header: SealedEnvelopeHeader): SignerCheck {
         body: {
             error: `This backup of your community was locked by another machine, ${header.nodePeerId}, not by this community's server. `
                 + "If this file was locked by this community's previous server, restore it on the server with "
-                + `\`beanpool restore --accept-signer ${header.nodePeerId}\`${SHELL_COMING_SUFFIX}. Otherwise do not restore it: anyone who has seen one `
+                + `\`beanpool restore --accept-signer ${header.nodePeerId} FILE\`. Otherwise do not restore it: anyone who has seen one `
                 + 'of your backup files can make one like it. Nothing was changed.',
-            command: `beanpool restore --accept-signer ${header.nodePeerId}`,
+            command: `beanpool restore --accept-signer ${header.nodePeerId} FILE`,
             signerNotPinned: true,
             signer: header.nodePeerId,
             pins,

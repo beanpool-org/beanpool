@@ -1,16 +1,25 @@
 /**
- * The `beanpool` command in the node's container (bin/beanpool). Two subcommands:
+ * The `beanpool` command in the node's container (bin/beanpool). Four subcommands:
  *
  *   beanpool claim [--name <label> | --address <url> | --no-name] [--direct <url>]   (claim-command.ts)
  *   beanpool claim --key <public key> --callsign <name>                                (claim-shell-owner.ts)
  *   beanpool recover --key <member public key | @callsign>                             (recover-command.ts)
+ *   beanpool restore [--code-file F] [--accept-signer <PeerId>] [--with-keys] FILE     (restore-command.ts)
+ *   beanpool restore --unlocked FILE.tar.gz
+ *   beanpool restore-point list | roll-back NAME                                       (restore-point-command.ts)
  *
  * claim: the last step of an install, the address and then the one-time code and its QR for the phone. recover: makes
- * a member an owner, prints their break-glass code once, and tells the community. Exit codes: 0 done, 1 refused
- * (nothing changed), 2 usage.
+ * a member an owner, prints their break-glass code once, and tells the community. restore and restore-point roll-back:
+ * with the node stopped, replace this server with a backup or a restore point, keeping a restore point first. There is
+ * no command that wipes or deletes (design case 18 D1; Marty, 15 Oct: recipes in the manual only).
+ *
+ * Exit codes: 0 done, 1 refused (nothing changed), 2 usage.
  */
 import { recoverOwner } from './recover-command.js';
 import { CLAIM_USAGE, runClaim } from './claim-command.js';
+import { RESTORE_USAGE, runRestore } from './restore-command.js';
+import { RESTORE_POINT_USAGE, runRestorePoint } from './restore-point-command.js';
+import { terminalAsk } from './shell-prompt.js';
 
 const RECOVER_USAGE = `Usage: beanpool recover --key <member public key | @callsign>
 
@@ -20,11 +29,22 @@ The community is told in a critical announcement, and the node's log records it.
 
 The member must have joined first.`;
 
-const USAGE = `${CLAIM_USAGE}\n\n${RECOVER_USAGE}`;
+const USAGE = `${CLAIM_USAGE}\n\n${RECOVER_USAGE}\n\n${RESTORE_USAGE}\n\n${RESTORE_POINT_USAGE}`;
 
 const [sub, ...rest] = process.argv.slice(2);
 if (sub === 'claim') {
     runClaim(rest).then(code => process.exit(code), (e) => {
+        console.error(`Nothing was changed. ${e?.message || e}`);
+        process.exit(1);
+    });
+} else if (sub === 'restore' || sub === 'restore-point') {
+    const prompt = terminalAsk();
+    const io = { ask: prompt.ask, out: (l: string) => console.log(l), err: (l: string) => console.error(l) };
+    (sub === 'restore' ? runRestore(rest, io) : runRestorePoint(rest, io)).then((code) => {
+        prompt.close();
+        process.exit(code);
+    }, (e) => {
+        prompt.close();
         console.error(`Nothing was changed. ${e?.message || e}`);
         process.exit(1);
     });

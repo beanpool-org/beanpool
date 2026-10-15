@@ -603,7 +603,7 @@ async function main(): Promise<void> {
             `1. data/restore-points/<ts>-before-restore/ was written (${JSON.stringify(rs.points)})`);
         assert(rs.body?.restorePoint?.name === name && typeof rs.body?.restorePointNote === 'string' && rs.body.restorePointNote.includes(name)
             && /kept until at least \d{4}-\d{2}-\d{2}/.test(rs.body.restorePointNote) && rs.body?.restartNote === 'The server restarts now; sign in again.'
-            && rs.body.restorePointNote.endsWith('or on the server with `beanpool restore-point` (coming in the next update).'),
+            && rs.body.restorePointNote.endsWith('or on the server with `beanpool restore-point`.'),
             `1. the answer names the point, how long it is kept, and the restart (${rs.body?.restorePointNote} / ${rs.body?.restartNote})`);
         assert(rs.pointCallsigns?.includes('FreshServerRow') && !rs.pointCallsigns?.includes('RoundTripMarker'),
             `1. the point holds the pre-restore database: the planted row is in it (${JSON.stringify(rs.pointCallsigns)})`);
@@ -848,10 +848,10 @@ async function main(): Promise<void> {
             try { return runChild(scenario, d, { ...env, ...extra, TEST_ROW: name }); } finally { fs.rmSync(d, { recursive: true, force: true }); }
         };
         const OTHER_WORDS = "This backup is from a different community, and people have already joined the community on this server. To bring the "
-            + "backup's community back, restore the file on a fresh server (install, claim, restore), or on this server with `beanpool restore FILE` "
-            + '(coming in the next update). Nothing was changed.';
+            + "backup's community back, restore the file on a fresh server (install, claim, restore), or on this server with `beanpool restore FILE`. "
+            + 'Nothing was changed.';
         const UNREADABLE_WORDS = 'This server cannot read its own community record or node key, so Settings cannot tell whose backup this is. Fix the '
-            + 'data folder, or restore on the server with `beanpool restore FILE` (coming in the next update). Nothing was changed.';
+            + 'data folder, or restore on the server with `beanpool restore FILE`. Nothing was changed.';
         const refusedOther = (r: any) => r.answer?.status === 409 && r.answer.otherCommunity === true && r.answer.livedIn === true
             && r.answer.error === OTHER_WORDS && r.answer.command === 'beanpool restore FILE' && r.answer.fileCommunityId === made.community
             && typeof r.answer.thisCommunityId === 'string' && r.answer.thisCommunityId !== made.community;
@@ -908,7 +908,7 @@ async function main(): Promise<void> {
         const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
         assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
             && r.json?.error === 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked. '
-                + 'An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE` (coming in the next update). Nothing was changed.',
+                + 'An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
             `8. refused 400, naming the command (${r.status} ${r.text.slice(0, 200)})`);
         assert(roles() === rolesBefore && !db.prepare(`SELECT 1 FROM node_roles WHERE member_pubkey = ?`).get(mallory), '8. no role moved: Mallory is no owner');
         assert(!fs.existsSync(path.join(dataDir!, '.restore-tmp')) && !fs.existsSync(path.join(dataDir!, '.restore-candidate'))

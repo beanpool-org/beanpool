@@ -29,44 +29,28 @@ import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
 import { bucketOf, getImageStore } from '../storage/image-store.js';
 import { captureSnapshotImages, snapshotImagesDir, writeDbSnapshot } from './snapshot-scheduler.js';
+import {
+    DAY_MS, RESTORE_POINT_DB, RESTORE_POINT_MAX_AGE_DAYS, RESTORE_POINT_MIN_AGE_DAYS, RESTORE_POINT_SERVER_TAR, RESTORE_POINTS_KEPT,
+    describeRestorePoint, parseRestorePointName, restorePointName, restorePointsDir, type RestorePointInfo, type RestorePointWhy,
+} from './restore-point-names.js';
 
-const DAY_MS = 24 * 60 * 60_000;
-export const RESTORE_POINTS_KEPT = 5;
-export const RESTORE_POINT_MIN_AGE_DAYS = 7;
-export const RESTORE_POINT_MAX_AGE_DAYS = 30;
+// The names, the list and the lookup live in restore-point-names.ts, which opens no database: `beanpool restore-point
+// list` reads them beside a running node (restore-point-command.ts).
+export {
+    RESTORE_POINT_DB, RESTORE_POINT_MAX_AGE_DAYS, RESTORE_POINT_MIN_AGE_DAYS, RESTORE_POINT_SERVER_TAR, RESTORE_POINTS_KEPT,
+    listRestorePoints, resolveRestorePoint, restorePointName, restorePointsDir,
+    type RestorePointInfo, type RestorePointWhy,
+} from './restore-point-names.js';
 
 /** The per-server files a sealed restore can replace (sealed-backup.ts applyBundle), plus node_config.json. */
 export const RESTORE_POINT_SERVER_FILES = [
     'libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'recovery-seal.key', 'open-join.key',
     'local-config.json', 'node_config.json',
 ] as const;
-export const RESTORE_POINT_DB = 'state.db';
-export const RESTORE_POINT_SERVER_TAR = 'server-files.tar.gz';
 const RESTORE_POINT_META = 'point.json';
-
-export type RestorePointWhy = 'restore' | 'roll-back';
-
-/** `2026-10-16T02-30-00.123Z-before-restore`: the ISO time with `-` for `:`, so the name is a plain folder name anywhere. */
-const NAME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})\.(\d{3})Z-before-(restore|roll-back)$/;
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-}
-
-export function restorePointsDir(): string {
-    return path.join(dataDir(), 'restore-points');
-}
-
-export interface RestorePointInfo {
-    name: string;
-    why: RestorePointWhy;
-    takenAt: string;
-    /** state.db and the server files; the images are hard links to the store, near-zero disk. */
-    bytes: number;
-    /** No point is removed before this. */
-    keptAtLeastUntil: string;
-    /** Nor kept after this. */
-    keptAtMostUntil: string;
 }
 
 /** A point that could not be written: the restore that needed it is refused, in words, with nothing replaced. */
@@ -85,28 +69,6 @@ export class RestorePointError extends Error {
         );
         this.code = code;
         this.httpStatus = full ? 507 : 500;
-    }
-}
-
-function parseName(name: string): { takenAt: number; why: RestorePointWhy } | null {
-    const m = NAME_RE.exec(name);
-    if (!m) return null;
-    const t = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
-    return Number.isFinite(t) ? { takenAt: t, why: m[6] as RestorePointWhy } : null;
-}
-
-export function restorePointName(at: number, why: RestorePointWhy): string {
-    return `${new Date(at).toISOString().replace(/:/g, '-')}-before-${why}`;
-}
-
-/** A caller's point name, as a path inside data/restore-points, or null: only a name of the exact shape, and one that exists. */
-export function resolveRestorePoint(name: unknown): string | null {
-    if (typeof name !== 'string' || !parseName(name)) return null;
-    const p = path.join(restorePointsDir(), name);
-    try {
-        return fs.lstatSync(p).isDirectory() ? p : null;
-    } catch {
-        return null;
     }
 }
 
@@ -193,41 +155,9 @@ export function takeRestorePoint(why: RestorePointWhy, now = Date.now()): Restor
         logger.error('SYS', `[Restore] Could not keep a restore point before a ${why}; it is refused: ${e?.message || e}`);
         throw new RestorePointError(e);
     }
-    const info = describe(name)!;
+    const info = describeRestorePoint(name)!;
     logger.info('SYS', `[Restore] Restore point ${name} kept (at least until ${info.keptAtLeastUntil}).`);
     return info;
-}
-
-function sizeOf(p: string): number {
-    try { return fs.statSync(p).size; } catch { return 0; }
-}
-
-function describe(name: string): RestorePointInfo | null {
-    const parsed = parseName(name);
-    if (!parsed) return null;
-    const dir = path.join(restorePointsDir(), name);
-    return {
-        name,
-        why: parsed.why,
-        takenAt: new Date(parsed.takenAt).toISOString(),
-        bytes: sizeOf(path.join(dir, RESTORE_POINT_DB)) + sizeOf(path.join(dir, RESTORE_POINT_SERVER_TAR)),
-        keptAtLeastUntil: new Date(parsed.takenAt + RESTORE_POINT_MIN_AGE_DAYS * DAY_MS).toISOString(),
-        keptAtMostUntil: new Date(parsed.takenAt + RESTORE_POINT_MAX_AGE_DAYS * DAY_MS).toISOString(),
-    };
-}
-
-/** Every point, newest first. Read-only. */
-export function listRestorePoints(): RestorePointInfo[] {
-    let names: string[];
-    try {
-        names = fs.readdirSync(restorePointsDir());
-    } catch {
-        return [];
-    }
-    return names
-        .filter((n) => resolveRestorePoint(n) !== null)
-        .map((n) => describe(n)!)
-        .sort((a, b) => Date.parse(b.takenAt) - Date.parse(a.takenAt));
 }
 
 /** The server files a point kept, as point.json names them (the tar is the bytes). */
@@ -261,7 +191,7 @@ export function expireRestorePoints(now = Date.now()): number {
     }
     let removed = 0;
     const points = names
-        .map((n) => ({ n, p: parseName(n) }))
+        .map((n) => ({ n, p: parseRestorePointName(n) }))
         .filter((x): x is { n: string; p: { takenAt: number; why: RestorePointWhy } } => !!x.p)
         .sort((a, b) => b.p.takenAt - a.p.takenAt);
     points.forEach(({ n, p }, i) => {

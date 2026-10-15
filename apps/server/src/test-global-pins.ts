@@ -33,7 +33,11 @@
  *        holds it, from the place: on a ring point within 250 km of the place but not of its neighbourhood, she gets the
  *        copy, exact, when someone taps Going, and a member there who isn't let in gets nothing, with the sockets' index
  *        on and off (#1965 confirmation finding 2: measuring her from the neighbourhood, or leaving her out of the
- *        index's parties, both passed before).
+ *        index's parties, both passed before);
+ *      - a repeating event whose host lets people in (#1945): the place goes by the note's rule, the member's one RSVP
+ *        row, this date's or an earlier one's; by id, nearest-first and in socket copies, the host and the member let in
+ *        last week have it after the roll and after a cancelled date, the member Going last week and never let in has the
+ *        neighbourhood, and "let everyone in" gives it to this date's waiting member alone.
  *   3. The operator's override `nodeProfile.openMembership = false` on the global node: every place exact again.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-global-pins)
@@ -601,6 +605,96 @@ async function main() {
             `global, ${name}: another member's 4 reads are the same bytes whether the listing is at one corner of its neighbourhood or the opposite one, ${apartKm.toFixed(2)} km apart`);
         assert(ownAt0.filter((t, i) => t !== ownAt1[i]).length === 4, `global, ${name}: and its author's 4 reads all show it move`);
     }
+
+    // A repeating event whose host lets people in (#1945 beside #1965): the place goes by the note's rule, the member's one
+    // RSVP row, this date's or an earlier one's. A roll and a cancelled date move nobody between the place and the
+    // neighbourhood; only a let-in does, and "let everyone in" takes this date's Going alone (83f6bd61).
+    const { rollDueSeries } = await import('./engine/event-series-roll.js');
+    const hana = member('Hana', { lat: -28.6, lng: 153.5 });
+    // Her area through the route, as a member sets it (a row written after the server read the areas is not one it knows).
+    const rae = member('Rae', null);
+    const raeArea = await post('/api/community/me/area', { lat: -28.7, lng: 153.5 }, rae);
+    if (raeArea.status !== 200) throw new Error(`area ${raeArea.status} ${raeArea.text.slice(0, 120)}`);
+    const SP = { lat: -28.664321, lng: 153.587654 };
+    const SC = cellOf(SP.lat, SP.lng);
+    const madeSeries = await post('/api/marketplace/posts', {
+        type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', credits: 0, authorPublicKey: hana.pubKeyHex,
+        lat: SP.lat, lng: SP.lng, eventPrivateNote: 'Side gate, number 7', eventHostLetsIn: true,
+        eventStartLocal: '2098-01-03T19:00', eventEndLocal: '2098-01-03T21:00', eventTz: 'Australia/Sydney',
+        eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },
+    }, hana);
+    const sid = (madeSeries.body?.id ?? madeSeries.body?.post?.id) as string;
+    assert((madeSeries.status === 200 || madeSeries.status === 201) && !!sid && madeSeries.body?.post?.eventRepeat?.byDay === 'FR',
+        `global: a weekly event whose host lets people in is posted through the route (got ${madeSeries.status} ${madeSeries.text.slice(0, 120)})`);
+    place.set(sid, SP);
+    const seriesRow = () => db.prepare('SELECT event_start_local, event_end_at FROM posts WHERE id = ?').get(sid) as { event_start_local: string; event_end_at: string };
+    for (const who of [carol, dan]) {
+        const r = await post(`/api/marketplace/posts/${sid}/rsvp`, { status: 'going' }, who);
+        if (r.status !== 200) throw new Error(`rsvp ${r.status} ${r.text.slice(0, 120)}`);
+    }
+    const letCarol = await post(`/api/marketplace/posts/${sid}/let-in`, { memberPublicKey: carol.pubKeyHex }, hana);
+    assert(letCarol.status === 200 && letCarol.body?.changed === 1, `global, repeating: the host lets Carol in on the first date (got ${letCarol.status} ${letCarol.text.slice(0, 120)})`);
+    const seriesFor = (who: Id) => eventFor(sid, who);
+    /** Exact for these, the neighbourhood for the rest, by id; and from a point 3 km north, 0.1 km from the place or whole km from the neighbourhood. */
+    const placesAre = async (stage: string, exact: Id[], rounded: Id[]) => {
+        const named = (who: Id) => [hana, carol, dan, bob, rae].indexOf(who);
+        const names = ['Hana', 'Carol', 'Dan', 'Bob', 'Rae'];
+        const byIdOk = await Promise.all([...exact.map(async w => exactOf(await seriesFor(w))), ...rounded.map(async w => { const p = await seriesFor(w); return neighbourhoodOf(p) && !exactOf(p); })]);
+        const Q = { lat: six(SP.lat + 0.027), lng: SP.lng };
+        const nearOf = async (who: Id) => ours((await get(`/api/marketplace/posts?${ALL_TYPES}&lat=${Q.lat}&lng=${Q.lng}&radiusKm=10&sort=distance&limit=200`, who)).body).find(p => p.id === sid);
+        const nearOk = await Promise.all([
+            ...exact.map(async w => { const p = await nearOf(w); return !!p && exactOf(p) && p.distanceKm === Math.round(haversine(Q.lat, Q.lng, SP.lat, SP.lng) * 10) / 10; }),
+            ...rounded.map(async w => { const p = await nearOf(w); return !!p && neighbourhoodOf(p) && p.distanceKm === Math.round(haversine(Q.lat, Q.lng, SC.lat, SC.lng)); }),
+        ]);
+        assert(byIdOk.every(Boolean) && nearOk.every(Boolean),
+            `global, repeating, ${stage}: the place for ${exact.map(w => names[named(w)]).join(', ')}; the neighbourhood for ${rounded.map(w => names[named(w)]).join(', ')}, by id and nearest-first (by id ${byIdOk.map(Number).join('')}, nearest ${nearOk.map(Number).join('')})`);
+    };
+    await placesAre('on the first date', [hana, carol], [dan, bob, rae]);
+
+    // The roll to the next Friday, with sockets open: its copy is exact for the host and Carol, the neighbourhood for the rest.
+    const seriesSocks = new Map<Id, Sock>();
+    for (const who of [hana, carol, dan, bob, rae]) seriesSocks.set(who, await openSocket(`${wsBase}?${signedWsQuery(who)}`));
+    await sleep(300);
+    const copiesOf = (who: Id) => listingCopies(seriesSocks.get(who)!).filter(e => e.post.id === sid);
+    const copiesAre = (exact: Id[], rounded: Id[]) =>
+        exact.every(w => copiesOf(w).length > 0 && copiesOf(w).every(e => e.post.lat === SP.lat && e.post.lng === SP.lng))
+        && rounded.every(w => copiesOf(w).length > 0 && copiesOf(w).every(e => e.post.lat === SC.lat && e.post.lng === SC.lng));
+    /** What each socket got: its copies' places, or how many other messages it had. */
+    const copiesSeen = () => ['Hana', 'Carol', 'Dan', 'Bob', 'Rae'].map((name, i) => {
+        const who = [hana, carol, dan, bob, rae][i];
+        const c = copiesOf(who);
+        return `${name} ${c.length ? c.map(e => e.post.lat === SP.lat ? 'place' : e.post.lat === SC.lat ? 'nbhd' : `${e.post.lat}`).join('+') : `none of ${seriesSocks.get(who)!.raw.length}`}`;
+    }).join(', ');
+    const rolled = rollDueSeries(se.broadcast, Date.parse(seriesRow().event_end_at) + 1000);
+    await sleep(500);
+    assert(rolled >= 1 && seriesRow().event_start_local === '2098-01-10T19:00',
+        `global, repeating: it rolls to the next Friday (rolled ${rolled}, now ${seriesRow().event_start_local})`);
+    assert(copiesAre([hana, carol], [dan, bob, rae]), `global, repeating: the roll's socket copy is exact for the host and Carol (let in last week), the neighbourhood for Dan, Bob and Rae (${copiesSeen()})`);
+    const carolNow = await seriesFor(carol);
+    assert(carolNow?.myRsvp === null && carolNow?.myLastRsvp?.status === 'going' && carolNow?.eventPrivateNote === 'Side gate, number 7',
+        `global, repeating: after the roll Carol's let-in is last week's and still reads the note (got ${JSON.stringify({ my: carolNow?.myRsvp, last: carolNow?.myLastRsvp?.status })})`);
+    await placesAre('after the roll', [hana, carol], [dan, bob, rae]);
+
+    // Rae says Going for this date and waits; "let everyone in" lets her in and not Dan, whose Going was last week's.
+    const raeGoing = await post(`/api/marketplace/posts/${sid}/rsvp`, { status: 'going' }, rae);
+    assert(raeGoing.status === 200, `global, repeating: Rae says Going for this date (got ${raeGoing.status})`);
+    await placesAre('Rae waiting', [hana, carol], [dan, bob, rae]);
+    const everyone = await post(`/api/marketplace/posts/${sid}/let-in`, { everyone: true }, hana);
+    assert(everyone.status === 200 && everyone.body?.changed === 1, `global, repeating: "let everyone in" lets in this date's one waiting, Rae (got ${everyone.status} changed ${everyone.body?.changed})`);
+    await placesAre('after "let everyone in"', [hana, carol, rae], [dan, bob]);
+
+    // The host cancels this date: the event moves to the one after, and nobody moves between the place and the neighbourhood.
+    for (const s of seriesSocks.values()) s.raw.length = 0;
+    const skipped = await post(`/api/events/${sid}/skip`, { date: '2098-01-10' }, hana);
+    await sleep(500);
+    assert(skipped.status === 200 && seriesRow().event_start_local === '2098-01-17T19:00',
+        `global, repeating: the host cancels this date and the event moves to the next (got ${skipped.status} ${seriesRow().event_start_local})`);
+    assert(copiesAre([hana, carol, rae], [dan, bob]), `global, repeating: the cancelled date's socket copy is exact for the host, Carol and Rae, the neighbourhood for Dan and Bob (${copiesSeen()})`);
+    await placesAre('after a cancelled date', [hana, carol, rae], [dan, bob]);
+    const seriesParties = se.listingReachParties({ type: 'post_updated', post: { id: sid } }) ?? [];
+    assert([hana, carol, rae].every(w => seriesParties.includes(w.pubKeyHex)) && ![dan, bob].some(w => seriesParties.includes(w.pubKeyHex)),
+        `global, repeating: its copies visit the host, Carol and Rae as parties, not Dan or Bob (${seriesParties.length} parties)`);
+    for (const s of seriesSocks.values()) s.ws.close();
 
     // ── 3. The operator's override on the global node: every place exact again ──
     console.log('\n── 3. nodeProfile.openMembership = false on the global node ──');

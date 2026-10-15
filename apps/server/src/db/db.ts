@@ -271,6 +271,48 @@ export function deletePlainRows(table: string, where: string, ...args: unknown[]
 }
 
 /**
+ * event_reminders_sent keyed on the date too (DESIGN-event-times §8): a repeating event reminds its regulars once per date,
+ * where the old key (post, member, offset) let the first week's mark block every later week's. SQLite cannot change a
+ * table's key in place, so a table of the old shape is rebuilt, before the schema.sql exec (which then finds it as it
+ * writes it). Each old mark is for the date its event has now, so nothing already sent is sent again. Its touch triggers
+ * go with the old table; stampPlainTables makes them again after the exec. Foreign keys are off on this database, and
+ * `legacy_alter_table` is on for the rename, as repackGroups has them. Once rebuilt, every later boot finds the column and
+ * does nothing.
+ */
+function rekeyReminderMarksByOccurrence(): void {
+    const cols = db.prepare(`SELECT name FROM pragma_table_info('event_reminders_sent')`).all() as { name: string }[];
+    if (cols.length === 0 || cols.some((c) => c.name === 'occurrence_at')) return;
+    const hasUpdatedAt = cols.some((c) => c.name === 'updated_at');
+    db.pragma('legacy_alter_table = ON');
+    try {
+        db.transaction(() => {
+            db.exec(`
+                DROP TABLE IF EXISTS event_reminders_sent_by_date;
+                CREATE TABLE event_reminders_sent_by_date (
+                    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    offset_min INTEGER NOT NULL,
+                    occurrence_at TEXT NOT NULL DEFAULT '',
+                    sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (post_id, member_pubkey, offset_min, occurrence_at)
+                );
+                INSERT INTO event_reminders_sent_by_date (post_id, member_pubkey, offset_min, occurrence_at, sent_at, updated_at)
+                    SELECT s.post_id, s.member_pubkey, s.offset_min,
+                           COALESCE((SELECT p.event_start_at FROM posts p WHERE p.id = s.post_id), ''),
+                           s.sent_at, ${hasUpdatedAt ? 's.updated_at' : 'NULL'}
+                      FROM event_reminders_sent s;
+                DROP TABLE event_reminders_sent;
+                ALTER TABLE event_reminders_sent_by_date RENAME TO event_reminders_sent;
+            `);
+        })();
+    } finally {
+        db.pragma('legacy_alter_table = OFF');
+    }
+    console.log('[DB] event_reminders_sent is keyed on the date too (repeating events)');
+}
+
+/**
  * A person's row with no record of joining (members.is_visitor, markExistingVisitors). Every way in writes one: an
  * invite and an offline ticket write the inviter's key into `invited_by` and the code into `invite_code` (and use the
  * code, `invite_codes.used_by`), the open door `open:<provider>` and an `open_joins` row, the genesis member `genesis`,
@@ -1391,6 +1433,11 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_tz TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_online INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_link TEXT`).run(); } catch { }
+    // Repeating events (DESIGN-event-times §8): the rule, its last date and its cancelled dates. NULL on every row: no
+    // event repeats until its host says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT`).run(); } catch { }
     // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
     // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
     // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,
@@ -1420,6 +1467,10 @@ export function initSchema() {
     // is not the failure we want to discover at boot. NULL on every existing row means "my default
     // applies", which is exactly the behaviour a node that upgrades into this should have.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
+    // The date an RSVP is for (DESIGN-event-times §8). Before the schema.sql exec, which indexes it. NULL on every existing
+    // row: an RSVP from before it is for the date its event has (engine/event-series-roll.ts RSVP_IS_CURRENT).
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN occurrence_at DATETIME`).run(); } catch { }
+    rekeyReminderMarksByOccurrence();
     // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
     // matters only on an event whose host lets people in, and no existing event is one.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "đậu",
@@ -39,5 +39,80 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Địa điểm lấy từ OpenStreetMap. Những gì bạn nhập ở đây sẽ được gửi cho OpenStreetMap.",
   "Choose {place}": "Chọn {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Cộng đồng này yêu cầu ảnh hồ sơ trước khi bạn đăng bài. Bạn có thể thêm ảnh sau từ hồ sơ của mình.",
-  "A picture is optional here. You can add one later from your profile.": "Ở đây ảnh là tùy chọn. Nếu muốn, bạn có thể thêm ảnh sau từ hồ sơ của mình."
+  "A picture is optional here. You can add one later from your profile.": "Ở đây ảnh là tùy chọn. Nếu muốn, bạn có thể thêm ảnh sau từ hồ sơ của mình.",
+  "{n}st\u0004day of the month": "ngày {n}",
+  "{n}nd\u0004day of the month": "ngày {n}",
+  "{n}rd\u0004day of the month": "ngày {n}",
+  "{n}th\u0004day of the month": "ngày {n}",
+  "Every month on the first {weekday}": "Mỗi tháng vào {weekday} đầu tiên",
+  "Every month on the second {weekday}": "Mỗi tháng vào {weekday} thứ hai",
+  "Every month on the third {weekday}": "Mỗi tháng vào {weekday} thứ ba",
+  "Every month on the fourth {weekday}": "Mỗi tháng vào {weekday} thứ tư",
+  "Every month on the last {weekday}": "Mỗi tháng vào {weekday} cuối cùng",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "other": "{n} tháng một lần, vào {weekday} đầu tiên"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "other": "{n} tháng một lần, vào {weekday} thứ hai"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "other": "{n} tháng một lần, vào {weekday} thứ ba"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "other": "{n} tháng một lần, vào {weekday} thứ tư"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "other": "{n} tháng một lần, vào {weekday} cuối cùng"
+  },
+  "Monthly, first {weekday}": "Hàng tháng, {weekday} đầu tiên",
+  "Monthly, second {weekday}": "Hàng tháng, {weekday} thứ hai",
+  "Monthly, third {weekday}": "Hàng tháng, {weekday} thứ ba",
+  "Monthly, fourth {weekday}": "Hàng tháng, {weekday} thứ tư",
+  "Monthly, last {weekday}": "Hàng tháng, {weekday} cuối cùng",
+  "Does not repeat": "Không lặp lại",
+  "Every week on {weekday}": "Mỗi tuần vào {weekday}",
+  "Every 2 weeks on {weekday}": "2 tuần một lần vào {weekday}",
+  "Every month on the {day}": "Mỗi tháng vào {day}",
+  "An event that repeats must end before its next date starts": "Sự kiện lặp lại phải kết thúc trước khi ngày tiếp theo bắt đầu",
+  "(months without a {day} are skipped)": "(các tháng không có {day} sẽ được bỏ qua)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "other": "{n} tuần một lần vào {weekday}"
+  },
+  "Every {weekday}": "Mỗi {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "other": "{n} tháng một lần vào {day}"
+  },
+  "Monthly on the {day}": "Hàng tháng vào {day}",
+  "{repeats} · until {date}": "{repeats} · đến {date}",
+  "The last date must be a date on or after the first one": "Ngày cuối cùng phải trùng hoặc sau ngày đầu tiên",
+  "The last date can be at most {n} years after the first one": "Ngày cuối cùng chỉ có thể cách ngày đầu tiên tối đa {n} năm",
+  "{date} is cancelled. Next: {next}": "{date} đã bị hủy. Lần tới: {next}",
+  "{date} is cancelled.": "{date} đã bị hủy.",
+  "{date} is back on": "{date} được tổ chức lại",
+  "Moved from the regular {weekday}": "Đã chuyển từ {weekday} thường lệ",
+  "Moved from the regular date": "Đã chuyển từ ngày thường lệ",
+  "Choose how the event repeats from the list": "Chọn cách lặp lại sự kiện từ danh sách",
+  "An event can repeat every 1 to 12 weeks or months": "Một sự kiện có thể lặp lại sau mỗi 1 đến 12 tuần hoặc tháng",
+  "The first date must be one of the repeating dates": "Ngày đầu tiên phải là một trong các ngày lặp lại",
+  "The last date can be at most 5 years after the first one": "Ngày cuối cùng chỉ có thể cách ngày đầu tiên tối đa 5 năm",
+  "Pick one of the dates this event repeats on": "Chọn một trong các ngày mà sự kiện này lặp lại",
+  "This event does not repeat": "Sự kiện này không lặp lại",
+  "Only the host can cancel or restore a date": "Chỉ người tổ chức mới có thể hủy hoặc khôi phục một ngày",
+  "This is the last date: change when the event ends, or cancel the event": "Đây là ngày cuối cùng: hãy đổi ngày kết thúc hoặc hủy sự kiện",
+  "At most 100 dates can be cancelled": "Có thể hủy tối đa 100 ngày",
+  "This event has been cancelled": "Sự kiện này đã bị hủy",
+  "Pick a time zone from the list": "Chọn múi giờ từ danh sách",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Hiển thị trong phạm vi khoảng 1 km. Hãy hỏi {name} địa điểm cụ thể khi hẹn gặp.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Hiển thị cho tất cả những ai có thể xem sự kiện. Hãy ghi địa chỉ chính xác vào ghi chú bên dưới.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Đây có vẻ là địa chỉ nhà. Bất kỳ ai thấy sự kiện đều sẽ đọc được, vì vậy để trong ghi chú bên dưới sẽ an toàn hơn.",
+  "An earlier message was removed when this chat was locked": "Một tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "other": "{n} tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "other": "{n} tin nhắn đã bị người điều hành xóa"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "other": "{n} tin nhắn đã bị xóa"
+  }
 }

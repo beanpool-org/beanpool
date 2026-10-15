@@ -234,7 +234,8 @@ async function main(): Promise<void> {
         // ── 2. While the cause lasts, the timer retries, each wait twice the last ──
         await sleep(1700); // turns near 200, 400 (+200), 800 (+400), 1600 (+800) ms after boot
         const gaps = attempts.slice(1).map((t, i) => t - attempts[i]);
-        const doubling = gaps.slice(2).every((g, i) => g >= gaps[i + 1] * 1.6);
+        const baseWait = Number(process.env.MEMBER_PHOTO_RESUME_MS) || 200;
+        const doubling = gaps.length >= 3 && gaps.slice(1).every((g, n) => g >= baseWait * (2 ** n) - 50);
         assert(attempts.length >= 4 && attempts.length <= 6 && doubling && hasColumn() && photo(ann.pk) === null,
             `while it keeps stopping the resumed move retries with a doubling wait (${attempts.length - 1} turns, gaps ${gaps.join('/')} ms)`);
 

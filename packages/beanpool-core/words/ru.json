@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "бобы",
@@ -48,5 +48,110 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Места из OpenStreetMap. То, что вы вводите здесь, отправляется им.",
   "Choose {place}": "Выбрать: {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Это сообщество просит фото профиля перед публикацией. Добавить его можно позже в своём профиле.",
-  "A picture is optional here. You can add one later from your profile.": "Здесь фото необязательно. Добавить его можно позже в своём профиле."
+  "A picture is optional here. You can add one later from your profile.": "Здесь фото необязательно. Добавить его можно позже в своём профиле.",
+  "{n}st\u0004day of the month": "{n}-е число",
+  "{n}nd\u0004day of the month": "{n}-е число",
+  "{n}rd\u0004day of the month": "{n}-е число",
+  "{n}th\u0004day of the month": "{n}-е число",
+  "Every month on the first {weekday}": "Каждый месяц в первый {weekday}",
+  "Every month on the second {weekday}": "Каждый месяц во второй {weekday}",
+  "Every month on the third {weekday}": "Каждый месяц в третий {weekday}",
+  "Every month on the fourth {weekday}": "Каждый месяц в четвёртый {weekday}",
+  "Every month on the last {weekday}": "Каждый месяц в последний {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Каждый {n} месяц, первый {weekday}",
+    "few": "Каждые {n} месяца, первый {weekday}",
+    "many": "Каждые {n} месяцев, первый {weekday}",
+    "other": "Каждые {n} месяца, первый {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Каждый {n} месяц, второй {weekday}",
+    "few": "Каждые {n} месяца, второй {weekday}",
+    "many": "Каждые {n} месяцев, второй {weekday}",
+    "other": "Каждые {n} месяца, второй {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Каждый {n} месяц, третий {weekday}",
+    "few": "Каждые {n} месяца, третий {weekday}",
+    "many": "Каждые {n} месяцев, третий {weekday}",
+    "other": "Каждые {n} месяца, третий {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Каждый {n} месяц, четвёртый {weekday}",
+    "few": "Каждые {n} месяца, четвёртый {weekday}",
+    "many": "Каждые {n} месяцев, четвёртый {weekday}",
+    "other": "Каждые {n} месяца, четвёртый {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Каждый {n} месяц, последний {weekday}",
+    "few": "Каждые {n} месяца, последний {weekday}",
+    "many": "Каждые {n} месяцев, последний {weekday}",
+    "other": "Каждые {n} месяца, последний {weekday}"
+  },
+  "Monthly, first {weekday}": "Ежемесячно, первый {weekday}",
+  "Monthly, second {weekday}": "Ежемесячно, второй {weekday}",
+  "Monthly, third {weekday}": "Ежемесячно, третий {weekday}",
+  "Monthly, fourth {weekday}": "Ежемесячно, четвёртый {weekday}",
+  "Monthly, last {weekday}": "Ежемесячно, последний {weekday}",
+  "Does not repeat": "Не повторяется",
+  "Every week on {weekday}": "Каждую неделю в {weekday}",
+  "Every 2 weeks on {weekday}": "Каждые 2 недели в {weekday}",
+  "Every month on the {day}": "Каждый месяц {day}",
+  "An event that repeats must end before its next date starts": "Повторяющееся событие должно заканчиваться до начала следующей даты",
+  "(months without a {day} are skipped)": "(месяцы без {day} пропускаются)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Каждую {n} неделю в {weekday}",
+    "few": "Каждые {n} недели в {weekday}",
+    "many": "Каждые {n} недель в {weekday}",
+    "other": "Каждые {n} недели в {weekday}"
+  },
+  "Every {weekday}": "Каждый {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Каждый {n} месяц {day}",
+    "few": "Каждые {n} месяца {day}",
+    "many": "Каждые {n} месяцев {day}",
+    "other": "Каждые {n} месяца {day}"
+  },
+  "Monthly on the {day}": "Ежемесячно, {day}",
+  "{repeats} · until {date}": "{repeats} · до {date}",
+  "The last date must be a date on or after the first one": "Дата окончания должна совпадать с первой датой или быть позже неё",
+  "The last date can be at most {n} years after the first one": "Дата окончания может быть максимум через {n} года после первой",
+  "{date} is cancelled. Next: {next}": "{date} отменено. Следующее: {next}",
+  "{date} is cancelled.": "{date} отменено.",
+  "{date} is back on": "{date} снова состоится",
+  "Moved from the regular {weekday}": "Перенесено с обычного дня ({weekday})",
+  "Moved from the regular date": "Перенесено с обычной даты",
+  "Choose how the event repeats from the list": "Выберите способ повторения события из списка",
+  "An event can repeat every 1 to 12 weeks or months": "Событие может повторяться каждые 1–12 недель или месяцев",
+  "The first date must be one of the repeating dates": "Первая дата должна быть одной из дат повторения",
+  "The last date can be at most 5 years after the first one": "Дата окончания может быть максимум через 5 лет после первой",
+  "Pick one of the dates this event repeats on": "Выберите одну из дат повторения этого события",
+  "This event does not repeat": "Это событие не повторяется",
+  "Only the host can cancel or restore a date": "Только организатор может отменить или восстановить дату",
+  "This is the last date: change when the event ends, or cancel the event": "Это последняя дата: измените время окончания или отмените событие",
+  "At most 100 dates can be cancelled": "Можно отменить не более 100 дат",
+  "This event has been cancelled": "Это событие отменено",
+  "Pick a time zone from the list": "Выберите часовой пояс из списка",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Показывается с точностью около 1 км. Уточните точное место у {name} при договоренности о встрече.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Видно всем, кто может видеть событие. Укажите точный адрес в заметке ниже.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Это похоже на точный адрес. Его смогут прочесть все, кто видит событие, поэтому безопаснее указать его в заметке ниже.",
+  "An earlier message was removed when this chat was locked": "Предыдущее сообщение было удалено, когда этот чат был заблокирован",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} предыдущее сообщение удалено при блокировке чата",
+    "few": "{n} предыдущих сообщения удалено при блокировке чата",
+    "many": "{n} предыдущих сообщений удалено при блокировке чата",
+    "other": "{n} предыдущих сообщений удалено при блокировке чата"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} сообщение удалено координатором",
+    "few": "{n} сообщения удалено координатором",
+    "many": "{n} сообщений удалено координатором",
+    "other": "{n} сообщений удалено координатором"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} сообщение было удалено",
+    "few": "{n} сообщения были удалены",
+    "many": "{n} сообщений было удалено",
+    "other": "{n} сообщений было удалено"
+  }
 }

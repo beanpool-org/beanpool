@@ -7162,11 +7162,16 @@ function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id
  * refuses it to anyone else. The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
  */
 export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
+    return !!reportSuspensionTakesRole(reportId);
+}
+
+/** The owner's or admin's role actioning this report with suspendUser would take away, or null (reportSuspensionTakesPrivilegedRole). */
+export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' | null {
     const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
         { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
-    if (!report) return false;
+    if (!report) return null;
     const subject = reportSubjectOf(report);
-    return !!subject && !isClosedAccountKey(subject) && !!heldPrivilegedRole(subject);
+    return subject && !isClosedAccountKey(subject) ? heldPrivilegedRole(subject) : null;
 }
 
 export function actionReport(

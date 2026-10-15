@@ -66,6 +66,7 @@ import {
     pruneNeedsOwner,
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
+    reportSuspensionTakesRole,
     broadcast,
     dispatchPushNotification,
     isNodeAdmin,
@@ -1850,6 +1851,25 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (!decision) return false;
     if (action === 'halt') return haltRestoresRole(decision) && !!heldRoleFor([target]);
     return decision.effect === 'remove_member' && !!decision.subject && !!heldPrivilegedRole(decision.subject);
+}
+
+/**
+ * Whether this admin action takes an owner's role away or holds it aside (an owner, or an owner suspended with the role
+ * held aside): emergency-suspending one, suspending one through a report, pruning or offboarding one ('prune'), a branch
+ * with one in it, or cutting short one's removal. Each is one of adminActionNeedsOwner's, on an owner. The routes ask an
+ * owner's fresh proof on exactly these (routes/admin.ts ownerRemovalProof; Marty, 15 Oct, #1984 confirmation N-1), so a
+ * stolen session can't strip the other owners; on an admin or a member they ask what adminActionNeedsOwner asks.
+ */
+export function adminActionRemovesOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    if (!target) return false;
+    const removesOwner = (pk: string) => pruneNeedsOwner(pk, actor) && heldPrivilegedRole(pk) === 'owner';
+    if (action === 'suspend') return isNodeOwner(target);
+    if (action === 'prune') return removesOwner(target);
+    if (action === 'prune-branch') return inviteBranchOf(target).some(removesOwner);
+    if (action === 'report-suspend') return reportSuspensionTakesRole(target) === 'owner';
+    if (action !== 'accelerate') return false;
+    const decision = getDecision(target);
+    return !!decision && decision.effect === 'remove_member' && !!decision.subject && heldPrivilegedRole(decision.subject) === 'owner';
 }
 
 /**

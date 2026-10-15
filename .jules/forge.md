@@ -159,3 +159,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
+
+## 2026-10-15 - [Missing 400 status code on failed test alert dispatch]
+**Issue:** `POST /api/local/admin/alerts/test` in `apps/server/src/routes/alerts.ts` returned `200 OK` with `{ ok: false, error: '...' }` when `sendTestAlert()` failed (e.g., when no channel is configured or the hourly message cap is reached).
+**Learning:** Route handlers calling test or trigger operations should set `ctx.status = 400` when the domain action returns `{ ok: false }` to prevent misrepresenting failed operations as successful HTTP 200 responses.
+**Pattern:** Look for route handlers where domain calls return result objects with an `ok: boolean` property and ensure `!result.ok` sets an appropriate HTTP error status code (e.g. 400).

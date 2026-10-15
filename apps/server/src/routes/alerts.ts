@@ -52,6 +52,9 @@ export function createAlertsRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/alerts/test', async (ctx) => {
         if (!(await ownerOnly(ctx))) return;
         const result = await sendTestAlert();
+        if (!result.ok) {
+            ctx.status = 400;
+        }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { ...result, status: getAlertsStatus() };
     });

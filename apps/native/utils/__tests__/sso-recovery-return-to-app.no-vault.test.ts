@@ -49,7 +49,8 @@ vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 import { sealSeedToSso } from '@beanpool/core';
 import { signedPost } from '../node-post';
 import { signInWithGoogle, SsoSignInError } from '../sso-signin';
-import { lookupUnreachable, notThatAccount, recoverAccountWithSso } from '../sso-recovery';
+import { CommunityRestoreRefused, recoverAccountWithSso } from '../sso-recovery';
+import { restoreRefusalText } from '../community-restore-copy';
 import { seedToKeypair } from '../crypto';
 import { stubCommunityLookup } from './community-lookup';
 
@@ -123,7 +124,10 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
     it('a copy of another account, refused after the sign-in: the sign-in was said to be done', async () => {
         await node(OTHER_SEED);
 
-        await expect(restore()).rejects.toThrow(notThatAccount('Marty'));
+        const refused = await restore().catch((e: unknown) => e);
+        expect(refused).toBeInstanceOf(CommunityRestoreRefused);
+        expect(refused).toMatchObject({ refusal: { code: 'not_that_account', name: 'Marty' } });
+        expect(restoreRefusalText(refused)).toBe("The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.");
 
         expect(onSignedIn).toHaveBeenCalledTimes(1);
     });
@@ -149,7 +153,10 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
         await node(SEED);
         stubCommunityLookup('https://elsewhere.example.org', []);
 
-        await expect(restore()).rejects.toThrow(lookupUnreachable());
+        const refused = await restore().catch((e: unknown) => e);
+        expect(refused).toBeInstanceOf(CommunityRestoreRefused);
+        expect(refused).toMatchObject({ refusal: { code: 'lookup_unreachable' } });
+        expect(restoreRefusalText(refused)).toBe("Can't reach the community right now. Try again in a minute.");
 
         expect(signInWithGoogle).not.toHaveBeenCalled();
         expect(onSignedIn).not.toHaveBeenCalled();

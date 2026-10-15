@@ -85,4 +85,9 @@ SELECT '0009_watch.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('watch_log', 'watch_marks'))
        OR (type = 'index' AND name IN ('idx_watch_log_target', 'idx_watch_log_ran', 'idx_watch_log_target_ran'))) = 5;
 
+-- 0010: its seven policy rows (as 0005: a database with only some of them gets the rest from `migrations apply`).
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0010_reserve_our_hosts.sql'
+WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('vault', 'auth', 'mullum1', 'mullum2', 'mullum3', 'test-mirror', 'p2p-mullum2')) = 7;
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

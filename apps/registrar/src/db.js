@@ -202,3 +202,7 @@ export const insertSweepLog = async (env, s, now) => {
     ).bind(now, s.live, s.ok, s.unverifiable, s.impostor, s.content_swap || 0, s.action).run();
     await env.DB.prepare('DELETE FROM sweep_log WHERE ran_at < ?').bind(now - 90 * 86400).run();
 };
+
+// Did the registrar hold `name` before the tenure claimed at `since`? A claim event earlier than it says so.
+export const claimedBefore = async (env, name, since) =>
+    !!(await env.DB.prepare("SELECT 1 AS yes FROM name_events WHERE name=? AND event='claimed' AND at < ? LIMIT 1").bind(name, since).first());

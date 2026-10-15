@@ -6540,8 +6540,12 @@ export interface GroupMemberItem {
     formerKeys?: FormerKey[] | null;
 }
 
-/** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
-export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any) {
+/**
+ * Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE). `withStatus`: the thrown error also
+ * carries the answer's `status`, and `unsaid` when the node gave no words of its own, so a screen can tell a refusal
+ * (403, said in the node's words) from a blip. Opt-in: other callers' errors stay exactly as they were.
+ */
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean }) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
@@ -6564,7 +6568,10 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
 
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || errJson.message || `Request failed: ${res.status}`);
+        const words = errJson.error || errJson.message;
+        const error = new Error(words || `Request failed: ${res.status}`);
+        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true });
+        throw error;
     }
     return await res.json();
 }
@@ -6725,11 +6732,12 @@ export async function approveGroupMemberApi(groupId: string, memberPubkey: strin
 }
 
 export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
+    // With the status: a refusal (403) is said in the node's words (utils/group-invite-send.ts).
     return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
         memberPubkey,
         role,
         action: 'invite'
-    });
+    }, { withStatus: true });
 }
 
 export async function setGroupMemberRoleApi(groupId: string, memberPubkey: string, role: GroupRole): Promise<any> {

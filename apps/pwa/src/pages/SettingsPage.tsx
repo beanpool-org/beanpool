@@ -17,7 +17,7 @@ import {
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getFriends, removeFriendApi,
-    getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
+    getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
@@ -130,7 +130,7 @@ function LanguageRow() {
                 aria-label={t('Language')}
                 value={value}
                 onChange={(e) => { if (isLang(e.target.value)) void choose(e.target.value); }}
-                className="mt-3 w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-[15px] text-nature-900 dark:text-white cursor-pointer"
+                className="mt-3 w-full min-h-[48px] px-3 rounded-xl border border-border-input bg-nature-50 dark:bg-nature-800 text-[15px] text-nature-900 dark:text-white cursor-pointer"
             >
                 {LANGS.map((l) => <option key={l} value={l} lang={l}>{LANGUAGE_NAMES[l]}</option>)}
             </select>
@@ -595,6 +595,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         });
     };
 
+    // Members never pick the node address (Marty, card signin-two-names, 15 Oct: "Keep refusing, hide the setting"): the
+    // account-move QR (#1983) refuses a second address, so an address the phone doesn't know would strand them. The editor
+    // is a development build's; a browser that already has one stored says which and can reset it.
+    const showNodeUrlEditor = import.meta.env.DEV;
+    const [storedNodeUrl] = useState(() => getStoredNodeApiUrl());
     const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
     const [testingNode, setTestingNode] = useState(false);
     const [nodeTestResult, setNodeTestResult] = useState<{ ok: boolean; callsign?: string; latencyMs?: number; error?: string } | null>(null);
@@ -1765,9 +1770,29 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             Manage referral connections and client-side database/state cache sync.
                         </p>
 
-                        {/* Node Connection */}
+                        {/* Node Connection: the editor in a development build; a stored address said, with Reset, in any build */}
+                        {(showNodeUrlEditor || storedNodeUrl) && (
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
+                            {showNodeUrlEditor ? (
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
+                            ) : (
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">{t('Community address')}</h4>
+                            )}
+                            {storedNodeUrl && (
+                                <div className="mb-3">
+                                    <p className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed mb-2 mt-0 break-words">
+                                        {t('This browser is set to use the community at {address}.', { address: storedNodeUrl })}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleResetNodeUrl}
+                                        className="w-full py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 border-none cursor-pointer"
+                                    >
+                                        {t('Reset to this page’s community')}
+                                    </button>
+                                </div>
+                            )}
+                            {showNodeUrlEditor && (<>
                             <input
                                 type="text"
                                 value={customNodeUrl}
@@ -1796,7 +1821,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     💾 Save & Connect
                                 </button>
                             </div>
+                            </>)}
                         </div>
+                        )}
 
                         {/* Private Key Reveal */}
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">

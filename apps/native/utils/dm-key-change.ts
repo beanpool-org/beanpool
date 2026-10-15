@@ -11,10 +11,14 @@
 import { t, word, formatDate } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
 
-/** The name as the banner says it: the node's callsign, or "this person" while it is unknown. */
-function nameOf(peerName?: string | null): string {
+/**
+ * The name as the banner says it: the node's callsign, or null while it is unknown. Each sentence then has a whole twin
+ * for the unknown name ("this chat", "the other person", "them"), never an English word pasted into a translated one
+ * (15 Oct words design, D4).
+ */
+function nameOf(peerName?: string | null): string | null {
     const n = peerName?.trim();
-    return n && n !== 'Loading...' ? n : 'this person';
+    return n && n !== 'Loading...' ? n : null;
 }
 
 /** "3 Oct 2026" (in en) for an ISO date, or null for anything that isn't one. */
@@ -43,6 +47,11 @@ export interface DmKeyChangeCopyInput {
     afterReset?: boolean;
     /** The date the node says the account was re-keyed (slice 3), when it says so. */
     rekeyedAt?: string;
+    /**
+     * First sight found lines it couldn't place (rule 5; 15 Oct words design, D1): `code` is the key the listing names,
+     * and Continue keeps the lines that didn't open as they are, so the body says so.
+     */
+    unplaced?: boolean;
 }
 
 export interface DmKeyChangeCopy {
@@ -64,32 +73,47 @@ export const DM_RESET_LEAD = word("This community's chat memory was reset, so th
 
 const LEADS = { firstSight: DM_FIRST_SIGHT_LEAD, reset: DM_RESET_LEAD } as const;
 
-/** The banner's words. */
-export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt }: DmKeyChangeCopyInput): DmKeyChangeCopy {
+/** The banner's words. Every sentence is whole, with a twin for when the name is unknown (D4). */
+export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt, unplaced }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
-    const title = t('The key behind "{name}" changed.', { name });
+    const title = name ? t('The key behind "{name}" changed.', { name }) : t('The key behind this chat changed.');
     const on = rekeyedOnText(rekeyedAt);
     const dateLine = on ? t('This community says the account was re-keyed on {on}.', { on }) : null;
     if (!code) {
+        // A pause offering no key, or a rule-5 record whose listing names no single key: several, or none (D2 (c)). It
+        // promises nothing about when it lifts.
         return {
             title,
-            body: t('This community now lists more than one other key in this chat, so there is no one key to continue with. Nothing will be sent here. To keep talking with {name}, start a new chat with them.', { name }),
+            body: name
+                ? t("This community doesn't list a single key for {name} in this chat, so there is no key to continue with. Nothing will be sent here. Check with {name} in person or on a call.", { name })
+                : t("This community doesn't list a single key for the other person in this chat, so there is no key to continue with. Nothing will be sent here. Check with them in person or on a call."),
             dateLine, confirm: null, continueLabel: null, notNowLabel: t('Not now'),
         };
     }
     // The first-sight case opens with the amendment's sentence, worded so it is true after an update too (P17), not only
     // after a restore. Each sentence is translated whole; the lead and the rest are joined with one space.
     const said: string[] = [];
-    if (firstSight) {
+    if (unplaced) {
+        // Rule 5 with one listed key (D1 (b)): no lead, since no key was placed; what stays unopened is said before Continue.
+        said.push(name
+            ? t("This phone can't match this chat to one key. What you can read here may not be from {name}, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for {name}. Check with {name} first, in person or on a call: their key code should be", { name })
+            : t("This phone can't match this chat to one key. What you can read here may not be from the other person, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for them. Check with them first, in person or on a call: their key code should be"));
+    } else if (firstSight) {
         if (afterReset) said.push(t(LEADS.reset));
         else said.push(t(LEADS.firstSight));
-        said.push(t('The earlier messages here came from a different key than the one this community now gives for {name}. Anything you send now would go to the new key. Check with {name} first, in person or on a call: their key code should be', { name }));
+        said.push(name
+            ? t('The earlier messages here came from a different key than the one this community now gives for {name}. Anything you send now would go to the new key. Check with {name} first, in person or on a call: their key code should be', { name })
+            : t('The earlier messages here came from a different key than the one this community now gives for the other person. Anything you send now would go to the new key. Check with them first, in person or on a call: their key code should be'));
     } else {
-        said.push(t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name }));
+        said.push(name
+            ? t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name })
+            : t('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be'));
     }
     return {
         title, body: said.join(' '), dateLine,
-        confirm: t('I checked with {name}: the key code in their Settings matches this one.', { name }),
+        confirm: name
+            ? t('I checked with {name}: the key code in their Settings matches this one.', { name })
+            : t('I checked with them: the key code in their Settings matches this one.'),
         continueLabel: t('Continue with the new key'),
         notNowLabel: t('Not now'),
     };

@@ -37,6 +37,12 @@ export function getNodeApiUrl(): string {
     return ''; // Same-origin fallback
 }
 
+/** The address set on this browser (bp_node_url), not a build's VITE_BEANPOOL_NODE_URL: only this one can be reset here. */
+export function getStoredNodeApiUrl(): string | null {
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('bp_node_url') : null;
+    return stored && stored.trim() ? stored.trim().replace(/\/+$/, '') : null;
+}
+
 export function setNodeApiUrl(url: string | null): void {
     if (typeof localStorage === 'undefined') return;
     if (url && url.trim()) {

@@ -120,6 +120,38 @@ describe('the chain of releases', () => {
         expect(chain.problems.map(p => [p.label, p.reason])).toEqual([['vault-v1.2.1', 'not signed by the custodians of the release before it']]);
     });
 
+    it('a re-root (reshare rotation design §2.5): one image released twice, as H in the genesis chain naming the new custodians, and as R0, the first release of theirs; each root walks its own chain and lists the other\'s releases as problems, never a fork', () => {
+        const n = keys3();
+        const g0 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: root, signers: [root[0], root[1]] });
+        const image = randomImage();
+        const apiBundleHash = crypto.randomBytes(32).toString('hex');
+        const h = makeRelease({ version: '1.1.0', previous: g0, custodianKeys: n, signers: [root[0], root[2]], image, apiBundleHash });
+        const r0 = makeRelease({ version: '1.1.0', previous: null, custodianKeys: n, signers: [n[0], n[1]], image, apiBundleHash, label: 'vault-v1.1.0-root' });
+        expect(r0.manifest.imageHash).toBe(h.manifest.imageHash);
+        const feed = [g0, h, r0];
+
+        // Today's image, rooted at the genesis keys: …→ H, the same image as R0, which it doesn't take.
+        const fromG = resolveChain(feed, rootKeys);
+        expect(fromG.releases.map(r => r.hash)).toEqual([g0.hash, h.hash]);
+        expect(fromG.newest?.manifest.custodianKeys).toEqual(n.map(k => k.publicKey));
+        expect(fromG.stopped).toBeNull();
+        expect(fromG.problems.map(p => p.label)).toEqual(['vault-v1.1.0-root']);
+
+        // The new image, rooted at the new custodians: R0 alone; the genesis release and H are not its.
+        const fromN = resolveChain(feed, n.map(k => k.publicKey));
+        expect(fromN.releases.map(r => r.hash)).toEqual([r0.hash]);
+        expect(fromN.newest?.manifest.imageHash).toBe(h.manifest.imageHash);
+        expect(fromN.stopped).toBeNull();
+        expect(fromN.problems.map(p => p.label).sort()).toEqual(['vault-v1.0.0', 'vault-v1.1.0']);
+
+        // From then on the genesis keys sign nothing the new root takes: not a release after R0, not a second root.
+        const byG = makeRelease({ version: '1.2.0', previous: r0, custodianKeys: root, signers: [root[0], root[1]] });
+        const otherRoot = makeRelease({ version: '1.0.1', previous: null, custodianKeys: root, signers: [root[0], root[1]], label: 'vault-v1.0.1-g' });
+        const after = resolveChain([...feed, byG, otherRoot], n.map(k => k.publicKey));
+        expect(after).toMatchObject({ newest: { hash: r0.hash }, stopped: null });
+        expect(after.problems.map(p => p.label)).toEqual(expect.arrayContaining(['vault-v1.2.0', 'vault-v1.0.1-g']));
+    });
+
     it('two releases signed as the next after one (a fork): nothing after it is trusted', () => {
         const r1 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: root, signers: root });
         const a = makeRelease({ version: '1.1.0', previous: r1, custodianKeys: root, signers: root, label: 'vault-v1.1.0-a' });

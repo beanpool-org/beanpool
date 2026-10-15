@@ -32,8 +32,9 @@ import { isVaultKeyHex, vaultB64, vaultDepositKeyId, vaultUnb64 } from '@beanpoo
  *
  *   "BVDK" | u8 1 | u32 generation | K_index 32 | K_disk 32 | K_backup 32
  *   | u8 n | n × (u32 wrap version | K_wrap 32)     the first is current; a second is kept while a reshare re-wraps
- *   | u8 n | n × Ed25519 ticket seed 32             the first signs; the apps have room for two (design §1.1)
- *   | u8 n | n × X25519 deposit secret 32           the first is current; boxes name theirs by key id
+ *   | u8 n | n × Ed25519 ticket seed 32             the first signs; a reshare makes a new one in place of the old
+ *   | u8 n | n × X25519 deposit secret 32           the first is current; a reshare puts a new one first and keeps the
+ *                                                   old ones, since boxes name theirs by key id
  */
 
 export const STATE_FILE = 'state.json';
@@ -298,6 +299,28 @@ export interface PendingStateFile {
     shareChecks: string[];
     /** The new custodians who have shown they hold their share. */
     confirmed: string[];
+    /**
+     * The new state's public keys, newest first: what global's door, the registrar and the app list before the switch.
+     * Kept here because they outlive a restart, when the new keys themselves are no longer in memory. Null in a file
+     * written by a keyholder from before they were kept: that file must still start the keyholder, or a ceremony left
+     * waiting across an image update would keep the vault down until a wipe.
+     */
+    publicKeys: PendingPublicKeys | null;
+}
+
+export interface PendingPublicKeys {
+    ticket: string[];
+    deposit: { kid: string; key: string }[];
+}
+
+function asPendingPublicKeys(value: unknown): PendingPublicKeys | null {
+    const k = value as Partial<PendingPublicKeys> | null;
+    if (!k || typeof k !== 'object' || !Array.isArray(k.ticket) || !k.ticket.length || !k.ticket.every(isVaultKeyHex)
+        || !Array.isArray(k.deposit) || !k.deposit.length
+        || !k.deposit.every(d => !!d && typeof d === 'object' && typeof d.kid === 'string' && typeof d.key === 'string')) {
+        return null;
+    }
+    return { ticket: [...k.ticket], deposit: k.deposit.map(d => ({ kid: d.kid, key: d.key })) };
 }
 
 export function readPendingFile(dir: string): PendingStateFile | null {
@@ -305,12 +328,13 @@ export function readPendingFile(dir: string): PendingStateFile | null {
     if (!existsSync(file)) return null;
     const p = JSON.parse(readFileSync(file, 'utf8')) as Partial<PendingStateFile> | null;
     const state = asStateFile(p?.state);
-    if (!p || p.v !== 1 || (p.purpose !== 'genesis' && p.purpose !== 'reshare') || !state
+    const publicKeys = p?.publicKeys === undefined ? null : asPendingPublicKeys(p.publicKeys);
+    if (!p || p.v !== 1 || (p.publicKeys !== undefined && !publicKeys) ||(p.purpose !== 'genesis' && p.purpose !== 'reshare') || !state
         || !Array.isArray(p.shareChecks) || p.shareChecks.length !== state.custodians.length || !p.shareChecks.every(c => typeof c === 'string')
         || !Array.isArray(p.confirmed) || !p.confirmed.every(c => state.custodians.includes(c))) {
         throw new Error(`${file} is not a pending vault state.`);
     }
-    return { v: 1, purpose: p.purpose, state, shareChecks: [...p.shareChecks], confirmed: [...new Set(p.confirmed)] };
+    return { v: 1, purpose: p.purpose, state, shareChecks: [...p.shareChecks], confirmed: [...new Set(p.confirmed)], publicKeys };
 }
 
 export function writePendingFile(dir: string, pending: PendingStateFile): void {

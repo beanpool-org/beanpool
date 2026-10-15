@@ -20,6 +20,11 @@
  *     Another member's line, and a hex run that is no one's key, are exactly as they were. Their DM photos' stored objects are gone; the other
  *     member's are there, rows and all. Their picture is gone from the row, from the avatar route (404), and from the
  *     route's memory.
+ *  7. A save of the schedule (or a start) does not push the next scheduled snapshot back: it is due one interval after
+ *     the newest scheduled one, not one interval after the save. So an interval of 336 hours (14 days) leaves no hour
+ *     with none: the next one comes as the newest ages out, and saving the same values again, or a higher keep, moves
+ *     nothing. One already due is taken at once; with none, the first comes one interval on (the deciding review of
+ *     #1992, NB 1).
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-data-retention.ts
@@ -156,11 +161,12 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the snapshot settings (owner only)
     // are changed under an owner's key session.
-    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
-    const asOwner = ownerSessionHeaders();
-    const setConfig = async (body: Record<string, unknown>) => {
+    const { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+    const ownerKey = seedOwnerForTests('retentionOwner');
+    const asOwner = ownerSessionHeaders(ownerKey);
+    const setConfig = async (body: Record<string, unknown>, headers: Record<string, string> = asOwner) => {
         const res = await fetch(`${base}/api/local/admin/snapshots/config`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner },
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(body),
         });
         return { status: res.status, body: await res.json().catch(() => ({})) as any };
@@ -173,7 +179,11 @@ async function main() {
         assert(snap.getAutoSnapshotConfig().keep === 7, `and the schedule still keeps 7 (${snap.getAutoSnapshotConfig().keep})`);
         const fourteen = await setConfig({ keep: 14 });
         assert(fourteen.status === 200 && fourteen.body?.config?.keep === 14, `it takes 14 (${fourteen.status} ${j(fourteen.body)})`);
-        const seven = await setConfig({ keep: 7 });
+        // Keeping fewer asks the owner's fresh proof (#1984 confirmation N-2): a computer's session is sent to the phone.
+        const sevenComputer = await setConfig({ keep: 7 });
+        assert(sevenComputer.status === 403 && sevenComputer.body?.code === 'phone_required' && snap.getAutoSnapshotConfig().keep === 14,
+            `fewer (7) from a computer's session: sent to the phone, still 14 (${sevenComputer.status} ${j(sevenComputer.body)})`);
+        const seven = await setConfig({ keep: 7 }, ownerPhoneSessionHeaders(ownerKey));
         assert(seven.status === 200 && seven.body?.config?.keep === 7, `and 7, the default (${seven.status} ${j(seven.body)})`);
     } finally {
         server.close();
@@ -368,6 +378,68 @@ async function main() {
         try { p = JSON.parse(l?.metadata ?? 'null'); } catch { /* checked below */ }
         assert(p && j(p) === j({ who: 'a deleted member', nested: { list: ['x', 'a deleted member wrote'], n: 12, ok: true } }) && l?.message === '[Offboard] Looked at a deleted member',
             `a real name is still scrubbed, in strings only, and the metadata stays JSON (${l?.metadata})`);
+    }
+
+    // ── 7. A save does not push the next scheduled snapshot back ──────────────────────────────────
+    console.log('\n— 7. the next scheduled snapshot, after a save —');
+    {
+        const HOUR = 3_600_000;
+        const MAX_AGE_MS: number = (snap as any).SNAPSHOT_MAX_AGE_MS ?? 14 * DAY;
+        const removeScheduled = () => {
+            for (const s of snap.listSnapshots().filter((x) => !x.manual)) {
+                const full = path.join(snap.SNAPSHOTS_DIR, s.name);
+                fs.rmSync(snap.snapshotImagesDir(full), { recursive: true, force: true });
+                fs.rmSync(full, { force: true });
+            }
+        };
+        /**
+         * When the timers this change arms would take the next snapshot, from now: the soonest of those it arms. Recorded,
+         * never run (a real one in their place that does nothing), so nobody waits and no snapshot is taken here.
+         */
+        const nextSnapshotAfter = (change: () => void): number | null => {
+            const realTimeout = globalThis.setTimeout;
+            const realInterval = globalThis.setInterval;
+            const due: number[] = [];
+            const inert = () => { const t = realTimeout(() => {}, 2 ** 31 - 1); t.unref?.(); return t; };
+            (globalThis as any).setTimeout = (_fn: () => void, ms = 0) => { due.push(Date.now() + ms); return inert(); };
+            (globalThis as any).setInterval = (_fn: () => void, ms = 0) => { due.push(Date.now() + ms); return inert(); };
+            try { change(); } finally {
+                globalThis.setTimeout = realTimeout;
+                globalThis.setInterval = realInterval;
+            }
+            return due.length ? Math.min(...due) : null;
+        };
+        const hours = (ms: number) => (ms / HOUR).toFixed(2);
+        assert(snap.armedSnapshotInterval() !== null, `the main server runs its timer (${j(snap.armedSnapshotInterval())})`);
+        snap.updateAutoSnapshotConfig({ enabled: true, intervalHours: 24, keep: 7 });
+        removeScheduled();
+        const newest = fakeSnapshot('snapshot-2026-10-14T02-00-00.db', 23 * HOUR);
+        const newestAt = fs.statSync(newest.db).mtimeMs;
+
+        // 24 h to 336 h: the next one is due 336 h after the newest (313 h from now), as the newest ages out, not 336 h from now.
+        const saved = Date.now();
+        const longer = nextSnapshotAfter(() => snap.updateAutoSnapshotConfig({ intervalHours: 336 }));
+        const gap = longer === null ? null : longer - (newestAt + MAX_AGE_MS);
+        assert(longer !== null && Math.abs(longer - (newestAt + 336 * HOUR)) < 60_000,
+            `interval 24 h → 336 h, the newest taken 23 h ago: the next is due 336 h after it, ${longer === null ? 'none' : hours(longer - saved)} h from the save (not 336.00)`);
+        assert(gap !== null && gap <= 60_000, `so no hour passes with none kept: the next comes ${gap === null ? '-' : hours(gap)} h after the newest ages out (at most 0.02)`);
+        const again = nextSnapshotAfter(() => snap.updateAutoSnapshotConfig({ intervalHours: 336, keep: 7 }));
+        assert(again !== null && Math.abs(again - (newestAt + 336 * HOUR)) < 60_000, `the same values saved again move nothing (${again === null ? 'none' : hours(again - Date.now())} h from now)`);
+        const moreKept = nextSnapshotAfter(() => snap.updateAutoSnapshotConfig({ keep: 8 }));
+        assert(moreKept !== null && Math.abs(moreKept - (newestAt + 336 * HOUR)) < 60_000, `nor does a higher keep (${moreKept === null ? 'none' : hours(moreKept - Date.now())} h from now)`);
+        const restarted = nextSnapshotAfter(() => snap.restartScheduler());
+        assert(restarted !== null && Math.abs(restarted - (newestAt + 336 * HOUR)) < 60_000, `nor does a start (${restarted === null ? 'none' : hours(restarted - Date.now())} h from now)`);
+
+        // Due already: 24 h, the newest 30 h old, is taken at once. With none, the first comes one interval on.
+        snap.updateAutoSnapshotConfig({ intervalHours: 336, keep: 7 });
+        removeScheduled();
+        fakeSnapshot('snapshot-2026-10-14T03-00-00.db', 30 * HOUR);
+        const overdue = nextSnapshotAfter(() => snap.updateAutoSnapshotConfig({ intervalHours: 24 }));
+        assert(overdue !== null && overdue - Date.now() <= 1000, `interval 24 h, the newest 30 h old: the next is taken at once (${overdue === null ? 'none' : hours(overdue - Date.now())} h from now)`);
+        removeScheduled();
+        const fresh = nextSnapshotAfter(() => snap.restartScheduler());
+        assert(fresh !== null && Math.abs(fresh - (Date.now() + 24 * HOUR)) < 60_000, `with no scheduled snapshot, the first comes one interval on (${fresh === null ? 'none' : hours(fresh - Date.now())} h)`);
+        snap.restartScheduler();
     }
 
     console.log(`\n${passed}/${run} passed`);

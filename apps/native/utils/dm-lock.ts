@@ -69,9 +69,10 @@ export function dmKeyChangedLine(peerName?: string | null): string {
  * amendment): no key is pinned, nothing is offered, so there is no Continue. It names no key. It never says the chat
  * reads as theirs: on a restored phone whose node served PUPPET's lines first (P23b, twin-first T2) the only lines that
  * read are the listed key's, and the person's own history is the part that "couldn't be verified" (#1872 handover 4).
- * A new chat is the first-sight path, where no code is shown, so the line says to check with them first (amendment 4 §3).
+ * What to do is on the banner above it (15 Oct words design, D1/D2): the listed key's code and Continue, or Not now only.
+ * It never says "start a new chat": the server answers a new chat with the same person with this same chat.
  */
-export const DM_UNPLACED_LINE = word("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. Check with them in person or on a call, then start a new chat.");
+export const DM_UNPLACED_LINE = word("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them.");
 
 /**
  * The fixed line drawn in the slot of a DM line that opens only under the key offered in the pinned one's place (design

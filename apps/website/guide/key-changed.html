@@ -58,7 +58,7 @@
         <h2>What it means</h2>
         <p>Every message between two people is locked so that only the other person's phone can open it. It is locked to their <strong>key</strong>, not to their name. Your phone remembers which key it has been locking your chat to.</p>
         <p>If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see <strong>The key behind &quot;Ben&quot; changed.</strong> The message box is greyed out and says sending is paused.</p>
-        <p>Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as <strong>couldn't be verified</strong> until you decide.</p>
+        <p>Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, messages from the new key read <strong>Sent from the new key. Shown after you continue.</strong> until you decide.</p>
         <p>This is on the phone app. The web app doesn't remember keys yet.</p>
         <h2>Why it can happen</h2>
         <ul>
@@ -78,16 +78,23 @@
         <p>The code isn't secret. It's safe to read out.</p>
         <h2>If the code doesn't match, or you can't check</h2>
         <p>Tap <strong>Not now</strong>. Nothing is sent and nothing changes. You can come back to the chat later.</p>
-        <p>A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat.</p>
+        <p>A paused chat may stay paused until you continue. There is no other way to keep talking in it: your community keeps one chat for the two of you, so starting a new chat with the same person opens this same chat.</p>
         <p>If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.</p>
         <h2>If the banner offers no key to continue with</h2>
-        <p>Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers <strong>Not now</strong>.</p>
-        <p>To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it.</p>
+        <p>Sometimes the community doesn't list a single key for the person in a chat between two people: it lists several, or none. There is then no key to continue with, so the banner says so and offers only <strong>Not now</strong>. Nothing is sent. Talk to the person in person or on a call. Your phone checks the chat again by itself when the community's list changes, and a new chat with the same person is this same chat.</p>
         <h2>If the banner says your phone is checking the chat from the start</h2>
-        <p>After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with <strong>This phone is checking this chat from the start, as it does after you restore it or update the app.</strong> Check the code with the person as above.</p>
-        <h2>If the message box says your phone can't match the chat to one key</h2>
-        <p>Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says <strong>This phone can't match this chat to one key, so sending is off.</strong> There is nothing to continue with.</p>
-        <p>Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as <strong>couldn't be verified</strong>. To keep talking, start a new chat with them, and talk to them in person or on a call first.</p>
+        <p>After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with <strong>This phone is checking this chat from the start, as it does after you restore it or update the app.</strong> Check the code with the person as above. After you reset the community's chat memory it starts with <strong>This community's chat memory was reset, so this phone is checking this chat from the start.</strong> instead.</p>
+        <h2>Chat memory</h2>
+        <p>Your phone keeps a small memory for each community: which key each of your chats is with, and which chats are private. It is kept on the phone, and the community's server can't move a chat to another key by itself: only you can, on the banner. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.</p>
+        <p>You can reset it for one community: open <strong>Settings</strong>, tap <strong>Chat memory</strong> under <strong>Account &amp; identity</strong>, tap <strong>Reset</strong> next to the community, read the warning, and tap <strong>Reset</strong> again. The app points you here only when it says it couldn't read that memory and trying again didn't help.</p>
+        <p>After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with <strong>This community's chat memory was reset, so this phone is checking this chat from the start.</strong> Check the code with the person as above.</p>
+        <p>Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.</p>
+        <p>A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above).</p>
+        <p>This is on the phone app. The web app has no chat memory.</p>
+        <h2>If the banner says your phone can't match the chat to one key</h2>
+        <p>Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Above the message box it says <strong>This phone can't match this chat to one key, so sending is off.</strong> and the banner shows the code of the key your community now lists for the person.</p>
+        <p>Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that read <strong>This message couldn't be verified, so it isn't shown.</strong> Those stay that way, even after you continue.</p>
+        <p>Check the code with the person as above, in person or on a call. If it matches, tick the box and tap <strong>Continue with the new key</strong>: from then on your messages go to that key. If it doesn't match, or you can't check, tap <strong>Not now</strong>. A new chat with the same person is this same chat, so there is nothing else to try. If the community lists no single key for them, the banner offers only <strong>Not now</strong>, and your phone checks the chat again by itself when the community's list changes.</p>
         <h2>What your phone can check, and what it can't</h2>
         <p>Your phone checks a chat against the messages it already holds. A restored phone, or an existing phone at the update, is steered only by a server that holds back or surrounds the oldest part of the chat in what it sends. A phone that already held that oldest part is steered by nothing the server sends after the update.</p>
         <p>So a phone you have just restored, or just updated, can be misled about a chat's key. A banner can't rule that out. <strong>Confirm a changed key in person</strong>, or on a call where you know it's them.</p>
@@ -99,7 +106,7 @@
             <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, how to keep them safe, and adding a sign-in as a second way back.</span></a></li>
             <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 134.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 135.</p>
     </main>
 </body>
 </html>

@@ -100,6 +100,12 @@ import { VaultWatcher } from './watch.js';
  * Key files are sealed under a passphrase (keyfile.ts), asked for on the terminal, or taken from
  * VAULT_CUSTODIAN_PASSPHRASE. Every flag a command needs is checked, and every file it reads is read, before anything is
  * sent. New shares are written under --out first, and only then is this custodian's own share confirmed.
+ *
+ * `fetch-share` saves your new share AND confirms it, at once: after a reshare, the second new custodian's
+ * `fetch-share` is the switch, and from then on the new ticket key alone signs. So the new ticket key must be in global's
+ * .env and the registrar before any new custodian runs it: take the lines `reshare` prints (or `/v1/report`'s
+ * `pending`). To save a share without confirming, take the sealed file the retiring custodian's `reshare --out` wrote
+ * for you (it is sealed to your key) and run `confirm --share <file>` once the keys are listed.
  */
 
 const FEED_FLAGS = ['--feed', '--feed-dir', '--root-keys'];
@@ -290,6 +296,38 @@ function print(result: CustodianCall): void {
     delete rest.custodianShares;
     delete rest.share;
     console.log(result.status, JSON.stringify(rest));
+}
+
+/**
+ * After a reshare, or a new custodian's fetch of their share while it waits: the lines to paste so the pins list the
+ * new keys before the switch (reshare rotation design §2.4). The new ticket key first, then the one in force (from the
+ * public report, read before this custodian confirms), which signs until two new custodians confirm and must stay
+ * listed until every app build has the new one. None for a genesis: there is no key in force to keep. `fetch-share`
+ * confirms straight after, so its header says the lines are to have been listed already.
+ */
+async function pinLines(url: string, answer: Record<string, unknown>, command: 'reshare' | 'fetch-share'): Promise<string[]> {
+    const pending = answer.pending as { purpose?: string; publicKeys?: { ticket: string[]; deposit: { key: string }[] } | null } | null;
+    const waiting = pending?.purpose === 'reshare' ? pending.publicKeys : undefined;
+    if (!waiting) return [];
+    let inForce: string | null = null;
+    try {
+        const res = await fetch(`${url.replace(/\/$/, '')}/v1/report`);
+        const ticketKey = ((await res.json()) as { ticketKey?: unknown }).ticketKey;
+        if (res.ok && isVaultKeyHex(ticketKey) && !waiting.ticket.includes(ticketKey)) inForce = ticketKey;
+    } catch {
+        // Said below: the key in force is to be added by hand.
+    }
+    return [
+        '',
+        command === 'reshare'
+            ? 'The new keys. List the ticket keys in global\'s .env and the registrar now, before any new custodian runs fetch-share: fetch-share also confirms, and the second new custodian\'s confirmation is the switch. The app build after the switch takes the new deposit key.'
+            : 'The new keys, which global\'s .env and the registrar had to list before this: your share is confirmed above, and the second new custodian\'s confirmation is the switch. The app build after the switch takes the new deposit key.',
+        `BEANPOOL_VAULT_TICKET_KEYS=${[...waiting.ticket, ...(inForce ? [inForce] : [])].join(',')}`,
+        `EXPO_PUBLIC_BEANPOOL_VAULT_DEPOSIT_KEYS=${waiting.deposit[0].key}`,
+        inForce
+            ? 'The old ticket key (the second) stops signing at the switch; keep it listed until every app build has the new one.'
+            : 'The ticket key in force could not be read from the report: add it after the new one by hand, and keep it listed until every app build has the new one.',
+    ];
 }
 
 function keyList(text: string, what: string): string[] {
@@ -563,6 +601,7 @@ async function main(): Promise<void> {
     const opts: CallOptions = {
         trust, acceptRelease: arg('--accept-release'), acceptNoHardwareProof: flag('--no-hardware-proof'),
         confirm: async warning => confirmYes(`\n${warning}`),
+        confirmRestore: async r => confirmYes(`\nThis vault is waiting to finish a restore from backup ${r.backup ?? '(unnamed)'}, named by custodian key ${r.by ?? '(not recorded)'}. Your share makes that backup's keys the vault's. Is that the backup you agreed on?`),
     };
     if (trust) {
         // Read the releases once up front, so a broken feed stops us before the vault is contacted at all.
@@ -579,6 +618,7 @@ async function main(): Promise<void> {
 
     let result: CustodianCall;
     let confirmed: CustodianCall | null = null;
+    let pins: string[] = [];
     if (command === 'settings send') {
         const file = arg('--file') as string;
         const local = settingsHash(readSettings(file));
@@ -611,7 +651,10 @@ async function main(): Promise<void> {
         result = await presentShare(url, key, share as CustodianShare, opts);
     } else if (command === 'reshare') {
         result = await presentShare(url, key, share as CustodianShare, { ...opts, purpose: 'reshare', newCustodians });
-        if (result.status === 200 && result.body.custodianShares) confirmed = await keep(result.body.custodianShares as CustodianShare[]);
+        if (result.status === 200 && result.body.custodianShares) {
+            pins = await pinLines(url, result.body, 'reshare');
+            confirmed = await keep(result.body.custodianShares as CustodianShare[]);
+        }
     } else if (command === 'fetch-share') {
         const fetched = await fetchPendingShare(url, key);
         result = fetched.call;
@@ -619,6 +662,7 @@ async function main(): Promise<void> {
             console.error('The vault no longer has the new shares (it restarted). Use the copy you saved, or two current custodians cancel and start again.');
             process.exit(1);
         }
+        if (result.status === 200) pins = await pinLines(url, result.body, 'fetch-share');
         if (fetched.share) confirmed = await keep([fetched.share]);
     } else if (command === 'confirm') {
         result = await confirmShare(url, key, share as CustodianShare);
@@ -626,12 +670,14 @@ async function main(): Promise<void> {
         result = await cancelPending(url, key, arg('--pending') as string);
     } else {
         result = await restoreFromBackup(url, key, arg('--backup') as string, opts);
+        if (result.body.code === 'older_generation') console.error(`refused: ${String(result.body.error)}`);
     }
     print(result);
     if (confirmed) {
         process.stdout.write('confirmed: ');
         print(confirmed);
     }
+    for (const line of pins) console.log(line);
     if (result.status !== 200 || (confirmed && confirmed.status !== 200)) process.exit(1);
 }
 

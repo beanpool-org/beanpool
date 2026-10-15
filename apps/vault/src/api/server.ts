@@ -27,7 +27,15 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '@beanpool/signin';
-import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
+import {
+    BACKUP_NAME_RE,
+    backupNameFor,
+    backupTimeOf,
+    compareBackupNames,
+    parseBackupFile,
+    RESTORE_PENDING_NAME,
+    type BackupHeader,
+} from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
 import {
     parseRestartRequest,
@@ -213,13 +221,21 @@ interface KeyholderStatus {
     since: number;
     custodians: string[];
     /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
-    pending: { purpose: string; generation: number; custodians: string[]; confirmed: string[] } | null;
+    pending: {
+        purpose: string; generation: number; custodians: string[]; confirmed: string[];
+        /**
+         * The new state's public keys: listed by global's door, the registrar and the app before the switch. Null for
+         * one left waiting by a keyholder from before they were kept.
+         */
+        publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] } | null;
+    } | null;
     /** The genesis or reshare that switched at this boot: who has shown they hold their new share (in memory only). */
     switched: { generation: number; custodians: string[]; confirmed: string[] } | null;
     generation: number | null;
     platform: string;
     releaseHash: string;
-    restorePending: boolean;
+    /** A restore from backup taken and not finished: the backup, and the custodian key that named it. */
+    restorePending: { backup: string | null; by: string | null } | null;
     publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] } | null;
     wrapVersion: number | null;
     /** The keyholder's memory hygiene (hygiene.ts): what V3's image got wrong shows here and in the report. */
@@ -490,7 +506,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch {
             return {
                 state: 'locked', since: startedAt, custodians: [], pending: null, switched: null, generation: null, platform: 'none', releaseHash: 'unknown',
-                restorePending: false, publicKeys: null, wrapVersion: null, memory: null, reachable: false,
+                restorePending: null, publicKeys: null, wrapVersion: null, memory: null, reachable: false,
             };
         }
     }
@@ -1137,6 +1153,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             pushes: { sent: push.sent, failed: push.failed },
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
+            // A reshare waiting for its custodians: the new ticket and deposit keys, public, for the pins to list before
+            // the switch (the old ticket key signs until then, this report included).
+            pending: status.pending ? { generation: status.pending.generation, publicKeys: status.pending.publicKeys } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
             api: about().api, update: about().update, restart: about().restart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
@@ -1247,6 +1266,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             header = parseBackupFile(bytes).header;
         } catch (e) {
             throw new HttpError(400, 'bad_backup', (e as Error).message);
+        }
+        // Never an older generation once a newer one is in the stores, whoever asks (reshare rotation design §3.1).
+        const newest = await newestReadableGeneration(header.vaultId);
+        const named = (header.state as { generation?: unknown } | null)?.generation;
+        if (newest !== null && !(typeof named === 'number' && named >= newest)) {
+            throw new HttpError(409, 'older_generation', `A newer generation of this vault's keys exists in the stores (gen ${newest}): restore a backup of that generation.`, { generation: newest });
         }
         // Off the data partition's mount point (restoreDir): the unlock mounts the partition, which would hide it.
         mkdirSync(restoreDir, { recursive: true, mode: 0o700 });
@@ -1667,7 +1692,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const map: Record<string, number> = {
                 locked: 503, bad_request: 400, unknown_custodian: 403, bad_signature: 403, bad_share: 400, bad_box: 400,
                 bad_backup: 400, already_set_up: 409, open: 409, fresh: 409, proposal_mismatch: 409, no_custodians: 409,
-                no_pending: 404, bad_confirmation: 400, restore_pending: 409,
+                no_pending: 404, bad_confirmation: 400, restore_pending: 409, keys_unknown: 409,
             };
             const status = map[e.code] ?? 500;
             if (status === 500) counters.counts.errors++;
@@ -1707,8 +1732,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * a later reshare retired, and its state unlocks with their shares, so neither their own keys nor a custodian the
      * reshare kept may start it. A newer file this can't read might be that newest backup, so it refuses (the image's
      * pinned genesis keys still start the restore). This is about the keys a request is signed by: the pinned genesis
-     * keys, the rebuild keys, start a restore of any generation (README "Rebuild keys"), and the newest backup is the
-     * newest the stores list, so someone who can remove files from a store can make an older one the newest.
+     * keys, the rebuild keys, start a restore without being listed, but for every key the restore route refuses a
+     * generation older than the newest the stores can read ({@link newestReadableGeneration}; reshare rotation design
+     * §3.1), and the newest backup is the newest the stores list, so someone who can remove files from a store can make
+     * an older one the newest.
      * Never a key the backup doesn't list: the keyholder's `adoptState` checks the list again on the very state it
      * adopts, with the key's signature over the restore statement for this boot and that name.
      *
@@ -1736,14 +1763,14 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             return Array.isArray(custodians) && custodians.includes(key);
         };
         try {
-            const named = parseBackupFile(await readBackup(name)).header;
+            const named = await namedHeader(name);
             if (!lists(named.state)) return false;
             const listing = await backupListing();
             for (const n of listing.names.filter(n => compareBackupNames(n, name as string) > 0).reverse()) {
                 let unreadable = false;
                 for (const holder of listing.holders(n)) {
                     try {
-                        const header = parseBackupFile(await holder.get(n)).header;
+                        const header = await headerIn(holder, n);
                         // And of the newest backup's generation: an older generation's state unlocks with its own
                         // custodians' shares, retired ones included, so a re-appointed custodian would let them in.
                         if (header.vaultId === named.vaultId) return lists(header.state) && generationOf(header.state) === generationOf(named.state);
@@ -1757,6 +1784,68 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * A backup's header as one store holds it, parsed once per name for this boot (review N2): a refused hello, or a
+     * restore's generation check, then costs no more whole-file reads. Only a header that parsed is kept: a file that
+     * didn't, or couldn't be fetched, is read again next time (a good copy may have been put back).
+     */
+    const headers = new Map<BackupStore, Map<string, BackupHeader>>();
+    async function headerIn(holder: BackupStore, name: string): Promise<BackupHeader> {
+        let byName = headers.get(holder);
+        if (!byName) headers.set(holder, byName = new Map());
+        const known = byName.get(name);
+        if (known) return known;
+        const header = parseBackupFile(await holder.get(name)).header;
+        byName.set(name, header);
+        return header;
+    }
+
+    /** The header of the backup a request names: from the vault's own store, or else the off-box one, as {@link readBackup}. */
+    async function namedHeader(name: string): Promise<BackupHeader> {
+        try {
+            return await headerIn(store, name);
+        } catch (e) {
+            if (!offsite) throw e;
+            return headerIn(offsite, name);
+        }
+    }
+
+    /**
+     * The highest generation among this vault's backups whose headers the stores can read (reshare rotation design
+     * §3.1), or null when there is none: the newest such header, since names sort by time and a generation never goes
+     * down. A restore of a lower generation is refused for every key, pinned or listed: the older state unlocks with
+     * the shares of custodians a later reshare retired. A file whose header can't be read has no generation and isn't
+     * counted, so damaging one file can't make every restore impossible (someone who can write to a store can beat the
+     * rule anyway, by adding one older file under a newer name or removing the newer files: README "Rebuild keys"). A
+     * file that can't be fetched from any store that lists it fails the check, to be tried again: it may be the newest.
+     */
+    async function newestReadableGeneration(vaultId: string): Promise<number | null> {
+        let listing: Awaited<ReturnType<typeof backupListing>>;
+        try {
+            listing = await backupListing();
+        } catch {
+            throw new HttpError(503, 'stores_unreachable', 'The backup stores could not be listed, so whether a newer generation exists is unknown. Try again.');
+        }
+        for (const name of [...listing.names].reverse()) {
+            let fetchFailed = false;
+            for (const holder of listing.holders(name)) {
+                let header: BackupHeader;
+                try {
+                    header = await headerIn(holder, name);
+                } catch (e) {
+                    if (!(e instanceof Error && /^Not a vault backup:/.test(e.message))) fetchFailed = true;
+                    continue;
+                }
+                const generation = (header.state as { generation?: unknown } | null)?.generation;
+                if (header.vaultId === vaultId && typeof generation === 'number' && Number.isSafeInteger(generation)) return generation;
+            }
+            if (fetchFailed) {
+                throw new HttpError(503, 'stores_unreachable', `The backup ${name} could not be fetched, so whether a newer generation exists is unknown. Try again.`);
+            }
+        }
+        return null;
     }
 
     async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

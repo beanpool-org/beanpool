@@ -3,6 +3,7 @@ import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { bumpMembersVersion } from './versions.js';
+import { KEY_HELD_FOR_REKEY, NODE_HAS_OWNER_SQL } from './owner-sql.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
@@ -92,6 +93,37 @@ export function isNodeOwner(pubkey: string): boolean {
 }
 
 /**
+ * Whether this member is an owner whose key waits on a re-key code (KEY_HELD_FOR_REKEY): not an owner whose role acts
+ * (isNodeOwner), but still an owner wherever a target or the node is asked "is this an owner?" (nodeHasOwner,
+ * state-engine isSoleOwner, decisions-engine's suspension through heldPrivilegedRole). Counted as one nowhere, an
+ * owner who lost their phone could be suspended with no proof and, the only one, replaced by any admin (the deciding
+ * review of #1992, BLOCKING 1 and its note 2).
+ */
+export function isOwnerWaitingOnRekey(pubkey: string): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare(
+        `SELECT 1 FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND ${KEY_HELD_FOR_REKEY}`
+    ).get(pubkey);
+}
+
+/**
+ * The owner or admin role a member holds, counting one held aside while they are suspended — a suspended
+ * co-owner is still an owner for the purpose of who may prune them. It reads the role rows whatever the member's
+ * status, so an owner whose key waits on a re-key code ({@link isOwnerWaitingOnRekey}) is one too.
+ */
+export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null {
+    const rows = db.prepare(`
+        SELECT role FROM node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+        UNION ALL
+        SELECT role FROM suspended_node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+    `).all(publicKey, publicKey) as { role: 'owner' | 'admin' }[];
+    if (rows.some(r => r.role === 'owner')) return 'owner';
+    return rows.length ? 'admin' : null;
+}
+
+/**
  * Returns whether the given pubkey has node administrative authority (NODE_ROLE_ACTS).
  * By default (`includeOwner = true`), owners have full admin authority.
  */
@@ -158,7 +190,9 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * Whether this node has an owner AT ALL — the one question the owner-bootstrap branch of
  * `grantNodeRole` asks. An owner role parked in `suspended_node_roles` counts: a community that
  * suspended its owner still HAS one. The role is held aside, it comes back the moment the
- * suspension lifts, and the member is still there. Genuinely ownerless means a node that never had
+ * suspension lifts, and the member is still there. So does an owner whose key waits on a re-key code
+ * (owner-sql.ts KEY_HELD_FOR_REKEY): the only owner recovering a lost phone is still the node's owner,
+ * and no admin makes themselves owner meanwhile (the deciding review of #1992, note 2). Genuinely ownerless means a node that never had
  * an owner, or whose owners were all removed outright (#1006). A visitor's row's owner role from before the visitors'
  * rule counts here the same way: it acts for nothing (NODE_ROLE_ACTS), but it would act again if that row joined, so
  * an admin's session doesn't make itself owner over it; the password still may.
@@ -176,20 +210,16 @@ export function listNodeRoles(): NodeRoleRecord[] {
  *
  * NOT the "is this the last owner?" question. Every guard that stops a node losing its last USABLE
  * owner — demotion and revocation below, `adminPruneUser`, `purgeMemberSelf`, `isSoleOwner` — goes
- * on counting ACTIVE owners only, and so does who can open a sealed backup
+ * on counting ACTIVE owners only as the owners who keep the node (`isSoleOwner` also counts its target
+ * when that owner's key waits on a re-key code, so the only owner is never taken away while recovering a
+ * phone), and so does who can open a sealed backup
  * (`services/takeover-envelope.ts`). A suspended owner cannot sign anything, so treating them as the
  * one owner still standing would let the last signing owner walk away and strand the node.
+ *
+ * The shell's claim commands read the same SQL (owner-sql.ts NODE_HAS_OWNER_SQL).
  */
 export function nodeHasOwner(): boolean {
-    const row = db.prepare(
-        `SELECT 1 FROM node_roles nr
-         JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active'
-         UNION ALL
-         SELECT 1 FROM suspended_node_roles WHERE role = 'owner'
-         LIMIT 1`
-    ).get();
-    return !!row;
+    return !!db.prepare(NODE_HAS_OWNER_SQL).get();
 }
 
 const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
@@ -352,7 +382,10 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
 
         if (role === 'owner') {
             if (!isOwner) {
-                if (ownerCount > 0) {
+                // An owner whose key waits on a re-key code is one too (owner-sql.ts KEY_HELD_FOR_REKEY): the only owner
+                // recovering a lost phone leaves no node to bootstrap.
+                if (ownerCount > 0 || db.prepare(`SELECT 1 FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
+                    WHERE nr.role = 'owner' AND ${KEY_HELD_FOR_REKEY}`).get()) {
                     throw new Error('Only an owner may grant the owner role');
                 }
                 // No ACTIVE owner. That is the bootstrap case — a fresh node whose first owner has to

@@ -39,6 +39,7 @@ import {
     unlockBind,
     verifyStatement,
     type CustodianShare,
+    type RestorePending,
     type ShareConfirmation,
     type ShareSubmission,
     type UnlockHello,
@@ -97,6 +98,7 @@ import { combineMnemonics, decodeShare, splitMasterSecret } from './slip39.js';
  * hold their share: each signs a check of its words ({@link Keyholder.confirmShare}), or two of them unlock with the
  * new shares. Until then the old state is the vault's, and every unlock uses it. Two current custodians can drop a
  * ceremony nobody finished ({@link Keyholder.cancelPending}); a genesis nobody finished is also replaced by the next.
+ * A reshare an older image left waiting switches by neither way ({@link keysUnknown}): it can only be cancelled.
  */
 
 export class KeyholderError extends Error {
@@ -167,6 +169,21 @@ const ROW_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 function fail(code: string, message: string): never {
     throw new KeyholderError(code, message);
 }
+
+/**
+ * A reshare whose file has no public keys, written by an image from before they were kept: this keyholder can't say
+ * which keys its switch would put in force, and that image kept the old ticket and deposit keys, which the retiring
+ * custodians' shares still open. Neither a confirmation nor an unlock with its new shares switches it (the switch
+ * would skip the rotation in silence); two current custodians cancel it and start again.
+ *
+ * A genesis left waiting the same way still switches, by either: there is no key in force to keep listed, and its
+ * keys are the first the vault has.
+ */
+function keysUnknown(p: PendingStateFile): boolean {
+    return p.purpose === 'reshare' && !p.publicKeys;
+}
+
+const KEYS_UNKNOWN = 'This reshare was started by an older image, whose new keys are unknown here (that image kept the old ticket and deposit keys): two current custodians cancel it and start the reshare again.';
 
 /**
  * The ceremony that switched at this boot. Its new shares, sealed to their custodians, stay fetchable until a restart:
@@ -256,6 +273,7 @@ export class Keyholder {
         return {
             id: p.id, purpose: p.file.purpose, vaultId: p.file.state.vaultId, generation: p.file.state.generation,
             custodians: [...p.file.state.custodians], confirmed: [...p.file.confirmed], sharesHeld: !!p.shares, cancels: p.cancels.size,
+            publicKeys: p.file.publicKeys && { ticket: [...p.file.publicKeys.ticket], deposit: p.file.publicKeys.deposit.map(d => ({ ...d })) },
         };
     }
 
@@ -270,8 +288,19 @@ export class Keyholder {
         return s ? { generation: s.file.state.generation, custodians: [...s.file.state.custodians], confirmed: [...s.confirmed] } : null;
     }
 
-    private get restorePending(): boolean {
-        return existsSync(path.join(this.opts.stateDir, RESTORE_PENDING_FILE));
+    /**
+     * A restore from backup this vault took and has not finished: the backup, and the custodian key that named it, for
+     * the custodians who unlock to see which file they are about to make the vault's (reshare rotation design §3.3).
+     */
+    private get restorePending(): RestorePending | null {
+        const file = path.join(this.opts.stateDir, RESTORE_PENDING_FILE);
+        if (!existsSync(file)) return null;
+        try {
+            const r = JSON.parse(readFileSync(file, 'utf8')) as { backupName?: unknown; by?: unknown };
+            return { backup: typeof r.backupName === 'string' ? r.backupName : null, by: typeof r.by === 'string' ? r.by : null };
+        } catch {
+            return { backup: null, by: null };
+        }
     }
 
     private requireOpen(): WorkingKeys {
@@ -340,6 +369,7 @@ export class Keyholder {
             releaseHash: this.opts.releaseHash ?? 'unreleased',
             platform: this.attestor.platform,
             evidence: evidence ? vaultB64(evidence) : null,
+            restore: this.restorePending,
         };
     }
 
@@ -388,6 +418,7 @@ export class Keyholder {
         const shares = mnemonics.map((words, i) => sealCustodianShare(words, file.custodians[i], file.vaultId, file.generation, i + 1));
         const record: PendingStateFile = {
             v: 1, purpose, state: file, shareChecks: mnemonics.map((words, i) => shareCheck(words, file.vaultId, file.generation, i + 1)), confirmed: [],
+            publicKeys: { ticket: keys.ticketPublicKeys, deposit: keys.depositPublicKeys },
         };
         writePendingFile(this.opts.stateDir, record);
         this.pending?.keys?.wipe();
@@ -435,6 +466,9 @@ export class Keyholder {
     /**
      * A new custodian shows they hold their share: a signed check of its words. At two, the vault switches. Kept on disk,
      * so a restart in between loses no confirmation.
+     *
+     * Not for a reshare an older image left waiting ({@link keysUnknown}): two current custodians cancel it and start
+     * again. A genesis left the same way still switches.
      */
     confirmShare(raw: unknown) {
         const c = raw as ShareConfirmation;
@@ -451,6 +485,7 @@ export class Keyholder {
         if (!p) fail('no_pending', 'No genesis or reshare is waiting.');
         const next = p.file.state;
         this.checkConfirmation(p.file, c);
+        if (keysUnknown(p.file)) fail('keys_unknown', KEYS_UNKNOWN);
         if (!p.file.confirmed.includes(c.custodian)) {
             const record = { ...p.file, confirmed: [...p.file.confirmed, c.custodian] };
             writePendingFile(this.opts.stateDir, record);
@@ -519,7 +554,7 @@ export class Keyholder {
         this.pending = null;
         const pendingFile = path.join(this.opts.stateDir, RESTORE_PENDING_FILE);
         // Which backup, before the state: a state on disk always has its backup named beside it.
-        writeFileSync(pendingFile, `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)) })}\n`, { mode: 0o600 });
+        writeFileSync(pendingFile, `${JSON.stringify({ backupName, stateHash: textHash(JSON.stringify(state)), by: custodian })}\n`, { mode: 0o600 });
         try {
             writeStateFile(this.opts.stateDir, state);
         } catch (e) {
@@ -536,7 +571,9 @@ export class Keyholder {
      * custodian, or not signed for this boot, changes nothing.
      *
      * An unlock opens the state in force; failing that, a genesis or reshare still waiting, whose new shares these may
-     * be: two new custodians unlocking with them is the other way to show they hold them, and the vault switches.
+     * be: two new custodians unlocking with them is the other way to show they hold them, and the vault switches. Not
+     * to a reshare an older image left waiting ({@link keysUnknown}): refused, with nothing written, and the vault stays
+     * locked on the state in force. A genesis left the same way still switches.
      */
     submitShare(raw: unknown) {
         const sub = raw as ShareSubmission;
@@ -627,6 +664,11 @@ export class Keyholder {
                 return { state: this.state, sharesPresent: 0, threshold, ...this.reshare(newCustodians as string[]) };
             }
             const openedNext = purpose === 'unlock' ? tryOpen(next) : null;
+            if (openedNext?.ok && keysUnknown((this.pending as Pending).file)) {
+                openedNext.keys.wipe();
+                this.lastError = 'keys_unknown';
+                fail('keys_unknown', KEYS_UNKNOWN);
+            }
             if (openedNext?.ok) {
                 this.switchToPending(openedNext.keys, contributors);
                 return { state: this.state, sharesPresent: 0, threshold, switched: true, generation: this.stateFile?.generation };
@@ -641,12 +683,21 @@ export class Keyholder {
 
     /**
      * A reshare (design §2.4), after two current shares proved two custodians agree: a new `M`, the working keys under
-     * it with a new K_wrap (the old ones stay in `DK` so envelopes not yet re-wrapped still open) and a new K_backup,
-     * and three new shares for `newCustodians`. K_index, the ticket and deposit keys stay: the apps pin the last two.
-     * The new state waits beside the old one until two new custodians confirm their shares (see the class comment).
+     * it with a new K_wrap (the old ones stay in `DK` so envelopes not yet re-wrapped still open), a new K_backup, and
+     * three new shares for `newCustodians`. The new state waits beside the old one until two new custodians confirm
+     * their shares (see the class comment).
      *
-     * K_disk stays too. On V3's image it is the data partition's LUKS key, and changing it there is a keyslot change
-     * V3 makes in the same step; until then it has no disk to open.
+     * A new ticket key and a new deposit key too (reshare rotation design §2.4), made here under the new `M`, which
+     * the retiring custodians never hold: with the old ones they could still sign what every phone and global's door
+     * believe, and open every deposit box in flight. The new ticket key replaces the old one, which signs until the
+     * switch: nothing in the new state needs it (a backup of another generation never opens here). The new deposit
+     * key goes first and the old ones stay, since boxes from builds that still seal to an old one must open. Their
+     * public halves are in the pending file and the report while the new state waits, so global's door, the registrar
+     * and the app can list the new ticket key before it signs.
+     *
+     * K_index stays: `sub_index` can't be made again without every member's `sub`, which the vault never keeps.
+     * K_disk stays too: on the image it is the data partition's LUKS key, and changing it there is a keyslot change
+     * the image's disk helper would have to make in the same step.
      */
     private reshare(newCustodians: string[]) {
         const keys = this.requireOpen();
@@ -657,11 +708,10 @@ export class Keyholder {
         const next = new WorkingKeys(
             file.generation + 1, copy(keys.kIndex), copy(keys.kDisk), fresh.kBackup,
             [{ version: nextVersion, key: fresh.wrap[0].key }, ...keys.wrap.map(w => ({ version: w.version, key: copy(w.key) }))],
-            keys.ticketSeeds.map(copy), keys.depositSecrets.map(copy),
+            [fresh.ticketSeeds[0]], [fresh.depositSecrets[0], ...keys.depositSecrets.map(copy)],
         );
         fresh.kIndex.fill(0);
         fresh.kDisk.fill(0);
-        for (const b of [...fresh.ticketSeeds, ...fresh.depositSecrets]) b.fill(0);
         const m = crypto.randomBytes(32);
         try {
             const header = { v: 1 as const, vaultId: file.vaultId, generation: file.generation + 1, custodians: newCustodians, threshold: 2 };
@@ -1008,9 +1058,11 @@ export class Keyholder {
      * A backup's deletion records only. Opens across reshares (they are under K_index, which a reshare keeps).
      *
      * They are read by their own seal, signed or not (B2, review #1981): sealed under a key from K_index with the whole
-     * header as associated data, only a holder of K_index makes records that open, and every state that holds K_index
-     * holds the ticket keys that sign backups too (keys.ts `WorkingKeys`), so they authenticate as strongly as the
-     * signature. A file damaged elsewhere (its snapshot, its signature) still gives its deletions, which a restore must
+     * header as associated data, only a holder of K_index makes records that open. That is weaker than the signature:
+     * a reshare replaces the ticket key but keeps K_index, so a retired custodian (who can still work out the old state's
+     * K_index offline) with write access to a store can seal deletion records that a later restore applies, deleting
+     * copies whose ids they know. Reshare rotation design §2.6 and §7 name this; P2's per-generation deletions seal
+     * closes it. A file damaged elsewhere (its snapshot, its signature) still gives its deletions, which a restore must
      * not lose: skipping them brings back copies their members deleted. `signed` says whether the whole file checked.
      */
     openBackupDeletions(file: Buffer): { name: string; createdAt: number; deletions: string; signed: boolean } {

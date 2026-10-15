@@ -22,8 +22,15 @@ const REPORTED_WORDS = {
     private: word('Your words were not sent, because this phone knows this as a private chat.'),
     /** The words were left out because the guard couldn't tell (the DM pins or the guard list unreadable, or any other error). */
     unread: word("Your words were not sent, because this phone couldn't read which chats here are private."),
-    /** Either left-out case when the report went as Child safety: the server reads that reason, never the words, so it still alerts. */
+    /**
+     * Either left-out case when the member picked Child safety: the server reads that reason, never the words, so it still
+     * alerts. Only when picked (15 Oct words design, D3): when the words made it go as Child safety, the two below.
+     */
     childSafetyAlerted: word("Because you chose Child safety, the people who run this community's server are alerted even without your words."),
+    /** Either left-out case when the member picked another reason and their words read as child safety (D3). */
+    childSafetyClassified: word("Your words looked like a report about a child's safety, so it went as Child safety."),
+    /** With the sentence above. */
+    childSafetyClassifiedAlerted: word("The people who run this community's server are alerted even without your words."),
     /** With the sentence above (the guide's own sentence). */
     childInDanger: word('If a child is in danger right now, call your local emergency number first.'),
 } as const;
@@ -31,6 +38,8 @@ export const REPORT_SENT_TEXT = REPORTED_WORDS.sent;
 export const REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT = REPORTED_WORDS.private;
 export const REPORT_WORDS_LEFT_OUT_UNREAD_TEXT = REPORTED_WORDS.unread;
 export const REPORT_CHILD_SAFETY_ALERTED_TEXT = REPORTED_WORDS.childSafetyAlerted;
+export const REPORT_CHILD_SAFETY_CLASSIFIED_TEXT = REPORTED_WORDS.childSafetyClassified;
+export const REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT = REPORTED_WORDS.childSafetyClassifiedAlerted;
 export const CHILD_IN_DANGER_TEXT = REPORTED_WORDS.childInDanger;
 
 /** True when `reason` (as the screen sent it, words and all) was Child safety: as the server reads it, by the prefix. */
@@ -43,14 +52,19 @@ export function pickedChildSafety(reason: string): boolean {
  * (`wordsLeftOut`), why; then, when the report went as Child safety, that it still alerts and the emergency sentence.
  * It went as Child safety when the server's own rule (@beanpool/core reportKind) reads the full reason, words and all,
  * as child safety: picked, or written in under another reason (db.ts reportReasonFor sends "Child safety" then; #1938
- * confirmation 10, finding 1, the director's ruling (i)).
+ * confirmation 10, finding 1, the director's ruling (i)). "Because you chose Child safety" only when it was picked;
+ * otherwise the words looked like it (15 Oct words design, D3), which is also true of the server's false positives.
  */
 export function reportedAlertBody(wordsLeftOut: ReportWordsLeftOut | undefined, reason: string): string {
     const said: string[] = [t(REPORTED_WORDS.sent)];
     if (wordsLeftOut) {
         if (wordsLeftOut === 'private') said.push(t(REPORTED_WORDS.private));
         else said.push(t(REPORTED_WORDS.unread));
-        if (reportKind(reason) === 'child safety') said.push(t(REPORTED_WORDS.childSafetyAlerted), t(REPORTED_WORDS.childInDanger));
+        if (reportKind(reason) === 'child safety') {
+            said.push(...(pickedChildSafety(reason)
+                ? [t(REPORTED_WORDS.childSafetyAlerted)]
+                : [t(REPORTED_WORDS.childSafetyClassified), t(REPORTED_WORDS.childSafetyClassifiedAlerted)]), t(REPORTED_WORDS.childInDanger));
+        }
     }
     return said.join(' ');
 }

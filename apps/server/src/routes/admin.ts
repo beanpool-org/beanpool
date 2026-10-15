@@ -40,7 +40,7 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn, adminActionNeedsOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
+import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -518,8 +518,8 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * The proof a role change that needs an owner asks for (roleChangeNeedsOwner), and a re-key of an owner or admin, which
  * moves their role to the new key (rekeyProof). An owner: the fresh proof every time (design case 18, C6 and C8), so a
  * stolen session can't give a key of its own an owner's or admin's role (enrol, node-roles, re-key), or take one away
- * with a role change. Removing (pruning, offboarding) or emergency-suspending an owner asks only the step-up
- * (stepUpIfOwnerOnly; design D4 and D5, #1984 confirmation N-1). In break-glass mode too (#1984 review B2): the password
+ * with a role change. Removing (pruning, offboarding) or suspending an owner asks it too (ownerRemovalProof; #1984
+ * confirmation N-1, Marty 15 Oct). In break-glass mode too (#1984 review B2): the password
  * and an earlier 2FA session are the stolen session C6 is for, and the owner recovering sends a current code with the
  * password. Anyone else (an admin, a break-glass code) is
  * asked what they were asked before, the phone step-up, and the engine decides as it always has: it refuses them unless
@@ -542,8 +542,9 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
  * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
  * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
- * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof). From
- * the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the engine is given.
+ * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof; removing
+ * or suspending an owner asks more: ownerRemovalProof). From the phone's Manage hand-off it asks for its unlock again
+ * (requirePhoneStepUp). `actor` is the one the engine is given.
  * Answers 403 and returns false when that is due.
  */
 function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
@@ -551,6 +552,21 @@ function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: strin
     // their own branch) is still an owner's action, so it is refused to the token (requirePhoneStepUp).
     const asActor = ctx.state?.automationTokenId ? '' : actor;
     return !adminActionNeedsOwner(action, target, asActor) || requirePhoneStepUp(ctx);
+}
+
+/**
+ * Removing or suspending an owner (decisions-engine adminActionRemovesOwner: pruning, offboarding, a branch with one in
+ * it, cutting short one's removal, an emergency suspension or one through a report): an owner gives the fresh proof each
+ * time (roleChangeProof), so a stolen session can't strip the other owners (#1984 confirmation N-1; Marty, 15 Oct, card
+ * owner-stolen-session: "Yes to both"). Anyone else is asked the step-up, and the engine refuses them as it always has.
+ * Any other target (an admin, a member) is asked what stepUpIfOwnerOnly asks, as before. The code comes as the body's
+ * `code` or the X-Fresh-Proof header.
+ */
+async function ownerRemovalProof(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): Promise<boolean> {
+    const asActor = ctx.state?.automationTokenId ? '' : actor;
+    if (!adminActionRemovesOwner(action, target, asActor)) return stepUpIfOwnerOnly(ctx, action, target, actor);
+    const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
+    return roleChangeProof(ctx, code, 'remove or suspend an owner');
 }
 
 /**
@@ -1706,7 +1722,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
-    if (!stepUpIfOwnerOnly(ctx, 'suspend', ctx.params.pubkey)) return;
+    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const { reason } = (ctx as any).requestBody || {};
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
@@ -1824,7 +1840,7 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
-    if (!stepUpIfOwnerOnly(ctx, 'prune', ctx.params.pubkey, actor)) return;
+    if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
         adminPruneUser(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1840,7 +1856,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
-    if (!stepUpIfOwnerOnly(ctx, 'prune-branch', ctx.params.pubkey, actor)) return;
+    if (!(await ownerRemovalProof(ctx, 'prune-branch', ctx.params.pubkey, actor))) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1944,7 +1960,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
         // refuses anyone else, given the actor). Read only to suspend: a moderator, refused that above, is no node admin.
         const actor = suspendUser ? resolveAdminActor(ctx) : null;
         if (suspendUser && !actor) return;
-        if (suspendUser && !stepUpIfOwnerOnly(ctx, 'report-suspend', ctx.params.id)) return;
+        if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
@@ -2154,7 +2170,7 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const signedActor = resolveAdminActor(ctx);
     if (!signedActor) return;
-    if (!stepUpIfOwnerOnly(ctx, 'accelerate', ctx.params.id)) return;
+    if (!(await ownerRemovalProof(ctx, 'accelerate', ctx.params.id))) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -2711,7 +2727,7 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         return;
     }
     // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).
-    if (!stepUpIfOwnerOnly(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase())) return;
+    if (!(await ownerRemovalProof(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase()))) return;
 
     try {
         const result = executeOffboard(

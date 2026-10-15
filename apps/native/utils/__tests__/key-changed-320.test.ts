@@ -139,7 +139,8 @@ describe('"(key changed)" at 320dp with 1.3× text', () => {
 
 describe('rule 5\'s line under the DM box at 320dp with 1.3× text, light and dark (amendment 4 §3)', () => {
     it('is the approved line, word for word', () => {
-        expect(DM_UNPLACED_LINE).toBe("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. Check with them in person or on a call, then start a new chat.");
+        // The way out is on the banner above it (15 Oct words design, D1/D2): never "start a new chat", which opens this same chat.
+        expect(DM_UNPLACED_LINE).toBe("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them.");
     });
 
     it.each([['light', lightColors], ['dark', darkColors]] as const)('%s: drawn whole above the box, no line limit and no fixed height on it or around it, wrapping only between words', (name, colors) => {
@@ -173,20 +174,20 @@ describe('rule 5\'s line under the DM box at 320dp with 1.3× text, light and da
         }
         expect(lines.join(' ')).toBe(DM_UNPLACED_LINE);
         expect(lines.every((l) => widthOf(l, font) <= width)).toBe(true);
-        expect(lines.length).toBe(6);   // the RN-web replica draws it on 4 lines at 320 dp and 1.3× (Roboto is narrower than 0.62 em)
+        expect(lines.length).toBe(4);   // two sentences since the 15 Oct words design (D2 (a)); six before, with "then start a new chat"
     });
 });
 
 describe('amendment 6\'s two lines under the DM box at 320dp with 1.3× text, light and dark: a community\'s pins full, and pins this phone can\'t read', () => {
     it('a refused send shows each one word for word, as its own error says it', () => {
         expect(DM_PINS_FULL_TEXT).toBe("This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.");
-        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
+        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.");
         expect(refusedSendNotice(new DmPinsFullError(), 'Ben')).toBe(DM_PINS_FULL_TEXT);
         expect(refusedSendNotice(new DmPinStoreError(), 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);
         // [id].tsx shows what refusedSendNotice gives a refused send under the box (lockNotice), the words put back.
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/chat/[id].tsx'), 'utf-8');
         expect(src).toMatch(/const refused = refusedSendNotice\(err, peerPubkey \? peerName : null\);/);
-        expect(src).toMatch(/notice=\{keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : lockNotice\}/);
+        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice\}/);
     });
 
     for (const [label, line, lines] of [['full', DM_PINS_FULL_TEXT, 5], ['unreadable', DM_PIN_STORE_UNREAD_TEXT, 7]] as const) {

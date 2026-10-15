@@ -446,7 +446,7 @@ export function ProposeDecisionModal({
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-bp-accent-fill hover:bg-bp-accent-hover text-bp-accent-on font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {submitting ? 'Submitting...' : 'Submit Decision'}
                         </button>

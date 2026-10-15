@@ -12,6 +12,7 @@ import {
     signStatement,
     unlockBind,
     type CustodianShare,
+    type RestorePending,
     type UnlockHello,
 } from '../shared/ceremony.js';
 import type { ReleaseFeed } from '../shared/release-feed.js';
@@ -75,6 +76,11 @@ export interface CallOptions {
     acceptNoHardwareProof?: boolean;
     /** Asked when there is no hardware proof and it wasn't accepted up front: true sends. */
     confirm?: (warning: string) => Promise<boolean>;
+    /**
+     * Asked before an unlock share goes to a vault waiting to finish a restore from backup (the hello says which backup
+     * and which custodian key named it): the share makes that backup's keys the vault's. False sends nothing.
+     */
+    confirmRestore?: (restore: RestorePending) => Promise<boolean>;
     /** Every request sent after the checks: its path. */
     outbox?: string[];
     /** A checker per confidential platform (V8); none today. */
@@ -188,6 +194,9 @@ export async function presentShare(baseUrl: string, key: CustodianKey, share: Cu
     const purpose = opts.purpose ?? 'unlock';
     const prefix = purpose === 'unlock' ? '/v1/unlock' : '/v1/reshare';
     const h = await checkedHello(baseUrl, key, `${prefix}/hello`, opts);
+    if (purpose === 'unlock' && h.hello.restore && opts.confirmRestore && !(await opts.confirmRestore(h.hello.restore))) {
+        refuse('not_confirmed', 'The vault is waiting to finish a restore from that backup, and you did not confirm it. Nothing was sent.');
+    }
     const mnemonic = typeof share === 'string' ? share : openCustodianShare(share, key.seed);
     const submission = buildShareSubmission({ mnemonic, purpose, hello: h.hello, custodianSeed: key.seed, newCustodians: opts.newCustodians });
     return send(baseUrl, `${prefix}/share`, { submission }, key, opts);

@@ -108,7 +108,7 @@ import * as phoneCrypto from '../e2e-crypto';
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
 import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX, reportKind } from '@beanpool/core';
-import { reportedAlertBody, REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
+import { reportedAlertBody, REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 
@@ -1903,6 +1903,74 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, firstSight: true, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
         expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
+
+    // The 15 Oct words design, D1 (confirmation 11, finding 2; its harness run2/parts/r5.block): on a node that sends no
+    // formerKeys, P15's honest member had no way out. A new chat with Ben is this chat (the server's findDirectConversationRow)
+    // and the reset re-judges to rule 5, so the banner offers the listed key's code, the tick and Continue, as a pause does.
+    it('R5-D1: P15 on an old node (no formerKeys): the banner offers K2\'s code; a new chat is this chat and the reset keeps rule 5; Continue seals to K2, and the lines that didn\'t open stay that way', async () => {
+        await aQuestionAndAnAnswer();
+        benRekeys({ formerKeys: false });
+        saysTo(k2, dm, 'New phone. Still on for Saturday?');
+        await restoredPhone();
+        expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: k2.publicKey, firstSight: true, unplaced: true });
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        const unopened = (await texts(dm.id)).filter((t: string) => t === NOT_VERIFIED).length;
+        expect(unopened).toBeGreaterThan(0);
+        // "Start a new chat" with Ben: the server answers with the conversation already between them; the record stands.
+        const f0 = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if ((init.method ?? 'GET') === 'POST' && new URL(url).pathname === '/api/messages/conversation') {
+                return answer(200, { conversation: { id: dm.id, type: 'dm', participants: [ana.publicKey, k2.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00.000Z' } });
+            }
+            return f0(url, init);
+        };
+        try { expect((await createConversationApi('dm', [ana.publicKey, k2.publicKey], ana.publicKey))?.id).toBe(dm.id); } finally { (globalThis as any).fetch = f0; }
+        expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true, listed: k2.publicKey });
+        // The member's Chat memory reset, then a pass: rule 5 again, and the same banner (R5's durability stands).
+        await dbPort.resetDmChatMemory(ANCHOR);
+        restarted();
+        await syncMessages(ana.publicKey);
+        expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: k2.publicKey, unplaced: true });
+        expect(await sendTo(dm.id, 'Hello after the reset?', [k2, ben])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        // Only the key whose code was shown moves it.
+        for (const k of [ben, puppet]) expect(await acceptOfferedPeer(dm.id, k.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true });
+        expect(await acceptOfferedPeer(dm.id, k2.publicKey)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: k2.publicKey, by: 'member' });
+        expect(pinOf(ana, dm.id).former).toBeUndefined();
+        expect(await getDmKeyChange(dm.id)).toBeNull();
+        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect((await texts(dm.id)).filter((t: string) => t === NOT_VERIFIED).length).toBe(unopened);
+        expect(await texts(dm.id)).toContain('New phone. Still on for Saturday?');
+        expect(await sendTo(dm.id, 'Yes, Saturday', [k2, ben, puppet])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben on a new phone'] });
+        // A member's pin from then on: a later listing only offers, and a pass, a prune or the reset's re-check never moves it.
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: k2.publicKey, by: 'member' });
+    }, 120_000);
+
+    it('R5-D1: the node lists PUPPET for that rule-5 chat between the banner and the tap: the tap for K2 moves nothing; the banner then shows PUPPET\'s code; several keys listed: no key to continue with', async () => {
+        await aQuestionAndAnAnswer();
+        benRekeys({ formerKeys: false });
+        saysTo(k2, dm, 'New phone. Still on for Saturday?');
+        await restoredPhone();
+        const shown = await getDmKeyChange(dm.id);
+        expect(shown?.offeredPeer).toBe(k2.publicKey);
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await acceptOfferedPeer(dm.id, shown!.offeredPeer!)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+        expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: puppet.publicKey, unplaced: true });
+        for (const k of [ben, k2]) expect(await acceptOfferedPeer(dm.id, k.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id).peer).toBeUndefined();
+        expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben, k2])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        dm.participants = [ana.publicKey, puppet.publicKey, k2.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: null, unplaced: true });
+        for (const k of [puppet, k2, ben]) expect(await acceptOfferedPeer(dm.id, k.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true });
+        expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben, k2])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+    }, 120_000);
 
     it('P16 (the documented limit, asserted so a change is deliberate): a restored phone meeting [Ana, PUPPET] with ALL history withheld pins PUPPET, and the send goes', async () => {
         await aQuestionAndAnAnswer();
@@ -3889,7 +3957,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
             expect(refusedSendNotice(err, 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);
             await syncMessages(ana.publicKey);
         }
-        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
+        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.");
         expect((await getMessages(dmB.id)).map((m: any) => m.text)).toEqual(Array(4).fill(DM_PINS_UNREAD_LINE));
         expect(DM_PINS_UNREAD_LINE).toBe("Can't be shown until this phone can read who this chat is with.");
         expect(h.store.get(PINS_B())).toBe(corrupt);
@@ -4244,8 +4312,8 @@ describe('the DM guard list: one bounded list per community file, never read as 
     const WINDOW = 2 * 1024 * 1024;
     const MiB = 1024 * 1024;
     const OLD_KEY = 'beanpool_dm_conversations_seen';
-    // The pins' twin since §3.4 amendment 8: where the way out is (the member's reset in Settings → Account → Chat memory).
-    const GUARD_UNREAD = "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.";
+    // The pins' twin since §3.4 amendment 8: where the way out is (the member's reset in Settings → Chat memory).
+    const GUARD_UNREAD = "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.";
     const seenKey = (file = FILE_A) => `beanpool_dm_conversations_seen:${ana.publicKey.toLowerCase()}:${file}`;
     const seenIn = (file = FILE_A): any => { const raw = h.store.get(seenKey(file)); if (raw == null) return null; try { return JSON.parse(raw); } catch { return 'unparseable'; } };
     const bytesOf = (k: string) => Buffer.byteLength(h.store.get(k) ?? '');
@@ -4870,7 +4938,8 @@ describe('the DM guard list: one bounded list per community file, never read as 
             const back = { dm: await both(dm.id), honest: await both(ev.id) };
             console.log(`GXR10 (${how}) ${JSON.stringify({ unread, back, took })}`);
             const thanks = REPORT_SENT_TEXT;
-            const pair = `${REPORT_CHILD_SAFETY_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
+            // Words under another reason that read as child safety (15 Oct words design, D3): the "looked like" pair, never "Because you chose".
+            const pair = `${REPORT_CHILD_SAFETY_CLASSIFIED_TEXT} ${REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
             const leftOut = (why: 'private' | 'unread') => ({
                 child: { err: null, wordsLeftOut: why, nodeReads: [], reasons: ['Child safety'], serverKind: ['child safety'], dialog: `${thanks} ${why === 'private' ? REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT : REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${pair}` },
                 plain: { err: null, wordsLeftOut: why, nodeReads: [], reasons: ['Offensive content'], serverKind: ['offensive content'], dialog: `${thanks} ${why === 'private' ? REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT : REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}` },

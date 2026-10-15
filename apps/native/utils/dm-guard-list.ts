@@ -42,12 +42,12 @@ export const DM_SEEN_MAX_BYTES = 1024 * 1024;
  * out is (amendment 8: the member's reset, the pins' twin).
  */
 const GUARD_WORDS = {
-    unread: word("This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start."),
+    unread: word("This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start."),
 } as const;
 export const DM_GUARD_UNREAD_TEXT = GUARD_WORDS.unread;
 
 /**
- * Settings → Account → Chat memory's words once its reset takes this list too (§3.4 amendment 8 §3), word for word: the
+ * Settings → Chat memory's words once its reset takes this list too (§3.4 amendment 8 §3), word for word: the
  * row's subtitle, the card's body, and the confirmation, which states both residuals. #1873's card (chat-memory.ts
  * CHAT_MEMORY_COPY.rowSub, body, confirm) takes them from here.
  */

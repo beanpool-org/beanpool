@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,7 +8,16 @@ import { openSeedFromSso, openVaultRelease, vaultUnb64 } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { HOLD_MS, RESTORE_RETRY_MS } from '../api/server.js';
-import { custodianKey, listBackups, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
+import {
+    checkedHello,
+    CustodianRefusal,
+    custodianKey,
+    listBackups,
+    presentShare,
+    restoreFromBackup,
+    sendSettings,
+    type CustodianKey,
+} from '../custodian/lib.js';
 import { openState, readStateFile, type WorkingKeys } from '../keyholder/keys.js';
 import { combineMnemonics, splitMasterSecret } from '../keyholder/slip39.js';
 import { BACKUP_BODY_AAD, BACKUP_DELETIONS_AAD, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
@@ -28,6 +37,7 @@ import {
     type Member,
     type VaultUnderTest,
 } from './harness.js';
+import { StubS3 } from './stubs.js';
 
 /**
  * Backups (key vault design §4, §1.7; V2's "Backup" tests): a backup opens only with `M`; restoring one into a fresh
@@ -35,8 +45,10 @@ import {
  */
 
 const open: VaultUnderTest[] = [];
+const stubs: StubS3[] = [];
 afterEach(async () => {
     while (open.length) await open.pop()!.close();
+    while (stubs.length) await stubs.pop()!.stop();
 });
 
 async function vault(opts: Parameters<typeof startVault>[0] = {}): Promise<VaultUnderTest> {
@@ -99,7 +111,7 @@ describe('backups', () => {
         expect((await signed(b, '/v1/copies/status', {}, m2.seed)).body.copies).toHaveLength(2);
         // The restore is finished: the vault is an ordinary one now.
         expect(readdirSync(b.dataDir)).not.toContain('restore-pending.bin');
-        expect(b.keyholder().status().restorePending).toBe(false);
+        expect(b.keyholder().status().restorePending).toBeNull();
     });
 
     it('the file itself opens with keys from its own vault\'s K_backup and K_index, and not with another vault\'s', async () => {
@@ -456,13 +468,15 @@ describe('a restore from backup is finished before anything sees it', () => {
 
     it('a newer backup that can\'t be read: the vault answers 503 and keeps the restore, and finishes it once the backup reads', async () => {
         const { a, g, older, newer } = await deletedAfterBackup();
-        let broken = true;
+        // The store fails once the restore is taken: its start reads the newest header (the generation rule, below).
+        let broken = false;
         const b = await restoring(a, older, inner => wrap(inner, {
             get: async n => {
                 if (broken && n === newer) throw new Error('the store timed out');
                 return inner.get(n);
             },
         }));
+        broken = true;
         await unlockWith(b, g.shares, [0]);
         const [unlocked] = await unlockWith(b, g.shares, [1]);
         // The custodians are told why; any other caller only that it is being finished.
@@ -472,7 +486,7 @@ describe('a restore from backup is finished before anything sees it', () => {
         expect(JSON.stringify(reply.body)).not.toContain('timed out');
         expect((await get(b, '/v1/health')).body.state).toBe('locked');
         expect(readdirSync(b.dataDir)).toContain('restore-pending.bin');
-        expect(b.keyholder().status().restorePending).toBe(true);
+        expect(b.keyholder().status().restorePending).toEqual({ backup: older, by: b.custodians[0].publicKey });
         // The keys are open, but no reshare while the restore waits: the restore opens only its own generation.
         expect((await presentShare(b.baseUrl, b.custodians[0], g.shares[0], { ...b.call(), purpose: 'reshare', newCustodians: b.custodians.map(c => c.publicKey) })).status).toBe(503);
 
@@ -482,7 +496,7 @@ describe('a restore from backup is finished before anything sees it', () => {
         await expectNoCopy(b, 'google', 'deleted-later');
         expect((await get(b, '/v1/health')).body.state).toBe('open');
         expect(readdirSync(b.dataDir)).not.toContain('restore-pending.bin');
-        expect(b.keyholder().status().restorePending).toBe(false);
+        expect(b.keyholder().status().restorePending).toBeNull();
     });
 
     it('a newer backup with one flipped byte in its snapshot: its deletion records still open by their own seal and apply, at the first try (B2, review #1981)', async () => {
@@ -498,7 +512,7 @@ describe('a restore from backup is finished before anything sees it', () => {
         expect((await unlockWith(b, g.shares, [1]))[0].body.state).toBe('open');
         // The copy deleted after the older backup stays deleted.
         await expectNoCopy(b, 'google', 'deleted-later');
-        expect(b.keyholder().status().restorePending).toBe(false);
+        expect(b.keyholder().status().restorePending).toBeNull();
     });
 
     it('a newer backup whose deletion records open in no store: the restore waits, named to the custodians, and the vault never skips it; a good copy put back finishes it (B2, review #1981)', async () => {
@@ -523,7 +537,7 @@ describe('a restore from backup is finished before anything sees it', () => {
             expect(reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
             expect(JSON.stringify(reply.body)).not.toContain(newer);
         }
-        expect(b.keyholder().status().restorePending).toBe(true);
+        expect(b.keyholder().status().restorePending).toEqual({ backup: older, by: b.custodians[0].publicKey });
         expect((await get(b, '/v1/health')).body.state).toBe('locked');
 
         broken = false;
@@ -535,13 +549,15 @@ describe('a restore from backup is finished before anything sees it', () => {
 
     it('a failing list: nothing is served and nothing written until the restore finishes, and an API restart after it doesn\'t run it again', async () => {
         const { a, g, older } = await deletedAfterBackup();
-        let failing = true;
+        // The list fails once the restore is taken: its start lists the stores (the generation rule, below).
+        let failing = false;
         const b = await restoring(a, older, inner => wrap(inner, {
             list: async () => {
                 if (failing) throw new Error('the store is unreachable');
                 return inner.list();
             },
         }));
+        failing = true;
         await unlockWith(b, g.shares, [0]);
         expect((await unlockWith(b, g.shares, [1]))[0]).toMatchObject({ status: 503, body: { code: 'restoring' } });
         const late = newMember();
@@ -573,7 +589,7 @@ describe('a restore from backup is finished before anything sees it', () => {
 
         expect((await restoreFromBackup(a.baseUrl, a.custodians[1], backup, a.call())).body).toMatchObject({ state: 'locked' });
         expect((await unlockWith(a, g.shares, [0, 1]))[1].body.state).toBe('open');
-        expect(a.keyholder().status().restorePending).toBe(false);
+        expect(a.keyholder().status().restorePending).toBeNull();
         expect(readdirSync(a.dataDir)).not.toContain('restore-pending.bin');
         expect((await get(a, '/v1/health')).body.state).toBe('open');
         await expectNoCopy(a, 'apple', 'after-the-backup');
@@ -633,5 +649,170 @@ describe('holds across a restore from backup', () => {
         expect((await signed(b, '/v1/holds/cancel', { holdId }, member.seed)).body).toEqual({ status: 'stopped' });
         b.clock.advance(86_400_000);
         expect((await signed(b, '/v1/restore/collect', { holdId }, e)).body).toEqual({ status: 'stopped' });
+    });
+});
+
+/**
+ * Once a backup of a newer generation is in the stores, no key, pinned or listed, may start a restore of an older one
+ * (reshare rotation design §3): the older state unlocks with the shares of custodians a later reshare retired. The rule
+ * binds the generation, not the file: an older file of the newest generation still restores. A file whose header can't
+ * be read isn't counted; removing every newer file from the stores (store write) gets round it, as it always could.
+ */
+describe('a restore never takes an older generation once a newer one is in the stores', () => {
+    const share = (shares: CustodianShare[], k: CustodianKey) => shares.find(s => s.custodian === k.publicKey) as CustodianShare;
+
+    /**
+     * Vault `a` with its backups also off the box: a copy, `gen1`, a reshare from the genesis keys G to N, then two
+     * backups of generation 2, in both stores.
+     */
+    async function twoGenerations() {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const stub = await new StubS3().start();
+        stubs.push(stub);
+        const settings = { v: 1, offsite: stub.settings() };
+        for (const c of a.custodians.slice(0, 2)) expect((await sendSettings(a.baseUrl, c, settings, a.call())).status).toBe(200);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'generations');
+        const gen1 = await a.api.runBackup();
+        const n = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const newCustodians = n.map(c => c.publicKey);
+        await presentShare(a.baseUrl, a.custodians[0], g.shares[0], { ...a.call(), purpose: 'reshare', newCustodians });
+        const r = await presentShare(a.baseUrl, a.custodians[1], g.shares[1], { ...a.call(), purpose: 'reshare', newCustodians });
+        const nShares = r.body.custodianShares as CustodianShare[];
+        expect((await confirmWith(a, nShares, [0, 1], n))[1].body).toMatchObject({ switched: true, generation: 2 });
+        await a.api.idle();
+        a.clock.advance(60 * 60 * 1000);
+        const gen2a = await a.api.runBackup();
+        a.clock.advance(60 * 60 * 1000);
+        const gen2b = await a.api.runBackup();
+        await a.api.idle();
+        const offKey = (name: string) => [...stub.objects.keys()].find(k => k.endsWith(name)) as string;
+        for (const name of [gen1, gen2a, gen2b]) {
+            expect(existsSync(path.join(a.storeDir, name))).toBe(true);
+            expect(offKey(name)).toBeDefined();
+        }
+        const remove = { local: (name: string) => rmSync(path.join(a.storeDir, name)), offsite: (name: string) => stub.objects.delete(offKey(name)) };
+        const garble = (name: string) => {
+            const junk = crypto.randomBytes(600);
+            writeFileSync(path.join(a.storeDir, name), junk);
+            stub.objects.set(offKey(name), junk);
+        };
+        /** A fresh vault on `a`'s store (or none: the cold path), with the off-box store set by two genesis keys. */
+        const fresh = async (own: 'same store' | 'new machine' = 'same store') => {
+            const b = await vault({ stub: a.stub, clock: a.clock, custodians: a.custodians, ...(own === 'same store' ? { storeDir: a.storeDir } : {}) });
+            for (const c of b.custodians.slice(0, 2)) expect((await sendSettings(b.baseUrl, c, settings, b.call())).status).toBe(200);
+            return b;
+        };
+        return { a, g, n, nShares, member, stub, gen1, gen2a, gen2b, remove, garble, fresh };
+    }
+
+    /** `key` asks `b` to restore `name`: refused as an older generation, and `b` stays fresh. */
+    async function refusedAsOlder(b: VaultUnderTest, key: CustodianKey, name: string) {
+        const r = await restoreFromBackup(b.baseUrl, key, name, b.call());
+        expect(r).toMatchObject({ status: 409, body: { code: 'older_generation', generation: 2 } });
+        expect(String(r.body.error)).toContain('A newer generation of this vault\'s keys exists in the stores (gen 2)');
+        expect(b.keyholder().status().state).toBe('fresh');
+    }
+
+    it('a pinned genesis key naming a generation-1 backup is refused when a generation-2 one is in the vault\'s own store; naming that one, only the new custodians\' shares open it', async () => {
+        const { g, n, nShares, member, gen1, gen2b, remove, fresh } = await twoGenerations();
+        for (const name of [gen1, gen2b]) remove.offsite(name);
+        const b = await fresh();
+        await refusedAsOlder(b, b.custodians[0], gen1);
+        await refusedAsOlder(b, b.custodians[1], gen1);
+
+        expect((await restoreFromBackup(b.baseUrl, b.custodians[0], gen2b, b.call())).body).toMatchObject({ state: 'locked', generation: 2 });
+        // The genesis keys are not custodians of the state it took; their old shares open nothing.
+        await expect(presentShare(b.baseUrl, b.custodians[0], g.shares[0], b.call())).rejects.toThrow(/403/);
+        await presentShare(b.baseUrl, n[0], share(nShares, n[0]), b.call());
+        expect((await presentShare(b.baseUrl, n[1], share(nShares, n[1]), b.call())).body.state).toBe('open');
+        await expectCopy(b, 'google', 'generations', member);
+    });
+
+    it('the same with the generation-2 backups off the box only (the cold path), and in both stores', async () => {
+        const { a, gen1, gen2a, gen2b, remove, fresh } = await twoGenerations();
+        // Both stores hold them.
+        await refusedAsOlder(await fresh(), a.custodians[0], gen1);
+        // A new machine: nothing of its own; the off-box store holds them all.
+        await refusedAsOlder(await fresh('new machine'), a.custodians[0], gen1);
+        // The machine's own store has lost them; the off-box store still holds them.
+        for (const name of [gen2a, gen2b]) remove.local(name);
+        await refusedAsOlder(await fresh(), a.custodians[2], gen1);
+    });
+
+    it('a generation-2 file whose header no store can read is not counted; one readable generation-2 file beside it is', async () => {
+        const { a, gen1, gen2a, gen2b, garble, fresh } = await twoGenerations();
+        garble(gen2b);
+        // The newest file is unreadable, the one before it is generation 2: refused.
+        await refusedAsOlder(await fresh(), a.custodians[0], gen1);
+        garble(gen2a);
+        // No readable generation-2 file is left: the newest readable is generation 1, and the restore is taken.
+        const b = await fresh();
+        expect((await restoreFromBackup(b.baseUrl, a.custodians[0], gen1, b.call())).body).toMatchObject({ state: 'locked', generation: 1 });
+    });
+
+    it('stores that can\'t say whether a newer generation exists: the restore is refused 503 (never taken as older), the vault stays fresh, and it is refused 409 once they answer', async () => {
+        const { a, stub, gen1, gen2b, remove, fresh } = await twoGenerations();
+        const unknown = async (b: VaultUnderTest, name: string, file: string | null) => {
+            const r = await restoreFromBackup(b.baseUrl, a.custodians[0], name, b.call());
+            expect(r).toMatchObject({ status: 503, body: { code: 'stores_unreachable' } });
+            if (file) expect(String(r.body.error)).toContain(`The backup ${file} could not be fetched`);
+            expect(b.keyholder().status().state).toBe('fresh');
+            expect(b.keyholder().status().restorePending).toBeNull();
+        };
+
+        // A new machine, whose only store is off the box: the named file reads, the listing fails.
+        const cold = await fresh('new machine');
+        stub.failStep.list = 500;
+        await unknown(cold, gen1, null);
+        await unknown(cold, gen2b, null);
+        delete stub.failStep.list;
+        await refusedAsOlder(cold, a.custodians[0], gen1);
+
+        // The vault's own store holds the named file; the newest is only off the box, and fetching it fails.
+        remove.local(gen2b);
+        const own = await fresh();
+        stub.failStep.get = 500;
+        await unknown(own, gen1, gen2b);
+        delete stub.failStep.get;
+        await refusedAsOlder(own, a.custodians[0], gen1);
+    });
+
+    it('with every generation-2 file removed from both stores, a generation-1 restore is taken again: what store write could always do', async () => {
+        const { a, g, member, gen1, gen2a, gen2b, remove, fresh } = await twoGenerations();
+        for (const name of [gen2a, gen2b]) {
+            remove.local(name);
+            remove.offsite(name);
+        }
+        const b = await fresh();
+        expect((await restoreFromBackup(b.baseUrl, a.custodians[0], gen1, b.call())).body).toMatchObject({ state: 'locked', generation: 1 });
+        await unlockWith(b, g.shares, [0, 1]);
+        await expectCopy(b, 'google', 'generations', member);
+    });
+
+    it('an older file of the newest generation is taken; the unlock hello says which backup and which key named it, and the tool asks before a share goes', async () => {
+        const { a, n, nShares, member, gen2a, fresh } = await twoGenerations();
+        const b = await fresh();
+        expect((await restoreFromBackup(b.baseUrl, a.custodians[0], gen2a, b.call())).body).toMatchObject({ state: 'locked', generation: 2 });
+        const { hello } = await checkedHello(b.baseUrl, n[0], '/v1/unlock/hello', b.call());
+        expect(hello.restore).toEqual({ backup: gen2a, by: a.custodians[0].publicKey });
+
+        // A custodian who doesn't recognise that backup says no: nothing is sent.
+        const outbox: string[] = [];
+        const asked: unknown[] = [];
+        const no = presentShare(b.baseUrl, n[0], share(nShares, n[0]), { ...b.call(), outbox, confirmRestore: async r => (asked.push(r), false) });
+        await expect(no).rejects.toThrow(CustodianRefusal);
+        await expect(no).rejects.toMatchObject({ code: 'not_confirmed' });
+        expect(asked).toEqual([{ backup: gen2a, by: a.custodians[0].publicKey }]);
+        expect(outbox).toEqual([]);
+        expect(b.keyholder().status().sharesPresent).toBe(0);
+
+        const yes = { ...b.call(), confirmRestore: async () => true };
+        await presentShare(b.baseUrl, n[0], share(nShares, n[0]), yes);
+        expect((await presentShare(b.baseUrl, n[1], share(nShares, n[1]), yes)).body.state).toBe('open');
+        await expectCopy(b, 'google', 'generations', member);
+        // Once the restore is finished, the hello names none.
+        expect(b.keyholder().status().restorePending).toBeNull();
     });
 });

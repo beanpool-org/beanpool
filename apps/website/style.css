@@ -125,8 +125,8 @@
         --reddit-ink: #9a3412;   /* chip.need.ink */
         --reddit-ink-strong: #9a3412;   /* chip.need.ink */
 
-        --logo-gradient-start: #92400e;   /* ink.warning */
-        --logo-gradient-end: #c2410c;   /* action.fill */
+        --logo-gradient-start: #c2410c;   /* action.fill */
+        --logo-gradient-end: #b85236;   /* cta.fill */
         --btn-primary-end: #f59e0b;   /* gold.fill */
         --rainbow-1: #c2410c;   /* action.fill */
         --rainbow-2: #b91c1c;   /* ink.danger */

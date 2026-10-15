@@ -9,7 +9,13 @@
  * - Strict 120-second TTL auto-expiration.
  * - Single-use guarantee with 15s resilience window for transient network drops.
  * - Zero-knowledge: the server only relays opaque ciphertext (XChaCha20-Poly1305).
+ * - Number matching (fable-security-signin finding 1, as the Settings QR sign-in does it): the phone's payload is held
+ *   with two digits the phone shows, and released only to the browser that opened the session (its binding secret, an
+ *   httpOnly cookie set at init) once that browser types them. Someone who only sent a member the QR never sees the
+ *   phone. Three wrong tries burn the session and its payload.
  */
+
+import crypto from 'node:crypto';
 
 export interface PairingPayload {
     mobilePubHex: string;
@@ -25,8 +31,13 @@ interface PairingSession {
     expiresAt: number;
     /** When it ends now: `expiresAt`, or sooner once its payload is collected (the grace, never past `expiresAt`). */
     endsAt: number;
-    status: 'waiting' | 'transferred';
+    status: 'waiting' | 'confirming' | 'transferred' | 'burned';
     payload?: PairingPayload;
+    /** sha256 of the binding secret only the opening browser holds. */
+    secretHash: Buffer;
+    /** The two digits the phone shows, until the browser types them. */
+    confirmCode?: string;
+    confirmTries: number;
     timer?: NodeJS.Timeout;
 }
 
@@ -56,6 +67,10 @@ const MAX_SESSIONS = 10_000;
 const MAX_HELD_PAYLOADS = 1_000;
 const MAX_CIPHERTEXT_HEX_LEN = 4_096;
 const RELAY_BUSY = 'Pairing relay at capacity. Please try again shortly.';
+/** Wrong digits before the session and its payload are burned. */
+const CONFIRM_TRIES = 3;
+
+const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest();
 
 export const PAIRING_RELAY_LIMITS = {
     sessions: MAX_SESSIONS,
@@ -63,6 +78,7 @@ export const PAIRING_RELAY_LIMITS = {
     ciphertextHex: MAX_CIPHERTEXT_HEX_LEN,
     ttlMs: PAIRING_TTL_MS,
     graceMs: COLLECT_GRACE_MS,
+    confirmTries: CONFIRM_TRIES,
 } as const;
 
 const sessions = new Map<string, PairingSession>();
@@ -115,7 +131,7 @@ function liveSession(sessionId: string): PairingSession | undefined {
 /**
  * Initializes a new pairing session requested by the desktop PWA.
  */
-export function initPairingSession(sessionId: string, desktopPubHex: string): { ok: boolean; error?: string; expiresAt?: number } {
+export function initPairingSession(sessionId: string, desktopPubHex: string): { ok: boolean; error?: string; expiresAt?: number; secret?: string } {
     if (!sessionId || typeof sessionId !== 'string' || !/^[0-9a-fA-F]{16,64}$/.test(sessionId)) {
         return { ok: false, error: 'Invalid sessionId format (must be 16-64 hex chars)' };
     }
@@ -133,13 +149,15 @@ export function initPairingSession(sessionId: string, desktopPubHex: string): { 
 
     const createdAt = now();
     const expiresAt = createdAt + PAIRING_TTL_MS;
+    const secret = crypto.randomBytes(32).toString('hex');
     const session: PairingSession = {
         sessionId, desktopPubHex, createdAt, expiresAt, endsAt: expiresAt, status: 'waiting',
+        secretHash: sha256(secret), confirmTries: 0,
     };
     sessions.set(sessionId, session);
     endAt(session, expiresAt);
 
-    return { ok: true, expiresAt };
+    return { ok: true, expiresAt, secret };
 }
 
 /**
@@ -150,7 +168,7 @@ export function transferPairingPayload(
     mobilePubHex: string,
     nonceHex: string,
     ciphertextHex: string
-): { ok: boolean; error?: string } {
+): { ok: boolean; error?: string; confirmCode?: string } {
     const session = liveSession(sessionId);
     if (!session) {
         return { ok: false, error: 'Pairing session expired or not found' };
@@ -181,25 +199,66 @@ export function transferPairingPayload(
         return { ok: false, error: RELAY_BUSY };
     }
 
-    // Its end stays `expiresAt`: 120 s from opening, so at most 120 s from now.
-    session.status = 'transferred';
+    // Its end stays `expiresAt`: 120 s from opening, so at most 120 s from now. Held until the browser types the digits.
+    session.status = 'confirming';
     session.payload = {
         mobilePubHex,
         nonceHex,
         ciphertextHex,
     };
+    session.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
+    session.confirmTries = 0;
     held.add(sessionId);
 
-    return { ok: true };
+    return { ok: true, confirmCode: session.confirmCode };
+}
+
+/** Only the browser holding the session's binding secret. */
+function bound(session: PairingSession, secret: string | undefined): boolean {
+    return !!secret && crypto.timingSafeEqual(sha256(String(secret)), session.secretHash);
+}
+
+export type ConfirmResult =
+    | { result: 'released' }
+    | { result: 'wrong'; triesLeft: number }
+    | { result: 'burned' | 'wrong-browser' | 'expired' | 'not-confirming' };
+
+/**
+ * The browser types the two digits the phone shows. Right digits release the payload to its next poll; three wrong
+ * burn the session and drop the payload. A browser without the binding secret changes nothing.
+ */
+export function confirmPairingTransfer(sessionId: string, secret: string | undefined, digits: unknown): ConfirmResult {
+    const session = typeof sessionId === 'string' ? liveSession(sessionId) : undefined;
+    if (!session) return { result: 'expired' };
+    if (!bound(session, secret)) return { result: 'wrong-browser' };
+    if (session.status === 'burned') return { result: 'burned' };
+    if (session.status !== 'confirming' || !session.confirmCode) return { result: 'not-confirming' };
+    const given = Buffer.from(String(digits ?? '').trim().padEnd(2, ' ').slice(0, 8));
+    const want = Buffer.from(session.confirmCode);
+    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+        session.confirmTries++;
+        if (session.confirmTries >= CONFIRM_TRIES) {
+            session.status = 'burned';
+            session.payload = undefined;
+            session.confirmCode = undefined;
+            held.delete(sessionId);
+            return { result: 'burned' };
+        }
+        return { result: 'wrong', triesLeft: CONFIRM_TRIES - session.confirmTries };
+    }
+    session.status = 'transferred';
+    session.confirmCode = undefined;
+    return { result: 'released' };
 }
 
 /**
  * Polled by the waiting desktop PWA.
- * If transferred, delivers the payload: its slot is free at once, and it is kept for a 15-second grace (a retry of a
+ * Answers only the browser holding the session's binding secret ('wrong-browser' to any other), and 'confirming'
+ * while the phone's digits wait to be typed. Once they are, delivers the payload: its slot is free at once, and it is kept for a 15-second grace (a retry of a
  * lost answer gets it again), re-armed by each poll but never past the session's 120 s.
  */
-export function pollPairingSession(sessionId: string): {
-    status: 'waiting' | 'transferred' | 'expired';
+export function pollPairingSession(sessionId: string, secret: string | undefined): {
+    status: 'waiting' | 'confirming' | 'transferred' | 'burned' | 'expired' | 'wrong-browser';
     desktopPubHex?: string;
     payload?: PairingPayload;
 } {
@@ -211,6 +270,9 @@ export function pollPairingSession(sessionId: string): {
     if (!session) {
         return { status: 'expired' };
     }
+    // Only the browser that opened it learns anything about it, the payload above all.
+    if (!bound(session, secret)) return { status: 'wrong-browser' };
+    if (session.status === 'confirming' || session.status === 'burned') return { status: session.status };
 
     if (session.status === 'transferred' && session.payload) {
         const payload = session.payload;

@@ -2723,8 +2723,19 @@ export async function initPairingApi(sessionId: string, desktopPubHex: string): 
     return request<{ success: boolean; expiresAt: number }>('POST', '/api/pair/init', { sessionId, desktopPubHex });
 }
 
+/**
+ * The two digits the phone shows (number matching). The relay holds the phone's account until this browser, the one
+ * holding the session's binding cookie, types them: 'released', 'wrong' (tries left), or 'burned' after three wrong.
+ */
+export async function confirmPairingApi(sessionId: string, code: string): Promise<{ result: 'released' | 'wrong' | 'burned' | 'wrong-browser' | 'expired' | 'not-confirming'; triesLeft?: number }> {
+    const res = await fetch(`${getNodeApiUrl()}/api/pair/confirm`, {
+        method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, code }),
+    });
+    return res.json().catch(() => ({ result: 'expired' as const }));
+}
+
 export async function pollPairingApi(sessionId: string): Promise<{
-    status: 'waiting' | 'transferred' | 'expired';
+    status: 'waiting' | 'confirming' | 'transferred' | 'burned' | 'expired' | 'wrong-browser';
     desktopPubHex?: string;
     payload?: {
         mobilePubHex: string;

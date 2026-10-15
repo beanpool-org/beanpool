@@ -28,7 +28,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t } from '@beanpool/core';
+import { t, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
 
 interface Props extends LocalCommunityWays {
     /** Null only in preview: a visitor with no key reads Example Valley's ledger in the lobby (GuestLobby). */
@@ -794,40 +794,30 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                     </div>
                     )}
 
-                    {/* Community Circulation info */}
+                    {/* Community Circulation: the ledger's own monthly demurrage (monthlyCirculation, core's one copy of the
+                        brackets), on the chip roles so it reads as a card in light and dark. At or under the fee-free line it
+                        says so in words rather than showing a zero. */}
                     {balance > 0 && (() => {
-                        const brackets = [
-                            { maxInBracket: 200, rate: 0.000 },
-                            { maxInBracket: 300, rate: 0.010 },
-                            { maxInBracket: 500, rate: 0.015 },
-                            { maxInBracket: 1000, rate: 0.020 },
-                            { maxInBracket: Infinity, rate: 0.025 }
-                        ];
-                        let remaining = balance;
-                        let totalCirculation = 0;
-                        for (const b of brackets) {
-                            if (remaining <= 0) break;
-                            const amountInBracket = Math.min(remaining, b.maxInBracket);
-                            totalCirculation += amountInBracket * b.rate;
-                            remaining -= amountInBracket;
-                        }
-                        const effectiveRate = ((totalCirculation / balance) * 100).toFixed(2);
+                        const monthly = monthlyCirculation(balance);
                         const showAmber = balance > 1000;
+                        // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
+                        const twoDp = (n: number) => (n < 0.005 ? '<0.01' : n.toFixed(2));
 
                         return (
-                            <div className="rounded-xl p-4 shadow-sm border" style={{ background: showAmber ? 'linear-gradient(135deg, #fef3c7, #fde68a)' : '#ecfdf5', borderColor: showAmber ? '#fbbf24' : '#a7f3d0' }}>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[13px] font-bold" style={{ color: showAmber ? '#92400e' : '#065f46' }}>
-                                        🌿 Community Circulation
-                                    </span>
-                                    <span className="text-[13px] font-bold font-mono flex items-center" style={{ color: showAmber ? '#92400e' : '#047857' }}>
-                                        −{totalCirculation.toFixed(3)}
-                                        <img src="/assets/bean.png" className="w-[14px] h-[14px] mx-0.5" alt="B" />
-                                        /mo → Commons
-                                    </span>
+                            <div className={`rounded-2xl p-4 shadow-sm border border-nature-200 dark:border-nature-800 ${showAmber ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`} data-testid="ledger-circulation">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="text-[13px] font-bold"><span aria-hidden="true">🌿 </span>{t('Community Circulation')}</span>
+                                    {monthly > 0 && (
+                                        <span className="text-[13px] font-bold font-mono flex items-center" data-testid="ledger-circulation-amount">
+                                            −{twoDp(monthly)}
+                                            <img src="/assets/bean.png" className="w-[14px] h-[14px] ml-0.5" alt="B" />
+                                        </span>
+                                    )}
                                 </div>
-                                <p className="text-[11px] mt-2 font-medium" style={{ color: showAmber ? '#92400e' : '#059669' }}>
-                                    ≈ {effectiveRate}% /mo effective • Funds community projects
+                                <p className="text-[11px] mt-2 font-medium">
+                                    {monthly > 0
+                                        ? t('Goes to the Commons each month: about {rate}% of your balance. It funds community projects.', { rate: twoDp((monthly / balance) * 100) })
+                                        : t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })}
                                 </p>
                             </div>
                         );

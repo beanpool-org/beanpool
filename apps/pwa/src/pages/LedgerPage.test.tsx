@@ -372,3 +372,47 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
         expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
     });
 });
+
+// PR #2020 fix round 1: the Wallet's Community Circulation box. Its figure is core's monthlyCirculation (the ledger's own
+// brackets), its colours are the chip roles (no raw hex, so it reads as a card in dark), and at or under the 200 Beans
+// fee-free line it says so in words instead of "−0.000 /mo" and "≈ 0.00% /mo".
+describe('the Wallet\'s Community Circulation box', () => {
+    const walletWith = async (balance: number) => {
+        vi.mocked(getBalance).mockResolvedValue({ balance, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${balance.toFixed(1)}B`));
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        return screen.getByTestId('ledger-circulation');
+    };
+
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    for (const balance of [85, 200]) {
+        it(`at ${balance} Beans says in words that nothing goes to the Commons, with no amount or rate`, async () => {
+            const box = await walletWith(balance);
+            expect(box).toHaveTextContent('Nothing goes to the Commons while you hold 200 Beans or less.');
+            expect(within(box).queryByTestId('ledger-circulation-amount')).toBeNull();
+            expect(box.textContent).not.toMatch(/0\.00|%/);
+        });
+    }
+
+    it('over 200 Beans shows the month\'s amount to 2 decimals and the share of the balance', async () => {
+        // 750: 300 at 1 % + 250 at 1.5 % = 6.75 a month, 0.90 % of the balance.
+        const box = await walletWith(750);
+        expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−6.75');
+        expect(box).toHaveTextContent('about 0.90% of your balance');
+        expect(box.textContent).not.toMatch(/Nothing goes/);
+    });
+
+    it('is drawn from the colour library: ok chip roles, warn above 1000, no inline colour', async () => {
+        const box = await walletWith(750);
+        expect(box).toHaveClass('bg-bp-chip-ok-tint', 'text-bp-chip-ok-ink');
+        expect([box, ...Array.from(box.querySelectorAll<HTMLElement>('*'))].map(el => el.getAttribute('style')).filter(Boolean)).toEqual([]);
+    });
+
+    it('turns to the warn roles above 1000 Beans', async () => {
+        const box = await walletWith(1500);
+        expect(box).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
+        expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−20.50');
+    });
+});

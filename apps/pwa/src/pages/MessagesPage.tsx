@@ -14,6 +14,7 @@ import {
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry,
 } from '../lib/api';
+import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
@@ -189,6 +190,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
+    // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
+    const [loadedDmId, setLoadedDmId] = useState<string | null>(null);
     const [groupChat, setGroupChat] = useState<GroupChatView | null>(null);
     // In-thread search (design §10): over the loaded thread only, in this browser.
     const [chatSearch, setChatSearch] = useState<string | null>(null);
@@ -330,20 +333,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
              (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
-    const completedTransactionsByPostId = useMemo(() => {
-        const map = new Map<string, MarketplaceTransaction>();
-        for (const tx of userTransactions) {
-            // marketplace_transactions has no UNIQUE on post_id, so an offer bought by
-            // several people has several completed rows. The .find() this replaces took
-            // the first match, and a Map keeps the last — so writing unconditionally
-            // would quietly change which deal the review prompt is about. First wins,
-            // as before; picking the right one per conversation is a separate bug.
-            if (tx.postId && tx.status === 'completed' && !map.has(tx.postId)) {
-                map.set(tx.postId, tx);
-            }
-        }
-        return map;
-    }, [userTransactions]);
 
     // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
     // to one line when the draft is cleared on send.
@@ -676,6 +665,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return true;
             });
             setMessages(uniqueMessages);
+            setLoadedDmId(convId);
             if (identity?.publicKey) {
                 markConversationReadApi(identity.publicKey, convId).catch(() => {});
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
@@ -1717,6 +1707,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     );
                 })()}
 
+                {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
+                    isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
+                {(() => {
+                    if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
+                    const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
+                    if (!unrated) return null;
+                    const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
+                        try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
+                    })());
+                    if (lineShown) return null;
+                    return (
+                        <div data-testid="chat-rate-banner" style={{
+                            borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+                        }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
+                            <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
+                                background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
+                                padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                            }}>
+                                <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
+                            </button>
+                        </div>
+                    );
+                })()}
+
                 {/* Messages */}
                 <div style={{
                     flex: 1, overflowY: 'auto', padding: '1rem',
@@ -1842,21 +1858,28 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     )}
                                     
                                     {msg.systemType === 'ESCROW_RELEASED' && metaObj?.postId && (() => {
-                                        const relatedTx = completedTransactionsByPostId.get(metaObj.postId);
-                                        const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
-                                        const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
+                                        // This line's own trade (lib/trade-review), never the first completed row on its post.
+                                        const relatedTx = tradeOfReleaseLine(userTransactions, metaObj, msg.timestamp);
+                                        const hasRated = relatedTx ? iRated(relatedTx, identity.publicKey) : false;
+                                        // A trade this page doesn't hold (older than the node's page of trades) can't be rated from
+                                        // here: the line opens its post, as the funded line's View Post does (review #1980 N2).
+                                        const canRate = !!relatedTx && !hasRated;
                                         return (
                                             <button
-                                                onClick={() => onNavigate?.('marketplace', metaObj.postId)}
+                                                onClick={() => canRate
+                                                    ? onNavigate?.('marketplace-review', relatedTx!.id)
+                                                    : onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
                                                     marginTop: '0.5rem', background: 'var(--bg-card)',
-                                                    color: hasRated ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)',
-                                                    border: `1px solid ${hasRated ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)'}`,
+                                                    color: canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)',
+                                                    border: `1px solid ${canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                             >
-                                                {hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
+                                                {!relatedTx
+                                                    ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
+                                                    : hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
                                             </button>
                                         );
                                     })()}
@@ -2538,10 +2561,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
                         .map(conv => {
-                            const relatedTx = conv.postId ? completedTransactionsByPostId.get(conv.postId) : undefined;
-                            const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
-                            const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
-                            const needsReview = conv.lastMsgType === 'system' && conv.lastSysType === 'ESCROW_RELEASED' && !hasRated;
+                            // A finished trade with this DM's other person that I haven't rated (lib/trade-review) — the
+                            // same answer the chat's rate button gives, as the phone's chat list does. Not the thread's
+                            // last line: a trade chat is one DM per pair, its post_id NULL, so that read "unrated" forever.
+                            const convPeer = conv.type === 'dm' ? (conv.participants?.find(p => p !== identity.publicKey) || '') : '';
+                            const needsReview = !!convPeer && !!unratedTradeWith(userTransactions, identity.publicKey, convPeer);
                             
                             return (
                             <div

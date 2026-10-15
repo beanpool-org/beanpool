@@ -38,7 +38,7 @@ import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlac
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, dealsLine,
-    decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
+    decideLine, distanceText, findBody, findListed, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
@@ -214,7 +214,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
     const [townOpen, setTownOpen] = useState(false);
     const [townName, setTownName] = useState<string | null>(null);
-    // The find card's two ways on with none near (Sonnet review S5; the phone's FindCommunityBody): start one, or be told.
+    // The find card's two ways on when nothing listed is near (Sonnet review S5; the phone's FindCommunityBody): start one
+    // (the screen the 🏘️ sheet opens), or be told.
     const [startOpen, setStartOpen] = useState(false);
     const [watched, setWatched] = useState(false);
     const [watchNote, setWatchNote] = useState<string | null>(null);
@@ -1104,11 +1105,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'find': {
                 const f = c.find!;
-                const more = f.communities.slice(0, 3);
+                const more = findListed(f);
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
-                        <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">{findBody(f)}</p>
+                        <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
@@ -1116,6 +1117,23 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                 : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
                         })}
+                        {/* Nothing listed within 250 km, and the list has loaded (findOffersStart): Start leads, as on the
+                            phone, and a member can be told when one starts here. Never before the list loads, never while near. */}
+                        {findOffersStart(f) && (
+                            <div className="mt-2 mb-1 flex flex-col gap-2" data-testid="home-find-actions">
+                                <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start"
+                                    className="w-full min-h-[44px] px-4 rounded-xl border-0 bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-sm font-bold cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                    {t('Start a community')}
+                                </button>
+                                {!(watched || (f.watches?.length ?? 0) > 0) && (
+                                    <button type="button" onClick={() => void tellMe()} data-testid="home-find-watch" className={FIND_ACTION}
+                                        aria-label={t('Tell me when a community starts near here')}>
+                                        {t('Tell me when one starts here')}
+                                    </button>
+                                )}
+                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
+                            </div>
+                        )}
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
@@ -1144,20 +1162,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town-instead" className={TOWN_LINK}>
                                 {NOT_HERE_TYPE_YOUR_TOWN}
                             </button>
-                        )}
-                        {f.communities.length === 0 && f.point !== null && (
-                            <div className="mt-2 flex flex-col gap-2" data-testid="home-find-actions">
-                                <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start" className={FIND_ACTION}>
-                                    {t('Start a community')}
-                                </button>
-                                {!(watched || (f.watches?.length ?? 0) > 0) && (
-                                    <button type="button" onClick={() => void tellMe()} data-testid="home-find-watch" className={FIND_ACTION}
-                                        aria-label={t('Tell me when a community starts near here')}>
-                                        {t('Tell me when one starts here')}
-                                    </button>
-                                )}
-                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
-                            </div>
                         )}
                         {townOpen && (
                             <div className="mt-2">

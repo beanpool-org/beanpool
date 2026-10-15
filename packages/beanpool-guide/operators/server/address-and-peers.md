@@ -49,9 +49,20 @@ A confirmed address travels with the take-over keys, so a standby that takes ove
 
 ![Node Identity and directory settings in Settings](images/appliance-identity.webp)
 
-By default your server tells the BeanPool directory about itself every 12 hours: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it.
+By default your server tells the BeanPool directory about itself every 12 hours, and at once when an owner names or renames the community: the community's name and web address, the area it serves and how many members it has. That is how new people find you, and how the global community passes on requests to join. The directory is public: anyone can read it, and the map on beanpool.org shows it.
 
 The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent.
+
+### When the directory doesn't list your community
+
+Your server sends the directory nothing while either of these is true. **Node Identity** says which, in a line under **Publish Now**, and so does the server's own settings page:
+
+- **The community has no name of its own**: its name is blank, or exactly "BeanPool Community". Type the community's name in **Community Name** and press **Save**. Your server tells the directory at once, with no restart. First-time setup asks for the name too, and won't go on without one.
+- **The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and restart the server. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts.
+
+While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one.
+
+To check the name your server sends, from anywhere, open https://YOUR-ADDRESS/api/directory/info. Its communityName must be your community's name: null means it has none yet.
 
 ## Gateway
 

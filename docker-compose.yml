@@ -143,6 +143,9 @@ services:
       # admin join, and visitors see nothing. Empty or 0/false/no/off = off. Any other value stops the node at start, so a
       # typo never leaves it open.
       - PRIVATE_PREVIEW=${PRIVATE_PREVIEW:-}
+      # Off the public directory whatever the settings say (apps/server/src/services/directory-publisher.ts): 1/true/
+      # yes/on. Our own test and review nodes set it in their .env; empty for a community.
+      - DIRECTORY_UNLISTED=${DIRECTORY_UNLISTED:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

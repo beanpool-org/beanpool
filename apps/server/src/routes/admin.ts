@@ -101,6 +101,7 @@ import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRede
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
+import { directoryHeldBack } from '../services/directory-publisher.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
@@ -1248,13 +1249,21 @@ const getDiagnosticsHandler = async (ctx: any) => {
             activeWsConnections: activeConnections ? activeConnections.size : 0,
             p2pActivePeers: activePeers,
             userCount,
-            communityName: config.communityName || 'BeanPool Community Node',
-            callsign: config.callsign || 'admin',
+            // The name and callsign as stored, null for none: the owners' name boxes (the manager's first-start wizard and
+            // Node Identity, static/settings.js) start from these, so a save left untouched stores what was there and
+            // never a stand-in. A stand-in saved as the name was published as one (deciding review of #1935, finding 1);
+            // each screen that shows a name says its own when there is none.
+            communityName: config.communityName || null,
+            callsign: config.callsign || null,
             // The community's contacts as stored, for the owner's Node Identity screens (the manager, static/settings.js):
             // the public /api/local/community-info says each only when it is published. Null for none, so a screen
             // can tell "none stored" from an answer that didn't load.
             contactEmail: config.contactEmail || null,
             contactPhone: config.contactPhone || null,
+            // Why the public directory doesn't list this community although it is set to publish: 'unnamed' (no name of
+            // its own yet) or 'unlisted' (DIRECTORY_UNLISTED in its .env), else null (services/directory-publisher.ts).
+            // The owners' Directory Publishing says it, with what to change.
+            directoryHeldBack: directoryHeldBack(),
             shutdownStatus: getShutdownStatus(),
             // The Settings banner when this server's standby needs its owners (services/standby-health.ts): the
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or

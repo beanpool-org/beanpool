@@ -383,6 +383,7 @@ export const SUITES = [
     'test-photo-key-collision',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',
+    'test-directory-hold-back',
     'test-website-directory-map',
     'test-members-holiday',
     'test-admin-seed-invite',

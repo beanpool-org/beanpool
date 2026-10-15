@@ -89,6 +89,7 @@ import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type Adm
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
+import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
@@ -326,7 +327,10 @@ router.post('/api/local/update-identity', async (ctx) => {
     if (communityName !== undefined) updates.communityName = cleanLabel(communityName, 60) ?? null;
     if (contactEmail !== undefined) updates.contactEmail = (contactEmail || '').slice(0, 100) || null;
     if (contactPhone !== undefined) updates.contactPhone = (contactPhone || '').slice(0, 30) || null;
+    const nameBefore = getLocalConfig().communityName;
     updateLocalConfig(updates);
+    // A community named (or renamed) after its server started is listed at once, not at the next timed push.
+    if (updates.communityName !== undefined && updates.communityName !== nameBefore) communityNameSaved();
     ctx.body = { success: true };
 });
 

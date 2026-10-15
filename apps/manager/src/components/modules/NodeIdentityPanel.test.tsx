@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { NodeIdentityPanel, DIRECTORY_HELD_BACK_LINES } from './NodeIdentityPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import { setTfaSessionToken, type DiagnosticsResponse } from '../../lib/node-client';
 
@@ -166,7 +166,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(screen.getByRole('button', { name: /save identity/i })).toBeInTheDocument();
     });
 
-    it('hydrates initial values correctly from /api/local/community-info, the admin diagnostics and /api/node/config', async () => {
+    it('hydrates initial values correctly: the name and contacts from the admin diagnostics, the callsign from /api/local/community-info, the rest from /api/node/config', async () => {
         await act(async () => {
             render(
                 <NodeIdentityPanel
@@ -177,9 +177,11 @@ describe('NodeIdentityPanel Component', () => {
             );
         });
 
-        // Wait for async load to finish populating
+        // Wait for async load to finish populating. The name is the stored one (diagnostics), never the public
+        // community-info's, which stands in the callsign for a community with no name (#1935 finding 1).
         await waitFor(() => {
-            expect(screen.getByDisplayValue('Hydrated Community')).toBeInTheDocument();
+            expect(screen.getByDisplayValue('Mullumbimby Commons')).toBeInTheDocument();
+            expect(screen.queryByDisplayValue('Hydrated Community')).toBeNull();
             expect(screen.getByDisplayValue('hydrated-callsign')).toBeInTheDocument();
             expect(screen.getByDisplayValue('contact@hydrated.org')).toBeInTheDocument();
             expect(screen.getByDisplayValue('+61 400 000 000')).toBeInTheDocument();
@@ -205,6 +207,10 @@ describe('NodeIdentityPanel Component', () => {
                     ok: true,
                     json: () => Promise.resolve({ communityName: 'Quiet Valley', contactEmail: 'hi@quiet.example', contactPhone: '+61 400 111 222' }),
                 });
+            }
+            if (url.includes('/api/local/admin/diagnostics')) {
+                // The stored name (the box's source since #1935); no contacts named.
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ communityName: 'Quiet Valley' }) });
             }
             if (url.includes('/api/node/config')) {
                 return Promise.resolve({
@@ -599,8 +605,8 @@ describe('NodeIdentityPanel Component', () => {
                 });
             }
             if (url.includes('/api/local/admin/diagnostics')) {
-                // A node with no contacts stored says so, so the empty boxes are what it has.
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ contactEmail: null, contactPhone: null }) });
+                // A node with no contacts stored says so, so the empty boxes are what it has. The stored name is here too.
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ communityName: 'Unlocated Node', contactEmail: null, contactPhone: null }) });
             }
             if (url.includes('/api/node/config')) {
                 return Promise.resolve({
@@ -871,7 +877,7 @@ describe('NodeIdentityPanel Component', () => {
                 if (url.includes('/api/local/admin/diagnostics')) {
                     return Promise.resolve({
                         ok: true,
-                        json: () => Promise.resolve({ contactEmail: 'info@eco.org', contactPhone: '+61 400 999 888' }),
+                        json: () => Promise.resolve({ communityName: 'Northern Rivers Eco', contactEmail: 'info@eco.org', contactPhone: '+61 400 999 888' }),
                     });
                 }
                 if (url.includes('/api/node/config')) {
@@ -1098,7 +1104,7 @@ describe('NodeIdentityPanel Component', () => {
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
-            await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByDisplayValue('quiet')).toBeInTheDocument());
             await waitFor(() => expect(screen.getByText(/couldn.t load the contact email and phone/i)).toBeInTheDocument());
 
             const emailInput = document.getElementById('contact-email') as HTMLInputElement;
@@ -1112,8 +1118,9 @@ describe('NodeIdentityPanel Component', () => {
             const body = identityBody(fetchMock);
             expect('contactEmail' in body).toBe(false);
             expect('contactPhone' in body).toBe(false);
-            // The rest of the identity still saves.
-            expect(body.communityName).toBe('Quiet Valley');
+            // The rest of the identity still saves: the stored name (diagnostics, as the manager read it), never the public
+            // route's stand-in.
+            expect(body.communityName).toBe('Mullumbimby Commons');
             expect(body.callsign).toBe('quiet');
         });
 
@@ -1122,7 +1129,7 @@ describe('NodeIdentityPanel Component', () => {
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
-            await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByDisplayValue('quiet')).toBeInTheDocument());
             expect(document.getElementById('contact-email')).toBeDisabled();
             expect(screen.queryByText(/couldn.t load the contact email and phone/i)).not.toBeInTheDocument();
 
@@ -1196,6 +1203,118 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect(nodeConfigBody()).toBeDefined();
             expect('acceptKnocks' in nodeConfigBody()).toBe(false);
+        });
+    });
+
+    describe('Directory publishing: why the community is not listed', () => {
+        /** The beforeEach routes, with these answered instead. */
+        const answer = (routes: Record<string, { ok: boolean; status?: number; body: unknown }>) => {
+            const base = global.fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+                const hit = Object.keys(routes).find((k) => url.includes(k));
+                if (!hit) return base(url, init);
+                const r = routes[hit];
+                return Promise.resolve({ ok: r.ok, status: r.status ?? (r.ok ? 200 : 500), statusText: '', json: () => Promise.resolve(r.body) });
+            }));
+        };
+        const identityBody = () => {
+            const call = (global.fetch as any).mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/update-identity'));
+            return call ? JSON.parse(call[1].body) : undefined;
+        };
+        const unnamed = { ...mockDiag, communityName: null, callsign: 'admin', directoryHeldBack: 'unnamed' as const };
+
+        it("an unnamed community's name box starts empty, never community-info's stand-in, and a Save of a place stores no name (#1935 finding 1)", async () => {
+            answer({
+                '/api/local/community-info': { ok: true, body: { communityName: 'admin', callsign: 'admin', contactEmail: null, contactPhone: null } },
+                '/api/local/admin/diagnostics': { ok: true, body: { ...unnamed, contactEmail: null, contactPhone: null } },
+            });
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={unnamed} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByDisplayValue('admin')).toBeInTheDocument());
+            expect((screen.getByLabelText(/Community Name/i) as HTMLInputElement).value).toBe('');
+            await act(async () => { fireEvent.click(screen.getByRole('button', { name: /save identity/i })); });
+            const body = identityBody();
+            expect(body.communityName).toBe('');
+            expect(body.callsign).toBe('admin');
+            expect(body.lat).toBe(-28.55);
+        });
+
+        it("a name that never loaded is left out of a Save, so an empty box never erases the node's name", async () => {
+            answer({ '/api/local/admin/diagnostics': { ok: false, status: 500, body: { error: 'down' } } });
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByDisplayValue('hydrated-callsign')).toBeInTheDocument());
+            expect((screen.getByLabelText(/Community Name/i) as HTMLInputElement).value).toBe('');
+            await act(async () => { fireEvent.click(screen.getByRole('button', { name: /save identity/i })); });
+            expect(identityBody()).not.toHaveProperty('communityName');
+            // A name typed into it is sent.
+            vi.mocked(global.fetch).mockClear();
+            fireEvent.change(screen.getByLabelText(/Community Name/i), { target: { value: 'Riverbend Commons' } });
+            await act(async () => { fireEvent.click(screen.getByRole('button', { name: /save identity/i })); });
+            expect(identityBody().communityName).toBe('Riverbend Commons');
+        });
+
+        it("Publish Now refused with 409 says the node's reason under the button, never \"Failed\" (#1935 finding 3)", async () => {
+            const reason = 'Not listed in the directory yet: this community has no name of its own ("BeanPool Community" is the default). Name it in Settings and it is listed at once.';
+            answer({ '/api/local/admin/directory/push': { ok: false, status: 409, body: { success: false, error: reason, heldBack: 'unnamed' } } });
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={unnamed} onRefreshDiag={vi.fn()} />);
+            });
+            await act(async () => { fireEvent.click(document.getElementById('publish-now-btn')!); });
+            await waitFor(() => expect(document.getElementById('publish-now-btn')).toHaveTextContent('Not listed'));
+            expect(screen.queryByText(/Failed/)).toBeNull();
+            const line = screen.getByTestId('directory-publish-refused');
+            expect(line).toHaveTextContent(reason);
+            expect(line.className).toContain('text-bp-ink-warning');
+            // One line: the node's answer stands in for the held-back hint while it shows.
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+        });
+
+        it('Publish Now that fails for any other reason still says Failed', async () => {
+            answer({ '/api/local/admin/directory/push': { ok: false, status: 500, body: { success: false, error: 'Directory registry returned 502' } } });
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await act(async () => { fireEvent.click(document.getElementById('publish-now-btn')!); });
+            await waitFor(() => expect(document.getElementById('publish-now-btn')).toHaveTextContent('Failed'));
+            expect(screen.queryByTestId('directory-publish-refused')).toBeNull();
+        });
+
+        it("says the node's own reason, with what to change, for a community with no name of its own", async () => {
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: 'unnamed' }} onRefreshDiag={vi.fn()} />);
+            });
+            const line = screen.getByTestId('directory-held-back-hint');
+            expect(line).toHaveTextContent(DIRECTORY_HELD_BACK_LINES.unnamed);
+            expect(line.textContent).toMatch(/no name of its own/);
+            expect(line.textContent).toMatch(/Community name, then Save/);
+            // The colour role, never a raw palette shade.
+            expect(line.className).toContain('text-bp-ink-warning');
+            expect(line.className).not.toMatch(/amber-/);
+        });
+
+        it('says when DIRECTORY_UNLISTED holds it back, and how to undo it', async () => {
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: 'unlisted' }} onRefreshDiag={vi.fn()} />);
+            });
+            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(DIRECTORY_HELD_BACK_LINES.unlisted);
+            expect(screen.getByTestId('directory-held-back-hint').textContent).toMatch(/DIRECTORY_UNLISTED.*restart/);
+        });
+
+        it('says nothing when nothing holds it back, or the node is from before, whatever the name box holds', async () => {
+            const { unmount } = render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: null }} onRefreshDiag={vi.fn()} />);
+            await act(async () => {});
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+            // A community really called "BeanPool Community" by its own choice is the node's call, not the box's.
+            fireEvent.change(screen.getByLabelText(/community name/i), { target: { value: 'BeanPool Community' } });
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+            unmount();
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
         });
     });
 });

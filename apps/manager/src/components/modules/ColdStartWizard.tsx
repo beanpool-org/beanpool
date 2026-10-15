@@ -121,7 +121,9 @@ export function ColdStartWizard({
     const nodeBaseUrl = activeNode?.url ? activeNode.url.replace(/\/+$/, '') : '';
     const nodeHost = nodeBaseUrl.replace(/^https?:\/\//, '') || 'this server';
 
-    // Step 1: Name & check. The step is done only when the node answered its health check AND saved the name.
+    // Step 1: Name & check. The step is done only when the node answered its health check AND saved the name. The box
+    // starts as the stored name: empty on a community with none, so the owner types one (the box is required). It never
+    // starts as a stand-in: saved untouched, that was published as the community's name (#1935 finding 1).
     const [communityName, setCommunityName] = useState(diag?.communityName || '');
     const [reachabilityStatus, setReachabilityStatus] = useState<'unchecked' | 'checking' | 'reachable' | 'error'>('unchecked');
     const [reachError, setReachError] = useState<string | null>(null);
@@ -246,8 +248,9 @@ export function ColdStartWizard({
                 headers: buildAdminHeaders(nodeCredential(activeNode), tfa),
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
+                    // The name the owner typed, and nothing else: the callsign stays as stored (none on a new community)
+                    // rather than one the owner never chose ("node-genesis", or the "admin" diagnostics once stood in with).
                     communityName: communityName.trim(),
-                    callsign: diag?.callsign || 'node-genesis',
                 }),
             });
         } catch {

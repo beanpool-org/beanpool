@@ -111,11 +111,22 @@ export interface DiagnosticsResponse {
     activeWsConnections: number;
     p2pActivePeers: number;
     userCount?: number;
-    communityName: string;
-    callsign: string;
+    /**
+     * The name and callsign as stored, null for none (a node from before #1935 sent "BeanPool Community Node" and "admin"
+     * instead). An owner's name box starts from these, never from a display fallback; a screen that shows a name says
+     * its own when there is none.
+     */
+    communityName: string | null;
+    callsign: string | null;
     /** The community's contacts as stored (null for none); absent on a node from before they moved off the public route. */
     contactEmail?: string | null;
     contactPhone?: string | null;
+    /**
+     * Why the public directory doesn't list the community although it is set to publish (apps/server
+     * services/directory-publisher.ts directoryHeldBack): no name of its own yet, or DIRECTORY_UNLISTED in its .env.
+     * Null when nothing holds it back; absent on a node from before.
+     */
+    directoryHeldBack?: 'unnamed' | 'unlisted' | null;
     shutdownStatus?: ShutdownStatus;
     diskHealth?: DiskHealth;
     /** The node's watch on its standbys (apps/server services/standby-health.ts): owners only, null to anyone else. */

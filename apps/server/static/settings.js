@@ -1027,7 +1027,9 @@
                         callsign: document.getElementById('cfg-callsign').value,
                         lat: document.getElementById('cfg-lat').value ? parseFloat(document.getElementById('cfg-lat').value) : null,
                         lng: document.getElementById('cfg-lng').value ? parseFloat(document.getElementById('cfg-lng').value) : null,
-                        communityName: document.getElementById('community-name').value,
+                        // Only a name the node gave, or one typed: an empty box that never loaded would erase the node's.
+                        ...(nameLoaded || document.getElementById('community-name').value.trim()
+                            ? { communityName: document.getElementById('community-name').value } : {}),
                         // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
                         ...(contactsLoaded ? {
                             contactEmail: document.getElementById('contact-email').value,
@@ -1039,13 +1041,17 @@
                 await saveNodeConfig();
                 if (res.ok) showStatus('identity-status', 'Saved!', 'success');
                 else showStatus('identity-status', 'Save failed', 'error');
+                refreshDirectoryHeldBack();
             } catch (e) { showStatus('identity-status', 'Save failed', 'error'); }
         });
 
         // ======================== COMMUNITY INFO ========================
-        // The contacts come from the admin route: the public community-info says each only when it is published. Until
-        // they load, or if they can't, the two boxes stay closed and Save leaves both out, so it never erases the node's.
+        // The name and the contacts come from the admin route, as stored. Never the public community-info's: it shows the
+        // callsign or "BeanPool Community" for a community with no name, and that saved back as the name was published
+        // (deciding review of #1935, finding 1); it says each contact only when it is published. Until they load, or if
+        // they can't, the two contact boxes stay closed and Save leaves both out, so it never erases the node's.
         let contactsLoaded = false;
+        let nameLoaded = false;
         function showContacts(loaded, failed) {
             contactsLoaded = loaded;
             document.getElementById('contact-email').disabled = !loaded;
@@ -1053,16 +1059,34 @@
             document.getElementById('contacts-not-loaded').style.display = failed ? 'block' : 'none';
         }
 
+        // Why the public directory doesn't list this community, from the node itself (diagnostics `directoryHeldBack`), and
+        // what to change: the manager's Directory Publishing says the same. Hidden when nothing holds it back.
+        const DIRECTORY_HELD_BACK_LINES = {
+            unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community Name, then Save.',
+            unlisted: "Not on the public map: this server's .env sets DIRECTORY_UNLISTED, as our test and review nodes do. Remove that line and restart the node to be listed.",
+        };
+        function showDirectoryHeldBack(reason) {
+            const el = document.getElementById('directory-held-back');
+            if (!el) return;
+            const line = Object.prototype.hasOwnProperty.call(DIRECTORY_HELD_BACK_LINES, reason) ? DIRECTORY_HELD_BACK_LINES[reason] : null;
+            el.textContent = line || '';
+            el.style.display = line ? 'block' : 'none';
+        }
+        async function refreshDirectoryHeldBack() {
+            try {
+                const res = await fetch(`${API}/admin/diagnostics`, {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ password: authToken }),
+                });
+                showDirectoryHeldBack(res.ok ? (await res.json()).directoryHeldBack : null);
+            } catch { showDirectoryHeldBack(null); }
+        }
+
         // Load community info after login
         async function loadCommunityInfo() {
             showContacts(false, false);
-            try {
-                const res = await fetch(`${API}/community-info`);
-                if (res.ok) {
-                    const data = await res.json();
-                    document.getElementById('community-name').value = data.communityName || '';
-                }
-            } catch (e) { console.warn('Failed to load community info:', e); }
+            nameLoaded = false;
             try {
                 const res = await fetch(`${API}/admin/diagnostics`, {
                     method: 'POST',
@@ -1070,6 +1094,12 @@
                     body: JSON.stringify({ password: authToken }),
                 });
                 const data = res.ok ? await res.json() : null;
+                showDirectoryHeldBack(data && data.directoryHeldBack);
+                // The stored name, or none (null): an unnamed community's box starts empty.
+                if (data && (typeof data.communityName === 'string' || data.communityName === null)) {
+                    document.getElementById('community-name').value = data.communityName || '';
+                    nameLoaded = true;
+                }
                 // Each is text, or null for none stored; anything else is not the node's contacts.
                 const text = (v) => (typeof v === 'string' ? v : v === null ? '' : undefined);
                 if (!data || text(data.contactEmail) === undefined || text(data.contactPhone) === undefined) {
@@ -1819,6 +1849,12 @@
                         const date = new Date(data.timestamp);
                         document.getElementById('last-published').innerText = `Last published: ${date.toLocaleString()}`;
                     }
+                } else if (res.status === 409 && typeof data.error === 'string') {
+                    // Not listed by the node's own setting (no name of its own, DIRECTORY_UNLISTED, a profile that is never
+                    // listed), not a fault: the node's reason goes in the line under the button.
+                    btn.innerHTML = '⏸️ Not listed';
+                    const el = document.getElementById('directory-held-back');
+                    if (el) { el.textContent = data.error; el.style.display = 'block'; }
                 } else {
                     btn.innerHTML = '❌ Failed';
                 }

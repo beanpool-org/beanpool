@@ -125,6 +125,41 @@ describe('the web find card with no community near', () => {
         expect(api.watchPlace).not.toHaveBeenCalled();
     });
 
+    it('one Start a community, and one Start screen, never two (the #1935 × #1955 merge)', async () => {
+        await memberAtLismore();
+        expect(screen.getAllByTestId('home-find-start')).toHaveLength(1);
+        expect(screen.getAllByTestId('home-find-actions')).toHaveLength(1);
+        fireEvent.click(screen.getByTestId('home-find-start'));
+        expect(screen.getAllByTestId('start-community-screen')).toHaveLength(1);
+    });
+
+    it('far (nearest listed 12,489 km away) is "none near": one Start and Tell me, as the phone (#1935 250 km rule)', async () => {
+        const lismore = { key: 'l', name: 'Lismore', url: 'https://lismore.example.org', memberCount: 12, distanceKm: 12_489 };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [lismore] }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-find-actions');
+        expect(screen.getAllByTestId('home-find-start')).toHaveLength(1);
+        expect(screen.getByTestId('home-find-watch')).toBeInTheDocument();
+    });
+
+    it('near (12 km) or the list not loaded yet: neither Start nor Tell me', async () => {
+        const near = { key: 'l', name: 'Lismore', url: 'https://lismore.example.org', memberCount: 12, distanceKm: 12 };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [near] }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-find-body')).toHaveTextContent('The community nearest you.');
+        expect(screen.queryByTestId('home-find-actions')).toBeNull();
+        expect(screen.queryByTestId('home-find-start')).toBeNull();
+        expect(screen.queryByTestId('home-find-watch')).toBeNull();
+        cleanup();
+        resetHomeCacheForTest();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communityCount: 0, directoryFetchedAt: null }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-find-body')).toHaveTextContent("The list of communities isn't available right now.");
+        expect(screen.queryByTestId('home-find-actions')).toBeNull();
+        expect(screen.queryByTestId('home-find-start')).toBeNull();
+        expect(screen.queryByTestId('home-find-watch')).toBeNull();
+    });
+
     it('a member already watching here is not offered it again', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ watches: [{ id: 'w1' }] }, true)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);

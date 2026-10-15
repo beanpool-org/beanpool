@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
-import { getMember, isInvalidatedKey, isMemberKeySpelling, isVisitorKey } from '@beanpool/engine';
+import { foldName, getMember, installNameFold, isInvalidatedKey, isMemberKeySpelling, isVisitorKey } from '@beanpool/engine';
 import { generateBreakGlassCode, hashBreakGlassCode } from './break-glass-code.js';
 import type { ClaimIo } from './claim-command.js';
 
@@ -24,6 +24,7 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
     if (!isMemberKeySpelling(key)) { io.err('Nothing was changed. --key takes a member public key: 64 lower-case hex digits (the phone shows it in Settings).'); return 1; }
     if (callsign.length < 2 || callsign.length > 20 || callsign.toUpperCase() === 'SYSTEM') { io.err('Nothing was changed. --callsign takes a name of 2–20 characters.'); return 1; }
     const conn = new Database(path.join(dir, 'state.db'), { fileMustExist: true });
+    installNameFold(conn);
     let code = '';
     let shown = callsign;
     try {
@@ -40,8 +41,8 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
             if (member && !visitor && member.status !== 'active') return `That key's account here is ${member.status}.`;
             // An active member keeps their own callsign; the typed one is used only by a key that joins here.
             if (member && !visitor) { shown = member.callsign; }
-            const clash = member && !visitor ? null : conn.prepare(`SELECT 1 FROM members WHERE lower(callsign) = lower(?) AND public_key != ?
-                AND status NOT IN ('migrated', 'pruned')`).get(callsign, key);
+            const clash = member && !visitor ? null : conn.prepare(`SELECT 1 FROM members WHERE callsign_fold = ? AND public_key != ?
+                AND status NOT IN ('migrated', 'pruned')`).get(foldName(callsign), key);
             if (clash) return `The callsign @${callsign} is in use here. Pick another.`;
             const now = new Date().toISOString();
             if (!member) {

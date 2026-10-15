@@ -102,7 +102,7 @@ describe('the cache, the caption and Home', () => {
         const row = { postId: 'ev-s', title: 'Friday dinner', startAt: '2027-10-15T07:50:00.000Z', endAt: '2027-10-15T09:50:00.000Z', placeName: 'Hall',
             rsvp: 'going' as const, photo: null, reminderOffsets: null, repeat: { freq: 'weekly', interval: 1, byDay: 'FR' }, repeatUntil: '2027-12-17' };
         expect(eventRepeatCaption(myEventAsPost(row))).toBe('Every Friday · until 17 Dec 2027');
-        const { repeat: _r, repeatUntil: _u, ...oneOff } = row;
+        const oneOff = { ...row, repeat: undefined, repeatUntil: undefined };
         expect(eventRepeatCaption(myEventAsPost(oneOff))).toBe('');
     });
 

@@ -204,7 +204,7 @@ describe('the ↻ caption: card, map popup (the same card) and Home', () => {
             repeat: { freq: 'weekly' as const, interval: 1, byDay: 'FR' as const }, repeatUntil: '2027-12-17' };
         at320(<EventCard post={myEventAsPost(row)} identity={identity} />);
         expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec 2027');
-        const { repeat: _r, repeatUntil: _u, ...oneOff } = row;
+        const oneOff = { ...row, repeat: undefined, repeatUntil: undefined };
         expect(myEventAsPost(oneOff).eventRepeat).toBeUndefined();
     });
 

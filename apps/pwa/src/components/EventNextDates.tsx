@@ -1,17 +1,18 @@
 /**
  * A repeating event's "Next dates" on its detail page (DESIGN-event-times §4, §8): the dates the node sends on a by-id read
- * (`eventNextDates`, the current one first, cancelled ones marked), as a wrapped list. For the host, beside each: "Cancel
- * this date" (POST skip) or, for a cancelled one, "Bring it back" (DELETE), and "Change this date only", which cancels the
- * date and opens Copy to a new date with the line "Moved from the regular Friday". Cancelling the current date moves the
- * event on at once, and the page says so the way the node tells those going: "Fri 16 Oct is cancelled. Next: Fri 23 Oct",
- * with "Bring it back" on that line until the date has ended (the node then moves the event back to it and tells those
- * going "Fri 16 Oct is back on"; the deciding review of #1993, N2). Each control's name starts with the words it shows, so
- * a voice-control user who says "tap Cancel this date" reaches it (WCAG 2.5.3).
+ * (`eventNextDates`, cancelled ones marked), as a wrapped list. For the host, beside each: "Cancel this date" (POST skip) or,
+ * for a cancelled one, "Bring it back" (DELETE), and "Change this date only", which cancels the date and opens Copy to a new
+ * date with the line "Moved from the regular Friday". Cancelling the current date moves the event on at once, and the page
+ * says so the way the node tells those going: "Fri 16 Oct is cancelled. Next: Fri 23 Oct". The node lists a cancelled date
+ * the event has passed first, until it has ended, so its "Bring it back" is there after a reload and on every device (the
+ * node then moves the event back to it and tells those going "Fri 16 Oct is back on"; the deciding review of #1993, N2, and
+ * its confirmation 2, NB2); the page drops it at its end. Each control's name starts with the words it shows, so a
+ * voice-control user who says "tap Cancel this date" reaches it (WCAG 2.5.3).
  */
 
 import { useEffect, useState } from 'react';
 import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, t } from '@beanpool/core';
-import { setEventDateCancelled, type MarketplacePost } from '../lib/api';
+import { setEventDateCancelled, type EventNextDate, type MarketplacePost } from '../lib/api';
 
 interface Props {
     post: MarketplacePost;
@@ -25,42 +26,47 @@ interface Props {
 /** The longest a timer may wait (setTimeout's limit); a later end is checked again then. */
 const MAX_WAIT_MS = 2_147_483_647;
 
-/** The line after a change, and for a cancelled current date the date and when it ends: Bring it back until then. */
-interface Line { text: string; restore?: { date: string; endsAtMs: number } }
-
 const LINK = 'inline-flex items-center min-h-[44px] bg-transparent border-0 p-0 text-sm font-bold underline cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm';
 
+/**
+ * The node's dates as the page shows them now: a cancelled date the event has passed is left out once it has ended (the
+ * node lists it only until then, and takes it back only until then); an older node's list, without ends, as it is.
+ */
+export function shownNextDates(dates: EventNextDate[] | undefined, current: string | null, nowMs: number): EventNextDate[] {
+    return (dates ?? []).filter(d => !(current && d.date < current && d.endAt && Date.parse(d.endAt) <= nowMs));
+}
+
+/** When the next passed cancelled date on the list ends, for the page to drop it then; null when none is listed. */
+function nextPassedEndMs(dates: EventNextDate[] | undefined, current: string | null, nowMs: number): number | null {
+    const ends = (dates ?? []).filter(d => current && d.date < current && d.endAt).map(d => Date.parse(d.endAt!)).filter(ms => ms > nowMs);
+    return ends.length > 0 ? Math.min(...ends) : null;
+}
+
 export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }: Props) {
-    const dates = post.eventNextDates ?? [];
     const [busy, setBusy] = useState<string | null>(null);
-    const [line, setLine] = useState<Line | null>(null);
+    const [line, setLine] = useState<string | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
-    // The cancelled date's Bring it back goes when the date ends: the node no longer takes it back then.
-    const [tick, setTick] = useState(0);
-    const endsAtMs = line?.restore?.endsAtMs;
-    useEffect(() => {
-        if (endsAtMs == null || Date.now() >= endsAtMs) return;
-        const id = setTimeout(() => setTick(n => n + 1), Math.min(MAX_WAIT_MS, endsAtMs - Date.now() + 50));
-        return () => clearTimeout(id);
-    }, [endsAtMs, tick]);
-    if (!post.eventRepeat || dates.length === 0) return null;
     const current = post.eventStartLocal?.slice(0, 10) ?? null;
-    const restoreOpen = !!line?.restore && Date.now() < line.restore.endsAtMs;
+    // A cancelled date the event has passed goes from the list at its end: the node no longer takes it back then.
+    const [tick, setTick] = useState(0);
+    const passedEnd = nextPassedEndMs(post.eventNextDates, current, Date.now());
+    useEffect(() => {
+        if (passedEnd == null) return;
+        const id = setTimeout(() => setTick(n => n + 1), Math.min(MAX_WAIT_MS, passedEnd - Date.now() + 50));
+        return () => clearTimeout(id);
+    }, [passedEnd, tick]);
+    const dates = shownNextDates(post.eventNextDates, current, Date.now());
+    if (!post.eventRepeat || dates.length === 0) return null;
 
     const change = async (date: string, cancel: boolean, thenMove = false) => {
         if (busy) return;
         setBusy(date);
         setProblem(null);
         setLine(null);
-        // The current date's end, before the node moves the event on: until then it can be brought back.
-        const endsAtMs = Date.parse(post.eventEndAt ?? '');
         try {
             const res = await setEventDateCancelled(post.id, date, cancel);
-            if (cancel && date === current) {
-                setLine({ text: seriesCancelledLine(date, res.post?.eventStartLocal ?? null), ...(Number.isFinite(endsAtMs) ? { restore: { date, endsAtMs } } : {}) });
-            } else if (!cancel && current && date < current) {
-                setLine({ text: seriesBackOnLine(date) });
-            }
+            if (cancel && date === current) setLine(seriesCancelledLine(date, res.post?.eventStartLocal ?? null));
+            else if (!cancel && current && date < current) setLine(seriesBackOnLine(date));
             if (res.post) onChanged?.(res.post);
             if (thenMove) onChangeThisDateOnly?.(res.post ?? post, date);
         } catch (e: any) {
@@ -73,19 +79,7 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }
     return (
         <section data-testid="event-next-dates" className="min-w-0 flex flex-col gap-1">
             <h4 className="m-0 text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>
-            {line && (
-                <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-0">
-                    <p data-testid="event-date-cancelled-line" role="status" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{line.text}</p>
-                    {isHost && restoreOpen && line.restore && (
-                        <button type="button" data-testid="event-date-restore-current" disabled={!!busy}
-                            aria-label={t('Bring it back: {date}', { date: seriesDateLabel(line.restore.date) })}
-                            onClick={() => void change(line.restore!.date, false)}
-                            className={`${LINK} text-violet-800 dark:text-violet-200`}>
-                            {t('Bring it back')}
-                        </button>
-                    )}
-                </div>
-            )}
+            {line && <p data-testid="event-date-cancelled-line" role="status" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{line}</p>}
             <ul className={`m-0 p-0 list-none ${isHost ? 'flex flex-col gap-1' : 'flex flex-wrap gap-x-3 gap-y-1'}`}>
                 {dates.map(d => {
                     const label = seriesDateLabel(d.date);

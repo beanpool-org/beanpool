@@ -1556,7 +1556,8 @@ export async function updateMarketplacePost(
 }
 
 /** One of a repeating event's next dates, as the node sends them on a by-id read. */
-export interface EventNextDate { date: string; startLocal: string; startAt: string; cancelled: boolean }
+/** One of a series' next dates. `endAt` from a node with confirmation 2 of #1993: a cancelled date the event has passed is listed until then. */
+export interface EventNextDate { date: string; startLocal: string; startAt: string; endAt?: string; cancelled: boolean }
 
 /**
  * "Cancel this date" of a repeating event (`cancelled` true), or "Bring it back" (false): the host only, signed

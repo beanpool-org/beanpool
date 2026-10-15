@@ -9,6 +9,7 @@ import { useState } from 'react';
 import type { RepeatChoiceKey } from '@beanpool/core';
 import { EventCard, EventDetail } from './EventCard';
 import { EventRepeatFields, eventRepeatProblem, type KeptRepeat } from './EventRepeatFields';
+import { shownNextDates } from './EventNextDates';
 import * as api from '../lib/api';
 import {
     eventEditForm, eventEditPayload, eventRepeatCreate, movedCopyContext, parseCopyEventContext, withMovedFromLine,
@@ -37,6 +38,16 @@ const series: any = {
     ],
 };
 const hostView = { ...series, eventRsvps: [] };
+// The node's answer once the current 15 Oct is cancelled: the event rolls past the cancelled 22 Oct to 29 Oct, and the node
+// lists both cancelled dates it has passed first, each with its end, until then (confirmation 2 of #1993, NB2).
+const rolledView = {
+    ...hostView, eventStartLocal: '2027-10-29T18:50', eventEndLocal: '2027-10-29T20:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z',
+    eventNextDates: [
+        { date: '2027-10-15', startLocal: '2027-10-15T18:50', startAt: '2027-10-15T07:50:00.000Z', endAt: '2027-10-15T09:50:00.000Z', cancelled: true },
+        { date: '2027-10-22', startLocal: '2027-10-22T18:50', startAt: '2027-10-22T07:50:00.000Z', endAt: '2027-10-22T09:50:00.000Z', cancelled: true },
+        { date: '2027-10-29', startLocal: '2027-10-29T18:50', startAt: '2027-10-29T07:50:00.000Z', endAt: '2027-10-29T09:50:00.000Z', cancelled: false },
+    ],
+};
 
 function at320(ui: React.ReactElement) {
     Object.defineProperty(window, 'innerWidth', { value: 320, configurable: true, writable: true });
@@ -251,7 +262,7 @@ describe('the detail: Next dates', () => {
 
     it('the host cancels the current date: POST skip, and the page says what the node told those going', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const rolled = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
+        const rolled = rolledView;
         vi.mocked(api.setEventDateCancelled).mockResolvedValue({ success: true, post: rolled, skips: ['2027-10-15', '2027-10-22'] });
         const onChange = vi.fn();
         at320(<EventDetail post={hostView} identity={identity} onChange={onChange} />);
@@ -277,38 +288,65 @@ describe('the detail: Next dates', () => {
         expect(within(list).getByTestId('event-date-restore')).toHaveAccessibleName('Bring it back: Fri 22 Oct');
     });
 
-    it('the cancelled current date can be brought back until it ends: DELETE skip, and "… is back on" (review of #1993, N2)', async () => {
+    it(`the cancelled current date can be brought back from the node's list: DELETE skip, and "… is back on" (review of #1993, N2)`, async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const rolled = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
-        vi.mocked(api.setEventDateCancelled).mockResolvedValueOnce({ success: true, post: rolled, skips: ['2027-10-15', '2027-10-22'] });
+        vi.mocked(api.setEventDateCancelled).mockResolvedValueOnce({ success: true, post: rolledView, skips: ['2027-10-15', '2027-10-22'] });
         vi.mocked(api.setEventDateCancelled).mockResolvedValueOnce({ success: true, post: hostView, skips: ['2027-10-22'] });
         at320(<EventDetail post={hostView} identity={identity} />);
         fireEvent.click(screen.getAllByTestId('event-date-cancel')[0]);
-        const back = await screen.findByTestId('event-date-restore-current');
+        expect(await screen.findByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
+        // One Bring it back per date, on the list: the line only says what happened.
+        const back = screen.getByRole('button', { name: 'Bring it back: Fri 15 Oct' });
+        expect(screen.getAllByRole('button', { name: 'Bring it back: Fri 15 Oct' })).toHaveLength(1);
         expectLabelInName([back]);
-        expect(back).toHaveAccessibleName('Bring it back: Fri 15 Oct');
         fireEvent.click(back);
         await waitFor(() => expect(api.setEventDateCancelled).toHaveBeenLastCalledWith('ev-s', '2027-10-15', false));
         await waitFor(() => expect(screen.getByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is back on'));
-        expect(screen.queryByTestId('event-date-restore-current')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Bring it back: Fri 15 Oct' })).not.toBeInTheDocument();
     });
 
-    it('once the cancelled current date has ended, no Bring it back on its line', async () => {
+    it("after a reload Bring it back is still there, from the node's list alone (confirmation 2 of #1993, NB2)", async () => {
+        vi.mocked(api.setEventDateCancelled).mockResolvedValue({ success: true, post: hostView, skips: ['2027-10-22'] });
+        at320(<EventDetail post={rolledView} identity={identity} />);
+        const list = screen.getByTestId('event-next-dates');
+        expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual([
+            'Fri 15 OctCancelledBring it back', 'Fri 22 OctCancelledBring it back', 'Fri 29 OctCancel this date',
+        ]);
+        fireEvent.click(within(list).getByRole('button', { name: 'Bring it back: Fri 15 Oct' }));
+        await waitFor(() => expect(api.setEventDateCancelled).toHaveBeenCalledWith('ev-s', '2027-10-15', false));
+        expect(await screen.findByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is back on');
+    });
+
+    it('a member sees the passed cancelled date marked, with no control', () => {
+        // A member's read carries no RSVP list (the host's view does).
+        at320(<EventDetail post={{ ...rolledView, eventRsvps: undefined }} identity={{ ...identity, publicKey: 'me-pk' }} />);
+        const list = screen.getByTestId('event-next-dates');
+        expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual(['Fri 15 OctCancelled', 'Fri 22 OctCancelled', 'Fri 29 Oct']);
+        expect(within(list).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('a passed cancelled date leaves the list at its end; the line stays', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const end = Date.parse(hostView.eventEndAt);
+        const end = Date.parse(rolledView.eventNextDates[0].endAt);
         const now = vi.spyOn(Date, 'now').mockReturnValue(end - 1000);
         try {
-            const rolled = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
-            vi.mocked(api.setEventDateCancelled).mockResolvedValue({ success: true, post: rolled, skips: ['2027-10-15', '2027-10-22'] });
+            vi.mocked(api.setEventDateCancelled).mockResolvedValue({ success: true, post: rolledView, skips: ['2027-10-15', '2027-10-22'] });
             at320(<EventDetail post={hostView} identity={identity} />);
             fireEvent.click(screen.getAllByTestId('event-date-cancel')[0]);
-            expect(await screen.findByTestId('event-date-restore-current')).toBeInTheDocument();
+            expect(await screen.findByRole('button', { name: 'Bring it back: Fri 15 Oct' })).toBeInTheDocument();
             now.mockReturnValue(end + 1000);
-            await waitFor(() => expect(screen.queryByTestId('event-date-restore-current')).not.toBeInTheDocument(), { timeout: 3000 });
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Bring it back: Fri 15 Oct' })).not.toBeInTheDocument(), { timeout: 3000 });
+            expect(screen.getAllByTestId('event-next-date').map(d => d.textContent?.slice(0, 10))).toEqual(['Fri 22 Oct', 'Fri 29 Oct']);
             expect(screen.getByTestId('event-date-cancelled-line')).toHaveTextContent('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
         } finally {
             now.mockRestore();
         }
+    });
+
+    it("an older node's list (no ends) shows as it is", () => {
+        const old = rolledView.eventNextDates.map(({ endAt: _e, ...d }) => d);
+        expect(shownNextDates(old, '2027-10-29', Date.parse('2030-01-01T00:00:00Z'))).toEqual(old);
+        expect(shownNextDates(rolledView.eventNextDates, '2027-10-29', Date.parse('2027-10-15T10:00:00Z')).map(d => d.date)).toEqual(['2027-10-22', '2027-10-29']);
     });
 
     it("the node's refusal shows in its own words", async () => {

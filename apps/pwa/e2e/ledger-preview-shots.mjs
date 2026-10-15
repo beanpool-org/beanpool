@@ -8,8 +8,12 @@
  * Fails on a sideways scroll at 320 px, a marker that looks locked, a showcase control under 44 x 44 px, any request
  * about the reader's own ledger (balance, transactions, members, export) from the preview, or any write.
  *
+ * The Wallet's Community Circulation box (fix round 1): in the preview (85 Beans) a sentence that nothing goes to the
+ * Commons; on the local node (Ana holds 750) the month's amount and share; in both themes a card of the page's own tone,
+ * never a bright box on the dark page.
+ *
  * Run: node e2e/ledger-preview-shots.mjs   (LEDGER_SHOTS: where the pictures go; LEDGER_WHEN=before: the local node only,
- * for a build of main's sources)
+ * for a build of main's sources; LEDGER_SUFFIX: added to every picture's name, e.g. -fix1)
  */
 /* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
@@ -31,6 +35,9 @@ const SHOTS_DIR = process.env.LEDGER_SHOTS || path.join(os.tmpdir(), 'bp-ledger-
 const WHEN = process.env.LEDGER_WHEN === 'before' ? 'before' : 'after';
 const VIEW = { width: 320, height: 720 };
 const TEXT_SCALE = 1.3;
+const SUFFIX = process.env.LEDGER_SUFFIX || '';
+/** The local member's Beans: over 300, so the Circulation box shows a month's amount. */
+const LOCAL_BALANCE = 750;
 
 const failures = [];
 function check(ok, what) {
@@ -155,6 +162,23 @@ async function targetsAtLeast44(page, where) {
     check(small.length === 0, `${where}: every control is at least 44 x 44 px${small.length ? ` (${small.join('; ')})` : ''}`);
 }
 
+/**
+ * The Wallet's Community Circulation box: its words (`want`) and, in dark, a deep ground (relative luminance under 0.1)
+ * rather than a bright tint; in light a pale one. Its colours come from the chip roles, so no inline colour either.
+ */
+async function circulationBox(page, where, dark, want) {
+    const box = page.getByTestId('ledger-circulation');
+    const text = (await box.innerText()).replace(/\s+/g, ' ');
+    check(want.every((w) => (w instanceof RegExp ? w.test(text) : text.includes(w))), `${where}: Circulation box reads "${text}"`);
+    const { lum, inline } = await box.evaluate((el) => {
+        const [r, g, b] = getComputedStyle(el).backgroundColor.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number)
+            .map((c) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+        return { lum: 0.2126 * r + 0.7152 * g + 0.0722 * b, inline: [el, ...el.querySelectorAll('*')].some((e) => /color|background/.test(e.getAttribute('style') || '')) };
+    });
+    check(dark ? lum < 0.1 : lum > 0.5, `${where}: Circulation box ground fits the ${dark ? 'dark' : 'light'} page (luminance ${lum.toFixed(3)})`);
+    check(!inline, `${where}: Circulation box has no inline colour`);
+}
+
 async function tab(page, label) {
     await page.locator('[data-testid="mobile-bottom-nav"] button', { hasText: label }).first().click();
 }
@@ -176,7 +200,7 @@ async function shots(page, name, width) {
     for (let top = 0; top < total && part <= 4; top += step, part++) {
         await scroller.evaluate((el, y) => { el.scrollTop = y; }, top);
         await wait(250);
-        await page.screenshot({ path: path.join(SHOTS_DIR, `${name}-${part}.png`) });
+        await page.screenshot({ path: path.join(SHOTS_DIR, `${name}-${part}${SUFFIX}.png`) });
         const at = await scroller.evaluate((el) => el.scrollTop);
         if (at + 1400 >= total) break;
     }
@@ -213,6 +237,8 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('ledger-wallet').waitFor();
         const wallet = await page.getByTestId('ledger-wallet').innerText();
         check(/A loaf of bread/.test(wallet) && /FROM A NEIGHBOUR · YESTERDAY/i.test(wallet), 'Wallet: the sample rows, who and when');
+        await circulationBox(page, 'Ledger preview, Wallet', dark, ['Nothing goes to the Commons while you hold 200 Beans or less.']);
+        check(!/0\.00|%/.test(await page.getByTestId('ledger-circulation').innerText()), 'Ledger preview, Wallet: no zero amount or rate under the line');
         await noSideScroll(page, 'Ledger preview, Wallet');
         await targetsAtLeast44(page, 'Ledger preview, Wallet');
         await markersNeverLocked(page, 'Ledger preview, Wallet');
@@ -245,7 +271,7 @@ async function globalMember(browser, root, dark) {
 async function localMember(browser, root, dark) {
     const scheme = dark ? 'dark' : 'light';
     const ana = memberIdentity('Ana');
-    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30 }]);
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30, balance: LOCAL_BALANCE }]);
     console.log(`\nA member of a local node (Beans live), ${scheme}, ${WHEN}, on ${node.origin}:`);
     const { context, page } = await openContext(browser, node.origin, ana, dark);
     try {
@@ -258,7 +284,14 @@ async function localMember(browser, root, dark) {
         await shots(page, `local-levels-320-${scheme}-${WHEN}`, 320);
         await page.getByRole('button', { name: /Wallet/ }).click();
         await wait(800);
+        if (WHEN === 'after') {
+            // 750: 300 at 1 % + 250 at 1.5 % = 6.75 a month, 0.90 % of the balance.
+            await circulationBox(page, 'Local Ledger, Wallet', dark, ['−6.75', 'about 0.90% of your balance']);
+            await noSideScroll(page, 'Local Ledger, Wallet');
+        }
         await shots(page, `local-wallet-320-${scheme}-${WHEN}`, 320);
+        await page.evaluate(() => { for (const s of document.querySelectorAll('style')) if (/font-size: 130%/.test(s.textContent || '')) s.remove(); });
+        await shots(page, `local-wallet-1280-${scheme}-${WHEN}`, 1280);
     } finally {
         await context.close();
         await node.stop();
@@ -274,7 +307,7 @@ async function main() {
         console.log(`The web app as built (${WHEN}); one Chromium, reduced motion.`);
         const runs = WHEN === 'before'
             ? [() => localMember(browser, root, false)]
-            : [() => globalMember(browser, root, false), () => globalMember(browser, root, true), () => localMember(browser, root, false)];
+            : [() => globalMember(browser, root, false), () => globalMember(browser, root, true), () => localMember(browser, root, false), () => localMember(browser, root, true)];
         for (const run of runs) {
             try {
                 await run();

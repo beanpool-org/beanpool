@@ -617,6 +617,8 @@ export default function MarketScreen() {
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
+    // ⚡ Bolt: O(1) Map lookup for user groups by ID instead of O(G) .find() scans
+    const userGroupsById = React.useMemo(() => new Map(userGroups.map(g => [g.id, g])), [userGroups]);
     const [radiusKm, setRadiusKm] = useState<number | null>(null);
     const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
     const [showRadiusPicker, setShowRadiusPicker] = useState(false);
@@ -1183,7 +1185,7 @@ export default function MarketScreen() {
 
     const filterSummary = marketFilterSummary(filterState, searchQuery, {
         trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
-        groupName: id => userGroups.find(g => g.id === id)?.name,
+        groupName: id => userGroupsById.get(id)?.name,
     });
     // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
     // saved search's own sheet with it (or says why it can't: the same search there, five there, Home full).

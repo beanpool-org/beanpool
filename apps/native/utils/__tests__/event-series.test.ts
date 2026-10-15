@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildEventDraft, buildEventEditPatch, eventCacheColumns, eventEditValues, eventPinCard, eventRepeatCaption, eventRepeatOf, withMovedFromLine } from '../events';
 import { eventLine } from '../home-cards';
+import { myEventAsPost } from '../event-extras';
 
 const NOW = new Date(2026, 9, 1, 9, 0);
 // Fri 16 Oct 2026, 20:50 on this phone's clock.
@@ -30,6 +31,12 @@ describe('the create draft', () => {
         expect(buildEventDraft({ ...input, repeat: 'monthly-last' }, NOW)).toEqual({ ok: false, error: 'Choose how the event repeats from the list' });
         expect(buildEventDraft({ ...input, repeat: 'weekly', repeatUntil: '2026-10-15' }, NOW)).toEqual({ ok: false, error: 'The last date must be a date on or after the first one' });
         expect(buildEventDraft({ ...input, repeat: 'weekly', repeatUntil: '2031-10-17' }, NOW)).toEqual({ ok: false, error: 'The last date can be at most 5 years after the first one' });
+    });
+    it("a date as long as the gap to the next is refused before Save, in the node's sentence (review of #1993, N7)", () => {
+        const week = new Date(2026, 9, 23, 20, 50);
+        expect(buildEventDraft({ ...input, repeat: 'weekly', end: week }, NOW)).toEqual({ ok: false, error: 'An event that repeats must end before its next date starts' });
+        expect(buildEventDraft({ ...input, repeat: 'fortnightly', end: week }, NOW).ok).toBe(true);
+        expect(buildEventDraft({ ...input, repeat: 'weekly', end: new Date(2026, 9, 23, 20, 49) }, NOW).ok).toBe(true);
     });
 });
 
@@ -61,6 +68,23 @@ describe('the edit patch', () => {
         const cleared = buildEventEditPatch(before, { ...before, repeatUntil: '' }, NOW);
         expect(cleared.ok && cleared.patch.eventRepeatUntil).toBeNull();
     });
+    it('a series made a week long is refused before Save (review of #1993, N7)', () => {
+        const before = eventEditValues(post);
+        const out = buildEventEditPatch(before, { ...before, end: new Date(2026, 9, 23, 21, 0) }, NOW);
+        expect(out).toEqual({ ok: false, error: 'An event that repeats must end before its next date starts' });
+    });
+    it('every 3 weeks or every 3 months (a rule the form cannot make): kept or asked about, never re-sent as another (review of #1993, N3)', () => {
+        for (const rule of [{ freq: 'weekly', interval: 3, byDay: 'FR' }, { freq: 'monthly', interval: 3, byMonthDay: 16 }]) {
+            const before = eventEditValues({ ...post, eventRepeat: { ...rule, time: '20:50', minutes: 120 } });
+            expect(before.repeat).toBe('other');
+            const title = buildEventEditPatch(before, { ...before, title: 'Dinner' }, NOW);
+            expect(title.ok && title.patch).toEqual({ title: 'Dinner' });
+            const moved = { ...before, start: new Date(2026, 9, 23, 20, 50), end: new Date(2026, 9, 23, 22, 50) };
+            expect(buildEventEditPatch(before, moved, NOW)).toEqual({ ok: false, error: 'Choose how the event repeats from the list' });
+            const chosen = buildEventEditPatch(before, { ...moved, repeat: 'weekly' }, NOW);
+            expect(chosen.ok && chosen.patch.eventRepeat).toEqual({ freq: 'weekly', interval: 1, byDay: 'FR' });
+        }
+    });
 });
 
 describe('the cache, the caption and Home', () => {
@@ -74,6 +98,14 @@ describe('the cache, the caption and Home', () => {
         expect(eventCacheColumns({ type: 'event' }).slice(10)).toEqual([null, null]);
         expect(eventRepeatCaption({ type: 'event', event_repeat: 'not json' })).toBe('');
     });
+    it("Your events: the card's caption from the node's row (review of #1993, N5)", () => {
+        const row = { postId: 'ev-s', title: 'Friday dinner', startAt: '2027-10-15T07:50:00.000Z', endAt: '2027-10-15T09:50:00.000Z', placeName: 'Hall',
+            rsvp: 'going' as const, photo: null, reminderOffsets: null, repeat: { freq: 'weekly', interval: 1, byDay: 'FR' }, repeatUntil: '2027-12-17' };
+        expect(eventRepeatCaption(myEventAsPost(row))).toBe('Every Friday · until 17 Dec 2027');
+        const { repeat: _r, repeatUntil: _u, ...oneOff } = row;
+        expect(eventRepeatCaption(myEventAsPost(oneOff))).toBe('');
+    });
+
     it('Home: the rule after the next date', () => {
         const line = eventLine({ id: 'e', title: 'Friday dinner', startsAt: '2026-10-16T09:50:00.000Z', endsAt: null, place: 'The hall', rsvp: null,
             startLocal: '2026-10-16T20:50', tz: 'Australia/Sydney', repeat: { freq: 'weekly', interval: 1, byDay: 'FR' } });

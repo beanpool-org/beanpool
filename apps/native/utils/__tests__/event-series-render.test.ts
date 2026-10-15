@@ -94,6 +94,15 @@ const series = {
     ],
 };
 const hostView = { ...series, eventRsvps: [] };
+/** Every control's accessible name starts with the words it shows (WCAG 2.5.3, label in name). */
+const expectLabelInName = (els: HTMLElement[]) => {
+    expect(els.length).toBeGreaterThan(0);
+    for (const el of els) {
+        const shown = (el.textContent ?? '').trim();
+        expect(shown).not.toBe('');
+        expect((el.getAttribute('aria-label') ?? shown).startsWith(shown), `"${el.getAttribute('aria-label')}" starts with "${shown}"`).toBe(true);
+    }
+};
 const draw = async (view: any) => {
     node.view = view;
     await act(async () => { root.render(createElement(EventDetail, { post: series }) as unknown as Parameters<Root['render']>[0]); await new Promise((r) => setTimeout(r, 0)); });
@@ -124,6 +133,48 @@ describe('the detail, drawn at 320 dp and 1.3×', () => {
         await draw(hostView);
         await click(byTestId('event-date-restore')[0]);
         expect(node.sent).toEqual([['ev-s', '2027-10-22', false]]);
+    });
+
+    it('each host control is named from the words it shows (WCAG 2.5.3; review of #1993, N1)', async () => {
+        await draw(hostView);
+        expectLabelInName([...byTestId('event-date-cancel'), ...byTestId('event-date-move'), ...byTestId('event-date-restore')]);
+        expect(byTestId('event-date-cancel')[0].getAttribute('aria-label')).toBe('Cancel this date: Fri 15 Oct');
+        expect(byTestId('event-date-move')[0].getAttribute('aria-label')).toBe('Change this date only: Fri 15 Oct');
+        expect(byTestId('event-date-restore')[0].getAttribute('aria-label')).toBe('Bring it back: Fri 22 Oct');
+    });
+
+    it('the cancelled current date can be brought back until it ends: DELETE, then "… is back on" (review of #1993, N2)', async () => {
+        node.after = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventStartAt: '2027-10-29T07:50:00.000Z', eventEndAt: '2027-10-29T09:50:00.000Z', eventNextDates: hostView.eventNextDates.slice(2) };
+        await draw(hostView);
+        await click(byTestId('event-date-cancel')[0]);
+        await yes();
+        const back = byTestId('event-date-restore-current');
+        expect(back).toHaveLength(1);
+        expectLabelInName(back);
+        expect(back[0].getAttribute('aria-label')).toBe('Bring it back: Fri 15 Oct');
+        node.after = hostView;
+        await click(back[0]);
+        expect(node.sent.at(-1)).toEqual(['ev-s', '2027-10-15', false]);
+        expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is back on');
+        expect(byTestId('event-date-restore-current')).toHaveLength(0);
+    });
+
+    it('once the cancelled current date has ended, its line has no Bring it back', async () => {
+        const end = Date.parse(hostView.eventEndAt);
+        const now = vi.spyOn(Date, 'now').mockReturnValue(end - 200);
+        try {
+            node.after = { ...hostView, eventStartLocal: '2027-10-29T18:50', eventNextDates: hostView.eventNextDates.slice(2) };
+            await draw(hostView);
+            await click(byTestId('event-date-cancel')[0]);
+            await yes();
+            expect(byTestId('event-date-restore-current')).toHaveLength(1);
+            now.mockReturnValue(end + 1000);
+            await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+            expect(byTestId('event-date-restore-current')).toHaveLength(0);
+            expect(byTestId('event-date-cancelled-line')[0].textContent).toBe('Fri 15 Oct is cancelled. Next: Fri 29 Oct');
+        } finally {
+            now.mockRestore();
+        }
     });
 
     it("the node's refusal, in its own words", async () => {
@@ -174,6 +225,26 @@ describe('the form: Repeats and Until, drawn', () => {
         expect(byTestId('event-repeat-until-problem')[0].textContent).toBe('The last date must be a date on or after the first one');
         await click(byTestId('event-repeat-until')[0]);
         expect(byTestId('date-picker')).toHaveLength(1);
+    });
+
+    it('Until shows the last date with its year, and each button is named from its words (review of #1993, N1, N4)', async () => {
+        await drawFields({ start: new Date(2026, 9, 16, 20, 50), repeat: 'weekly', until: '2028-12-15', onRepeatChange: noop, onUntilChange: noop });
+        expect(byTestId('event-repeat-until')[0].textContent).toBe('15 Dec 2028');
+        expect(byTestId('event-repeat-until')[0].getAttribute('aria-label')).toContain('15 Dec 2028');
+        expectLabelInName(byTestId('event-repeat-until-clear'));
+        expect(byTestId('event-repeat-until-clear')[0].getAttribute('aria-label')).toBe('Clear: repeat until I cancel it');
+    });
+
+    it("a date as long as the gap to the next says so, in the node's sentence (review of #1993, N7)", async () => {
+        await drawFields({ start: new Date(2026, 9, 16, 20, 50), end: new Date(2026, 9, 23, 20, 50), repeat: 'weekly', until: '', onRepeatChange: noop, onUntilChange: noop });
+        expect(byTestId('event-repeat-length-problem')[0].textContent).toBe('An event that repeats must end before its next date starts');
+        await drawFields({ start: new Date(2026, 9, 16, 20, 50), end: new Date(2026, 9, 23, 20, 50), repeat: 'monthly-day', until: '', onRepeatChange: noop, onUntilChange: noop });
+        expect(byTestId('event-repeat-length-problem')).toHaveLength(0);
+    });
+
+    it('a rule the form cannot make asks for a choice (review of #1993, N3)', async () => {
+        await drawFields({ start: new Date(2027, 9, 15, 18, 50), repeat: 'other', until: '', onRepeatChange: noop, onUntilChange: noop });
+        expect(byTestId('event-repeat-problem')[0].textContent).toBe('Choose how the event repeats from the list');
     });
 
     it('the 31st says which months are skipped; a choice the date does not offer says so', async () => {

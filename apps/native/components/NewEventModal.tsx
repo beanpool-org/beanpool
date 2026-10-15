@@ -723,7 +723,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             </View>
                         )}
 
-                        <EventRepeatFields start={start} repeat={repeat} until={repeatUntil} onRepeatChange={setRepeat} onUntilChange={setRepeatUntil} />
+                        <EventRepeatFields start={start} end={end} repeat={repeat} until={repeatUntil} onRepeatChange={setRepeat} onUntilChange={setRepeatUntil} />
 
                         {onlineOffered && (
                             <View style={styles.field}>

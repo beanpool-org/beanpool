@@ -10,7 +10,7 @@
 import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, t, tn, word, type EventWhenParts,
-    repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
+    repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -145,7 +145,7 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
     if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
     const description = input.description.trim();
     if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: `Keep the description under ${EVENT_DESCRIPTION_MAX} characters.` };
-    const series = eventRepeatFields(input.repeat ?? 'never', input.repeatUntil ?? '', startLocal.slice(0, 10));
+    const series = eventRepeatFields(input.repeat ?? 'never', input.repeatUntil ?? '', startLocal.slice(0, 10), eventFormMinutes(input.start, input.end));
     if (!series.ok) return series;
 
     const draft: EventPostDraft = {
@@ -178,15 +178,23 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
 
 /**
  * The Repeats and Until rows checked the way the node checks them (DESIGN-event-times §8): a choice the first date offers,
- * and an Until on or after it and at most five years out. The pattern is read on that date; null for "Does not repeat".
+ * each date ending before the next starts (`minutes`, start to end; the deciding review of #1993, N7), and an Until on or
+ * after it and at most five years out. The pattern is read on that date; null for "Does not repeat". A stored rule the
+ * form can't make ('other') is never a pattern: it asks for a choice.
  */
-export function eventRepeatFields(choice: RepeatChoiceKey, until: string, firstDate: string):
+export function eventRepeatFields(choice: RepeatChoiceKey, until: string, firstDate: string, minutes = NaN):
     { ok: true; pattern: RepeatPattern | null } | { ok: false; error: string } {
     if (choice === 'never') return { ok: true, pattern: null };
     const pattern = repeatChoicesFor(firstDate).some(c => c.key === choice) ? repeatPatternFor(choice, firstDate) : null;
     if (!pattern) return { ok: false, error: t('Choose how the event repeats from the list') };
-    const problem = repeatUntilProblem(until, firstDate);
+    const problem = repeatLengthProblem(choice, firstDate, minutes) ?? repeatUntilProblem(until, firstDate);
     return problem ? { ok: false, error: problem } : { ok: true, pattern };
+}
+
+/** Wall minutes from the form's Starts to its Ends as the host's clock reads them (a blank end: two hours). NaN without a start. */
+export function eventFormMinutes(start: Date | null, end: Date | null | undefined): number {
+    if (!start) return NaN;
+    return Math.round((localClockMs(deviceLocalClock(end ?? defaultEventEnd(start))) - localClockMs(deviceLocalClock(start))) / 60000);
 }
 
 // ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================
@@ -276,8 +284,8 @@ export function isWaitingForHost(err: unknown): boolean {
 // ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
 
 /**
- * What "Copy to a new date" carries into NewEventModal. One-off events plus this is the whole of repeats in
- * v1: there are no repeat rules and no materialiser (§5).
+ * What "Copy to a new date" carries into NewEventModal: a new event on another date, alongside the series' own
+ * repeating (DESIGN-event-times §8) and "Change this date only".
  *
  * The dates are NOT here, on purpose — the form opens with Starts and Ends blank, because picking the new date
  * is the one thing the host is here to do, and a prefilled old date is the one value that must never be
@@ -857,16 +865,19 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (after.hostLetsIn !== before.hostLetsIn) patch.eventHostLetsIn = after.hostLetsIn;
     // The series (§8 Edit), as the web app sends it: the choice read on the NEW first date (a series moved from a Friday to a
     // Saturday goes as every Saturday, which is what the list then says), sent when the choice or the first date changed.
+    // A rule the form can't make ('other': every 3 weeks, every 3 months) is never re-sent as another: left alone on its
+    // own date it is kept (nothing sent), and a moved date asks for a choice (the deciding review of #1993, N3).
     const was = before.repeat ?? 'never';
     const now2 = after.repeat ?? 'never';
     const firstDate = startLocal.slice(0, 10);
     const dateMoved = !before.start || deviceLocalClock(before.start).slice(0, 10) !== firstDate;
+    const minutes = eventFormMinutes(after.start, after.end);
     if (now2 !== was || (now2 !== 'never' && dateMoved)) {
-        const series = eventRepeatFields(now2, after.repeatUntil ?? '', firstDate);
+        const series = eventRepeatFields(now2, after.repeatUntil ?? '', firstDate, minutes);
         if (!series.ok) return series;
         patch.eventRepeat = series.pattern;
     } else if (now2 !== 'never') {
-        const problem = repeatUntilProblem(after.repeatUntil ?? '', firstDate);
+        const problem = repeatLengthProblem(now2, firstDate, minutes) ?? repeatUntilProblem(after.repeatUntil ?? '', firstDate);
         if (problem) return { ok: false, error: problem };
     }
     if (now2 !== 'never' && (after.repeatUntil ?? '') !== (before.repeatUntil ?? '')) patch.eventRepeatUntil = after.repeatUntil || null;

@@ -297,6 +297,9 @@ export interface MyEvent {
     endLocal?: string | null;
     tz?: string | null;
     online?: boolean | null;
+    /** A repeating event's pattern and last date, for the card's ↻ caption (the deciding review of #1993, N5); absent on a one-off. */
+    repeat?: Record<string, unknown> | null;
+    repeatUntil?: string | null;
 }
 
 /**
@@ -332,6 +335,9 @@ export function myEventAsPost(row: MyEvent): Record<string, unknown> {
         event_end_local: row.endLocal ?? null,
         event_tz: row.tz ?? null,
         event_online: row.online === true ? 1 : row.online === false ? 0 : null,
+        // How it repeats, as the cache keeps it (JSON text), so a host's own series reads as one here too.
+        event_repeat: row.repeat && typeof row.repeat === 'object' ? JSON.stringify(row.repeat) : null,
+        event_repeat_until: row.repeat && row.repeatUntil ? row.repeatUntil : null,
         event_state: 'scheduled',
         status: 'active',
         photos: row.photo ? [row.photo] : null,

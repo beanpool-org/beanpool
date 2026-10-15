@@ -292,6 +292,23 @@ shape (`global` and `earth` by hand, no `ssh-global`) it leaves 0005 unrecorded,
 `ssh-global`; and the guard refuses a database never bootstrapped, including one whose empty `d1_migrations` a
 `migrations list` made.
 
+### Hand records, and restoring D1 to an earlier time (standing process)
+
+The registrar refuses a claim that finds a record or `bp-` tunnel at its name it did not make (`outsideRegistrar`):
+the claimant gets 409 "name in use outside the registrar", and the admin is told once a week per name ("Claim refused
+… add a name_policy row (blocked) by migration"). Two rules follow from it:
+
+- **Before making any new record by hand under beanpool.org**, add its label to `name_policy` as `blocked` in a
+  migration first, and look in /admin for a row at that label. A row there is a community's (or a pending claim's)
+  name: pick another label.
+- **After a D1 time-travel restore** (`wrangler d1 time-travel restore`), every row created or claimed since the
+  restore point is gone, but its record and tunnel are still at Cloudflare. That community's node keeps running, yet
+  its own claims now read "Claim refused … outside the registrar", and the registrar can't heal or rotate its name.
+  Take an export before restoring (`wrangler d1 export beanpool-registrar --remote --output <scratch>/before.sql`),
+  then re-insert the lost `name_allocations` rows from it. Don't block those names, and don't delete their records:
+  the node is still serving on them. (The deploy runbook rolls back with bookmarks taken just before a migration, so
+  only rows written since that bookmark are at risk.)
+
 ## Signed request scheme (node → registrar)
 
 Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128 hex), and `x-bp-proto` (the

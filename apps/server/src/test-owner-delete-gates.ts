@@ -16,7 +16,10 @@
  *     re-pointing an off-box destination is held on each refusal. In break-glass mode the password and an earlier 2FA
  *     session enrol no owner key; a current code does. Re-keying an owner or admin (making the code and binding it) asks
  *     the same, and each refusal leaves their key, status and role as they were; cancelling, and a member's or a
- *     moderator's re-key, ask nothing more.
+ *     moderator's re-key, ask nothing more. Removing or suspending an owner (pruning, offboarding, a branch with one in
+ *     it, an emergency suspension, one through a report) asks the same, and each refusal leaves them an active owner; an
+ *     admin or a member as target asks what it asked before. Keeping fewer snapshots (a lower keep, turning them off, an
+ *     interval past their 14-day age) asks the same; keeping more, turning them on, a shorter interval do not.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
  *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
@@ -225,8 +228,9 @@ async function main(): Promise<void> {
         const mirrorAddr = 'mirror.example.invalid:4001';
         const branchRoot = addMember('Bramble');
         const ownerOnly: Array<{ what: string; method: string; route: string; body: unknown; unchanged?: () => string; ok: (r: any) => boolean }> = [
-            { what: 'snapshot settings (A4)', method: 'POST', route: '/api/local/admin/snapshots/config', body: { keep: 5 },
-                unchanged: () => JSON.stringify(getAutoSnapshotConfig()), ok: (r) => r.status === 200 && r.json?.config?.keep === 5 },
+            // Keeping more: keeping fewer asks the fresh proof too (3d).
+            { what: 'snapshot settings (A4)', method: 'POST', route: '/api/local/admin/snapshots/config', body: { keep: 8 },
+                unchanged: () => JSON.stringify(getAutoSnapshotConfig()), ok: (r) => r.status === 200 && r.json?.config?.keep === 8 },
             { what: 'off-box settings (A6)', method: 'POST', route: '/api/local/admin/offbox-backups/settings', body: { intervalHours: 12 },
                 unchanged: () => JSON.stringify(readOffboxSettings().intervalHours), ok: (r) => r.status === 200 },
             { what: 'replication token generate (A7)', method: 'POST', route: '/api/local/admin/replication-token/generate', body: {},
@@ -524,6 +528,155 @@ async function main(): Promise<void> {
                 `re-key ${what}: no proof asked, 200 and 200 (${short(i)}; ${short(c)}; role ${roleRow(nk)})`);
         }
         for (const pk of [...coOwners, ada]) if (roleRow(pk)) revokeNodeRole(pk, roleRow(pk), owner);
+
+        // Removing or suspending an owner asks the same fresh proof (#1984 confirmation N-1; Marty, 15 Oct, card
+        // owner-stolen-session: "Yes to both"): pruning, offboarding, a branch with one in it, an emergency suspension and
+        // one through a report. Each refusal leaves the owner active, with the role. An admin or a member as before.
+        console.log('\n── 3c. removing or suspending an owner asks the fresh proof; an admin or a member as before ──');
+        const heldAside = (pk: string) => (db.prepare('SELECT role FROM suspended_node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const intact = (pk: string) => statusOf(pk) === 'active' && roleRow(pk) === 'owner' && heldAside(pk) === null;
+        // Olive alone is an owner here: a stolen session still can't suspend the only owner, nor can the proof.
+        const soleStolen = await call('POST', `/api/local/admin/users/${owner}/suspend`, earlier2fa(), { reason: 'stolen session' });
+        assert(soleStolen.status === 401 && intact(owner), `suspend the only owner, the password with an earlier 2FA session → 401, still an owner (${short(soleStolen)})`);
+        const soleProof = await call('POST', `/api/local/admin/users/${owner}/suspend`, pwSession(), { reason: 'with a code', code: tfa.code() });
+        assert(soleProof.status === 400 && intact(owner), `suspend the only owner, with a current code → 400, still an owner (${short(soleProof)})`);
+        const reportOn = (pk: string): string => {
+            const id = `rpt-${crypto.randomBytes(6).toString('hex')}`;
+            db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)`)
+                .run(id, admin, pk, 'gates suite', new Date().toISOString());
+            return id;
+        };
+        /** A branch whose root is a member, with an owner invited by them. */
+        const ownerInBranch = (): [string, string] => {
+            const root = addMember('Root');
+            const pk = coOwner('Branchy');
+            db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(root, pk);
+            return [root, pk];
+        };
+        type Removal = { what: string; send: (target: string, headers: Record<string, string>, extra?: Record<string, unknown>) => Promise<any>;
+            done: (target: string) => boolean; target?: () => [string, string] };
+        const removals: Removal[] = [
+            { what: 'emergency-suspend an owner', send: (t, h, x = {}) => call('POST', `/api/local/admin/users/${t}/suspend`, h, { reason: 'gates suite', ...x }),
+                done: (t) => statusOf(t) !== 'active' && roleRow(t) === null && heldAside(t) === 'owner' },
+            { what: 'suspend an owner through a report', send: (t, h, x = {}) => call('POST', `/api/local/admin/reports/${reportOn(t)}/action`, h, { suspendUser: true, ...x }),
+                done: (t) => statusOf(t) !== 'active' && roleRow(t) === null },
+            { what: 'prune an owner', send: (t, h, x = {}) => call('POST', `/api/local/admin/users/${t}/prune`, h, x),
+                done: (t) => statusOf(t) === 'pruned' && roleRow(t) === null },
+            { what: 'offboard an owner', send: (t, h, x = {}) => call('POST', `/api/local/admin/members/${t}/offboard`, h, { resolution: 'prune_zero_balance', ...x }),
+                done: (t) => statusOf(t) === 'pruned' && roleRow(t) === null },
+            { what: 'prune a branch with an owner in it', target: ownerInBranch,
+                send: (root, h, x = {}) => call('POST', `/api/local/admin/branches/${root}/prune`, h, x),
+                done: (root) => statusOf(root) === 'pruned' },
+        ];
+        for (const row of removals) {
+            console.log(`  · ${row.what}`);
+            const [target, ownerKey] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
+            for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+                // The computer's row also sends a code in the body, as the owner's own would.
+                const r = await row.send(target, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+                assert(refused(r), `${row.what}, ${who}: refused (${short(r)})`);
+                assert(intact(ownerKey) && (target === ownerKey || statusOf(target) === 'active'),
+                    `${row.what}, ${who}: nothing changed, still an active owner (${statusOf(ownerKey)}, ${roleRow(ownerKey)}, held ${heldAside(ownerKey)})`);
+            }
+            const code = tfa.code();
+            const withCode = await row.send(target, pwSession(), { code });
+            assert(withCode.status === 200 && row.done(target) && roleRow(ownerKey) === null,
+                `${row.what}, a password session with a current code → 200, done (${short(withCode)}; ${statusOf(target)}, role ${roleRow(ownerKey)})`);
+            // Again, on another owner: the code is spent; the phone with Manage pressed just now, or the code as X-Fresh-Proof.
+            const [target2, ownerKey2] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
+            const spent = await row.send(target2, pwSession(), { code });
+            assert(spent.status === 401 && intact(ownerKey2), `${row.what}, the same code again → 401, nothing changed (${short(spent)})`);
+            const phone = await row.send(target2, asPhone());
+            assert(phone.status === 200 && row.done(target2) && roleRow(ownerKey2) === null,
+                `${row.what}, Manage pressed just now → 200, done (${short(phone)})`);
+            const [target3, ownerKey3] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
+            const header = await row.send(target3, { ...pwSession(), 'x-fresh-proof': tfa.code() });
+            assert(header.status === 200 && row.done(target3) && roleRow(ownerKey3) === null,
+                `${row.what}, a current code in X-Fresh-Proof → 200, done (${short(header)})`);
+        }
+        // An admin or a member as target: the step-up, as before. The password with an earlier 2FA session, an owner's
+        // computer, an admin's computer: no code asked.
+        const asked = (r: any) => r.status === 401 || r.json?.code === 'phone_required' || r.json?.code === 'step_up_required';
+        for (const [what, make, send, done] of [
+            ['prune an admin, the password with an earlier 2FA session', () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
+                (t: string) => call('POST', `/api/local/admin/users/${t}/prune`, earlier2fa(), {}), (t: string) => statusOf(t) === 'pruned'],
+            ["suspend an admin, an owner's computer", () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
+                (t: string) => call('POST', `/api/local/admin/users/${t}/suspend`, asComputer, { reason: 'gates suite' }), (t: string) => statusOf(t) !== 'active' && heldAside(t) === 'admin'],
+            ["offboard an admin, an owner's computer", () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
+                (t: string) => call('POST', `/api/local/admin/members/${t}/offboard`, asComputer, { resolution: 'prune_zero_balance' }), (t: string) => statusOf(t) === 'pruned'],
+            ["prune a member, an admin's computer", () => addMember('Membee'),
+                (t: string) => call('POST', `/api/local/admin/users/${t}/prune`, asAdmin, {}), (t: string) => statusOf(t) === 'pruned'],
+            ["suspend a member, an admin's computer", () => addMember('Membee'),
+                (t: string) => call('POST', `/api/local/admin/users/${t}/suspend`, asAdmin, { reason: 'gates suite' }), (t: string) => statusOf(t) !== 'active'],
+            ["offboard a member, an admin's computer", () => addMember('Membee'),
+                (t: string) => call('POST', `/api/local/admin/members/${t}/offboard`, asAdmin, { resolution: 'prune_zero_balance' }), (t: string) => statusOf(t) === 'pruned'],
+            ["suspend a member through a report, an admin's computer", () => addMember('Membee'),
+                (t: string) => call('POST', `/api/local/admin/reports/${reportOn(t)}/action`, asAdmin, { suspendUser: true }), (t: string) => statusOf(t) !== 'active'],
+            ["prune a branch of members, an owner's computer", () => addMember('Rootee'),
+                (t: string) => call('POST', `/api/local/admin/branches/${t}/prune`, asComputer, {}), (t: string) => statusOf(t) === 'pruned'],
+        ] as Array<[string, () => string, (t: string) => Promise<any>, (t: string) => boolean]>) {
+            const t = make();
+            const r = await send(t);
+            assert(r.status === 200 && !asked(r) && done(t), `${what}: no proof asked, 200, done (${short(r)}; ${statusOf(t)})`);
+        }
+        for (const pk of coOwners) if (roleRow(pk)) revokeNodeRole(pk, roleRow(pk), owner);
+
+        // Fewer snapshots asks the same fresh proof (#1984 confirmation N-2): a lower keep, turning scheduled snapshots off,
+        // an interval past their 14-day age. More, on, or a shorter interval: no proof.
+        console.log('\n── 3d. keeping fewer snapshots, or none, asks the fresh proof; keeping more does not ──');
+        const snapCfg = () => JSON.stringify(getAutoSnapshotConfig());
+        const configRoute = '/api/local/admin/snapshots/config';
+        const raise = await call('POST', configRoute, asComputer, { keep: 9 });
+        assert(raise.status === 200 && getAutoSnapshotConfig().keep === 9, `keeping more snapshots (keep 9) from a computer: no proof asked (${short(raise)})`);
+        const MAX_AGE_HOURS = (snapshots.SNAPSHOT_MAX_AGE_DAYS ?? 14) * 24;
+        const lessen: Array<[string, Record<string, unknown>, () => boolean, Record<string, unknown>]> = [
+            ['keep fewer snapshots (9 → 8, then 7)', { keep: 8 }, () => getAutoSnapshotConfig().keep === 8, { keep: 7 }],
+            ['turn scheduled snapshots off', { enabled: false }, () => getAutoSnapshotConfig().enabled === false, { enabled: false }],
+            [`an interval past their age (${MAX_AGE_HOURS + 1} h)`, { intervalHours: MAX_AGE_HOURS + 1 }, () => getAutoSnapshotConfig().intervalHours === MAX_AGE_HOURS + 1,
+                { intervalHours: MAX_AGE_HOURS + 2 }],
+        ];
+        for (const [what, change, done, again] of lessen) {
+            console.log(`  · ${what}`);
+            const before = snapCfg();
+            for (const [who, headers, refused] of [
+                ...refusals(null).filter(([w]) => !w.includes('admin')),
+                ['an admin', () => asAdmin, inWords],
+                ['an admin token', () => asToken, (r: any) => r.status === 403 && r.json?.code === 'token_not_allowed'],
+            ] as Refusal[]) {
+                const r = await call('POST', configRoute, headers(), { ...change, ...(who.includes('computer') ? { code: tfa.code() } : {}) });
+                assert(refused(r), `${what}, ${who}: refused (${short(r)})`);
+                assert(snapCfg() === before, `${what}, ${who}: the config as it was`);
+            }
+            const code = tfa.code();
+            const withCode = await call('POST', configRoute, pwSession(), { ...change, code });
+            assert(withCode.status === 200 && done(), `${what}, a password session with a current code → 200 (${short(withCode)}; ${snapCfg()})`);
+            const spentBefore = snapCfg();
+            const spent = await call('POST', configRoute, pwSession(), { ...again, ...(again.enabled === false ? { keep: 6 } : {}), code });
+            assert(spent.status === 401 && snapCfg() === spentBefore, `${what}, the same code again → 401, unchanged (${short(spent)})`);
+            if (again.enabled === false) {
+                const on = await call('POST', configRoute, asComputer, { enabled: true });
+                assert(on.status === 200 && getAutoSnapshotConfig().enabled === true, `turning scheduled snapshots back on from a computer: no proof asked (${short(on)})`);
+                const offPhone = await call('POST', configRoute, asPhone(), { enabled: false });
+                assert(offPhone.status === 200 && getAutoSnapshotConfig().enabled === false, `turning them off, Manage pressed just now → 200 (${short(offPhone)})`);
+                const onAgain = await call('POST', configRoute, asComputer, { enabled: true });
+                assert(onAgain.status === 200 && getAutoSnapshotConfig().enabled === true, `and on again, no proof (${short(onAgain)})`);
+            } else {
+                const phone = await call('POST', configRoute, asPhone(), again);
+                assert(phone.status === 200 && Object.entries(again).every(([k, v]) => (getAutoSnapshotConfig() as any)[k] === v),
+                    `${what}, Manage pressed just now → 200 (${short(phone)}; ${snapCfg()})`);
+            }
+        }
+        const shorter = await call('POST', configRoute, asComputer, { intervalHours: MAX_AGE_HOURS });
+        assert(shorter.status === 200 && getAutoSnapshotConfig().intervalHours === MAX_AGE_HOURS,
+            `a shorter interval (${MAX_AGE_HOURS} h, within their age) from a computer: no proof asked (${short(shorter)})`);
+        const daily = await call('POST', configRoute, asComputer, { intervalHours: 24, keep: 8, enabled: true });
+        assert(daily.status === 200 && getAutoSnapshotConfig().intervalHours === 24 && getAutoSnapshotConfig().keep === 8,
+            `back to daily and keep 8 from a computer: no proof asked (${short(daily)})`);
+        const mixed = await call('POST', configRoute, asComputer, { keep: 7, enabled: true });
+        assert(mixed.status === 403 && mixed.json?.code === 'phone_required' && getAutoSnapshotConfig().keep === 8,
+            `keep fewer with snapshots on in the same change: the proof is still asked (${short(mixed)})`);
+        const sameKeep = await call('POST', configRoute, asComputer, { keep: 8, intervalHours: 24 });
+        assert(sameKeep.status === 200, `the same keep and interval sent again: no proof asked (${short(sameKeep)})`);
         // Retiring the password is a key session's alone: the phone, unlocked within 90 seconds. Last, as it ends the password.
         const retireStale = await call('POST', '/api/local/admin/auth/retire-password', asStalePhone(), { acceptOneOwner: true });
         assert(retireStale.status === 403 && retireStale.json?.code === 'step_up_required', `retire the password (C4), Manage 91 s ago → 403 step_up_required (${short(retireStale)})`);
@@ -538,7 +691,8 @@ async function main(): Promise<void> {
             assert(r.status === 400, `snapshots/config keep ${keep} → 400 (${short(r)})`);
             assert(JSON.stringify(getAutoSnapshotConfig()) === cfgBefore, `and the config as it was (keep ${keep})`);
         }
-        const keep3 = await call('POST', '/api/local/admin/snapshots/config', asComputer, { keep: MIN_SNAPSHOTS_KEPT });
+        // Down to the floor is keeping fewer: the fresh proof (3d).
+        const keep3 = await call('POST', '/api/local/admin/snapshots/config', asPhone(), { keep: MIN_SNAPSHOTS_KEPT });
         assert(keep3.status === 200 && getAutoSnapshotConfig().keep === MIN_SNAPSHOTS_KEPT, `snapshots/config keep ${MIN_SNAPSHOTS_KEPT} is taken (${short(keep3)})`);
         // A snapshot taken by hand never pushes out a scheduled one (#1984 review B1): `keep` counts the scheduler's own.
         const keepNow: number = getAutoSnapshotConfig().keep;

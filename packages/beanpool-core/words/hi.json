@@ -2,10 +2,10 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "फलियाँ",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "जगहें OpenStreetMap से हैं। आप यहाँ जो लिखते हैं, वह उन्हें भेजा जाता है।",
   "Choose {place}": "{place} चुनें",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "यह समुदाय कुछ भी पोस्ट करने से पहले प्रोफ़ाइल फ़ोटो माँगता है। आप इसे बाद में अपनी प्रोफ़ाइल से जोड़ सकते हैं।",
-  "A picture is optional here. You can add one later from your profile.": "यहाँ फ़ोटो वैकल्पिक है। आप इसे बाद में अपनी प्रोफ़ाइल से जोड़ सकते हैं।"
+  "A picture is optional here. You can add one later from your profile.": "यहाँ फ़ोटो वैकल्पिक है। आप इसे बाद में अपनी प्रोफ़ाइल से जोड़ सकते हैं।",
+  "{n}st\u0004day of the month": "{n} तारीख",
+  "{n}nd\u0004day of the month": "{n} तारीख",
+  "{n}rd\u0004day of the month": "{n} तारीख",
+  "{n}th\u0004day of the month": "{n} तारीख",
+  "Every month on the first {weekday}": "हर महीने पहले {weekday} को",
+  "Every month on the second {weekday}": "हर महीने दूसरे {weekday} को",
+  "Every month on the third {weekday}": "हर महीने तीसरे {weekday} को",
+  "Every month on the fourth {weekday}": "हर महीने चौथे {weekday} को",
+  "Every month on the last {weekday}": "हर महीने आख़िरी {weekday} को",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "हर {n} महीने, पहले {weekday} को",
+    "other": "हर {n} महीने, पहले {weekday} को"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "हर {n} महीने, दूसरे {weekday} को",
+    "other": "हर {n} महीने, दूसरे {weekday} को"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "हर {n} महीने, तीसरे {weekday} को",
+    "other": "हर {n} महीने, तीसरे {weekday} को"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "हर {n} महीने, चौथे {weekday} को",
+    "other": "हर {n} महीने, चौथे {weekday} को"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "हर {n} महीने, आख़िरी {weekday} को",
+    "other": "हर {n} महीने, आख़िरी {weekday} को"
+  },
+  "Monthly, first {weekday}": "मासिक, पहले {weekday} को",
+  "Monthly, second {weekday}": "मासिक, दूसरे {weekday} को",
+  "Monthly, third {weekday}": "मासिक, तीसरे {weekday} को",
+  "Monthly, fourth {weekday}": "मासिक, चौथे {weekday} को",
+  "Monthly, last {weekday}": "मासिक, आख़िरी {weekday} को",
+  "Does not repeat": "दोहराया नहीं जाता",
+  "Every week on {weekday}": "हर हफ़्ते {weekday} को",
+  "Every 2 weeks on {weekday}": "हर 2 हफ़्ते में {weekday} को",
+  "Every month on the {day}": "हर महीने {day} को",
+  "An event that repeats must end before its next date starts": "दोहराए जाने वाले कार्यक्रम को अपनी अगली तारीख शुरू होने से पहले समाप्त होना चाहिए",
+  "(months without a {day} are skipped)": "({day} के बिना वाले महीने छोड़ दिए जाते हैं)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "हर {n} हफ़्ते {weekday} को",
+    "other": "हर {n} हफ़्ते {weekday} को"
+  },
+  "Every {weekday}": "हर {weekday} को",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "हर {n} महीने {day} को",
+    "other": "हर {n} महीने {day} को"
+  },
+  "Monthly on the {day}": "मासिक, {day} को",
+  "{repeats} · until {date}": "{repeats} · {date} तक",
+  "The last date must be a date on or after the first one": "आख़िरी तारीख पहली तारीख के दिन या उसके बाद की होनी चाहिए",
+  "The last date can be at most {n} years after the first one": "आख़िरी तारीख पहली तारीख के अधिकतम {n} साल बाद तक हो सकती है",
+  "{date} is cancelled. Next: {next}": "{date} रद्द कर दी गई है। अगला: {next}",
+  "{date} is cancelled.": "{date} रद्द कर दी गई है।",
+  "{date} is back on": "{date} फिर से शुरू हो गया है",
+  "Moved from the regular {weekday}": "नियमित {weekday} से बदला गया",
+  "Moved from the regular date": "नियमित तारीख से बदला गया",
+  "Choose how the event repeats from the list": "सूची से चुनें कि कार्यक्रम कैसे दोहराया जाए",
+  "An event can repeat every 1 to 12 weeks or months": "कोई कार्यक्रम हर 1 से 12 हफ़्ते या महीने में दोहराया जा सकता है",
+  "The first date must be one of the repeating dates": "पहली तारीख दोहराई जाने वाली तारीखों में से एक होनी चाहिए",
+  "The last date can be at most 5 years after the first one": "आख़िरी तारीख पहली तारीख के अधिकतम 5 साल बाद तक हो सकती है",
+  "Pick one of the dates this event repeats on": "उन तारीखों में से एक चुनें जिन पर यह कार्यक्रम दोहराया जाता है",
+  "This event does not repeat": "यह कार्यक्रम दोहराया नहीं जाता",
+  "Only the host can cancel or restore a date": "केवल आयोजक ही किसी तारीख को रद्द या बहाल कर सकते हैं",
+  "This is the last date: change when the event ends, or cancel the event": "यह आख़िरी तारीख है: कार्यक्रम समाप्त होने का समय बदलें, या कार्यक्रम रद्द करें",
+  "At most 100 dates can be cancelled": "अधिकतम 100 तारीखें रद्द की जा सकती हैं",
+  "This event has been cancelled": "यह कार्यक्रम रद्द कर दिया गया है",
+  "Pick a time zone from the list": "सूची से समय क्षेत्र चुनें",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "लगभग 1 किमी के दायरे में दिखाई देता है। मिलने की योजना बनाते समय सटीक जगह के लिए {name} से पूछें।",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "कार्यक्रम देखने वाले सभी लोगों को दिखाई देता है। नीचे दिए गए नोट में सटीक पता लिखें।",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "यह सड़क का पता लगता है। कार्यक्रम देखने वाले सभी लोग इसे पढ़ सकेंगे, इसलिए इसे नीचे दिए गए नोट में लिखना अधिक सुरक्षित है।",
+  "An earlier message was removed when this chat was locked": "यह चैट लॉक होने पर एक पुराना संदेश हटा दिया गया था",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "यह चैट लॉक होने पर {n} पुराना संदेश हटा दिया गया था",
+    "other": "यह चैट लॉक होने पर {n} पुराने संदेश हटा दिए गए थे"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "संयोजक द्वारा {n} संदेश हटाया गया",
+    "other": "संयोजक द्वारा {n} संदेश हटाए गए"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} संदेश हटा दिया गया था",
+    "other": "{n} संदेश हटा दिए गए थे"
+  }
 }

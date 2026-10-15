@@ -45,10 +45,10 @@ for (const [label, mode, body] of [
             const ev = w.events('ourthing');
             assert.equal(ev.length, 1);
             assert.equal(ev[0].event, 'claim-refused');
-            assert.match(ev[0].detail, /a A record at Cloudflare the registrar did not make/);
+            assert.match(ev[0].detail, /an A record at Cloudflare the registrar did not make/);
             const told = refusedAlerts(w, 'ourthing');
             assert.equal(told.length, 1, 'the admin is told');
-            assert.match(told[0].body, /ourthing\.beanpool\.org already has a A record/);
+            assert.match(told[0].body, /ourthing\.beanpool\.org already has an A record/);
             assert.doesNotMatch(told[0].body, new RegExp(stranger.pubHex.slice(0, 16)), 'no key in the alert');
             // Asked again (its node retries every 5 minutes): refused again, told once.
             assert.equal((await w.claim(stranger, { name: 'ourthing', mode, ...body })).status, 409);
@@ -89,7 +89,7 @@ test('a gated claim at a label with a hand-made record or tunnel: the admin\'s a
         assert.deepEqual(w.cf.dns.get(before.id), before);
         assert.deepEqual(w.cf.tunnels.get(tun.id), tun);
         assert.ok(!w.cf.calls.some((c) => /^(PATCH|DELETE|POST|PUT) /.test(c)), w.cf.calls.join(', '));
-        assert.match(w.events('sydney').at(-1).detail, /^approve by the admin refused: a A record and 1 bp-sydney tunnel/);
+        assert.match(w.events('sydney').at(-1).detail, /^approve by the admin refused: an A record and 1 bp-sydney tunnel/);
     } finally { w.restore(); }
 });
 
@@ -145,5 +145,108 @@ test('a community\'s own name still heals over a record at its hostname (node-ad
         assert.equal(r.status, 200, JSON.stringify(r.body));
         assert.equal(r.body.status, 'live');
         assert.equal(routing(w, 'riverbend').dns, `${row.tunnel_id}.cfargotunnel.com`, 'routed to its own tunnel again');
+    } finally { w.restore(); }
+});
+
+// NB1 of the #1978 review (P-C4): a new tenure that passed the check but failed at Cloudflare stays pending for its key,
+// and that key's next claim (or /heal) retries it. The retry takes over nothing made since, as the claim would not have.
+test('a pending claim retried after a hand record appeared at its label is refused (409); the record is untouched', async () => {
+    const w = await world();
+    try {
+        const stranger = await makeKey();
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(stranger, { name: 'futurebox' })).status, 502);
+        w.cf.fail.ingress = false;
+        const pending = await w.row('futurebox');
+        assert.equal(pending.status, 'pending');
+        const before = handRecord(w, 'futurebox.beanpool.org');
+        w.cf.calls.length = 0;
+        for (const retry of [() => w.claim(stranger, { name: 'futurebox' }), () => w.heal(stranger, { name: 'futurebox' })]) {
+            const r = await retry();
+            assert.equal(r.status, 409, JSON.stringify(r.body));
+            assert.equal(r.body.error, 'name in use outside the registrar');
+        }
+        assert.deepEqual(w.cf.dns.get(before.id), before, 'the hand-made record is exactly as it was');
+        assert.deepEqual(routing(w, 'futurebox').tunnels, [], 'no tunnel made');
+        assert.ok(!w.cf.calls.some((c) => /^(PATCH|DELETE|POST|PUT) /.test(c)), `no write to Cloudflare: ${w.cf.calls.join(', ')}`);
+        assert.deepEqual(await w.row('futurebox'), pending, 'the row is as it was: still pending for its key');
+        assert.match(w.events('futurebox').at(-1).detail, /refused: an A record at Cloudflare the registrar did not make/);
+    } finally { w.restore(); }
+});
+
+// What the pending tenure itself made before it stopped (a Worker that died part way, or a record Cloudflare made but
+// answered an error for) is its own: a CNAME to a bp-<name> tunnel made at or after the claim. Its retry finishes.
+for (const [label, deleted] of [['still live', false], ['since deleted', true]]) {
+    test(`a pending claim whose own CNAME is left at its label (to a tunnel ${label}) is finished by its retry: live`, async () => {
+        const w = await world();
+        try {
+            const key = await makeKey();
+            w.cf.fail.ingress = true;
+            assert.equal((await w.claim(key, { name: 'halfway' })).status, 502);
+            w.cf.fail.ingress = false;
+            const since = (await w.row('halfway')).requested_at - 700;   // long enough ago that the tunnel is stale
+            await w.backdate('halfway', { requested_at: since });
+            const t = { id: 'tun-left', name: 'bp-halfway', created_at: new Date((since + 5) * 1000).toISOString(), deleted_at: deleted ? new Date().toISOString() : null };
+            w.cf.tunnels.set(t.id, t);
+            w.cf.dns.set('dns-left', { id: 'dns-left', type: 'CNAME', name: 'halfway.beanpool.org', content: 'tun-left.cfargotunnel.com', proxied: true });
+            const r = await w.claim(key, { name: 'halfway' });
+            assert.equal(r.status, 200, JSON.stringify(r.body));
+            assert.equal(r.body.status, 'live');
+            const row = await w.row('halfway');
+            assert.equal(row.dns_record_id, 'dns-left', 'its own record adopted');
+            assert.equal(routing(w, 'halfway').dns, `${row.tunnel_id}.cfargotunnel.com`);
+        } finally { w.restore(); }
+    });
+}
+
+test('a pending claim retried over a bp- tunnel made before the claim, at a name never held, is refused (409)', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(key, { name: 'ourthing' })).status, 502);
+        w.cf.fail.ingress = false;
+        const before = handTunnel(w);   // a day old: made before this tenure began
+        const r = await w.claim(key, { name: 'ourthing' });
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        assert.deepEqual(w.cf.tunnels.get(before.id), before);
+    } finally { w.restore(); }
+});
+
+// NB2 (P-C5): every host record at the hostname is checked, not only the first Cloudflare lists.
+test('a claim where the last tenure\'s record stands beside a hand AAAA record is refused (409); both are untouched', async () => {
+    const w = await world();
+    try {
+        const [first, second] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'tworecs', first);
+        w.cf.fail.deleteDns = true;
+        assert.equal((await w.admin('tworecs', 'release', { free_now: true })).status, 200);
+        w.cf.fail.deleteDns = false;
+        const released = await w.row('tworecs');
+        const recorded = { ...w.cf.dns.get(released.dns_record_id) };
+        const aaaa = { id: 'hand-aaaa', type: 'AAAA', name: 'tworecs.beanpool.org', content: '2001:db8::1', proxied: true };
+        w.cf.dns.set(aaaa.id, { ...aaaa });   // listed after the recorded one
+        w.cf.calls.length = 0;
+        const r = await w.claim(second, { name: 'tworecs' });
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        assert.equal(r.body.error, 'name in use outside the registrar');
+        assert.deepEqual(w.cf.dns.get(aaaa.id), aaaa, 'the hand AAAA is intact');
+        assert.deepEqual(w.cf.dns.get(recorded.id), recorded);
+        assert.deepEqual(await w.row('tworecs'), released, 'the released row is unchanged');
+        assert.ok(!w.cf.calls.some((c) => /^(PATCH|DELETE|POST|PUT) /.test(c)), w.cf.calls.join(', '));
+        assert.match(w.events('tworecs').at(-1).detail, /refused: an AAAA record at Cloudflare/);
+    } finally { w.restore(); }
+});
+
+// NB6: the alert says how to reserve a name — a migration — not the Block action.
+test('the refusal alert reads "an A record" and points at a name_policy migration', async () => {
+    const w = await world({ env: { NTFY_URL: 'https://ntfy.invalid/topic' } });
+    try {
+        handRecord(w);
+        assert.equal((await w.claim(await makeKey(), { name: 'ourthing' })).status, 409);
+        const [told] = refusedAlerts(w, 'ourthing');
+        assert.match(told.body, /ourthing\.beanpool\.org already has an A record the registrar did not make\. Nothing was changed\./);
+        assert.match(told.body, /add a name_policy row \(blocked\) by migration/);
+        assert.doesNotMatch(told.body, /reserve the name \(blocked\)/);
     } finally { w.restore(); }
 });

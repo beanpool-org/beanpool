@@ -35,9 +35,10 @@ export const createTunnel = (env, name) =>
 export const tunnelNameTaken = (e) => !!e && (e.codes?.includes(1013) || e.status === 409);
 
 // The live (not deleted) tunnels named `name`: { id, name, created_at, … }.
-export async function listTunnelsNamed(env, name) {
-    const list = await cf(env, 'GET', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`);
-    return (Array.isArray(list) ? list : []).filter((t) => t && t.name === name && !t.deleted_at);
+export async function listTunnelsNamed(env, name, { withDeleted = false } = {}) {
+    // Without is_deleted Cloudflare lists deleted tunnels too (with `deleted_at`).
+    const list = await cf(env, 'GET', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}${withDeleted ? '' : '&is_deleted=false'}`);
+    return (Array.isArray(list) ? list : []).filter((t) => t && t.name === name && (withDeleted || !t.deleted_at));
 }
 
 // The tunnel, or null if Cloudflare no longer has it (404, or deleted — a deleted tunnel is still listed with
@@ -77,11 +78,14 @@ export const deleteTunnel = (env, id) =>
 export const createDnsRecord = (env, label, rec) =>
     cf(env, 'POST', `/zones/${env.CF_ZONE_ID}/dns_records`, { type: rec.type, name: label, content: rec.content, proxied: rec.proxied });
 
-// The routing record at `fqdn` (CNAME, A or AAAA), or null.
-export async function findDnsRecord(env, fqdn) {
+// Every routing record at `fqdn` (CNAME, A or AAAA): A and AAAA may stand side by side.
+export async function findDnsRecords(env, fqdn) {
     const list = await cf(env, 'GET', `/zones/${env.CF_ZONE_ID}/dns_records?name=${encodeURIComponent(fqdn)}`);
-    return (Array.isArray(list) ? list : []).find((r) => ['CNAME', 'A', 'AAAA'].includes(r.type)) || null;
+    return (Array.isArray(list) ? list : []).filter((r) => r && ['CNAME', 'A', 'AAAA'].includes(r.type));
 }
+
+// The routing record at `fqdn`, or null: the first findDnsRecords lists.
+export const findDnsRecord = async (env, fqdn) => (await findDnsRecords(env, fqdn))[0] || null;
 
 // Content and proxied only; ensure() replaces a record whose type must change (Cloudflare won't PATCH a type).
 export const patchDnsRecord = (env, id, rec) =>

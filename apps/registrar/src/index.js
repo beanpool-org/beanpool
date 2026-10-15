@@ -235,28 +235,39 @@ async function createTunnelFor(env, a, expected) {
     catch (e) { throw cf.tunnelNameTaken(e) ? cleaningUp(a.name) : e; }
 }
 
-// What routes `name` at Cloudflare that the registrar did not make, before a new tenure's first ensure(): the record
-// at the hostname, unless `row` (the last tenure's, or a pending claim's own) records it or it is owed (teardown) —
-// those the takeover deletes as its own; and, at a name the registrar never held before (`heldBefore` false), any live
-// bp-<name> tunnel. Where it did hold the name, a tunnel nothing records may be its own leftover, and createTunnelFor
-// already deletes one only when provably stale. Anything else is someone else's: one of our own servers, routed by
-// hand. Null when there is nothing. Throws if Cloudflare can't say: "can't tell" never reads as "nothing there".
-async function outsideRegistrar(env, name, row, heldBefore) {
+// What routes `name` at Cloudflare that the registrar did not make, before a new tenure's first ensure(): every host
+// record at the hostname (A and AAAA may stand side by side, and ensure() would replace one after another), unless
+// `row` (the last tenure's, or a pending claim's own) records it or it is owed (teardown) — those the takeover deletes
+// as its own; and, at a name the registrar never held before (`heldBefore` false), any live bp-<name> tunnel. Where it
+// did hold the name, a tunnel nothing records may be its own leftover, and createTunnelFor already deletes one only
+// when provably stale. A pending tenure being finished (`since`: when it began) also owns what it made itself before
+// it stopped — a Worker that died part way, or a record Cloudflare made but answered an error for: a bp-<name> tunnel
+// made since it began, deleted since or not, and a CNAME to one (only the registrar makes bp- tunnels). Anything else
+// is someone else's: one of our own servers, routed by hand. Null when there is nothing. Throws if Cloudflare can't
+// say: "can't tell" never reads as "nothing there".
+async function outsideRegistrar(env, name, row, heldBefore, since = null) {
     const owed = await db.listTeardown(env, name);
     const ours = (kind, id) => id === row?.[kind === 'dns' ? 'dns_record_id' : 'tunnel_id'] || owed.some((t) => t.kind === kind && t.cf_id === id);
-    const rec = await cf.findDnsRecord(env, `${name}.${env.BASE_DOMAIN}`);
-    const dns = rec && !ours('dns', rec.id) ? rec : null;
-    const tunnels = heldBefore ? 0 : (await cf.listTunnelsNamed(env, `bp-${name}`)).filter((t) => !ours('tunnel', t.id)).length;
-    return dns || tunnels ? { dns, tunnels } : null;
+    const named = since === null && heldBefore ? [] : await cf.listTunnelsNamed(env, `bp-${name}`, { withDeleted: since !== null });
+    const made = new Set(since === null ? [] : named.filter((t) => Date.parse(t.created_at) / 1000 >= since - CF_CLOCK_SLACK_S).map((t) => t.id));
+    const madeTarget = (r) => r.type === 'CNAME' && [...made].some((id) => r.content === `${id}.cfargotunnel.com`);
+    const dns = (await cf.findDnsRecords(env, `${name}.${env.BASE_DOMAIN}`)).filter((r) => !ours('dns', r.id) && !madeTarget(r));
+    const tunnels = heldBefore ? 0 : named.filter((t) => !t.deleted_at && !ours('tunnel', t.id) && !made.has(t.id)).length;
+    return dns.length || tunnels ? { dns, tunnels } : null;
 }
+
+// Cloudflare's clock against the Worker's: a tunnel a claim made is never dated before the claim by more than this.
+const CF_CLOCK_SLACK_S = 60;
+
+const aRecord = (r) => `${/^[AEIOU]/.test(r.type) ? 'an' : 'a'} ${r.type} record`;
 
 // Refuse the claim, change nothing at Cloudflare or in the table but the audit trail, and tell the admin (hostnames
 // and counts only).
 async function refuseOutside(env, name, pubkey, found, by = `claim by key ${key16(pubkey)}`) {
-    const what = [found.dns && `a ${found.dns.type} record`, found.tunnels && `${found.tunnels} bp-${name} tunnel${found.tunnels === 1 ? '' : 's'}`]
+    const what = [...found.dns.map(aRecord), found.tunnels && `${found.tunnels} bp-${name} tunnel${found.tunnels === 1 ? '' : 's'}`]
         .filter(Boolean).join(' and ');
     console.warn('[OUTSIDE_REGISTRAR]', name, `${by} refused: ${what} the registrar did not make`);
-    await logEvent(env, name, 'claim-refused', `${by} refused: ${what} at Cloudflare the registrar did not make; nothing changed. If the name is ours, reserve it (blocked).`);
+    await logEvent(env, name, 'claim-refused', `${by} refused: ${what} at Cloudflare the registrar did not make; nothing changed. If the name is ours, add a name_policy row (blocked) by migration.`);
     await tell(env, () => alerts.outsideRegistrar(env, name, what));
     return json({ error: 'name in use outside the registrar' }, 409);
 }
@@ -662,6 +673,18 @@ async function heal(env, cur, b, now, tries = 3) {
     if (cur.status === 'paused' && cur.pause_reason === 'admin') {
         if (!(await db.updateIfUnchanged(env, cur.name, cur, fields, { withIds: true }))) return missed();
         return reply({ status: 'paused', reason: 'admin', since: cur.paused_at, changed: [] });
+    }
+
+    // A pending row is a new tenure whose provisioning failed: finishing it takes over nothing the registrar did not
+    // make, as its claim would not have (NB1 of the #1978 review) — what that claim made before it stopped is its own.
+    if (cur.status === 'pending') {
+        let found;
+        try { found = await outsideRegistrar(env, cur.name, cur, await db.claimedBefore(env, cur.name, cur.requested_at), cur.requested_at); }
+        catch (e) { return provisionFailed(e); }
+        if (found) {
+            if (!(await db.isUnchanged(env, cur.name, cur, { withIds: true }))) return missed();
+            return refuseOutside(env, cur.name, cur.node_pubkey, found);
+        }
     }
 
     try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }

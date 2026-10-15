@@ -281,7 +281,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         target_archetypes: null, // dormant: the node never sends it and nothing reads it
         event_start_at: null, event_end_at: null, event_place_name: null, event_state: null,
         event_going_count: 0, event_interested_count: 0,
-        event_start_local: null, event_end_local: null, event_tz: null, event_online: null,
+        event_start_local: null, event_end_local: null, event_tz: null, event_online: null, event_repeat: null, event_repeat_until: null,
         carried_callsign: 'Ann', // the author's name as the node sent it, for a listing whose author the directory doesn't hold
         carried_avatar: null, // and their face: this copy names none
     };

@@ -94,13 +94,13 @@ describe('event times: share text and Home', () => {
 describe('event times: the cache (amendment 1 item 3)', () => {
     it('caches the clock, zone and online flag, and never the join link', () => {
         const cols = eventCacheColumns({ ...vibe, eventState: 'scheduled', goingCount: 2, interestedCount: 1 });
-        expect(cols).toEqual([vibe.eventStartAt, vibe.eventEndAt, null, 'scheduled', 2, 1, '2026-10-16T20:50', '2026-10-16T22:50', 'Australia/Sydney', 1]);
+        expect(cols).toEqual([vibe.eventStartAt, vibe.eventEndAt, null, 'scheduled', 2, 1, '2026-10-16T20:50', '2026-10-16T22:50', 'Australia/Sydney', 1, null, null]);
         expect(cols).not.toContain(vibe.eventLink);
         expect(eventCacheColumns({ type: 'event', event_start_local: 'a', event_end_local: 'b', event_tz: 'Africa/Lagos', event_online: 0 }).slice(6))
-            .toEqual(['a', 'b', 'Africa/Lagos', 0]);
+            .toEqual(['a', 'b', 'Africa/Lagos', 0, null, null]);
         // A node from before zones: NULL, so the card falls back to device time.
-        expect(eventCacheColumns({ type: 'event', eventStartAt: 's' }).slice(6)).toEqual([null, null, null, null]);
-        expect(eventCacheColumns({ type: 'offer' })).toEqual([null, null, null, null, 0, 0, null, null, null, null]);
+        expect(eventCacheColumns({ type: 'event', eventStartAt: 's' }).slice(6)).toEqual([null, null, null, null, null, null]);
+        expect(eventCacheColumns({ type: 'offer' })).toEqual([null, null, null, null, 0, 0, null, null, null, null, null, null]);
     });
 });
 

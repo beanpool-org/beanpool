@@ -493,13 +493,8 @@ async function main(): Promise<void> {
         });
 
         await section('7. Settings: claim, status, Take offline, Restart tunnel', async () => {
-            // Owner level, as the real checkAdminAuth gives the admin password (an admin is test-tunnel-token-owner-only's), sent
-            // with a current code: the owner's fresh proof that taking the address offline or claiming over a live name asks
-            // (design case 18, B1, B3). The node's 2FA is on, so the password path has its second factor.
-            const { updateLocalConfig } = await import('./config/local-config.js');
-            const { generateTotpSecret } = await import('./totp.js');
-            updateLocalConfig({ totpEnabled: true, totpSecret: generateTotpSecret() } as any);
-            const deps = { checkAdminAuth: async (ctx: any) => { ctx.state.adminRole = 'owner'; ctx.state.secondFactorJustVerified = true; return true; } } as unknown as RouteDeps;
+            // Owner level, as the real checkAdminAuth gives the admin password (an admin is test-tunnel-token-owner-only's).
+            const deps = { checkAdminAuth: async (ctx: any) => { ctx.state.adminRole = 'owner'; return true; } } as unknown as RouteDeps;
             const k = new Koa();
             k.use(async (ctx: any, next: any) => {
                 if (ctx.method === 'POST') {

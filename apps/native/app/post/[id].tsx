@@ -37,11 +37,10 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
-import { hostLetsInDefault } from '../../utils/events';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -110,7 +109,6 @@ export default function PostDetailModal() {
         authorInfo: { marginLeft: 12 },
         authorName: { color: colors.text.body, fontSize: 16, fontWeight: '700' },
         authorRating: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
-        roughPlace: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 16 },
 
         // Own Post Actions
         ownPostActions: { paddingHorizontal: 20, gap: 10 },
@@ -696,7 +694,7 @@ export default function PostDetailModal() {
 
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
-        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} />;
+        return <EventDetail post={post} />;
     }
 
     const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));
@@ -1072,12 +1070,6 @@ export default function PostDetailModal() {
                         </View>
                     </Pressable>
                 )}
-                {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md §4):
-                    said here, so a pin on the map is never taken for the door. A keeper reads their enterprise's exactly. */}
-                {placeShownRoughly({ authorPublicKey: post.author_pubkey, type: post.type, lat: post.lat, lng: post.lng }, identity?.publicKey, hostLetsInDefault(nodeProfile?.features))
-                    && !isOperatorOfAuthor && (
-                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: cardAuthor })}</Text>
-                )}
 
                 {/* Action Buttons */}
 
@@ -1239,7 +1231,7 @@ export default function PostDetailModal() {
                             {/* Type Toggle */}
                             <View style={styles.editTypeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'offer' }} style={[styles.editTypeBtn, editType === 'offer' && styles.editTypeBtnOffer]} onPress={() => setEditType('offer')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>🟢 Offer</Text>
+                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>🔵 Offer</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'need' }} style={[styles.editTypeBtn, editType === 'need' && styles.editTypeBtnNeed]} onPress={() => setEditType('need')}>
                                     <Text style={[styles.editTypeBtnText, editType === 'need' && styles.editTypeBtnTextActive]}>🟠 Need</Text>
@@ -1812,12 +1804,11 @@ export default function PostDetailModal() {
                                         try {
                                             setSubmittingReport(true);
                                             const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;
-                                            const sent = await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
+                                            await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
                                             setShowReportForm(false);
                                             setReportDetails('');
                                             setReportReason('');
-                                            // The thanks, and why the member's words were left out when they were (case 14).
-                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, finalReason));
+                                            Alert.alert('Reported', "Thanks. Your community's moderators will review it.");
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message);
                                         } finally {

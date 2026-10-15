@@ -5,10 +5,6 @@
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
-import { forgetRecentLookups } from '../lib/members-on-demand';
-
-// Each case asks the node afresh: an answer kept from the last case (the search's and near read's recent answers) isn't this one's.
-beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -90,23 +86,20 @@ describe('People on a community with members on demand', () => {
         expect(whole).not.toHaveBeenCalled();
     });
 
-    it("the nearest read's day budget spent (429, features.openMembership): the node's words, and the search still works", async () => {
+    it("the nearest read's day budget spent (429, features.openMembership): Try again, and the search still works", async () => {
         // DESIGN-global-member-privacy-fable.md §3: where anyone can join in a minute, a member may ask who is near a place
-        // 100 times a day (READ_LIMITS.nearestPeoplePerDay on the server). Past it the page says so in the node's words
-        // (#1965 review N4: never a connection problem, and no Try again that can only fail until it lets up), and the
-        // search by name still answers; the page never reads the directory whole instead.
+        // 100 times a day (READ_LIMITS.nearestPeoplePerDay on the server). Past it the page says it couldn't check, and
+        // the search by name still answers; the page never reads the directory whole instead.
         info.value = { ...GLOBAL, features: { ...GLOBAL.features, openMembership: true } };
-        const SPENT = 'You have looked up the people near a place 100 times today, the most one account can in 24 hours. You can look again in about 3 hours. Searching by name still works.';
         cards.mockImplementation(async (path: string) => {
-            if (path.includes('lat=')) throw Object.assign(new Error(SPENT), { status: 429, code: 'nearest_people_day_budget' });
+            if (path.includes('lat=')) throw Object.assign(new Error('You have looked up the people near a place 100 times today'), { status: 429, code: 'nearest_people_day_budget' });
             if (path.includes('q=')) return [card('e', 'Alma')];
             return [];
         });
         openCommunity();
         const failed = await screen.findByTestId('people-near-failed');
-        expect(failed).toHaveTextContent(SPENT);
-        expect(failed).not.toHaveTextContent("Couldn't check");
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(failed).toHaveTextContent("Couldn't check who's near you just now.");
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Search members by name'), { target: { value: 'al' } });
         await screen.findByTestId('people-found');
         expect(screen.getByTestId('people-found')).toHaveTextContent('Alma');
@@ -203,18 +196,5 @@ describe('People on a community with members on demand', () => {
         openCommunity();
         await waitFor(() => expect(whole).toHaveBeenCalledTimes(1));
         expect(cards).not.toHaveBeenCalled();
-    });
-
-    it("the search's day budget spent (429): the node's words, never \"check your connection\" (#1965 review N4)", async () => {
-        info.value = { ...GLOBAL, features: { ...GLOBAL.features, openMembership: true } };
-        const SPENT = 'You have searched for people by name 100 times today, the most one account can in 24 hours. You can search again in about 2 hours. The people you have already met are still in your lists.';
-        cards.mockImplementation(async (path: string) => {
-            if (path.includes('q=')) throw Object.assign(new Error(SPENT), { status: 429, code: 'people_search_day_budget' });
-            return [];
-        });
-        openCommunity();
-        fireEvent.change(await screen.findByLabelText('Search members by name'), { target: { value: 'al' } });
-        await waitFor(() => expect(screen.getByTestId('people-search-status')).toHaveTextContent(SPENT));
-        expect(screen.getByTestId('people-search-status')).not.toHaveTextContent('Check your connection');
     });
 });

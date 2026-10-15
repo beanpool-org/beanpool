@@ -31,13 +31,11 @@ import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost, fetchGroups, getBalance, getTreasuries, updateEvent } from '../utils/db';
-import { useNodeProfile } from '../utils/use-node-profile';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
-    buildEventDraft, buildEventEditPatch, approximatePin, freshEventPin, defaultEventEnd, formatPickerValue,
+    buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
     type EventCopy, type EventEditValues,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
@@ -46,7 +44,6 @@ import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
 import type { AddressResult } from '@beanpool/core';
-import { looksLikeStreetAddress, PLACE_WORDS, t } from '@beanpool/core';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -97,20 +94,12 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const scrollRef = useRef<ScrollView | null>(null);
     // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
-    // The spot a new pin was placed at, kept while the pin shows Approximate, so the host can still choose it.
-    const exactPin = useRef<{ lat: number; lng: number } | null>(null);
     const centreMap = (latitude: number, longitude: number) => {
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
     const [description, setDescription] = useState('');
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
-    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): ticked where anyone can
-    // join in a minute. Null until the host touches it, so a profile that arrives late still sets the default.
-    const nodeProfile = useNodeProfile();
-    const openMembership = hostLetsInDefault(nodeProfile?.features);
-    const [hostLetsInChoice, setHostLetsIn] = useState<boolean | null>(null);
-    const hostLetsIn = hostLetsInChoice ?? openMembership;
     const [audienceGroupId, setAudienceGroupId] = useState<string | null>(null);
     const [hostKey, setHostKey] = useState('me');
     // The host a copy names, held separately so the copy is posted by the same enterprise or group even if the
@@ -176,9 +165,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
 
     const reset = () => {
-        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
+        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
-        setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
+        setCopiedHost(null); setIsCopy(false);
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -195,7 +184,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
-        setApproximate(false); exactPin.current = null;
+        setApproximate(false);
         setAudienceGroupId(prefill.groupId);
         const copied: HostOption | null = prefill.enterprisePubkey
             ? { key: `ent:${prefill.enterprisePubkey}`, label: 'Enterprise', authorPubkey: prefill.enterprisePubkey, groupId: null }
@@ -226,10 +215,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setEnd(v.end);
         setPlaceName(v.placeName);
         setNote(v.privateNote);
-        setHostLetsIn(v.hostLetsIn);
         setPhoto(v.photo);
         setPicker(null);
-        setApproximate(false); exactPin.current = null;
+        setApproximate(false);
         if (v.lat != null && v.lng != null) {
             setPin({ lat: v.lat, lng: v.lng });
             centreMap(v.lat, v.lng);
@@ -245,8 +233,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         if (!visible) { appliedInitialPin.current = false; return; }
         if (prefill || editOf || appliedInitialPin.current || !initialPin) return;
         appliedInitialPin.current = true;
-        // A new pin, as a tap in the form is: Approximate from the start where anyone can join (freshEventPin).
-        placePin(initialPin.lat, initialPin.lng);
+        setPin({ lat: initialPin.lat, lng: initialPin.lng });
         centreMap(initialPin.lat, initialPin.lng);
     }, [visible, prefill, initialPin]);
 
@@ -281,17 +268,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
     };
 
-    // Where anyone can join, a new pin starts Approximate (freshEventPin); "Use the exact spot" takes it back.
     const placePin = (lat: number, lng: number) => {
-        const fresh = freshEventPin(lat, lng, openMembership);
-        exactPin.current = fresh.exact;
-        setPin(fresh.pin);
-        setApproximate(fresh.approximate);
-    };
-
-    const chooseExactPin = () => {
-        if (!exactPin.current) return;
-        setPin(exactPin.current);
+        setPin({ lat, lng });
         setApproximate(false);
     };
 
@@ -331,7 +309,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const makeApproximate = () => {
         if (!pin) return;
-        if (!approximate) exactPin.current = pin;
         setPin(approximatePin(pin.lat, pin.lng));
         setApproximate(true);
     };
@@ -354,7 +331,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const editValues = (): EventEditValues => ({
         title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
-        hostLetsIn,
     });
     const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
 
@@ -395,7 +371,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             title, description, start, end, placeName,
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
-            hostLetsIn,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -538,13 +513,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 maxLength={EVENT_PLACE_NAME_MAX}
                                 accessibilityLabel="Place name"
                             />
-                            {/* Where anyone can join, the place name is the one place everyone who can see the event reads
-                                (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
-                            {openMembership && (
-                                <Text style={styles.helper} testID="event-place-helper">
-                                    {looksLikeStreetAddress(placeName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
-                                </Text>
-                            )}
                         </View>
 
                         <View style={styles.field} onLayout={(e) => { addressY.current = e.nativeEvent.layout.y; }}>
@@ -605,17 +573,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 >
                                     <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
                                 </Pressable>
-                                {approximate && exactPin.current && (
-                                    <Pressable
-                                        onPress={chooseExactPin}
-                                        style={[styles.secondaryBtn, styles.approxBtn]}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={t('Use the exact spot')}
-                                        testID="event-pin-exact"
-                                    >
-                                        <Text style={styles.secondaryText} numberOfLines={1}>{t('Use the exact spot')}</Text>
-                                    </Pressable>
-                                )}
                             </View>
                         </View>
 
@@ -656,27 +613,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 maxLength={EVENT_PRIVATE_NOTE_MAX}
                                 accessibilityLabel="Note for people who are going"
                             />
-                            <Text style={styles.helper} testID="event-note-helper">{privateNoteHelper(hostLetsIn, openMembership)}</Text>
-                            <Pressable
-                                onPress={() => setHostLetsIn(!hostLetsIn)}
-                                style={styles.tickRow}
-                                accessibilityRole="checkbox"
-                                accessibilityState={{ checked: hostLetsIn }}
-                                accessibilityLabel={hostLetsInLabel()}
-                                testID="event-host-lets-in"
-                            >
-                                <Text style={styles.tickBox}>{hostLetsIn ? '☑' : '☐'}</Text>
-                                <View style={styles.tickTextCol}>
-                                    <Text style={styles.tickTitle}>{hostLetsInLabel()}</Text>
-                                    <Text style={styles.helper}>{hostLetsInHint()}</Text>
-                                </View>
-                            </Pressable>
-                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
-                            {editOf && hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn) && (
-                                <Text style={styles.letInOffWarning} accessibilityLiveRegion="polite" testID="event-host-lets-in-off">
-                                    {hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn)}
-                                </Text>
-                            )}
+                            <Text style={styles.helper}>Only people who tap Going see this.</Text>
                         </View>
 
                         {editOf && editCheck?.ok && editCheck.notifies && (
@@ -773,11 +710,6 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         },
         mapFallback: { justifyContent: 'center', alignItems: 'center', padding: 16 },
         helper: { fontSize: 12, color: colors.text.secondary, marginTop: 6, lineHeight: 16 },
-        tickRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, minHeight: 44, paddingVertical: 4 },
-        tickBox: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
-        tickTextCol: { flex: 1, minWidth: 0 },
-        tickTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, lineHeight: 19 },
-        letInOffWarning: { fontSize: 13, fontWeight: '600', color: colors.text.body, lineHeight: 18, marginTop: 6 },
         copyNote: {
             fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12,
             padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle,

@@ -287,7 +287,6 @@ import PublicProfileScreen from '../../app/public-profile';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
-import { forgetRecentLookups } from '../members-lookup';
 
 const realLoad = (Module as any)._load;
 beforeAll(() => {
@@ -301,8 +300,6 @@ afterAll(() => { (Module as any)._load = realLoad; });
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(async () => {
-    // Each case asks the node afresh: an answer kept from the last case (members-lookup's recent lookups) is another node's.
-    forgetRecentLookups();
     events.listeners.clear();
     mem.store.clear();
     mem.store.set('beanpool_anchor_url', NODE_URL);

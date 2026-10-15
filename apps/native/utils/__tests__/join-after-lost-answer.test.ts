@@ -621,7 +621,7 @@ describe('welcome.tsx: "Your Name" is not left while Next is out', () => {
 
     it('Back to Home, Restore Existing Identity and the Recover link are disabled while it is out, and do nothing if tapped', () => {
         const s = createStep();
-        expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, goBack\)\}\s*disabled=\{loading\}\s*accessibilityRole="button"\s*accessibilityLabel=\{t\('Back to Home'\)\}/);
+        expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, goBack\)\}\s*disabled=\{loading\}\s*accessibilityRole="button"\s*accessibilityLabel="Back to Home"/);
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{ setMode\('member'\); setError\(null\); \}\)\}\s*disabled=\{loading\}/);
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{\s*setError\(null\);\s*setMode\('recover'\);\s*\}\)\}\s*disabled=\{loading\}/);
         // No other way off the step: every change of step on it goes through that gate.

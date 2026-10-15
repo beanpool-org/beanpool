@@ -271,10 +271,6 @@ export interface NodeFeatures {
      *  `lat`, `lng`, `radiusKm` and `sort=distance|recent`, a point on the People lists, and a member's coarse area
      *  (POST /api/community/me/area). Apps from before G4 ignore it. */
     distanceSearch: boolean;
-    /** This server carries online events (DESIGN-event-times §9): no pin, a join link only the host and Going read, and
-     *  every member's set and Home hold them wherever the member is (director amendment 2). The apps offer "Online" only
-     *  where it is true: a server from before it would refuse the event, or keep it from everyone but its host. */
-    onlineEvents: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
     /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
@@ -475,8 +471,6 @@ export function getNodeFeatures(): NodeFeatures {
         knocks: s.knocks,
         // A capability of the build, not a profile switch: a local node answers distance queries too.
         distanceSearch: true,
-        // Also the build's: every profile carries online events.
-        onlineEvents: true,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,

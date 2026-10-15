@@ -32,7 +32,7 @@ import path from 'node:path';
 import { setCommonsBalance } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initAdminPassword, getLocalConfig, updateLocalConfig } from './config/local-config.js';
-import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db, createCrowdfundProject } from './db/db.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
@@ -98,12 +98,10 @@ const signed = (urlPath: string, id: Id, body: unknown) => signedRaw(urlPath, id
 
 // Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token.
 let ADMIN: Record<string, string> = {};
-// A new ledger baseline is an owner's (design case 18, D2), which no token reaches: an owner's key session sets it.
-let OWNER: Record<string, string> = {};
-async function adminPost(urlPath: string, body: unknown, as: Record<string, string> = ADMIN) {
+async function adminPost(urlPath: string, body: unknown) {
     const res = await fetch(`${BASE}${urlPath}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...as },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify(body),
     });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
@@ -130,7 +128,6 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
     ADMIN = ownerTokenHeaders('admin');
-    OWNER = ownerSessionHeaders();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -494,7 +491,7 @@ async function main(): Promise<void> {
         `the admin ledger audit: not ok, 2 not a number, drift null (${brief(liveAudit)})`);
     const baselineRow = () => (db.prepare(`SELECT value FROM node_config WHERE key = 'ledger_audit_baseline'`).get() as { value: string } | undefined)?.value;
     const baselineBefore = baselineRow();
-    const rebase = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from an infinite row' }, OWNER);
+    const rebase = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from an infinite row' });
     assert(rebase.status === 409 && /2 account balance\(s\) are not a number, so the ledger has no total to set a new baseline at\. Nothing was changed\./.test(String(rebase.body?.error))
         && baselineRow() === baselineBefore,
         `a rebaseline is refused in plain words, and the baseline stays ${baselineBefore} (${brief(rebase)}, now ${baselineRow()})`);
@@ -523,7 +520,7 @@ async function main(): Promise<void> {
         assert(route.status === 200 && route.body?.ok === false && route.body?.badBalances === 3
             && (route.body?.brokenBalances ?? []).some((b: any) => b.account === 'COMMONS_POOL' && b.holds === `in memory: ${pot}`),
             `the admin ledger audit answers 200 and names the pot (${brief(route)})`);
-        const rebase2 = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from the pot' }, OWNER);
+        const rebase2 = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from the pot' });
         assert(rebase2.status === 409 && /COMMONS_POOL \(the Commons pot\) holds in memory/.test(String(rebase2.body?.error)) && baselineRow() === baselineBefore,
             `the rebaseline is refused (409, not 500) and names the pot (${brief(rebase2)})`);
         restartingTakeover();

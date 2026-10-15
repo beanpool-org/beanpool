@@ -74,11 +74,7 @@ describe('ReportModal Component', () => {
         expect(screen.getByLabelText(/Additional details/i)).toHaveValue('he asked my son for photos');
         expect(screen.getByRole('button', { name: /Submit Report/i })).toBeEnabled();
         fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
-        // Sent: said in the card (rehearsal 14 Oct N3), and Done closes it.
-        expect(await screen.findByTestId('report-sent')).toBeInTheDocument();
-        expect(onClose).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-        expect(onClose).toHaveBeenCalled();
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(vi.mocked(reportAbuse).mock.calls.map((c) => c[2])).toEqual(['Child safety: he asked my son for photos', 'Child safety: he asked my son for photos']);
     });
 

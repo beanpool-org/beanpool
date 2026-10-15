@@ -2,45 +2,9 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
-    "review": "machine",
+    "draftedBy": null,
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
-    "glossary": {
-      "Beans": "haricots",
-      "BeanPool": "BeanPool"
-    }
-  },
-  "just now": "à l'instant",
-  "{n} day ago|{n} days ago": {
-    "one": "il y a {n} jour",
-    "other": "il y a {n} jours"
-  },
-  "{n} hour ago|{n} hours ago": {
-    "one": "il y a {n} heure",
-    "other": "il y a {n} heures"
-  },
-  "{n} minute ago|{n} minutes ago": {
-    "one": "il y a {n} minute",
-    "other": "il y a {n} minutes"
-  },
-  "Roughly where are you?": "Où êtes-vous à peu près ?",
-  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Nous gardons votre zone à environ 10 km près, jamais votre position exacte. Les autres membres voient à quelle distance vous êtes, et un sondage que vous créez s'affiche dans votre zone.",
-  "Use my location": "Utiliser ma position",
-  "Type a town or suburb": "Saisissez une ville ou un quartier",
-  "Skip for now": "Ignorer pour l'instant",
-  "You can change or clear this any time in Settings → Your area.": "Vous pouvez modifier ou effacer ceci à tout moment dans Paramètres → Votre zone.",
-  "Your area": "Votre zone",
-  "Not set": "Non définie",
-  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "La communauté mondiale vous montre ce qui est proposé près de chez vous : les {max} annonces les plus proches dans un rayon de {km} km.",
-  "About 10 km around {place}": "Environ 10 km autour de {place}",
-  "Find your town or suburb": "Trouvez votre ville ou quartier",
-  "Town or suburb": "Ville ou quartier",
-  "Town search isn't working right now. Use my location instead, or skip for now.": "La recherche de ville ne fonctionne pas pour le moment. Utilisez plutôt votre position, ou ignorez cette étape pour l'instant.",
-  "No matches. Try the name of a town or suburb nearby.": "Aucun résultat. Essayez le nom d'une ville ou d'un quartier proche.",
-  "Places from OpenStreetMap. What you type here is sent to them.": "Lieux issus d'OpenStreetMap. Ce que vous saisissez ici leur est envoyé.",
-  "Choose {place}": "Choisir {place}",
-  "This community asks for a profile picture before you post. You can add one later from your profile.": "Cette communauté demande une photo de profil avant de publier. Vous pourrez l'ajouter plus tard depuis votre profil.",
-  "A picture is optional here. You can add one later from your profile.": "Ici, la photo est facultative. Vous pourrez l'ajouter plus tard depuis votre profil."
+    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+  }
 }

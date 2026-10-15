@@ -76,11 +76,6 @@ describe('An admin gave me a re-key code', () => {
         render(<WelcomePage onComplete={onComplete} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
         expect(await screen.findByTestId('web-rekey-words')).toBeTruthy();
-        const list = screen.getByTestId('web-rekey-word-list');
-        expect(list.querySelectorAll('li')).toHaveLength(12);
-        // English in every language, and never rewritten by the browser's page translation (#1947 confirmation N-B).
-        expect(list).toHaveAttribute('translate', 'no');
-        expect(list).toHaveClass('notranslate');
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         expect(await screen.findByTestId('web-rekey-done')).toBeTruthy();
         expect(screen.queryByTestId('web-rekey-link-again')).toBeNull();

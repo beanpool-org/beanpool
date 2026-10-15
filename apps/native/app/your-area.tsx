@@ -24,12 +24,10 @@ import { AreaPicker } from '../components/AreaPicker';
 import { describeArea, readMemberArea, recallAreaPlace, rememberAreaPlace, writeMemberArea, type MemberArea } from '../utils/member-area';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
-import { useWords } from '../components/LanguageProvider';
 
 export default function YourAreaScreen() {
     const { colors, dark } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
-    const { t } = useWords();
     const { identity } = useIdentity();
     const nodeProfile = useNodeProfile();
     const insets = useSafeAreaInsets();
@@ -73,16 +71,16 @@ export default function YourAreaScreen() {
         setPlace(null);
     };
 
-    const current = !loaded ? t('Checking…') : area === undefined ? t("Couldn't check right now.") : describeArea(area, place);
+    const current = !loaded ? 'Checking…' : area === undefined ? "Couldn't check right now." : describeArea(area, place);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style="light" />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">{t('Your area')}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">Your area</Text>
                 <View style={styles.headerSpacer} />
             </View>
             <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 32 }]} keyboardShouldPersistTaps="handled">
@@ -94,10 +92,10 @@ export default function YourAreaScreen() {
                             disabled={clearing}
                             onPress={clear}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Clear your area')}
+                            accessibilityLabel="Clear your area"
                             testID="your-area-clear"
                         >
-                            {clearing ? <ActivityIndicator color={colors.feedback.danger.fg} /> : <Text style={styles.clearText}>{t('Clear')}</Text>}
+                            {clearing ? <ActivityIndicator color={colors.feedback.danger.fg} /> : <Text style={styles.clearText}>Clear</Text>}
                         </Pressable>
                     )}
                     {error && <Text style={styles.error}>{error}</Text>}
@@ -107,7 +105,7 @@ export default function YourAreaScreen() {
                         url={url}
                         identity={identity}
                         features={nodeProfile?.features}
-                        skipLabel={t('Cancel')}
+                        skipLabel="Cancel"
                         onSkip={() => router.back()}
                         onSaved={async (_a, placeName) => {
                             if (left.current) return;

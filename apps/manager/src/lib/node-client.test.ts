@@ -697,20 +697,6 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
     });
 
-    it("re-key helpers pass the node's own sentence through when it asks for a fresh proof (#1984 confirmation R1)", async () => {
-        const { issueRekeyCodeApi, completeRekeyApi, bindRekeyByMatchApi, RekeyBindError } = await import('./node-client');
-        const askCode = 'Enter a current code from your authenticator app (or a backup code) to re-key an owner or admin';
-        const askPhone = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
-        fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: askCode, totpRequired: true }) });
-        await expect(issueRekeyCodeApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123')).rejects.toThrow(askCode);
-        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
-        await expect(completeRekeyApi('https://node.example.com', 'pub1', 'RK-AB12-CD34', 'pub2')).rejects.toThrow(askPhone);
-        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
-        const bind = bindRekeyByMatchApi('https://node.example.com', 'pub1', 'RK-AB12-CD34', '47');
-        await expect(bind).rejects.toBeInstanceOf(RekeyBindError);
-        await expect(bind).rejects.toMatchObject({ message: askPhone, code: 'phone_required', triesLeft: undefined });
-    });
-
     it('member rekey and offboard helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
         const {
             fetchRekeyStatusApi,

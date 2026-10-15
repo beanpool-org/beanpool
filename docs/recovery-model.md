@@ -187,9 +187,8 @@ the account and its public key, a throwaway key made for the restore opens the s
 every call in it, Google/Apple/Facebook leave the page and return to the join's own return page
 (`/app/auth/<provider>`, Apple via the node's 303), and core's
 `openSeedFromSso` opens the released copy in the page (`apps/pwa/src/lib/web-restore.ts`). The
-restored key must equal the public key the lookup named, or nothing is saved. The phone's restore
-at a community makes the same check (`apps/native/utils/sso-recovery.ts` `recoverAccountWithSso`,
-#1951). The 12 words are kept only when the web app's own derivation of them makes
+restored key must equal the public key the lookup named, or nothing is saved: a check the phone's
+restore does not make. The 12 words are kept only when the web app's own derivation of them makes
 that key. The account is then saved as a 12-words restore is: the node asked whether it is a
 member, a join this browser sent settled first, and the identity store's guarded write, which
 never replaces another account. The web opens only the single-blob copy; an older two-part one is

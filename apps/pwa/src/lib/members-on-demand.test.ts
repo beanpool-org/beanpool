@@ -3,15 +3,11 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import {
     memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
     MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
-    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS, dayBudgetWords,
 } from './members-on-demand';
 import * as api from './api';
 
 const info = vi.hoisted(() => ({ read: (async () => ({})) as () => Promise<unknown> }));
 vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(() => info.read()) }));
-
-// Each case asks the node afresh: an answer kept from the last case isn't this one's.
-beforeEach(() => forgetRecentLookups());
 
 describe('members on demand: the requests the web app builds (DESIGN-global-members-by-area §2.1)', () => {
     it('reads the switch only when the node says true', () => {
@@ -102,55 +98,6 @@ describe('members on demand: a node that can\'t be asked counts as it last answe
     });
 });
 
-describe("members on demand: never spending a member's day of lookups in the background (Marty's call 3, 15 Oct 2026)", () => {
-    const card = (k: string, callsign: string) => ({ publicKey: k.repeat(64), callsign, joinedAt: '2026-01-01T00:00:00.000Z' });
-    beforeEach(() => forgetRecentLookups());
-    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-
-    it('the same search or "near you" asked again soon is answered without asking the node; after two minutes it asks', async () => {
-        vi.useFakeTimers();
-        const cards = vi.spyOn(api, 'getMemberCards').mockResolvedValue([card('e', 'Alma')]);
-        await searchMembers('al');
-        await membersNear({ lat: -28.5, lng: 153.5 });
-        vi.advanceTimersByTime(RECENT_LOOKUP_MS - 1);
-        expect(await searchMembers('al')).toEqual([card('e', 'Alma')]);
-        await membersNear({ lat: -28.5, lng: 153.5 });
-        expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?q=al&limit=20', '/api/members?lat=-28.5&lng=153.5&limit=50']);
-        vi.advanceTimersByTime(1);
-        await searchMembers('al');
-        expect(cards).toHaveBeenCalledTimes(3);
-    });
-
-    it('a read by key is never kept, nor a refusal', async () => {
-        const cards = vi.spyOn(api, 'getMemberCards').mockResolvedValue([card('e', 'Alma')]);
-        await membersByKeys(['e'.repeat(64)]);
-        await membersByKeys(['e'.repeat(64)]);
-        expect(cards).toHaveBeenCalledTimes(2);
-        cards.mockRejectedValueOnce(Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' }));
-        await expect(searchMembers('zo')).rejects.toThrow();
-        await searchMembers('zo');
-        expect(cards).toHaveBeenCalledTimes(4);
-    });
-});
-
-describe("members on demand: a spent day says so in the node's words (#1965 review N4)", () => {
-    it('only for a day budget, and only with words', () => {
-        const spent = Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' });
-        expect(dayBudgetWords(spent)).toBe('You have searched for people by name 100 times today');
-        expect(dayBudgetWords(Object.assign(new Error('Too many'), { status: 429, code: 'rate_limited' }))).toBeNull();
-        expect(dayBudgetWords(new TypeError('Failed to fetch'))).toBeNull();
-        expect(dayBudgetWords(Object.assign(new Error(' '), { code: 'nearest_people_day_budget' }))).toBeNull();
-        expect(dayBudgetWords(null)).toBeNull();
-    });
-    it('the search box carries them with its failed state', async () => {
-        vi.spyOn(api, 'getMemberCards').mockRejectedValue(Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' }));
-        const { result } = renderHook(() => useMemberSearch('al', true));
-        await waitFor(() => expect(result.current.state).toBe('failed'), { timeout: 3000 });
-        expect(result.current.refusal).toBe('You have searched for people by name 100 times today');
-        vi.restoreAllMocks();
-    });
-});
-
 describe('members on demand: the search box (review of #1861, N3)', () => {
     const card = (k: string, callsign: string) => ({ publicKey: k.repeat(64), callsign, joinedAt: '2026-01-01T00:00:00.000Z' });
     afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -170,7 +117,7 @@ describe('members on demand: the search box (review of #1861, N3)', () => {
         expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?q=alm&limit=20']);
         expect(MEMBERS_SEARCH_DEBOUNCE_MS).toBe(400);
         await act(async () => { await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
     });
 
     it("an older search's late answer never replaces a newer one's, and the older request is stopped (L9)", async () => {
@@ -189,9 +136,9 @@ describe('members on demand: the search box (review of #1861, N3)', () => {
         expect(signals['/api/members?q=al&limit=20']?.aborted).toBe(true);
         await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS); });
         await act(async () => { await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
         await act(async () => { answerOld([card('f', 'Alder')]); await Promise.resolve(); });
-        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle', refusal: null });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
     });
 });
 
@@ -228,6 +175,6 @@ describe('members on demand: a node that never answers (review of #1861, N4)', (
         await act(async () => { await vi.advanceTimersByTimeAsync(MEMBERS_SEARCH_DEBOUNCE_MS + MEMBERS_REQUEST_TIMEOUT_MS - 1); });
         expect(result.current.state).toBe('searching');
         await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-        expect(result.current).toEqual({ found: null, state: 'failed', refusal: null });
+        expect(result.current).toEqual({ found: null, state: 'failed' });
     });
 });

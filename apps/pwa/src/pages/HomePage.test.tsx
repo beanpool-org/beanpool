@@ -44,9 +44,6 @@ import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
 import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
-import { chooseAndShowLanguage, resetLanguageForTests } from '../lib/language';
-import { useLanguage } from '../lib/useLanguage';
-import ruWords from '../../words/ru.json';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const NOW = new Date().toISOString();
@@ -189,26 +186,6 @@ describe('one request, the cached answer first (§5)', () => {
         vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
-    });
-
-    it('a failed read says why in the language of the moment: a live switch translates it, a node\'s own words stay its own (#1947 review N2)', async () => {
-        // As App does: the root re-renders when the language changes (lib/useLanguage.ts).
-        const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
-        try {
-            vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
-            render(<Live />);
-            expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
-            await act(async () => { await chooseAndShowLanguage('ru'); });
-            expect(screen.getByTestId('home-failed')).toHaveTextContent((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE] as string);
-            expect((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE]).not.toBe(HOME_NOT_ON_NODE);
-            cleanup();
-            // A refusal the node wrote is shown as it wrote it, in any language.
-            vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Your account is paused.'), { status: 403 }));
-            render(<Live />);
-            expect(await screen.findByTestId('home-failed')).toHaveTextContent('Your account is paused.');
-        } finally {
-            resetLanguageForTests();
-        }
     });
 
     it('an answer that is not Home (a proxy page, an empty object) is a failed read, not a crash', async () => {

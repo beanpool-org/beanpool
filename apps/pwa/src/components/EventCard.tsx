@@ -17,17 +17,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
-import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
+import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
-    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { visitorDistanceText } from '../lib/visitor-lobby';
-import { useCommunityInfo } from '../lib/features';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -154,60 +151,22 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
  * The date, the time and the CANCELLED / UPDATED badge on the first line, never cut off and never overlapping:
  * each is a whole piece, and at 320px with large text the next piece moves down a line instead of being
  * truncated, because the time is the one thing on the card nobody can do without.
- *
- * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
- * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
  */
-function EventWhen({ post, className, testId, hostLine = false }: { post: MarketplacePost; className: string; testId?: string; hostLine?: boolean }) {
+function EventWhen({ post, className, testId }: { post: MarketplacePost; className: string; testId?: string }) {
     const parts = eventWhenParts(post);
-    const noteAt = parts?.note ? parts.note.indexOf(' · ') : -1;
     return (
-        <>
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
-                <span data-testid={testId} aria-label={formatEventWhen(post)} className={`contents ${className}`}>
-                    {parts && (
-                        <>
-                            <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
-                            {/* Online, "your time" is a whole piece of its own: "4:50–6:50 your time" in the page's large text is wider
-                                than a 320px card. */}
-                            {parts.second.endsWith(YOUR_TIME) ? (
-                                <>
-                                    <span className={`whitespace-nowrap ${className}`}>{parts.second.slice(0, -YOUR_TIME.length)}</span>
-                                    <span className={`whitespace-nowrap ${className}`}>{YOUR_TIME.trim()}</span>
-                                </>
-                            ) : (
-                                <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
-                            )}
-                        </>
-                    )}
-                </span>
-                <StateBadge post={post} />
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
+            <span data-testid={testId} aria-label={formatEventWhen(post)} className={`contents ${className}`}>
+                {parts && (
+                    <>
+                        <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
+                        <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
+                    </>
+                )}
             </span>
-            {parts?.note && (
-                // aria-hidden: the line above already reads the whole of it out (formatEventWhen).
-                <span data-testid="event-when-note" aria-hidden="true" className="flex flex-wrap gap-x-1 min-w-0 w-full text-sm font-bold text-nature-700 dark:text-nature-300 leading-snug">
-                    {noteAt > 0 ? (
-                        <>
-                            <span className="whitespace-nowrap">{parts.note.slice(0, noteAt)} ·</span>
-                            <span className="whitespace-nowrap">{parts.note.slice(noteAt + 3)}</span>
-                        </>
-                    ) : parts.note}
-                </span>
-            )}
-            {hostLine && parts?.hostLine && (
-                <span data-testid="event-when-host" className="block w-full min-w-0 break-words text-sm font-semibold text-nature-600 dark:text-nature-400 leading-snug">
-                    {parts.hostLine}
-                </span>
-            )}
-        </>
+            <StateBadge post={post} />
+        </span>
     );
-}
-
-const YOUR_TIME = ' your time';
-
-/** A join link the page may open: the node takes http(s) only, and this is the second lock. */
-function joinHref(link: string | undefined): string | null {
-    return link && /^https?:\/\//i.test(link) ? link : null;
 }
 
 /**
@@ -245,12 +204,9 @@ interface EventCardProps {
 export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, visitor = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
-    // An online event has no place and no distance: "Online" stands where they go (DESIGN-event-times §4).
-    const place = p.eventOnline
-        ? t('Online')
-        : visitor
-            ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
-            : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
+    const place = visitor
+        ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
+        : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
@@ -271,7 +227,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
             </span>
             {place && (
                 <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                    <span aria-hidden="true">{p.eventOnline ? '🌐 ' : '📍 '}</span>{place}
+                    <span aria-hidden="true">📍 </span>{place}
                 </span>
             )}
             {countsLine(p) && (
@@ -350,32 +306,6 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
-    const openMembership = (useCommunityInfo()?.features as { openMembership?: boolean } | undefined)?.openMembership === true;
-    // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
-    const letInState = eventLetInState(p, isHost);
-    const letInLine = eventLetInLine(letInState);
-    const hostLetsIn = !!p.eventHostLetsIn;
-    const waiting = hostLetsIn ? eventWaitingCount(p.eventRsvps) : 0;
-    const [letting, setLetting] = useState<string | null>(null);
-    const [letInError, setLetInError] = useState<string | null>(null);
-
-    const saveLetIn = async (key: string, who: { memberPublicKey: string } | { everyone: true }, on: boolean) => {
-        if (letting) return;
-        setLetting(key);
-        setLetInError(null);
-        try {
-            const res = await letInToEvent(p.id, who, on);
-            if (res?.post) rsvp.setLivePost(res.post);
-        } catch (e: any) {
-            setLetInError(e?.message || t('Could not reach the node.'));
-        } finally {
-            setLetting(null);
-        }
-    };
-    const letEveryoneIn = () => {
-        if (!window.confirm(letEveryoneInQuestion(waiting))) return;
-        void saveLetIn('everyone', { everyone: true }, true);
-    };
 
     const handleCancel = async () => {
         if (!window.confirm('Cancel this event? Everyone will see it as cancelled.')) return;
@@ -405,39 +335,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 <img src={p.photos[0]} alt={p.title} className="w-full max-h-56 object-cover bg-nature-100 dark:bg-nature-900" />
             )}
             <div className="p-4 flex flex-col gap-3">
-                <h2 className="m-0 min-w-0 flex flex-col gap-1">
-                    <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
+                <h2 className="m-0 min-w-0">
+                    <EventWhen post={p} className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>
                 <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
 
-                {p.eventOnline && (
-                    <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">
-                        <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🌐 </span>{t('Online')}
-                        </span>
-                        {joinHref(p.eventLink) ? (
-                            <a
-                                data-testid="event-join"
-                                href={joinHref(p.eventLink)!}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
-                            >
-                                {t('Join')}
-                            </a>
-                        ) : !isHost && open ? (
-                            // Going already: the host has not added one (yet). Never "tap Going" to someone who did. Where the host
-                            // lets people in, the link waits for them like the note (eventPrivateOpenTo), and the hint says so.
-                            <p data-testid="event-join-hint" className="m-0 text-xs text-nature-500 dark:text-nature-400">
-                                {letInLine
-                                    ? t('The link to join shows here once the host lets you in.')
-                                    : p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
-                            </p>
-                        ) : null}
-                    </div>
-                )}
-
-                {!p.eventOnline && (p.eventPlaceName || p.lat != null) && (
+                {(p.eventPlaceName || p.lat != null) && (
                     <div className="flex flex-col items-start gap-1 min-w-0">
                         <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
                             <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}
@@ -450,12 +353,6 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             >
                                 Show on map
                             </button>
-                        )}
-                        {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
-                        {placeShownRoughly(p, identity?.publicKey, openMembership) && (
-                            <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
-                                {t(PLACE_WORDS.roughPlace, { name: hostName })}
-                            </p>
                         )}
                     </div>
                 )}
@@ -489,20 +386,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
                 {!isHost && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
 
-                {letInLine && open && (
-                    <p data-testid="event-let-in-line" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words">{letInLine}</p>
-                )}
-                {onOpenChat && letInState === 'waiting' && (
-                    <button
-                        type="button"
-                        disabled
-                        data-testid="event-chat-waiting"
-                        className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-700 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
-                    >
-                        💬 {eventChatWaitingText()}
-                    </button>
-                )}
-                {onOpenChat && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
+                {onOpenChat && (isHost || p.myRsvp === 'going') && (
                     <button
                         type="button"
                         data-testid="event-open-chat"
@@ -518,7 +402,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">Note for people who are going</p>
                         <p className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
                     </div>
-                ) : !isHost && open && !letInLine ? (
+                ) : !isHost && open ? (
                     <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
                         If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.
                     </p>
@@ -527,20 +411,6 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {isHost && (
                     <div data-testid="event-host-panel" className="flex flex-col gap-2 pt-2 border-t border-nature-100 dark:border-nature-800">
                         <p className="m-0 text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400">Who's going</p>
-                        {waiting > 0 && (
-                            <p data-testid="event-waiting-count" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-200">{eventWaitingLine(waiting)}</p>
-                        )}
-                        {waiting >= 2 && open && (
-                            <button
-                                type="button"
-                                data-testid="event-let-everyone-in"
-                                onClick={letEveryoneIn}
-                                disabled={!!letting}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
-                            >
-                                {t('Let everyone in')}
-                            </button>
-                        )}
                         {going.length === 0 && interested.length === 0 ? (
                             <p className="m-0 text-sm text-nature-500 dark:text-nature-400">Nobody yet.</p>
                         ) : (
@@ -550,25 +420,9 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                         <span className="flex-1 min-w-0 truncate font-semibold text-nature-900 dark:text-white">
                                             {r.memberCallsign || r.memberPubkey.slice(0, 8)}
                                         </span>
-                                        {hostLetsIn && r.status === 'going' && open ? (
-                                            <button
-                                                type="button"
-                                                data-testid="event-let-in"
-                                                onClick={() => saveLetIn(r.memberPubkey, { memberPublicKey: r.memberPubkey }, !r.letInAt)}
-                                                disabled={!!letting}
-                                                aria-pressed={!!r.letInAt}
-                                                aria-label={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
-                                                className={`flex-shrink-0 min-h-[44px] min-w-[88px] px-3 rounded-xl border text-sm font-bold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${r.letInAt
-                                                    ? 'border-violet-700 dark:border-violet-400 bg-violet-700 dark:bg-violet-600 text-white'
-                                                    : 'border-violet-300 dark:border-violet-800 bg-transparent text-violet-800 dark:text-violet-200'}`}
-                                            >
-                                                {r.letInAt ? t('Let in ✓') : t('Let in')}
-                                            </button>
-                                        ) : (
-                                            <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
-                                                {r.status === 'going' ? 'Going' : 'Interested'}
-                                            </span>
-                                        )}
+                                        <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
+                                            {r.status === 'going' ? 'Going' : 'Interested'}
+                                        </span>
                                     </li>
                                 ))}
                             </ul>
@@ -607,7 +461,6 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             </button>
                         )}
                         {cancelError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{cancelError}</p>}
-                        {letInError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{letInError}</p>}
                     </div>
                 )}
             </div>

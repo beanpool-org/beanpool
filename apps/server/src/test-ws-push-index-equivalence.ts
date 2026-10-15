@@ -43,7 +43,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { haversineKm, neighbourhoodOf, exactPlaceReaders } from '@beanpool/engine';
+import { haversineKm } from '@beanpool/engine';
 
 // PUSH_INDEX_REPORT: a file each line below is also appended to (the runner keeps no log of a passing run).
 const REPORT = process.env.PUSH_INDEX_REPORT;
@@ -142,28 +142,10 @@ async function main(): Promise<void> {
     // Members near a listing who blocked its author (member_blocks, as routes/blocks.ts writes them): a fifth of the
     // listings with a place, up to 4 near members each.
     const placeOf = (id: string) => db.prepare('SELECT author_pubkey, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; lat: number | null; lng: number | null };
-    /**
-     * How far a member's area is from a listing, as their set measures it: where anyone can join (`openMembership`, on
-     * for the global profile this runs on) from the listing's neighbourhood (engine neighbourhoodOf), but for the members
-     * who have its place exactly (engine exactPlaceReaders: its author, an enterprise's keepers), from the place
-     * (#1965: the broadcast's listingReach measures so, and a place on the 0.1° grid is no longer its own neighbourhood).
-     */
-    const distanceTo = (id: string): ((pk: string, a: { lat: number; lng: number }) => number) => {
-        const row = db.prepare('SELECT id, author_pubkey, lat, lng, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?').get(id) as
-            { id: string; author_pubkey: string; lat: number; lng: number; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null };
-        const open = getProfileSwitches().openMembership;
-        const exact = open ? exactPlaceReaders(db, row) : null;
-        const cell = open ? neighbourhoodOf(row.lat, row.lng) : null;
-        return (pk, a) => {
-            const at = cell && !exact!.has(pk) ? cell : { lat: row.lat, lng: row.lng };
-            return haversineKm(a.lat, a.lng, at.lat, at.lng);
-        };
-    };
     const nearMembers = (id: string): string[] => {
         const p = placeOf(id);
         if (p.lat == null || p.lng == null) return [];
-        const distance = distanceTo(id);
-        return members.filter(pk => { const a = area.memberAreaFor(pk); return !!a && pk !== p.author_pubkey && distance(pk, a) <= radiusKm; });
+        return members.filter(pk => { const a = area.memberAreaFor(pk); return !!a && pk !== p.author_pubkey && haversineKm(a.lat, a.lng, p.lat!, p.lng!) <= radiusKm; });
     };
     const blockNear = (id: string, n: number): number => {
         const author = placeOf(id).author_pubkey;
@@ -412,7 +394,6 @@ async function main(): Promise<void> {
         const parties = new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...(p.opts?.listingParties ?? [])]);
         const blocked = db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?');
         const placed = row.lat != null && row.lng != null;
-        const distance = placed ? distanceTo(id) : null;
         for (const ws of live()) {
             const pk = ws._memberPubkey as string | null;
             const got = sentTo.has(ws.id);
@@ -422,7 +403,7 @@ async function main(): Promise<void> {
                 if (blocked.get(pk, row.author_pubkey)) { reach.blockedParty++; if (got) reach.blockedPartyReached++; }
             } else if (pk && placed) {
                 const a = area.memberAreaFor(pk);
-                const near = !!a && distance!(pk, a) <= radiusKm;
+                const near = !!a && haversineKm(a.lat, a.lng, row.lat!, row.lng!) <= radiusKm;
                 const theyBlocked = !!blocked.get(pk, row.author_pubkey);
                 want = near && !theyBlocked;
                 if (near && theyBlocked) { reach.blockedNear++; if (got) reach.blockedNearReached++; }

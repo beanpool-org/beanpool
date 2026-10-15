@@ -14,14 +14,14 @@ import {
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
 import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
-import { OLDEST_STANDBY_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
+import { PHOTOS_BY_REFERENCE_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
     clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
-    updateBackupCadence, backupCadenceRefusal,
+    updateBackupCadence,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
@@ -31,7 +31,7 @@ import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
-    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT, MIN_SNAPSHOTS_KEPT,
+    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
@@ -583,10 +583,8 @@ const RESTORE_OWNER_ONLY = 'Only an owner of this node can restore a backup';
 const DOWNLOAD_OWNER_ONLY = 'Only an owner of this node can download a backup';
 const TOKEN_OWNER_ONLY = 'Only an owner of this node can make, change or remove its replication token';
 const COPY_FROM_OWNER_ONLY = 'Only an owner of this node can change the server it copies from';
-const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can change when snapshots are taken and kept';
-const RESYNC_OWNER_ONLY = 'Only an owner of this node can make its standby copy everything again';
+const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can delete a snapshot or change when snapshots are taken and kept';
 const COPY_OWNER_ONLY = 'Only an owner of this node can copy its whole ledger';
-const CADENCE_OWNER_ONLY = 'Only an owner of this node can change how often it copies from its main server';
 
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -944,10 +942,8 @@ router.post('/api/local/admin/replication-access', async (ctx) => {
 });
 
 // ---------- Force resync (backup side) ----------
-// It clears the standby's copied tables and rebuilds them: an owner's (design case 18, A9), or an admin repeating it keeps
-// the standby empty.
 router.post('/api/local/admin/replication-resync', async (ctx) => {
-    if (!(await ownerOnly(ctx, RESYNC_OWNER_ONLY))) return;
+    if (!(await checkAdminAuth(ctx as any))) return;
     const result = await requestResync();
     if (!result.ok) {
         ctx.status = 400;
@@ -966,11 +962,10 @@ router.post('/api/local/admin/snapshots/list', async (ctx) => {
     ctx.body = { success: true, snapshots: listSnapshots(), config: getAutoSnapshotConfig() };
 });
 
-// Any admin, and a backups-scope token: a snapshot taken here is a manual one, so it never pushes out a scheduled one.
 router.post('/api/local/admin/snapshots/create', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const info = createSnapshot('manual');
+        const info = createSnapshot();
         ctx.body = { success: true, snapshot: info };
     } catch (e: any) {
         ctx.status = 500;
@@ -978,11 +973,27 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
     }
 });
 
-// No route deletes a snapshot (design case 18, A3): it is a recovery point, and a session that could delete them and then
-// restore a hostile file would leave the owner no way back. Nor does any route push a scheduled one out (#1984 review B1):
-// one taken by snapshots/create above is a manual one, which counts against its own cap of the newest
-// MANUAL_SNAPSHOTS_KEPT manual ones, never against `keep`. A scheduled one goes only past the owner's `keep` (owner-only,
-// never under MIN_SNAPSHOTS_KEPT, snapshots/config below) or at the 14-day age limit (services/snapshot-scheduler.ts).
+// A snapshot is a recovery point, and removing one is an owner's, like restoring one.
+router.post('/api/local/admin/snapshots/delete', async (ctx) => {
+    if (!(await ownerOnly(ctx, SNAPSHOTS_OWNER_ONLY))) return;
+    const { name } = (ctx as any).requestBody || {};
+    const target = resolveSnapshotPath(name);
+    if (!target) {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid snapshot name' };
+        return;
+    }
+    try {
+        // The captured objects go with it, as they do when pruning: a snapshot's images are part of the
+        // snapshot, and a directory left behind belongs to nothing and is swept by nothing.
+        fs.rmSync(snapshotImagesDir(target), { recursive: true, force: true });
+        if (fs.existsSync(target)) fs.unlinkSync(target);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { error: e?.message || 'Delete failed' };
+    }
+});
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
 // header (the name is in the query string, never the password). Locked like /backup when there is a code, and an
@@ -1029,7 +1040,7 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     // (services/snapshot-scheduler.ts, data-at-rest report F3).
     if (body.keep !== undefined && !isAutoSnapshotKeep(body.keep)) {
         ctx.status = 400;
-        ctx.body = { error: `keep must be a whole number of snapshots from ${MIN_SNAPSHOTS_KEPT} to ${MAX_SNAPSHOTS_KEPT}` };
+        ctx.body = { error: `keep must be a whole number of snapshots from 1 to ${MAX_SNAPSHOTS_KEPT}` };
         return;
     }
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;
@@ -1078,19 +1089,10 @@ router.post('/api/local/admin/backup/verify', async (ctx) => {
 // them in local-config, read live by the backup puller on its next tick (no restart).
 // pullSeconds = how often to ask "what changed?" (cheap delta). reconcileMinutes =
 // how often to do a full re-read (0 = off; drift-triggered fulls still run).
-// Reading it is any admin's; changing it is an owner's, within bounds (#1984 review N2): an admin could otherwise stall the
-// standby's copying for weeks, or overflow its timer into a pull loop with no wait.
 router.post('/api/local/admin/backup-config', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
     if (body.pullSeconds !== undefined || body.reconcileMinutes !== undefined) {
-        if (!requireAdminRole(ctx, ['owner'], CADENCE_OWNER_ONLY)) return;
-        const refusal = backupCadenceRefusal(body);
-        if (refusal) {
-            ctx.status = 400;
-            ctx.body = { error: refusal };
-            return;
-        }
         updateBackupCadence({ pullSeconds: body.pullSeconds, reconcileMinutes: body.reconcileMinutes });
     }
     ctx.body = { success: true, status: getBackupStatus() };
@@ -1298,21 +1300,19 @@ router.post('/api/local/admin/sync-copy', async (ctx) => {
     if (!authMode) return;
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
-    // A standby whose importer is older than OLDEST_STANDBY_FORMAT (engine/sync.ts) drops a column this server sends: the
-    // listing photos that go by reference (8), an event's clock, zone, online flag and link (10), the host's let-in (11), a
-    // repeating event's rule, last date and cancelled dates, each RSVP's date and the reminder marks keyed on it (12). It
-    // would land the copy, or the delta (the same route, with ?since=), without them, and say nothing. Refused instead,
-    // loudly on both servers: here in the log and the Replication Access panel, there as a pull that failed with this
-    // status, every time, in its report and its owners' notice, until it is updated.
+    // A copy's listing photos go by reference (engine/sync.ts photoRowsByReference, REPLICA_FORMAT 8): a standby older than
+    // that says no format, and its import drops every photo row that carries no bytes, so it would land a copy without its
+    // photos. Refused instead, loudly on both servers: here in the log and the Replication Access panel, there as a pull
+    // that failed with this status, every time, in its report and its owners' notice, until it is updated.
     const format = Number(ctx.request.header['x-replica-format']);
-    if (!Number.isInteger(format) || format < OLDEST_STANDBY_FORMAT) {
-        const why = `this standby is older than its main server: it reads replica format ${format || 'none'}, and copies `
-            + `from this server need ${OLDEST_STANDBY_FORMAT}; update it, and its next pull takes a copy`;
+    if (!Number.isInteger(format) || format < PHOTOS_BY_REFERENCE_FORMAT) {
+        const why = `this standby is older than its main server: a copy's listing photos travel by reference, which a standby `
+            + `reads from replica format ${PHOTOS_BY_REFERENCE_FORMAT}; update it, and its next pull takes a copy`;
         console.warn(`[Backup] A copy asked for by ${ip ?? 'a standby'} was refused: ${why}.`);
         recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: why });
         ctx.status = 426;
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: OLDEST_STANDBY_FORMAT };
+        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: PHOTOS_BY_REFERENCE_FORMAT };
         return;
     }
 
@@ -1613,10 +1613,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
                     backup,
                 });
             }
-            // A well-formed code is a guess at a secret: through the password brake, under its own count for this source
-            // ('restore:', as the take-over's 'takeover:'), so the owner's password on each request, which clears the
-            // source's password record, never clears the count of wrong codes (design case 18 §3.2, standby review note 4).
-            const brakeKey = 'restore:' + clientLimiterKey(ctx as any);
+            // A well-formed code is a guess at a secret: through the password brake, like the check-code route.
+            const brakeKey = clientLimiterKey(ctx as any);
             const admission = await acquirePasswordAttempt(brakeKey);
             if (!admission.admitted) {
                 cleanupAll();

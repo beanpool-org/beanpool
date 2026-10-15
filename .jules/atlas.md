@@ -215,8 +215,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `confirmPhoneDigits` and `wrongDigitsMessage` in `apps/manager/src/lib/phone-signin.ts` lacked unit test coverage in `apps/manager/src/lib/phone-signin.test.ts`.
 **Learning:** Testing `confirmPhoneDigits` required mocking `globalThis.fetch` to cover network exception retry responses (`kind: 'retry'`), HTTP 500/429 status code handling, `status: 'wrong'` response mapping with `triesLeft`, and successful pairing confirmation delegation to `pollAnswer`.
 **Action:** Continue expanding unit test coverage for untested helper functions across `apps/manager/src/lib/`.
-
-## 2026-10-14 - [manager tests] geo utility edge-case unit tests
-**Gap:** Boundary coordinate extremes (poles and anti-meridian) and decimal rounding threshold edge cases in `apps/manager/src/lib/geo.ts` lacked explicit unit assertions.
-**Learning:** Adding tests for `approximateLocation` at 90/-90 lat and 180/-180 lng as well as 4th decimal rounding boundaries (.0004 vs .0005) ensures `geo` calculations handle extreme GIS coordinates accurately.
-**Action:** Continue identifying unit test coverage gaps across `apps/manager/`.

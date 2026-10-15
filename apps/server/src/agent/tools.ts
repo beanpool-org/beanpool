@@ -547,8 +547,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                 return { ok: true, rows: 1, result: { kind, taken: false, started: true, at: null, sizeMb: null, backupsToday: agentBackupsToday(grant.id) } };
             }
             try {
-                // A manual one: it never pushes out a scheduled recovery point (services/snapshot-scheduler.ts).
-                const info = createSnapshot('manual');
+                const info = createSnapshot();
                 return {
                     ok: true, rows: 1,
                     result: {

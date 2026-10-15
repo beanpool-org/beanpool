@@ -31,6 +31,6 @@ describe('posting an Offer or Need from the map', () => {
     });
 
     it('a Need waits for an Offer first, and the button says so', () => {
-        expect(offerNeedSubmit({ ...filled, type: 'need', needBlocked: true })).toEqual({ disabled: true, label: '🟢 List an Offer first to post Needs' });
+        expect(offerNeedSubmit({ ...filled, type: 'need', needBlocked: true })).toEqual({ disabled: true, label: '🔵 List an Offer first to post Needs' });
     });
 });

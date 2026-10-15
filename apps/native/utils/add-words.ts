@@ -10,7 +10,7 @@
  *
  * Nothing here or in the save reaches a network.
  */
-import { BIP39_ENGLISH, lowercaseRecoveryWords, normaliseRecoveryWords } from '@beanpool/core';
+import { BIP39_ENGLISH, normaliseRecoveryWords } from '@beanpool/core';
 import { hasMnemonic, type BeanPoolIdentity } from './identity';
 import { NO_WORDS_VIEW_LINE } from './no-words-copy';
 
@@ -39,7 +39,7 @@ export function emptyWordBoxes(): string[] {
 }
 
 export function wordBoxState(text: string): WordBoxState {
-    const word = lowercaseRecoveryWords(text).trim();
+    const word = text.trim().toLowerCase();
     if (!word) return 'empty';
     if (LISTED.has(word)) return 'ok';
     return BIP39_ENGLISH.some((w) => w.startsWith(word)) ? 'typing' : 'unknown';

@@ -86,7 +86,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
             <header className="sticky top-0 z-40 bg-nature-900/95 backdrop-blur-md border-b border-nature-800">
                 <div className="max-w-4xl mx-auto flex flex-wrap items-center gap-x-1 gap-y-0 pl-3 pr-1 min-h-[56px]">
                     <div className="min-w-0 flex-1 py-1">
-                        <p className="text-xs font-semibold text-bp-ink-terra m-0 truncate">{`${communityName || 'BeanPool'} · Settings`}</p>
+                        <p className="text-xs font-semibold text-terra-400 m-0 truncate">{`${communityName || 'BeanPool'} · Settings`}</p>
                         <p className="text-sm font-bold text-white m-0">Moderator</p>
                     </div>
                     {back && <PhoneReturnLink back={back} />}
@@ -260,7 +260,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                         Pulse · {pulse.platform}{pulse.removed ? ' · already off the Pulse' : ''}
                     </p>
                     {!pulse.removed && pulse.url && /^https?:\/\//i.test(pulse.url) ? (
-                        <a href={pulse.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[48px] text-bp-ink-terra underline break-all">
+                        <a href={pulse.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[48px] text-terra-300 underline break-all">
                             {pulse.title || pulse.url}
                         </a>
                     ) : (

@@ -178,19 +178,6 @@ describe('t and tn', () => {
         expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš~+\]$/);
     });
 
-    it('a long pseudo-locale pad breaks like words do: never a run a 320 px screen cannot wrap', () => {
-        const long = 'Your identity is yours. It lives on this device, backed by cryptography.';
-        const out = pseudoLocalise(long);
-        const pad = out.slice(out.indexOf('\u200B') + 1, -1);
-        expect(out).toContain('.\u200B~');
-        expect(out.replace(/\u200B/g, '').match(/~/g)).toHaveLength(Math.ceil(long.length * 0.35));
-        expect(pad.split('\u200B').every((w) => w.length <= 5)).toBe(true);
-        expect(Math.max(...out.split(/[\s\u200B]/).map((w) => w.length))).toBeLessThanOrEqual(15);
-        // Short pads stay one run, as the screens' button checks have always read them.
-        expect(pseudoLocalise('Save')).toBe('[Ŝāṽé~~]');
-        expect(pseudoLocalise('{n} new messages')).not.toContain('\u200B');
-    });
-
     it('normaliseLang maps device tags to the 25 BCP-47 tags, and nothing else', () => {
         expect(['ru-RU', 'pt-BR', 'pt_PT', 'ES', 'fr-CA', 'en-AU', 'de-DE', 'nl-NL', 'he', '', '1x', null].map(normaliseLang)).toEqual([
             'ru', 'pt', 'pt', 'es', 'fr', 'en', 'de', null, null, null, null, null,
@@ -321,7 +308,7 @@ describe('dates and numbers from tables', () => {
 
     it('every language\'s month and day tables are CLDR\'s (checked against Node ICU)', () => {
         for (const lang of LANGS.filter((l) => l !== 'en')) {
-            const w = DATE_WORDS[lang]!;
+            const w = DATE_WORDS[lang];
             for (let m = 0; m < 12; m++) {
                 const d = new Date(Date.UTC(2026, m, 15, 12));
                 const part = (o: Intl.DateTimeFormatOptions) =>
@@ -426,7 +413,7 @@ describe('dates and numbers from tables', () => {
         }
         for (const lang of LANGS) {
             const icu = new Intl.NumberFormat(INTL_TAG(lang)).formatToParts(1.5).find((p) => p.type === 'decimal')!.value;
-            expect([lang, DATE_WORDS[lang]!.decimal], RECHECK).toEqual([lang, icu]);
+            expect([lang, DATE_WORDS[lang].decimal], RECHECK).toEqual([lang, icu]);
         }
     });
 
@@ -517,7 +504,7 @@ describe('one table of month and day names', () => {
                 const path = join(dir, name);
                 if (name === 'node_modules' || name === '__tests__' || name === 'dist') continue;
                 if (statSync(path).isDirectory()) walk(path);
-                else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) && !/beanpool-core\/src\/(words(-dates)?\.ts|words-dates\/[A-Za-z-]+\.ts)$/.test(path)) {
+                else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) && !/beanpool-core\/src\/words(-dates)?\.ts$/.test(path)) {
                     if (table.test(readFileSync(path, 'utf8'))) found.push(relative(root, path));
                 }
             }

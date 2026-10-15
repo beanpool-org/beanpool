@@ -15,7 +15,6 @@
  *   on the lobby and hands down.
  */
 
-import { LanguageSwitch } from '../components/LanguageSwitch';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { CommunityInfo } from '../lib/api';
@@ -219,13 +218,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     position: 'relative',
                 }} className="md:pb-0">
                     {tab === 'home' && (
-                        <>
-                            {/* The language, at the top of the first screen: a switch, never a step (director amendment 2). */}
-                            <div className="flex justify-end px-4 pt-3">
-                                <LanguageSwitch />
-                            </div>
-                            <HomePage identity={null} visitor={{ joinCard, beans }} onNavigate={navigate} />
-                        </>
+                        <HomePage identity={null} visitor={{ joinCard, beans }} onNavigate={navigate} />
                     )}
                     {tab === 'marketplace' && (
                         <MarketplacePage

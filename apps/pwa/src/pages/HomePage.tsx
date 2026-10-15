@@ -31,13 +31,11 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
-import { StartCommunityScreen } from '../components/StartCommunityScreen';
+import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
-    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, dealsLine,
+    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
     decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
@@ -78,14 +76,6 @@ import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type A
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
 
 /** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
-/** The find card's buttons, as its Share my area. */
-const FIND_ACTION = 'w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
-/** "Tell me when one starts here", in the phone's words where it has them (FindCommunityBody); t(WATCH_WORDS.…) where shown. */
-export const WATCH_WORDS = {
-    done: word("Done. You'll be told when a community starts near here."),
-    joinFirst: word('Join first: being told is kept for a member. Join is at the top of this page.'),
-    needsPlace: word('Share your area or type your town first, so we know where "here" is.'),
-} as const;
 const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
@@ -95,23 +85,15 @@ const HOME_RETURN_STALE_MS = 30_000;
 const SOCKET_OPEN_QUIET_MS = 10_000;
 
 export const HOME_HINT = HOME_HINT_LINE;
-/** The sentences this page keeps in one place and says where they are shown: marked with word(), translated by t(HOME_WORDS.x). */
-const HOME_WORDS = {
-    offline: word("Couldn't reach your community; showing what we had."),
-    failed: word("Couldn't reach your community. Your other tabs still work."),
-    signedOut: word('You signed out of this browser in another tab. Reload this page to carry on.'),
-    notOnNode: word("This community's server doesn't have Home yet. The Market and the other tabs work as before."),
-    tipsDone: word('That was the last tip. Add a card brings them back.'),
-};
-export const HOME_OFFLINE = HOME_WORDS.offline;
-export const HOME_FAILED = HOME_WORDS.failed;
+export const HOME_OFFLINE = "Couldn't reach your community; showing what we had.";
+export const HOME_FAILED = "Couldn't reach your community. Your other tabs still work.";
 /** The member signed out in another tab: this page shows and keeps nothing of theirs any more. */
-export const HOME_SIGNED_OUT = HOME_WORDS.signedOut;
+export const HOME_SIGNED_OUT = 'You signed out of this browser in another tab. Reload this page to carry on.';
 /** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
-export const HOME_NOT_ON_NODE = HOME_WORDS.notOnNode;
+export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 /** Said politely when Done on the last tip takes the Tips card away. */
-export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
+export const TIPS_DONE_WORDS = 'That was the last tip. Add a card brings them back.';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -194,9 +176,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // The layout drawn: this browser's copy, or the newcomer's list drawn for an unknown (empty version-1) account list.
     const [layout, setLayout] = useState<HomeLayoutV2 | null>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
-    // Which failure, not its words: the words are written at render, so a language switch translates them (#1947 review
-    // N2). A refusal the node wrote (401/403) is kept as the node wrote it.
-    const [failure, setFailure] = useState<'notOnNode' | 'failed' | { message: string } | null>(null);
+    const [failure, setFailure] = useState<string | null>(null);
     const [live, setLive] = useState('');
     // The interests the page holds after a tap (saved in the background); null: the answer's.
     const [interests, setInterests] = useState<string[] | null>(null);
@@ -214,10 +194,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
     const [townOpen, setTownOpen] = useState(false);
     const [townName, setTownName] = useState<string | null>(null);
-    // The find card's two ways on with none near (Sonnet review S5; the phone's FindCommunityBody): start one, or be told.
-    const [startOpen, setStartOpen] = useState(false);
-    const [watched, setWatched] = useState(false);
-    const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
     /** The tour ended in this browser (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
@@ -416,7 +392,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     const settled = settleInterests(publicKey, me.interests, me.interestsUpdatedAt);
                     setInterests(settled.movedUp ? settled.interests : null);
                 }
-                if (statusRef.current === 'offline' || why === 'retry') setLive(t('Home updated.'));
+                if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
                 statusRef.current = 'ready';
                 setStatus('ready');
                 return;
@@ -464,7 +440,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             answerRef.current = a;
             setAnswer(a);
             draw(pick.layout);
-            if (statusRef.current === 'offline' || why === 'retry') setLive(t('Home updated.'));
+            if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
             statusRef.current = 'ready';
             setStatus('ready');
             setFailure(null);
@@ -486,14 +462,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             if (answerRef.current) {
                 statusRef.current = 'offline';
                 setStatus('offline');
-                setLive(t(HOME_WORDS.offline));
+                setLive(HOME_OFFLINE);
             } else {
                 statusRef.current = 'failed';
                 setStatus('failed');
                 const code = (e as { status?: number } | null)?.status;
                 // 404: a server from before Home (lib/api.ts isRouteMissing).
-                const said = (e as Error | null)?.message;
-                setFailure(code === 404 ? 'notOnNode' : (code === 401 || code === 403) && said ? { message: said } : 'failed');
+                setFailure(code === 404 ? HOME_NOT_ON_NODE
+                    : code === 401 || code === 403 ? ((e as Error).message || HOME_FAILED) : HOME_FAILED);
             }
         } finally {
             inFlight.current = false;
@@ -861,7 +837,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     function sharePoint() {
         setPointProblem(null);
-        if (!navigator.geolocation) { setPointProblem(t("This browser can't share a location.")); return; }
+        if (!navigator.geolocation) { setPointProblem("This browser can't share a location."); return; }
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const p = { lat: coarse(pos.coords.latitude), lng: coarse(pos.coords.longitude) };
@@ -872,24 +848,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 setTownOpen(false);
                 void fetchHomeRef.current('point');
             },
-            () => { setPointProblem(t("Your location wasn't shared. Type your town instead.")); setTownOpen(true); },
+            () => { setPointProblem("Your location wasn't shared. Type your town instead."); setTownOpen(true); },
             { maximumAge: 600_000, timeout: 15_000, enableHighAccuracy: false },
         );
-    }
-
-    /** "Tell me when one starts here": a member's, at the point Home was read from; a visitor is told to join first. */
-    async function tellMe() {
-        setWatchNote(null);
-        if (!publicKey) { setWatchNote(t(WATCH_WORDS.joinFirst)); return; }
-        const p = pointRef.current;
-        if (!p) { setWatchNote(t(WATCH_WORDS.needsPlace)); setTownOpen(true); return; }
-        try {
-            await watchPlace(p.lat, p.lng);
-            setWatched(true);
-            setWatchNote(t(WATCH_WORDS.done));
-        } catch (e: any) {
-            setWatchNote(e?.message || t("That didn't go through. Try again."));
-        }
     }
 
     /** A town picked in the shared search: the point Home is read from, as roughly as a shared location (`coarse`). */
@@ -911,24 +872,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 {visitor?.joinCard}
                 {status === 'signed-out' ? (
                     <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{t(HOME_WORDS.signedOut)}</p>
+                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{HOME_SIGNED_OUT}</p>
                         <button type="button" onClick={() => window.location.reload()}
                             className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Reload')}
+                            Reload
                         </button>
                     </div>
                 ) : status === 'failed' ? (
                     <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
-                            {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
-                        </p>
+                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{failure}</p>
                         <button type="button" onClick={() => void fetchHome('retry')}
                             className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Try again')}
+                            Try again
                         </button>
                     </div>
                 ) : (
-                    <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your Home…')}</p>
+                    <p className="text-sm text-nature-600 dark:text-nature-300" role="status">Loading your Home…</p>
                 )}
             </div>
         );
@@ -1009,7 +968,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const step = nextTip(tipsRef.current, tipsList, localDay());
         if (!step.view) focusAround('tips');
         keepTips(step.record);
-        setLive(step.view ? step.view.tip.text : t(HOME_WORDS.tipsDone));
+        setLive(step.view ? step.view.tip.text : TIPS_DONE_WORDS);
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
@@ -1031,17 +990,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             ? item.label.replace(/closes (within the hour|in \d+ (hours?|days))/, closesWords(item.closesAt, now))
             : item.label;
         const go = () => {
-            const target = item.target;
-            switch (target.to) {
-                case 'deal': return onNavigate('marketplace', target.postId);
+            const t = item.target;
+            switch (t.to) {
+                case 'deal': return onNavigate('marketplace', t.postId);
                 case 'my-deals': return onNavigate('marketplace');
                 case 'decide': return onNavigate('projects');
-                case 'chat': return onNavigate('messages', target.conversationId);
+                case 'chat': return onNavigate('messages', t.conversationId);
                 case 'unread-messages': case 'your-groups': return onNavigate('messages');
                 // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
-                case 'enterprise': return onNavigate('enterprise', target.id);
+                case 'enterprise': return onNavigate('enterprise', t.id);
                 // A group's vote lands on the group: its info, where its Decisions block is; never the Messages list.
-                case 'group': return onNavigate('group', target.id);
+                case 'group': return onNavigate('group', t.id);
                 default: return undefined;
             }
         };
@@ -1054,9 +1013,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             </>
         );
         if (item.target.to === 'admin') {
-            return <HomeLine key={i} href={`${getNodeApiUrl()}/settings#from=pwa`} label={t("{line}. Opens your community's settings.", { line: words })} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
+            return <HomeLine key={i} href={`${getNodeApiUrl()}/settings#from=pwa`} label={`${words}. Opens your community's settings.`} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
         }
-        return <HomeLine key={i} onClick={go} label={item.accent ? t('{line}. Waiting on you.', { line: words }) : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
+        return <HomeLine key={i} onClick={go} label={item.accent ? `${words}. Waiting on you.` : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
     }
 
     /** One listing as the Market card draws it (photo, Offer or Need, title, price, distance); opens the listing. */
@@ -1064,17 +1023,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const photo = resolveImageUrl(item.photoUrl);
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
         const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
-            : typeof item.credits === 'number' ? (item.credits > 0 ? tn(item.credits, '{n} Beans', '{n} Beans', { n: item.credits.toLocaleString('en') }) : t('Free', undefined, 'price')) : null;
+            : typeof item.credits === 'number' ? (item.credits > 0 ? `${item.credits.toLocaleString('en')} Beans` : 'Free') : null;
         const km = distanceText(item.distanceKm);
         const kind = item.type === 'need' ? 'NEED' : 'OFFER';
         return (
             <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId={testId}
-                label={[kind === 'NEED' ? t('Need', undefined, 'listing type') : t('Offer', undefined, 'listing type'), item.title, price, km ? t('{km} away', { km }) : null].filter(Boolean).join(', ')}>
+                label={[kind === 'NEED' ? 'Need' : 'Offer', item.title, price, km ? `${km} away` : null].filter(Boolean).join(', ')}>
                 {photo
                     ? <img src={listPhotoUrl(photo)} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
                     : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">{cat?.emoji ?? '🌱'}</span>}
                 <span className="min-w-0 flex-1">
-                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}</span><span dir="auto">{item.title}</span></span>
+                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind}</span>{item.title}</span>
                     {(price || km) && <span className="block text-xs text-nature-600 dark:text-nature-300">{[price, km].filter(Boolean).join(' · ')}</span>}
                 </span>
             </HomeLine>
@@ -1111,17 +1070,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
-                            const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
+                            const text = `${cm.name ?? 'A community'}${facts ? ` · ${facts}` : ''}`;
                             return cm.url
-                                ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
+                                ? <HomeLine key={cm.key} href={cm.url} external label={`${text}. Opens its page.`}><span className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                 : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
                         })}
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
-                                <span className="min-w-0 break-words text-sm font-semibold text-text-primary">{t('Near {town}', { town: townName })}</span>
-                                <button type="button" onClick={() => setTownOpen(true)} aria-label={t('Change the town (near {town})', { town: townName })} className={TOWN_LINK}>
-                                    {t('change', undefined, 'link beside the town name')}
+                                <span className="min-w-0 break-words text-sm font-semibold text-text-primary">Near {townName}</span>
+                                <button type="button" onClick={() => setTownOpen(true)} aria-label={`Change the town (near ${townName})`} className={TOWN_LINK}>
+                                    change
                                 </button>
                             </div>
                         )}
@@ -1129,9 +1088,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             <div className="mt-1">
                                 <button type="button" onClick={sharePoint} data-testid="home-share-area"
                                     className="w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                    {t('Share my area')}
+                                    Share my area
                                 </button>
-                                <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{t("Only a rough area (about 10 km) is used, to find what's near.")}</p>
+                                <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">Only a rough area (about 10 km) is used, to find what's near.</p>
                                 {pointProblem && <p role="alert" className="m-0 mt-1 text-xs text-nature-800 dark:text-nature-100">{pointProblem}</p>}
                                 {!townOpen && !townName && (
                                     <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town" className={TOWN_LINK}>
@@ -1145,26 +1104,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 {NOT_HERE_TYPE_YOUR_TOWN}
                             </button>
                         )}
-                        {f.communities.length === 0 && f.point !== null && (
-                            <div className="mt-2 flex flex-col gap-2" data-testid="home-find-actions">
-                                <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start" className={FIND_ACTION}>
-                                    {t('Start a community')}
-                                </button>
-                                {!(watched || (f.watches?.length ?? 0) > 0) && (
-                                    <button type="button" onClick={() => void tellMe()} data-testid="home-find-watch" className={FIND_ACTION}
-                                        aria-label={t('Tell me when a community starts near here')}>
-                                        {t('Tell me when one starts here')}
-                                    </button>
-                                )}
-                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
-                            </div>
-                        )}
                         {townOpen && (
                             <div className="mt-2">
                                 <AddressSearch words={FIND_TOWN_SEARCH_WORDS} onPick={pickTown} />
                                 <button type="button" onClick={() => setTownOpen(false)} data-testid="home-town-cancel" className={TOWN_LINK}
-                                    aria-label={townName ? t('Cancel, and keep near {town}', { town: townName }) : t('Cancel the town search')}>
-                                    {t('Cancel')}
+                                    aria-label={townName ? `Cancel, and keep near ${townName}` : 'Cancel the town search'}>
+                                    Cancel
                                 </button>
                             </div>
                         )}
@@ -1192,7 +1137,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     <span className={`min-w-0 break-words ${l.done ? 'line-through text-nature-500 dark:text-nature-400' : ''}`}>{l.text}</span>
                                 </>
                             );
-                            const label = l.done ? t('Done: {text}', { text: l.text }) : t('To do: {text}', { text: l.text });
+                            const label = `${l.done ? 'Done' : 'To do'}: ${l.text}`;
                             return l.href
                                 ? <HomeLine key={l.text} href={l.href} external label={label}>{body}</HomeLine>
                                 : <HomeLine key={l.text} onClick={l.go} label={label}>{body}</HomeLine>;
@@ -1213,9 +1158,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 className={`${btn} border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on focus-visible:ring-emerald-400`}>
                                 {startCardButton(tourProgress, tourTotal)}
                             </button>
-                            <button type="button" data-testid="home-start-skip" aria-label={t('Skip the tour')} onClick={() => applyTourEnd('skipped')}
+                            <button type="button" data-testid="home-start-skip" aria-label="Skip the tour" onClick={() => applyTourEnd('skipped')}
                                 className={`${btn} border-0 bg-transparent text-emerald-800 dark:text-emerald-300 focus-visible:ring-emerald-500`}>
-                                {t('Skip')}
+                                Skip
                             </button>
                         </div>
                     </HomeCard>
@@ -1234,12 +1179,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             {/* The same element on every tip, so focus stays on it after a tap. */}
                             <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
                                 className={`${btn} flex-1 min-w-[96px] border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on focus-visible:ring-emerald-400`}>
-                                {v.last ? t('Done') : t('Next')}
+                                {v.last ? 'Done' : 'Next'}
                             </button>
                             {slug && page && (
-                                <button type="button" onClick={() => onNavigate('guide', slug)} aria-label={t('Read more in the guide: {title}', { title: page.title })} data-testid="home-tips-more"
+                                <button type="button" onClick={() => onNavigate('guide', slug)} aria-label={`Read more in the guide: ${page.title}`} data-testid="home-tips-more"
                                     className={`${btn} flex-1 min-w-[96px] border border-nature-300 dark:border-nature-700 bg-transparent text-nature-900 dark:text-white focus-visible:ring-emerald-500`}>
-                                    {t('Read more')}
+                                    Read more
                                 </button>
                             )}
                         </div>
@@ -1254,8 +1199,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common}>
                         <div ref={interestsCardRef}>
-                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200">{t('Tap what you like: those come first on Home and in the Market. Nothing is hidden.')}</p>
-                            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Things you like')}>
+                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200">Tap what you like: those come first on Home and in the Market. Nothing is hidden.</p>
+                            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Things you like">
                                 {MARKETPLACE_CATEGORIES.map(cat => {
                                     const on = myInterests.includes(cat.id);
                                     return (
@@ -1269,7 +1214,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 })}
                             </div>
                             {myInterests.length > 0 && (
-                                <HomeMore onClick={() => setInterestsOpen(false)} testId="home-interests-done">{t('Done')}</HomeMore>
+                                <HomeMore onClick={() => setInterestsOpen(false)} testId="home-interests-done">Done</HomeMore>
                             )}
                         </div>
                     </HomeCard>
@@ -1277,52 +1222,44 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'deals':
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('marketplace', c.deals!.waitingOnMe?.postId)} label={t('Your deals: {line}', { line: dealsLine(c.deals!) })}>
+                        <HomeLine onClick={() => onNavigate('marketplace', c.deals!.waitingOnMe?.postId)} label={`Your deals: ${dealsLine(c.deals!)}`}>
                             <span className="min-w-0 break-words">{dealsLine(c.deals!)}</span>
                         </HomeLine>
                     </HomeCard>
                 );
             case 'enterprise': {
                 const e = c.enterprise!;
-                const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
-                const line = requests ? `${e.name} · ${requests}` : `${e.name}`;
+                const line = `${e.name}${e.requests ? ` · ${e.requests} ${e.requests === 1 ? 'request' : 'requests'} to approve` : ''}`;
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('enterprise', e.id)} label={e.lifecycle === 'bounded' ? t('{line}. Opens the project.', { line }) : t('{line}. Opens the enterprise.', { line })}>
+                        <HomeLine onClick={() => onNavigate('enterprise', e.id)} label={`${line}. Opens the ${e.lifecycle === 'bounded' ? 'project' : 'enterprise'}.`}>
                             <span className="min-w-0 break-words">{line}</span>
                         </HomeLine>
-                        {e.others > 0 && <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{tn(e.others, 'and {n} more you keep', 'and {n} more you keep')}</p>}
+                        {e.others > 0 && <p className="m-0 text-xs text-nature-600 dark:text-nature-300">and {e.others} more you keep</p>}
                     </HomeCard>
                 );
             }
             case 'events': {
                 const ev = c.events!;
                 return (
-                    <HomeCard key={id} {...common} title={ev.radiusKm ? t('{title} · within {km} km', { title, km: ev.radiusKm }) : title}>
+                    <HomeCard key={id} {...common} title={ev.radiusKm ? `${title} · within ${ev.radiusKm} km` : title}>
                         {ev.items.map(item => {
-                            // An online event has no place and no distance (DESIGN-event-times §4).
-                            const where = item.online ? t('Online') : item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
-                            const rsvp = item.rsvp === 'going' ? t('Going') : item.rsvp === 'interested' ? t('Interested') : null;
-                            const km = item.online ? null : distanceText(item.distanceKm);
-                            const when = homeEventWhen(item);
+                            const where = item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
+                            const rsvp = item.rsvp === 'going' ? 'Going' : item.rsvp === 'interested' ? 'Interested' : null;
+                            const km = distanceText(item.distanceKm);
+                            const text = [dayLabel(item.startsAt), item.title].filter(Boolean).join('  ');
                             return (
                                 <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-event"
-                                    label={[when, item.title, where, km, rsvp].filter(Boolean).join(', ')}>
+                                    label={[dayLabel(item.startsAt), item.title, where, km, rsvp].filter(Boolean).join(', ')}>
                                     <span className="min-w-0 flex-1">
-                                        {/* The time on a line of its own (with a zone named, run into the title it read as one phrase), each piece whole. */}
-                                        {when && (
-                                            <span data-testid="home-event-when" className="flex flex-wrap gap-x-1 text-sm font-bold text-nature-700 dark:text-nature-200">
-                                                {when.split(' · ').map((piece, i, all) => <span key={i} className="whitespace-nowrap">{piece}{i < all.length - 1 ? ' ·' : ''}</span>)}
-                                            </span>
-                                        )}
-                                        <span dir="auto" className="block break-words font-semibold">{item.title}</span>
+                                        <span className="block break-words font-semibold">{text}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>
                                     {rsvp && <span className="shrink-0 text-xs font-bold text-emerald-800 dark:text-emerald-300">{rsvp}</span>}
                                 </HomeLine>
                             );
                         })}
-                        <HomeMore onClick={() => onNavigate('map')}>{t('All events ›')}</HomeMore>
+                        <HomeMore onClick={() => onNavigate('map')}>All events ›</HomeMore>
                     </HomeCard>
                 );
             }
@@ -1332,9 +1269,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const examples = m.examples && m.items.length < 6;
                 return (
                     <HomeCard key={id} {...common} titleAside={!isVisitor && (
-                        <button type="button" onClick={openTune} aria-label={t('Tune: pick what comes first')} data-testid="home-tune"
+                        <button type="button" onClick={openTune} aria-label="Tune: pick what comes first" data-testid="home-tune"
                             className="min-h-[44px] px-2 -mt-2 bg-transparent border-0 text-xs font-bold text-nature-700 dark:text-nature-200 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                            {t('Tune')}
+                            Tune
                         </button>
                     )}>
                         {items.map(item => marketLine(item, 'home-market-item'))}
@@ -1356,14 +1293,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{EXAMPLES_NOTE}</p>
                             </div>
                         )}
-                        <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
+                        <HomeMore onClick={() => onNavigate('marketplace')} label="See all of the Market">See all ›</HomeMore>
                     </HomeCard>
                 );
             }
             case 'decide':
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('projects')} label={t('{line}. Opens Commons.', { line: decideLine(c.decide!, now) })}>
+                        <HomeLine onClick={() => onNavigate('projects')} label={`${decideLine(c.decide!, now)}. Opens Commons.`}>
                             <span className="min-w-0 break-words">{decideLine(c.decide!, now)}</span>
                         </HomeLine>
                     </HomeCard>
@@ -1372,9 +1309,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common}>
                         {c.groups!.items.map(g => {
-                            const line = `${g.name} · ${g.unread > 0 ? tn(g.unread, '{n} new', '{n} new') : t('quiet')}`;
+                            const line = `${g.name} · ${g.unread > 0 ? `${g.unread} new` : 'quiet'}`;
                             return (
-                                <HomeLine key={g.id} onClick={() => onNavigate('messages', g.id)} label={g.muted ? t('{line}, muted', { line }) : line}>
+                                <HomeLine key={g.id} onClick={() => onNavigate('messages', g.id)} label={`${line}${g.muted ? ', muted' : ''}`}>
                                     <span className="min-w-0 break-words">{line}</span>
                                 </HomeLine>
                             );
@@ -1386,7 +1323,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const faces = (j.names ?? []).map(n => ({ ...n, src: resolveImageUrl(n.avatarUrl) }));
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate(faces.length ? 'people-community' : 'people')} label={t('{line} Opens People.', { line: joinedLine(j) })}>
+                        <HomeLine onClick={() => onNavigate(faces.length ? 'people-community' : 'people')} label={`${joinedLine(j)} Opens People.`}>
                             {faces.length > 0 && (
                                 <span aria-hidden="true" className="shrink-0 flex -space-x-2">
                                     {faces.slice(0, 3).map((f, i) => f.src
@@ -1404,27 +1341,27 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common}>
                         {c.pulse!.items.map(p => {
                             const thumb = p.thumbnailUrl ? resolvePulseThumbnailUrl(p.id) : null;
-                            const postTitle = p.title || t('A new post');
+                            const t = p.title || 'A new post';
                             return (
-                                <HomeLine key={p.id} onClick={() => onNavigate('pulse')} label={t('{title}, by {name}. Opens the Pulse.', { title: postTitle, name: p.callsign })}>
+                                <HomeLine key={p.id} onClick={() => onNavigate('pulse')} label={`${t}, by ${p.callsign}. Opens the Pulse.`}>
                                     {thumb
                                         ? <img src={thumb} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
                                         : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">📡</span>}
                                     <span className="min-w-0 flex-1">
-                                        <span dir="auto" className="block break-words line-clamp-2">{postTitle}</span>
-                                        <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{t('by {name}', { name: p.callsign })}</span>
+                                        <span className="block break-words line-clamp-2">{t}</span>
+                                        <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">by {p.callsign}</span>
                                     </span>
                                 </HomeLine>
                             );
                         })}
-                        <HomeMore onClick={() => onNavigate('pulse')} label={t('See all of the Pulse')}>{t('See all ›')}</HomeMore>
+                        <HomeMore onClick={() => onNavigate('pulse')} label="See all of the Pulse">See all ›</HomeMore>
                     </HomeCard>
                 );
             case 'beans': {
                 const b = beansLines(c.beans!);
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('ledger')} label={b.note ? t('{line}. {note}. Opens the Ledger.', { line: b.line, note: b.note }) : t('{line}. Opens the Ledger.', { line: b.line })}>
+                        <HomeLine onClick={() => onNavigate('ledger')} label={`${b.line}${b.note ? `. ${b.note}` : ''}. Opens the Ledger.`}>
                             <span className="min-w-0">
                                 <span className="block break-words font-semibold">{b.line}</span>
                                 {b.note && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{b.note}</span>}
@@ -1439,12 +1376,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common}>
                         <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
                         {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
-                        {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{tn(n.unseen - 1, 'and {n} more', 'and {n} more')}</p>}
+                        {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">and {n.unseen - 1} more</p>}
                         <HomeMore onClick={() => {
                             // Never a notice of a Home this page no longer holds (another community's, in a tab that missed the news).
                             if (landedEpoch() === null) return;
                             void markNoticesSeen([n.first.id]).catch(() => { /* still unseen: the card stays */ });
-                        }} testId="home-notice-seen">{t('Mark as read')}</HomeMore>
+                        }} testId="home-notice-seen">Mark as read</HomeMore>
                     </HomeCard>
                 );
             }
@@ -1453,7 +1390,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common}>
                         <button type="button" onClick={() => onNavigate('people-invites')}
                             className="w-full min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Invite someone')}
+                            Invite someone
                         </button>
                     </HomeCard>
                 );
@@ -1462,12 +1399,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common} title={communityName(cm, profile)}>
                         <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">
-                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : `${communityLine(cm, profile)}.`}
+                            {cm.members === 1 && !isVisitor ? "1 member. You're first. Invite someone." : `${communityLine(cm, profile)}.`}
                         </p>
                         {!isVisitor && (
                             <div className="flex flex-wrap justify-end gap-x-4">
-                                <HomeMore onClick={() => setPickerOpen(true)} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
-                                <HomeMore onClick={() => setEditOpen(true)} testId="home-edit-open" label={t('Edit home: the cards on Home and their order')}>{t('Edit home ›')}</HomeMore>
+                                <HomeMore onClick={() => setPickerOpen(true)} testId="home-add-open" label="Add a card to Home">Add a card ›</HomeMore>
+                                <HomeMore onClick={() => setEditOpen(true)} testId="home-edit-open" label="Edit home: the cards on Home and their order">Edit home ›</HomeMore>
                             </div>
                         )}
                     </HomeCard>
@@ -1487,7 +1424,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{searchEmptyLine(q, found.km)}</p>}
                         {found?.items.map(item => marketLine(item, 'home-search-item'))}
                         {found?.more && (
-                            <HomeMore onClick={() => onNavigate('marketplace-search', q)} testId="home-search-more" label={q ? t('See more listings for {q} in the Market', { q }) : t('See more listings for this search in the Market')}>{t('See more ›')}</HomeMore>
+                            <HomeMore onClick={() => onNavigate('marketplace-search', q)} testId="home-search-more" label={`See more listings for ${q || 'this search'} in the Market`}>See more ›</HomeMore>
                         )}
                     </HomeCard>
                 );
@@ -1521,26 +1458,25 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
                 name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
-                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? SKY_NO_PLACE_LINE : t('Nothing to show now'),
+                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? 'All tips seen' : c.type === 'sky' ? SKY_NO_PLACE_LINE : 'Nothing to show now',
                 hasSettings: !!homeCardType(c.type)?.readSettings,
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
-    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
+    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: 'All tips seen' } : {}) : null;
 
     return (
         <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
             {reveal && <style>{'@keyframes home-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }'}</style>}
             <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
             {status === 'offline' && (
-                <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
+                <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{HOME_OFFLINE}</p>
             )}
             {visitor?.joinCard}
-            {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
             {saveNote && (
                 <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
                     <span className="min-w-0 flex-1 break-words">{saveNote}</span>
-                    <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
+                    <button type="button" aria-label="Close this note" onClick={() => setSaveNote(null)}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                         ✕
                     </button>
@@ -1548,7 +1484,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             )}
             {a.me?.standing === 'suspended' && (
                 <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                    {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
+                    Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.
                 </p>
             )}
             {shown.map((card, i) => (
@@ -1557,7 +1493,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     {i === 0 && fewerOpen && !isVisitor && (
                         <p data-testid="home-fewer" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
-                            <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
+                            <button type="button" aria-label="Close this note" onClick={() => setFewerOpen(false)}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>
@@ -1566,7 +1502,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     {i === 0 && hintOpen && !isVisitor && !startUp && (
                         <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
-                            <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
+                            <button type="button" aria-label="Close this tip" onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>

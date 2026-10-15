@@ -8,7 +8,7 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { ensureEventThread, syncEventThreadMembership, eventUnknownTo, loadEventForThread, writeEventOpenedLine, broadcastEventThreadMessage, type EventThreadMessage } from './event-thread.js';
+import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
@@ -16,17 +16,10 @@ import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './pos
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
-import { zoneOfPin } from './event-zone.js';
-import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
-    canonicalZone,
-    parseRepeatPattern,
-    zonedToInstant,
-    instantToLocal,
-    type ZonedInstant,
     getMember,
     getPosts,
     readsAsMember,
@@ -221,15 +214,14 @@ export function eventPushBody(kind: 'updated' | 'cancelled', eventTitle: string)
 }
 
 /**
- * Everyone marked Going for the event's current date (a repeating event's regulars for last week are not; engine/event-series-roll.ts)
- * who can still see the event. Interested is deliberately not notified (decision 10). A member
+ * Everyone marked Going who can still see the event. Interested is deliberately not notified (decision 10). A member
  * removed from the event's group, or who left it or was banned, keeps their RSVP, and is told nothing of the event
  * (engine/event-thread.ts canReadEventThread).
  */
 export function eventGoingPubkeys(postId: string): string[] {
     return (db.prepare(`
         SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-         WHERE r.post_id = ? AND r.status = 'going' AND ${RSVP_IS_CURRENT('r', 'p')} AND ${postInSightSql('p', 'r.member_pubkey')}
+         WHERE r.post_id = ? AND r.status = 'going' AND ${postInSightSql('p', 'r.member_pubkey')}
     `).all(postId) as any[]).map(r => r.member_pubkey as string);
 }
 
@@ -280,11 +272,6 @@ function cleanPlaceName(raw: unknown): string | null {
     return v || null;
 }
 
-/** The host's choice, 1 or 0; null when the request made none (the caller decides what that means). */
-function hostLetsInOf(raw: unknown): number | null {
-    return raw === true ? 1 : raw === false ? 0 : null;
-}
-
 function cleanPrivateNote(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('The note for people going must be text');
@@ -307,87 +294,6 @@ function resolveEventEnd(startIso: string, rawEnd: unknown): string {
     const endIso = parseEventTime(rawEnd, 'End time');
     if (Date.parse(endIso) <= Date.parse(startIso)) throw new Error('An event must end after it starts');
     return endIso;
-}
-
-/** What a refused zone says, on the form under the picker (DESIGN-event-times §2). */
-export const EVENT_ZONE_REFUSED = 'Pick a time zone from the list';
-export const EVENT_LINK_MAX = 500;
-
-/** A zone the app sent: the node's spelling of it, or refused. Absent (undefined, null, '') is null. */
-function cleanEventTz(raw: unknown): string | null {
-    if (raw == null || raw === '') return null;
-    const tz = canonicalZone(raw);
-    if (!tz) throw new Error(EVENT_ZONE_REFUSED);
-    return tz;
-}
-
-/**
- * An online event's join link: http(s) only, with no user name or password in it (`https://zoom.us@evil.example` goes to
- * evil.example), ≤ 500 characters, stored as the URL parser writes it (`a b` → `a%20b`). Blank is none.
- */
-function cleanEventLink(raw: unknown): string | null {
-    if (raw == null) return null;
-    if (typeof raw !== 'string') throw new Error('The link to join must be text');
-    const v = raw.trim();
-    if (!v) return null;
-    if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
-    let url: URL | null = null;
-    try { url = new URL(v); } catch { url = null; }
-    if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error('The link to join must start with https:// or http://');
-    if (url.username || url.password) throw new Error('The link to join must not hold a user name or password');
-    if (url.href.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
-    return url.href;
-}
-
-/** A clock the app sent, resolved in the zone, or refused in words the form shows. */
-function instantOfClock(raw: unknown, tz: string, label: string): ZonedInstant {
-    const resolved = typeof raw === 'string' ? zonedToInstant(raw, tz) : null;
-    if (!resolved) throw new Error(`${label} must be a valid date and time`);
-    return resolved;
-}
-
-/** Whether a body names a clock: an absent or blank one leaves the instant (an old client's body) or the stored clock to decide. */
-function clockSent(raw: unknown): boolean {
-    return raw != null && raw !== '';
-}
-
-/** A clock the node could not keep as typed (DESIGN-event-times §3, §7): a gap moved it forward; an overlap took the earlier. */
-export interface EventClockAdjustment {
-    kind: 'gap' | 'overlap';
-    /** The clock the host set. */
-    asked: string;
-    /** The clock saved: forward past a gap; for an overlap the same clock, at the earlier of its two instants. */
-    saved: string;
-}
-
-/**
- * What create and edit answer next to the post, never on it (a post is broadcast, kept in phones' caches and copied, and
- * this is said once), and only when a clock the host set was adjusted. An old client's instant-only body never gets it.
- */
-export interface EventTimeAdjusted {
-    start: EventClockAdjustment | null;
-    end: EventClockAdjustment | null;
-}
-
-/** Where createPost and updatePost leave `eventTimeAdjusted` for the route to answer. */
-export interface EventTimeOut {
-    eventTimeAdjusted?: EventTimeAdjusted;
-}
-
-function adjustmentOf(asked: string, resolved: ZonedInstant): EventClockAdjustment | null {
-    return resolved.adjusted ? { kind: resolved.adjusted, asked, saved: resolved.local } : null;
-}
-
-function noteTimeAdjusted(out: EventTimeOut | undefined, start: EventClockAdjustment | null, end: EventClockAdjustment | null): void {
-    if (out && (start || end)) out.eventTimeAdjusted = { start, end };
-}
-
-/**
- * The zone an event's clock belongs to, when the app named none: an in-person event's pin decides (offline lookup), an
- * online one falls back to UTC, which reads "UTC time" (DESIGN-event-times §2, an old client's instant-only body).
- */
-function defaultEventTz(online: boolean, lat: unknown, lng: unknown): string {
-    return (!online && zoneOfPin(lat, lng)) || 'UTC';
 }
 
 function audienceRecipients(row: { audience_scope?: string | null; target_group_id?: string | null }): string[] | undefined {
@@ -414,9 +320,8 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
  * Where a listing with no place stands on a node that syncs by area (DESIGN-global-sync-by-area §3.4, Q4): at its
  * author's area, which was rounded to 0.1° when it was stored, so visibly rough. Placeless, it would be in nobody's set
  * but its author's. A poll too: poll isolation drops any pin it is sent, and the area is how the polls a member sees are
- * the ones made near them. An event carries its own pin, or none when it is online (DESIGN-event-times §9), and is not
- * placed here: on a node that syncs by area an online event reaches only its host until the rule that design's Director
- * amendment 2 asks for. Null where the node doesn't sync by area or the author has no area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
+ * the ones made near them. An event carries its own pin. Null where the node doesn't sync by area or the author has no
+ * area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
  * puts the listing back at the area.
  */
 function placelessListingArea(authorPublicKey: string): { lat: number; lng: number } | null {
@@ -459,19 +364,6 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
-        /** "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.2): true or false; anything else, the node's default. */
-        eventHostLetsIn?: unknown;
-        /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
-        eventStartLocal?: unknown;
-        eventEndLocal?: unknown;
-        eventTz?: unknown;
-        eventOnline?: unknown;
-        eventLink?: unknown;
-        /** A repeating event's rule and its last date (DESIGN-event-times §8; engine/event-series-roll.ts seriesOnCreate). */
-        eventRepeat?: unknown;
-        eventRepeatUntil?: unknown;
-        /** Filled when a clock the host set was adjusted (a DST gap or overlap); the route answers it next to the post. */
-        out?: EventTimeOut;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -566,13 +458,6 @@ export function createPost(
     let eventEndAt: string | null = null;
     let eventPlaceName: string | null = null;
     let eventPrivateNote: string | null = null;
-    let eventHostLetsIn: number | null = null;
-    let eventStartLocal: string | null = null;
-    let eventEndLocal: string | null = null;
-    let eventTz: string | null = null;
-    let eventOnline = false;
-    let eventLink: string | null = null;
-    let series: { repeat: string | null; until: string | null; skips: string | null } = { repeat: null, until: null, skips: null };
 
     if (type === 'poll') {
         const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
@@ -623,51 +508,12 @@ export function createPost(
         cashAlsoNeeded = false;
         options = { ...options, reach: 'local', reachPeers: null };
     } else if (type === 'event') {
-        // Online: no pin, no place name, and a join link; in person: a pin, and no link (DESIGN-event-times §9).
-        eventOnline = options?.eventOnline === true;
-        if (eventOnline) { lat = undefined; lng = undefined; } else assertEventPin(lat, lng);
-        // The host's clock in its zone, made into the instant by this node. An old client's instant-only body has its
-        // clock read off the instant in the same zone, so both doors land as one stored triple (§2). An online event's
-        // clock is the host's own zone's, which only the app knows: a clock with no zone is refused, not read as UTC.
-        const sentTz = cleanEventTz(options?.eventTz);
-        if (eventOnline && !sentTz && (clockSent(options?.eventStartLocal) || clockSent(options?.eventEndLocal))) {
-            throw new Error(EVENT_ZONE_REFUSED);
-        }
-        // A repeating online event's zone anchors every date's clock: one the app did not name is refused, not read as
-        // UTC (§3: "a REPEATING online event refuses to save until one is picked").
-        if (eventOnline && !sentTz && parseRepeatPattern(options?.eventRepeat)) throw new Error(EVENT_ZONE_REFUSED);
-        eventTz = sentTz ?? defaultEventTz(eventOnline, lat, lng);
-        let startAdjusted: EventClockAdjustment | null = null;
-        let endAdjusted: EventClockAdjustment | null = null;
-        if (clockSent(options?.eventStartLocal)) {
-            const resolved = instantOfClock(options!.eventStartLocal, eventTz, 'Start time');
-            eventStartAt = resolved.instant;
-            startAdjusted = adjustmentOf(options!.eventStartLocal as string, resolved);
-        } else {
-            eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
-        }
+        eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
         if (Date.parse(eventStartAt) <= Date.now()) throw new Error('An event must start in the future');
-        if (clockSent(options?.eventEndLocal)) {
-            const resolved = instantOfClock(options!.eventEndLocal, eventTz, 'End time');
-            eventEndAt = resolved.instant;
-            endAdjusted = adjustmentOf(options!.eventEndLocal as string, resolved);
-        } else {
-            eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
-        }
-        if (Date.parse(eventEndAt) <= Date.parse(eventStartAt)) throw new Error('An event must end after it starts');
-        noteTimeAdjusted(options?.out, startAdjusted, endAdjusted);
-        eventStartLocal = instantToLocal(eventStartAt, eventTz);
-        eventEndLocal = instantToLocal(eventEndAt, eventTz);
-        // A repeating event's rule takes its date, time and length from the clocks the host set, before a gap moved them.
-        series = seriesOnCreate(options?.eventRepeat, options?.eventRepeatUntil,
-            clockSent(options?.eventStartLocal) ? options!.eventStartLocal as string : eventStartLocal,
-            clockSent(options?.eventEndLocal) ? options!.eventEndLocal as string : eventEndLocal);
-        eventLink = eventOnline ? cleanEventLink(options?.eventLink) : null;
-        eventPlaceName = eventOnline ? null : cleanPlaceName(options?.eventPlaceName);
+        eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
+        assertEventPin(lat, lng);
+        eventPlaceName = cleanPlaceName(options?.eventPlaceName);
         eventPrivateNote = cleanPrivateNote(options?.eventPrivateNote);
-        // Left out by the client (an old or third-party app): the node's default, so no app can post an event on a
-        // node anyone can join without the host letting people in (DESIGN-global-member-privacy-fable.md §2.2).
-        eventHostLetsIn = hostLetsInOf(options?.eventHostLetsIn) ?? (getProfileSwitches().openMembership ? 1 : 0);
         validatePostPhotos(photos);
 
         // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
@@ -726,10 +572,8 @@ export function createPost(
 
         db.prepare(`INSERT INTO posts (
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
-            event_start_at, event_end_at, event_place_name, event_private_note, event_state,
-            event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
-            event_repeat, event_repeat_until, event_repeat_skips
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            event_start_at, event_end_at, event_place_name, event_private_note, event_state
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -743,10 +587,7 @@ export function createPost(
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
             audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
             eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote,
-            type === 'event' ? 'scheduled' : null,
-            eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
-            eventHostLetsIn,
-            series.repeat, series.until, series.skips
+            type === 'event' ? 'scheduled' : null
         );
 
         if (photoColumns.length > 0) {
@@ -956,7 +797,7 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
 
-export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
+export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
     // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
@@ -1038,14 +879,6 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const eventValues: any[] = [];
     // Set when this edit moved the time or the pin/place name — the only edits that notify (decision 29).
     let eventTimeOrPlaceChanged = false;
-    // The event's date moved: its RSVPs and reminder marks go with it (engine/event-series-roll.ts moveOccurrence).
-    let occurrenceMove: { from: string; to: string } | null = null;
-    // The edit leaves the event repeating: its undated RSVPs (from before occurrence_at) get its date (stampUndatedRsvps).
-    let stampSeriesAt: string | null = null;
-    // Set when the host ticked or unticked "Only people I let in": who sits in the chat follows (syncEventThreadMembership).
-    let hostLetsInChanged = false;
-    // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
-    let hostOpenedChat = false;
     if (existingPost.type === 'event') {
         delete updates.credits;
         delete updates.category;
@@ -1059,56 +892,15 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         const raw = updates as any;
         const prevStart = existingPost.eventStartAt!;
         const prevEnd = existingPost.eventEndAt!;
-        // Online or in person (DESIGN-event-times §9): an online event holds no pin, no place name, and may hold a link.
-        const prevOnline = existingPost.eventOnline === true;
-        const nextOnline = raw.eventOnline !== undefined ? raw.eventOnline === true : prevOnline;
-        if (nextOnline) { updates.lat = null as any; updates.lng = null as any; }
-
-        const nextLat = updates.lat !== undefined ? updates.lat : existingPost.lat;
-        const nextLng = updates.lng !== undefined ? updates.lng : existingPost.lng;
-        if (!nextOnline) assertEventPin(nextLat, nextLng);
-        const pinMoved = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
-
-        // The zone: the one the app sent, never replaced; else the new pin's, when the pin moved into another zone (an old
-        // client's nudge within the zone keeps a zone the host picked); else the event's own, or (an event from before
-        // zones) its pin's, or UTC.
-        const sentTz = cleanEventTz(raw.eventTz);
-        const newPinZone = pinMoved && !nextOnline ? zoneOfPin(nextLat, nextLng) : null;
-        const keptTz = sentTz
-            ?? (newPinZone && newPinZone !== zoneOfPin(existingPost.lat, existingPost.lng) ? newPinZone : null)
-            ?? existingPost.eventTz
-            ?? null;
-        // An online event's clock with no zone named anywhere is refused, as at create, not read as UTC.
-        if (nextOnline && !keptTz && (clockSent(raw.eventStartLocal) || clockSent(raw.eventEndLocal))) throw new Error(EVENT_ZONE_REFUSED);
-        const nextTz = keptTz ?? defaultEventTz(nextOnline, nextLat, nextLng);
-
         let nextStart = prevStart;
-        let startAdjusted: EventClockAdjustment | null = null;
-        let endAdjusted: EventClockAdjustment | null = null;
-        if (clockSent(raw.eventStartLocal)) {
-            const resolved = instantOfClock(raw.eventStartLocal, nextTz, 'Start time');
-            nextStart = resolved.instant;
-            startAdjusted = adjustmentOf(raw.eventStartLocal, resolved);
-        } else if (raw.eventStartAt !== undefined) {
+        if (raw.eventStartAt !== undefined) {
             nextStart = parseEventTime(raw.eventStartAt, 'Start time');
-        } else if (sentTz && existingPost.eventStartLocal && sentTz !== existingPost.eventTz) {
-            // A new zone with the clock kept: the same clock, somewhere else, is another instant (§2 Edit); a clock that
-            // the new zone skips is said, like one the host typed.
-            const resolved = instantOfClock(existingPost.eventStartLocal, nextTz, 'Start time');
-            nextStart = resolved.instant;
-            startAdjusted = adjustmentOf(existingPost.eventStartLocal, resolved);
-        }
-        if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
-            throw new Error('An event must start in the future');
+            if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
+                throw new Error('An event must start in the future');
+            }
         }
         let nextEnd: string;
-        if (clockSent(raw.eventEndLocal)) {
-            const resolved = instantOfClock(raw.eventEndLocal, nextTz, 'End time');
-            nextEnd = resolved.instant;
-            endAdjusted = adjustmentOf(raw.eventEndLocal, resolved);
-        } else if (raw.eventEndLocal === '') {
-            nextEnd = resolveEventEnd(nextStart, null);
-        } else if (raw.eventEndAt === undefined) {
+        if (raw.eventEndAt === undefined) {
             // Moving the start without naming an end keeps the event's length.
             nextEnd = nextStart === prevStart
                 ? prevEnd
@@ -1118,10 +910,12 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
         if (Date.parse(nextEnd) <= Date.parse(nextStart)) throw new Error('An event must end after it starts');
 
-        let placeChanged = pinMoved || nextOnline !== prevOnline;
-        if (nextOnline) {
-            eventFields.push('event_place_name = ?'); eventValues.push(null);
-        } else if (raw.eventPlaceName !== undefined) {
+        const nextLat = updates.lat !== undefined ? updates.lat : existingPost.lat;
+        const nextLng = updates.lng !== undefined ? updates.lng : existingPost.lng;
+        assertEventPin(nextLat, nextLng);
+
+        let placeChanged = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
+        if (raw.eventPlaceName !== undefined) {
             const nextPlace = cleanPlaceName(raw.eventPlaceName);
             if (nextPlace !== (existingPost.eventPlaceName ?? null)) placeChanged = true;
             eventFields.push('event_place_name = ?'); eventValues.push(nextPlace);
@@ -1129,45 +923,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (raw.eventPrivateNote !== undefined) {
             eventFields.push('event_private_note = ?'); eventValues.push(cleanPrivateNote(raw.eventPrivateNote));
         }
-        if (!nextOnline) {
-            eventFields.push('event_link = ?'); eventValues.push(null);
-        } else if (raw.eventLink !== undefined) {
-            eventFields.push('event_link = ?'); eventValues.push(cleanEventLink(raw.eventLink));
-        }
-        // Silent like the note (no UPDATED, no push: docs/events-on-the-map.md §2.2): who reads the note is the host's to
-        // change. Left out, or not true/false: unchanged.
-        const nextLetsIn = hostLetsInOf(raw.eventHostLetsIn);
-        delete raw.eventHostLetsIn;
-        if (nextLetsIn !== null) {
-            eventFields.push('event_host_lets_in = ?'); eventValues.push(nextLetsIn);
-            hostLetsInChanged = nextLetsIn !== (existingPost.eventHostLetsIn ? 1 : 0);
-            hostOpenedChat = hostLetsInChanged && nextLetsIn === 0;
-        }
         const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
-        // The clocks are read off the instants only when the time, zone, pin or online flag changed, or the row has none
-        // yet (an event from before them): a title-only edit after a zone's rules change leaves the in-person clock as the
-        // host set it (§1, the clock wins), for the boot re-resolve to settle.
-        const clocksMissing = !existingPost.eventStartLocal || !existingPost.eventEndLocal || !existingPost.eventTz;
-        if (timeChanged || nextTz !== existingPost.eventTz || pinMoved || nextOnline !== prevOnline || clocksMissing) {
-            eventFields.push('event_start_local = ?', 'event_end_local = ?', 'event_tz = ?', 'event_online = ?');
-            eventValues.push(instantToLocal(nextStart, nextTz), instantToLocal(nextEnd, nextTz), nextTz, nextOnline ? 1 : 0);
-        }
-        // A repeating event's rule, its last date and its cancelled dates (§8): written when the rule, the date or the time
-        // changed; a rule the new first date is not on is refused. A rule taken off makes it a one-off.
-        const seriesCells = seriesOnEdit(existingPost, raw.eventRepeat, raw.eventRepeatUntil,
-            {
-                start: clockSent(raw.eventStartLocal) ? raw.eventStartLocal : raw.eventStartAt !== undefined ? instantToLocal(nextStart, nextTz) : null,
-                end: clockSent(raw.eventEndLocal) ? raw.eventEndLocal : raw.eventEndAt !== undefined ? instantToLocal(nextEnd, nextTz) : null,
-            },
-            { startLocal: instantToLocal(nextStart, nextTz), endLocal: instantToLocal(nextEnd, nextTz), tz: nextTz, timeChanged });
-        if (seriesCells) {
-            if (seriesCells.repeat && nextOnline && !keptTz) throw new Error(EVENT_ZONE_REFUSED);
-            eventFields.push('event_repeat = ?', 'event_repeat_until = ?', 'event_repeat_skips = ?');
-            eventValues.push(seriesCells.repeat, seriesCells.until, seriesCells.skips);
-        }
-        if (nextStart !== prevStart) occurrenceMove = { from: prevStart, to: nextStart };
-        if (seriesCells ? !!seriesCells.repeat : !!existingPost.eventRepeat) stampSeriesAt = nextStart;
-        noteTimeAdjusted(out, startAdjusted, endAdjusted);
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
             eventFields.push("event_state = 'updated'");
@@ -1215,7 +971,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
 
     // An edit that takes the pin away, on a node that syncs by area, puts the listing at its author's area, as a new one
-    // with no place is (placelessListingArea). An event keeps its pin (assertEventPin), or none online; a poll's place is never edited.
+    // with no place is (placelessListingArea). An event can't lose its pin (assertEventPin); a poll's place is never edited.
     if (existingPost.type !== 'event' && (updates.lat === null || updates.lng === null)) {
         const area = placelessListingArea(existingPost.authorPublicKey);
         if (area) { updates.lat = area.lat; updates.lng = area.lng; }
@@ -1297,19 +1053,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         ? storedPhotoColumns(id, updates.photos.slice(0, 5))
         : null;
 
-    let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
-        if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);
-        if (stampSeriesAt) stampUndatedRsvps(id, stampSeriesAt);
-        if (hostLetsInChanged) {
-            // Ticked: everyone Going whom the host hasn't let in leaves the chat; unticked: everyone Going is in it.
-            const going = db.prepare("SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'").all(id) as { member_pubkey: string }[];
-            for (const g of going) syncEventThreadMembership(id, g.member_pubkey, 'going');
-        }
-        // Everyone Going now reads every line so far, including ones written under the let-in notice: the chat says so
-        // (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1).
-        if (hostOpenedChat) openedLine = writeEventOpenedLine(id);
 
         if (nextPhotoColumns) {
             // Tombstones before caches (storage design §7): the row goes inside the transaction and the
@@ -1335,7 +1080,6 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
-    if (openedLine) broadcastEventThreadMessage({ broadcast }, id, openedLine);
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
@@ -1362,11 +1106,6 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 /**
  * RSVP to an event: `going`, `interested`, or null for "not going", which deletes the row (§2.2).
  * One tap, no host approval. Modelled on votePoll.
- *
- * Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.2), Going is still one tap and still counted;
- * the note and the chat wait for the host (letInEvent). The host's own friends are let in as they tap Going (the host
- * already chose them), and the host hears that people are waiting at most once an hour per event (notifyHostWaiting).
- * Interested → Going keeps a let-in; Not going deletes the row, and the let-in with it.
  */
 export function rsvpEvent(
     broadcast: BroadcastFn,
@@ -1374,7 +1113,6 @@ export function rsvpEvent(
     memberPublicKey: string,
     status: EventRsvpStatus | null,
     signature?: string,
-    push?: PushFn,
 ): { success: boolean; post: MarketplacePost } {
     if (status !== null && status !== 'going' && status !== 'interested') {
         throw new Error("RSVP status must be 'going', 'interested' or null");
@@ -1385,7 +1123,7 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
     // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
     // its cancellation or its end can say it exists.
@@ -1448,26 +1186,14 @@ export function rsvpEvent(
                 db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('event_rsvps', ?, ?)`).run(rowKey, writeAt);
             }
         } else {
-            // For the date the card showed (DESIGN-event-times §2): the event's current start, stamped here, never sent. Read
-            // inside the transaction the open-check above holds, so the roll cannot slip between.
-            const occurrenceAt = (db.prepare('SELECT event_start_at FROM posts WHERE id = ?').get(postId) as { event_start_at: string | null }).event_start_at;
             db.prepare(`
-                INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, occurrence_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
                     status = excluded.status,
                     signature = excluded.signature,
-                    occurrence_at = excluded.occurrence_at,
                     updated_at = excluded.updated_at
-            `).run(postId, memberPublicKey, status, signature || '', occurrenceAt, writeAt);
-            if (status === 'going' && row.event_host_lets_in === 1) {
-                const friendOf = hostFriendOf(row, memberPublicKey);
-                if (friendOf) {
-                    // The same stamp the RSVP above was just written with: one write, as a replica sees it.
-                    db.prepare('UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NULL')
-                        .run(writeAt, friendOf, writeAt, postId, memberPublicKey);
-                }
-            }
+            `).run(postId, memberPublicKey, status, signature || '', writeAt);
         }
         // Chat membership follows the RSVP in the same transaction (§2.2): Going adds you to the event
         // chat, Interested and "not going" take you out of it. The host never leaves.
@@ -1475,182 +1201,9 @@ export function rsvpEvent(
     })();
 
     bumpPostsVersion();
-    // Read for the member as their own reads are (where anyone can join, the neighbourhood: engine PostFilter.neighbourhood);
-    // the broadcast puts each socket's own place in (state-engine.ts broadcast).
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true })[0]!;
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
-    if (status === 'going' && row.event_host_lets_in === 1 && updatedPost.myLetIn === false
-        && !isEventHost(db, row, memberPublicKey)) {
-        notifyHostWaiting(push, row);
-    }
     return { success: true, post: updatedPost };
-}
-
-/**
- * The host whose own friends list holds this member, or null (DESIGN-global-member-privacy-fable.md §2.2: the one
- * automatic let-in). The author, and the keeper or convenor who posted it for an enterprise or a group. Nothing else lets
- * anyone in: on a node anyone can join a host knows nobody, and a direct message is a stranger's one tap.
- */
-function hostFriendOf(row: { author_pubkey: string; created_by?: string | null }, memberPubkey: string): string | null {
-    for (const host of [row.author_pubkey, row.created_by]) {
-        if (!host || host === memberPubkey) continue;
-        try {
-            if (db.prepare('SELECT 1 FROM friends WHERE owner_pubkey = ? AND friend_pubkey = ?').get(host, memberPubkey)) return host;
-        } catch { /* table absent on an older schema */ }
-    }
-    return null;
-}
-
-export const EVENT_LET_IN_PUSH_TITLE = "You're in";
-export const EVENT_WAITING_PUSH_TITLE = 'People are waiting';
-/** At most one "people are waiting" push per event in this long: a crowd of throwaways tapping Going is one push an hour. */
-export const EVENT_WAITING_PUSH_EVERY_MS = 60 * 60 * 1000;
-const waitingPushSentAt = new Map<string, number>();
-
-/** For a suite: forget when each host was last told, as a restart does. */
-export function resetEventWaitingPushes(): void {
-    waitingPushSentAt.clear();
-}
-
-/**
- * How many Going members wait for the host to let them in (never the host, never a visitor). On a repeating event, Going
- * for the date it has now (RSVP_IS_CURRENT), as the host's list of who is going reads (getPosts): a regular Going last week
- * and never let in waits again only once they tap Going for this date.
- */
-export function eventWaitingCount(row: { id: string; author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }): number {
-    const waiting = db.prepare(`
-        SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-         WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS NULL AND ${RSVP_IS_CURRENT('r', 'p')}
-           AND ${postInSightSql('p', 'r.member_pubkey')}
-    `).all(row.id) as { member_pubkey: string }[];
-    return waiting.filter(w => !isVisitorKey(db, w.member_pubkey) && !isEventHost(db, row, w.member_pubkey)).length;
-}
-
-/**
- * "N people are waiting to be let in to <title>", to the host who posted it, at most once an hour per event
- * (EVENT_WAITING_PUSH_EVERY_MS). Kept in memory: a restart may send one more, never 2,000. Fire-and-forget.
- */
-function notifyHostWaiting(push: PushFn | undefined, row: { id: string; title?: string; author_pubkey: string; created_by?: string | null; audience_scope?: string | null; target_group_id?: string | null }): void {
-    if (!push) return;
-    const now = Date.now();
-    const last = waitingPushSentAt.get(row.id);
-    if (last !== undefined && now - last < EVENT_WAITING_PUSH_EVERY_MS) return;
-    try {
-        const n = eventWaitingCount(row);
-        if (n === 0) return;
-        const host = row.created_by || row.author_pubkey;
-        waitingPushSentAt.set(row.id, now);
-        const name = (row.title || 'your event').trim() || 'your event';
-        push(
-            [host],
-            '',
-            EVENT_WAITING_PUSH_TITLE,
-            `${n} ${n === 1 ? 'person is' : 'people are'} waiting to be let in to ${name}`,
-            { screen: 'post', postId: row.id },
-            EVENT_PUSH_CATEGORY,
-            'market.listing',
-        );
-    } catch (e) {
-        console.warn('[Events] waiting notification not sent:', e);
-    }
-}
-
-export const LET_IN_NOT_GOING = "They haven't tapped Going";
-export const LET_IN_ONLY_HOST = 'Only the host can let people in';
-export const LET_IN_NOT_ASKED = "This event doesn't wait for the host: everyone going is already in";
-export const LET_IN_OUT_OF_SIGHT = "They can't see this event, so they can't be let in";
-
-/**
- * The host lets a Going member in to the note and the chat, or takes it back (`letIn` false), on an event whose host lets
- * people in (DESIGN-global-member-privacy-fable.md §2.2, §2.4). `everyone` lets in every Going member waiting now; people
- * who tap Going later still wait. A host's write on the member's row, so it bumps the row's updated_at (last-write-wins
- * on sync) and the post's, so a phone's delta brings the note. The chat's participants follow in the same transaction.
- * Pushes "<host> let you in to <title>" to each member let in; a take-back is silent.
- */
-export function letInEvent(
-    postId: string,
-    actorPubkey: string,
-    target: { memberPublicKey?: string; everyone?: boolean },
-    letIn = true,
-    push?: PushFn,
-): { success: true; post: MarketplacePost; changed: number } {
-    let row: ReturnType<typeof loadEventForThread>;
-    try {
-        row = loadEventForThread(postId);
-    } catch {
-        throw new Error('Event not found');
-    }
-    if (eventUnknownTo(row, actorPubkey)) throw new Error('Event not found');
-    if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
-    if (!isEventHost(db, row, actorPubkey)) throw new Error(LET_IN_ONLY_HOST);
-    assertNodeMember(actorPubkey);
-    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error('This event has been cancelled');
-    const nowIso = new Date().toISOString();
-    if (row.event_end_at && row.event_end_at <= nowIso) throw new Error('This event has ended');
-    if (row.event_host_lets_in !== 1) throw new Error(LET_IN_NOT_ASKED);
-
-    // A let-in goes only to someone who can see the event, and never to a visitor, as eventWaitingCount counts them (the
-    // #1953 review's N2): a member removed from an invite-only group keeps their Going row, and a let-in would push them
-    // the title of an event they can no longer see. A take-back goes to anyone let in: it opens nothing.
-    const mayBeLetIn = (pk: string) => !letIn || (!isVisitorKey(db, pk) && !!db.prepare(
-        `SELECT 1 FROM event_rsvps r JOIN posts p ON p.id = r.post_id WHERE r.post_id = ? AND r.member_pubkey = ? AND ${postInSightSql('p', 'r.member_pubkey')}`,
-    ).get(postId, pk));
-    let members: string[];
-    if (target.everyone === true) {
-        // Everyone waiting is everyone eventWaitingCount counts: on a repeating event, Going for its current date, never a
-        // regular's RSVP for last week, whom the host's list no longer shows. A take-back reaches everyone let in, any date.
-        members = (db.prepare(`SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
-            WHERE r.post_id = ? AND r.status = 'going' AND r.let_in_at IS ${letIn ? `NULL AND ${RSVP_IS_CURRENT('r', 'p')}` : 'NOT NULL'}`)
-            .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey).filter(mayBeLetIn);
-    } else {
-        const who = target.memberPublicKey;
-        if (typeof who !== 'string' || !who) throw new Error('memberPublicKey or everyone is required');
-        const rsvp = db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(postId, who) as { status: string } | undefined;
-        if (rsvp?.status !== 'going') throw new Error(LET_IN_NOT_GOING);
-        if (!mayBeLetIn(who)) throw new Error(LET_IN_OUT_OF_SIGHT);
-        members = [who];
-    }
-
-    const changedMembers: string[] = [];
-    db.transaction(() => {
-        for (const m of members) {
-            const rowKey = `${postId}|${m}`;
-            const prev = db.prepare(`
-                SELECT MAX(ts) AS ts FROM (
-                    SELECT updated_at AS ts FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?
-                    UNION ALL
-                    SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?
-                )`).get(postId, m, rowKey) as { ts: string | null } | undefined;
-            const writeAt = prev?.ts && prev.ts >= nowIso ? new Date(Date.parse(prev.ts) + 1).toISOString() : nowIso;
-            const res = letIn
-                ? db.prepare("UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND status = 'going' AND let_in_at IS NULL")
-                    .run(writeAt, actorPubkey, writeAt, postId, m)
-                : db.prepare("UPDATE event_rsvps SET let_in_at = NULL, let_in_by = NULL, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NOT NULL")
-                    .run(writeAt, postId, m);
-            if (res.changes > 0) {
-                changedMembers.push(m);
-                syncEventThreadMembership(postId, m, 'going');
-            }
-        }
-        if (changedMembers.length > 0) db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(nowIso, postId);
-    })();
-
-    if (changedMembers.length > 0) bumpPostsVersion();
-    if (letIn && push && changedMembers.length > 0) {
-        try {
-            const recipients = changedMembers.filter(pk => !isVisitorKey(db, pk));
-            const hostName = (getMember(db, actorPubkey) as any)?.callsign || 'The host';
-            const name = (row.title || 'an event').trim() || 'an event';
-            if (recipients.length > 0) {
-                push(recipients, actorPubkey, EVENT_LET_IN_PUSH_TITLE, `${hostName} let you in to ${name}`,
-                    { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
-            }
-        } catch (e) {
-            console.warn('[Events] let-in notification not sent:', e);
-        }
-    }
-    const post = getPosts(db, { id: postId, viewerPubkey: actorPubkey, includeAllScopes: true })[0]!;
-    return { success: true, post: forActor(post, actorPubkey), changed: changedMembers.length };
 }
 
 /**
@@ -1800,7 +1353,7 @@ export function votePoll(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true, includeVoters: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true, includeVoters: true })[0]!;
     let recipients: string[] | undefined;
     if (updatedPost.audienceScope === 'group' && updatedPost.targetGroupId) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updatedPost.targetGroupId) as any[];
@@ -2050,7 +1603,6 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
                 db.prepare(`
                     UPDATE posts
                        SET event_private_note = NULL,
-                           event_link = NULL,
                            active = 0,
                            status = 'completed',
                            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')

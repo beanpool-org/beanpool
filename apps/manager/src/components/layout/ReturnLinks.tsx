@@ -40,7 +40,7 @@ export function PhoneReturnLink({ back }: { back: BackLink }) {
             href={back.href}
             aria-label={back.label}
             title={back.label}
-            className="shrink-0 min-w-[48px] min-h-[48px] px-2 rounded-xl flex items-center justify-center gap-1 text-xs font-bold text-bp-ink-terra hover:text-white hover:bg-nature-800/60 no-underline"
+            className="shrink-0 min-w-[48px] min-h-[48px] px-2 rounded-xl flex items-center justify-center gap-1 text-xs font-bold text-terra-300 hover:text-white hover:bg-nature-800/60 no-underline"
         >
             <span aria-hidden="true" className="text-base leading-none">{back.glyph}</span>
             <span aria-hidden="true">{back.short}</span>

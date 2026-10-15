@@ -37,14 +37,8 @@ const COMMUNITY_COPY_FILE = /^(community_[a-z0-9._-]{0,40}_[0-9a-f]{32}\.db|bean
  * keeps what that identity knew of its groups' keys: a Wipe keeps the identity, so it keeps them (director, NB3 of the
  * #1788 confirmation). Removing every copy as the identity leaves, rather than a record each Wipe would have to keep,
  * also takes a copy left by any other path or an older build (confirmation 2 of #1788, finding 5).
- *
- * `beforeRemoving`: run with the copies that listing found, after the open one is closed and before any goes (Sign Out
- * keeps the account's DM memory of each: db.ts `seedDmPinsBeforeLeaving`). Its failure is logged; the copies go anyway.
  */
-export async function removeCommunityCaches(
-    communities: readonly string[],
-    opts: { everyCopy?: boolean; beforeRemoving?: (copies: string[]) => Promise<void> } = {},
-): Promise<void> {
+export async function removeCommunityCaches(communities: readonly string[], opts: { everyCopy?: boolean } = {}): Promise<void> {
     // What the sync last applied belonged to the copies going now: the next account's sync must not skip a payload
     // because it matches one of them (pillar-sync.ts).
     resetSyncFingerprints();
@@ -60,23 +54,14 @@ export async function removeCommunityCaches(
     // And each one's name from before every community had a file of its own (nodes.ts), in case it never moved
     // (cache-file-migration.ts): the account's copy goes with it either way.
     const names = new Set(communities.flatMap((url) => [getDatabaseFilenameForNode(url), legacyDatabaseFilenameForNode(url)]));
-    const found = new Set<string>();
     if (opts.everyCopy) {
         try {
             for (const f of await FileSystem.readDirectoryAsync(encodeURI(`file://${directory}`))) {
                 const copy = COMMUNITY_COPY_FILE.exec(f);
-                if (copy) found.add(copy[1]);
+                if (copy) names.add(copy[1]);
             }
         } catch (e) {
             console.warn('[Account] Could not list the cached community copies: only the listed ones go', e);
-        }
-        for (const name of found) names.add(name);
-    }
-    if (opts.beforeRemoving && found.size > 0) {
-        try {
-            await opts.beforeRemoving([...found]);
-        } catch (e) {
-            console.warn('[Account] Could not finish with the cached community copies before they go', e);
         }
     }
     for (const name of names) {

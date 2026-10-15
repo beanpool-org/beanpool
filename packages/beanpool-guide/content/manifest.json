@@ -28,7 +28,7 @@
       "id": "talk",
       "title": "Talk",
       "summary": "Messages, groups and their chats, people and friends, event chats, muting and mentions.",
-      "pages": ["messages", "groups", "people", "event-chat", "mute", "mentions", "key-changed"]
+      "pages": ["messages", "groups", "people", "event-chat", "mute", "mentions"]
     },
     {
       "id": "pulse",

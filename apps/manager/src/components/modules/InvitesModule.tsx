@@ -355,7 +355,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in">
                     {isGenerating ? (
                         <>
-                            <span className="text-3xl text-bp-ink-terra animate-spin" aria-hidden="true">🔄</span>
+                            <span className="text-3xl text-terra-400 animate-spin" aria-hidden="true">🔄</span>
                             <h4 className="text-sm font-bold text-white m-0">Generating Cryptographic Passes...</h4>
                             <p className="text-xs text-nature-400 m-0 max-w-sm">
                                 Issuing {inviteCount} single-use onboarding pass{inviteCount > 1 ? 'es' : ''} with offline QR codes.
@@ -377,14 +377,14 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             {generatedTokens.length > 0 && (
                 <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-6 space-y-4 shadow-xl animate-fade-in">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
-                        <h4 className="text-xs font-extrabold text-bp-ink-terra uppercase tracking-wider">
+                        <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider">
                             Generated Passes ({generatedTokens.length})
                         </h4>
 
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={handleCopyAllMessages}
-                                className="px-3 py-1.5 rounded-xl bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-xs font-bold border border-terra-600/40 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>💬</span>
                                 <span>{copiedIndex === 'all_messages' ? '✓ Messages Copied!' : 'Copy All Share Messages'}</span>
@@ -546,7 +546,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 <ModalBackdrop onClose={() => setPreviewQrItem(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <span className="text-xs font-bold text-bp-ink-terra uppercase tracking-wider">
+                            <span className="text-xs font-bold text-terra-400 uppercase tracking-wider">
                                 SINGLE-USE ONBOARDING PASS
                             </span>
                             <button

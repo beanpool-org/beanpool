@@ -29,11 +29,8 @@ export function nearbyListingsOn(features: NodeFeatures | null | undefined): boo
     return !!features?.nearbyListings;
 }
 
-/**
- * One wording for both apps (design §3.2), from @beanpool/core so the web's step says exactly the same. Each is a word()
- * key: show it through t(). The why line is areaWhyLine(features), built when it is drawn, so it follows the language.
- */
-export const AREA_WORDS = AREA_STEP_WORDS;
+/** One wording for both apps (design §3.2), from @beanpool/core so the web's step says exactly the same. */
+export const AREA_WORDS = { ...AREA_STEP_WORDS, why: coreWhyLine(null) } as const;
 
 /** The why line with the node's own numbers, when it says them (`features.nearbyListings`). */
 export function areaWhyLine(features: NodeFeatures | null | undefined): string {

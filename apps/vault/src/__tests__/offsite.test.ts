@@ -11,7 +11,6 @@ import { custodianKey, listBackups, restoreFromBackup, sendSettings } from '../c
 import { openState, STATE_FILE } from '../keyholder/keys.js';
 import { BACKUP_BODY_AAD, parseBackupFile } from '../shared/backup-format.js';
 import {
-    breakDeletions,
     deposit,
     doGenesis,
     get,
@@ -345,7 +344,7 @@ describe('the cold path: a new machine, the off-box store and two shares', () =>
         // A fresh vault: the genesis custodians set the store first, then see what it holds.
         expect((await setSettings(b, settings)).map(r => r.body.state)).toEqual(['waiting', 'in_force']);
         const listed = await listBackups(b.baseUrl, b.custodians[0], b.call());
-        expect(listed.body).toEqual({ local: [], offsite: [name], offsiteError: null, restoreWaiting: null });
+        expect(listed.body).toEqual({ local: [], offsite: [name], offsiteError: null });
         expect((await restoreFromBackup(b.baseUrl, b.custodians[1], name, b.call())).body).toMatchObject({ state: 'locked' });
         const unlocked = await unlockWith(b, g.shares, [0, 2]);
         expect(unlocked[1].body.state).toBe('open');
@@ -392,35 +391,6 @@ describe('the cold path: a new machine, the off-box store and two shares', () =>
         stub.failWith = null;
         b.clock.advance(60_000);
         expect((await get(b, '/v1/report')).status).toBe(200);
-        expect((await startRestore(b, 'google', 'deleted-later')).reply.body.code).toBe('no_copy');
-    });
-
-    it('a newer backup that doesn\'t open in the vault\'s own store is read from the off-box one, and its deletions apply (B2, review #1981)', async () => {
-        const a = await vault();
-        const g = await doGenesis(a);
-        const stub = await s3();
-        const settings = { v: 1, offsite: stub.settings() };
-        await setSettings(a, settings);
-        const member = newMember();
-        await deposit(a, g, member, 'google', 'deleted-later');
-        const older = await a.api.runBackup();
-        a.clock.advance(60 * 60 * 1000);
-        await signed(a, '/v1/copies/delete', { provider: 'google' }, member.seed);
-        const newer = await a.api.runBackup();
-
-        // A fresh vault on the same store, its copy of the newer backup broken; the off-box copy as it was sent.
-        const b = await vault({
-            stub: a.stub, clock: a.clock, custodians: a.custodians, storeDir: a.storeDir,
-            store: inner => ({
-                put: (n, bytes) => inner.put(n, bytes), list: () => inner.list(), delete: n => inner.delete(n),
-                get: async n => (n === newer ? breakDeletions(Buffer.from(await inner.get(n))) : inner.get(n)),
-            }),
-        });
-        await setSettings(b, settings);
-        await restoreFromBackup(b.baseUrl, b.custodians[0], older, b.call());
-        const before = stub.requests.filter(r => r.method === 'GET' && r.url.includes(newer)).length;
-        expect((await unlockWith(b, g.shares, [0, 1]))[1].body.state).toBe('open');
-        expect(stub.requests.filter(r => r.method === 'GET' && r.url.includes(newer)).length).toBe(before + 1);
         expect((await startRestore(b, 'google', 'deleted-later')).reply.body.code).toBe('no_copy');
     });
 });

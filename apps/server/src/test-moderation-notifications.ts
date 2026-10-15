@@ -141,8 +141,7 @@ async function main() {
         await next();
     });
     const checkAdminAuth = async (ctx: any): Promise<boolean> => {
-        // The password is owner level, as the real checkAdminAuth sets it (bulk deletion is an owner's: design case 18, D1).
-        if (ctx.headers['x-admin-password'] === 'pw') { ctx.state.adminRole = 'owner'; return true; }
+        if (ctx.headers['x-admin-password'] === 'pw') return true;
         if (ctx.headers['x-admin-session'] === 'warden') {
             ctx.state.actor = Warden.pubKeyHex; ctx.state.auth_signer = Warden.pubKeyHex; ctx.state.adminRole = 'admin';
             return true;

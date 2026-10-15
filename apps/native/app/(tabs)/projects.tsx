@@ -8,7 +8,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -354,7 +354,7 @@ export default function ProjectsScreen() {
     }, [groups, enterprises, yourGroups, groupKind, reader.effective]);
     const groupsEmpty = commonsGroupsEmpty(groupKind, reader.effective);
     // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
-    const startsProject = commonsPlusStartsProject(activeSection, groupKind, reader.effective);
+    const startsProject = activeSection === 'groups' && (groupKind === 'projects' || groupKind === 'enterprises');
     const openProposeProject = async () => {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) {

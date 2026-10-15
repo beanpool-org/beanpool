@@ -25,7 +25,6 @@ import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { ONE_PASS_MAX_MEASURED } from '@beanpool/engine';
 import { getPosts, isNodeMember } from '../state-engine.js';
-import { getProfileSwitches } from '../config/node-profile.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { viewerTier } from './viewer.js';
 import { isPoint, readMemberArea } from '../engine/member-area.js';
@@ -141,10 +140,6 @@ export function landingCardFor(actor: string | undefined, asked: Point | null, g
         const posts = getPosts({
             types: ['offer', 'need', 'poll', 'event'], viewerPubkey: guest ? undefined : actor, limit: NEARBY_POSTS_CAP + 1,
             near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM }, coarse: guest || undefined,
-            // Where anyone can join in a minute a member's count is measured from each other post's neighbourhood too
-            // (engine PostFilter.neighbourhood): a member there costs a minute, so bisecting their exact count is a
-            // stranger's way to a spot (DESIGN-global-member-privacy-fable.md §4).
-            neighbourhood: !guest && getProfileSwitches().openMembership ? true : undefined,
             // A city's box can hold any number of posts: measured at most this many (DoS review F5), as the listing.
             measureAtMost: ONE_PASS_MAX_MEASURED,
         });

@@ -47,7 +47,6 @@ import {
 } from '../engine/member-signature.js';
 import { offerablePageHost, offerStanding, type AddressSighting, type HeldBackReason } from '../engine/address-offers.js';
 import { logger } from '../logger.js';
-import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 /** More than any real community needs; a bound on what one Settings session can write. */
@@ -154,10 +153,8 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         ctx.body = appAddressesReport(ctx.query.host);
     });
 
-    // Members' apps that sign for a removed address are refused after it, a quiet lock-out: an owner's (design case 18, B6).
     router.post('/api/local/admin/app-addresses/remove', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove an app address')) return;
         const address = normalizeAddress(bodyOf(ctx).address);
         // The list as this node reads it (and Settings shows it), not as stored: a take-over envelope stores the
         // primary's list as it came, and an address accepted as this community's must be one Settings can remove.

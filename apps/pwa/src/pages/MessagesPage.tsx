@@ -14,7 +14,6 @@ import {
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry,
 } from '../lib/api';
-import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
@@ -27,7 +26,7 @@ import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITI
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
-    groupLineShown, groupRemovedRuns, type GroupLineShown, type OpenedGroupThread,
+    groupLineShown, type GroupLineShown, type OpenedGroupThread,
 } from '../lib/group-chat-lines';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -42,8 +41,7 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
-import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
-import { systemLineColours } from '../lib/systemLineColours';
+import { listPhotoUrl } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -190,8 +188,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
-    // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
-    const [loadedDmId, setLoadedDmId] = useState<string | null>(null);
     const [groupChat, setGroupChat] = useState<GroupChatView | null>(null);
     // In-thread search (design §10): over the loaded thread only, in this browser.
     const [chatSearch, setChatSearch] = useState<string | null>(null);
@@ -294,12 +290,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             .map((m) => ({ m, text: groupShown?.get(m.id)?.text ?? (groupLocked ? '' : decryptMessage(m)) }));
         return searchShownLines(texts, q).map((x) => x.m);
     }, [shownMessages, chatSearch, groupShown, groupLocked]);
-    // Two or more removed lines in a row, of one kind, drawn as one line (Marty, 15 Oct): display only, every id kept.
-    // Not while searching: hits in a row there need not be in a row in the chat, and each hit is drawn as itself.
-    const removedRuns = useMemo(
-        () => groupRemovedRuns(chatSearch?.trim() ? [] : shownMessages, groupShown),
-        [shownMessages, chatSearch, groupShown],
-    );
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
     // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
@@ -333,6 +323,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
              (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
+    const completedTransactionsByPostId = useMemo(() => {
+        const map = new Map<string, MarketplaceTransaction>();
+        for (const tx of userTransactions) {
+            // marketplace_transactions has no UNIQUE on post_id, so an offer bought by
+            // several people has several completed rows. The .find() this replaces took
+            // the first match, and a Map keeps the last — so writing unconditionally
+            // would quietly change which deal the review prompt is about. First wins,
+            // as before; picking the right one per conversation is a separate bug.
+            if (tx.postId && tx.status === 'completed' && !map.has(tx.postId)) {
+                map.set(tx.postId, tx);
+            }
+        }
+        return map;
+    }, [userTransactions]);
 
     // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
     // to one line when the draft is cleared on send.
@@ -665,7 +669,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return true;
             });
             setMessages(uniqueMessages);
-            setLoadedDmId(convId);
             if (identity?.publicKey) {
                 markConversationReadApi(identity.publicKey, convId).catch(() => {});
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
@@ -1187,9 +1190,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || 'Event chat';
         if (conv.type === 'group_thread') return conv.name || 'Group';
-        // An enterprise's thread is named after the enterprise (engine/enterprise-thread.ts), as the phone's header is: never
-        // after whichever member's key comes first, which made its header button read "Ben, enterprise page".
-        if ((conv.type as string) === 'enterprise_thread') return conv.name || t('Enterprise chat');
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
         const otherPubkey = conv.participants.find(p => p !== identity.publicKey) || '';
@@ -1338,7 +1338,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <p style={note} aria-live="polite" data-testid="new-message-search-status">
                     {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
                         : pickerSearch.state === 'searching' ? 'Searching…'
-                        : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? "Couldn't search just now. Check your connection and try again.")
+                        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
                         : pickerSearch.found && found.length === 0 ? 'Nobody here has a name starting with that.'
                         : null}
                 </p>
@@ -1489,7 +1489,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <button
                             onClick={() => {
                                 setActiveConv(null);
@@ -1498,56 +1498,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 setDraft('');
                                 loadConversations();
                             }}
-                            aria-label={t('Back to messages')}
-                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
                         >
                             ←
                         </button>
-                        {(() => {
-                            // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an
-                            // enterprise's thread its enterprise page (its id is the enterprise's key, as the phone's
-                            // treasury-detail). A group chat's id IS the group's id (lib/api.ts Conversation), compared
-                            // in lower case (lib/group-hold groupIdKey). A DM header stays as it was.
-                            const ownerTab = activeConv.type === 'group_thread' ? 'group'
-                                : (activeConv.type as string) === 'enterprise_thread' ? 'enterprise' : null;
-                            const ownerId = ownerTab === 'group' ? groupIdKey(activeConv.id) : activeConv.id;
-                            const title = getConversationTitle(activeConv);
-                            const body = (
-                                <>
-                                    {renderAvatar(activeConv.peerAvatar, title, 32)}
-                                    <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
-                                        <span style={{ fontWeight: 600, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {title}
-                                        </span>
-                                        {activeConv.type === 'group_thread' && (
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                {tn(activeConv.participants.length, '{n} member', '{n} members')}
-                                            </span>
-                                        )}
-                                    </span>
-                                </>
-                            );
-                            if (!ownerTab || !onNavigate) return <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>{body}</div>;
-                            return (
-                                <button
-                                    type="button"
-                                    data-testid="chat-owner-header"
-                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
-                                    onClick={() => onNavigate(ownerTab, ownerId)}
-                                    // The visible name first, so speech input matches it (review of #1979, X2).
-                                    aria-label={ownerTab === 'group'
-                                        ? t('{name}, group info', { name: title })
-                                        : t('{name}, enterprise page', { name: title })}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
-                                        minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',
-                                        color: 'inherit', font: 'inherit', cursor: 'pointer', borderRadius: '0.5rem',
-                                    }}
-                                >
-                                    {body}
-                                </button>
-                            );
-                        })()}
+                        {renderAvatar(activeConv.peerAvatar, getConversationTitle(activeConv), 32)}
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                                {getConversationTitle(activeConv)}
+                            </div>
+                            {activeConv.type === 'group_thread' && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    {activeConv.participants.length} members
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {activeConv.type === 'group_thread' && (
                         <button
@@ -1556,7 +1521,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             onClick={() => setChatSearch((q) => (q === null ? '' : null))}
                             aria-label={chatSearch === null ? 'Search this chat' : 'Close search'}
                             aria-expanded={chatSearch !== null}
-                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
+                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px' }}
                         >
                             {chatSearch === null ? '🔍' : '✕'}
                         </button>
@@ -1627,14 +1592,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {/* Sticky Marketplace Header */}
                 {activeConv.postId && (
                     <div style={{
-                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
+                        background: '#ecfdf5', padding: '0.75rem 1rem', borderBottom: '1px solid #d1fae5',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
                     }} onClick={() => {}}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontSize: '1.2rem' }}>🛍️</span>
                             <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>View Attached Listing</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>Marketplace Transaction Thread</div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#065f46' }}>View Attached Listing</div>
+                                <div style={{ fontSize: '0.75rem', color: '#059669' }}>Marketplace Transaction Thread</div>
                             </div>
                         </div>
                     </div>
@@ -1658,7 +1623,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             gap: '0.75rem'
                         }}>
                             <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? '#10b981' : '#f59e0b' }}>
                                     🔒 Trust Hold: {pendingTx.credits} Beans
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -1671,8 +1636,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
                                         disabled={actionLoading}
                                         style={{
-                                            background: 'var(--bp-commit-fill)',
-                                            color: 'var(--bp-commit-on)',
+                                            background: '#10b981',
+                                            color: '#fff',
                                             border: 'none',
                                             borderRadius: '8px',
                                             padding: '0.4rem 0.75rem',
@@ -1707,32 +1672,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     );
                 })()}
 
-                {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
-                    isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
-                {(() => {
-                    if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
-                    const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
-                    if (!unrated) return null;
-                    const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
-                        try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
-                    })());
-                    if (lineShown) return null;
-                    return (
-                        <div data-testid="chat-rate-banner" style={{
-                            borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
-                        }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
-                            <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
-                                background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
-                                padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
-                            }}>
-                                <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
-                            </button>
-                        </div>
-                    );
-                })()}
-
                 {/* Messages */}
                 <div style={{
                     flex: 1, overflowY: 'auto', padding: '1rem',
@@ -1755,15 +1694,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         // From before this member's membership (design §3): never drawn.
                         if (groupLine?.hidden) return null;
                         if (groupLine?.nodeLine && groupLine.text !== null) {
-                            // A tombstone, in the app's own words: no name, no actions. A run of them is drawn once, by its
-                            // first line, which keeps every line's anchor so a reply's "show the message" still lands.
-                            const run = removedRuns.get(msg.id);
-                            if (run === null) return null;
+                            // A tombstone, in the app's own words: no name, no actions.
                             return (
-                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" data-removed-count={run ? run.ids.length : undefined} style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
-                                    {run?.ids.slice(1).map((id) => <span key={id} id={`msg-${id}`} />)}
-                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted-on-hover)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
-                                        {run ? removedRunText(run.kind, run.ids.length) : groupLine.text}
+                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
+                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
+                                        {groupLine.text}
                                     </div>
                                 </div>
                             );
@@ -1818,17 +1753,33 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         
                         if (isSystem) {
                             let icon = 'ℹ️';
-                            // A trade's lines take the colour library's deal roles; others the page's grey.
-                            const { background: bgColor, color: textColor, border: borderColor } = systemLineColours(msg.systemType);
+                            let bgColor = 'var(--bg-hover)';
+                            let textColor = 'var(--text-secondary)';
+                            let borderColor = 'transparent';
                             let metaObj: any;
                             
                             try {
                                 if (msg.metadata) metaObj = JSON.parse(msg.metadata);
                             } catch {}
 
-                            if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
-                            if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
-                            if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
+                            if (msg.systemType === 'ESCROW_FUNDED') {
+                                icon = '🔐';
+                                bgColor = 'rgba(209, 250, 229, 0.4)';
+                                textColor = '#065f46';
+                                borderColor = '#10b981';
+                            }
+                            if (msg.systemType === 'ESCROW_RELEASED') {
+                                icon = '✅';
+                                bgColor = 'rgba(167, 243, 208, 0.4)';
+                                textColor = '#065f46';
+                                borderColor = '#059669';
+                            }
+                            if (msg.systemType === 'ESCROW_CANCELLED') {
+                                icon = '🚫';
+                                bgColor = 'rgba(254, 226, 226, 0.4)';
+                                textColor = '#991b1b';
+                                borderColor = '#ef4444';
+                            }
 
                             return (
                                 <div key={msg.id} style={{
@@ -1849,7 +1800,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <button
                                             onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                             style={{
-                                                marginTop: '0.5rem', background: 'var(--bg-card)', color: 'var(--bp-ink-success)', border: '1px solid var(--bp-ink-success)',
+                                                marginTop: '0.5rem', background: '#fff', color: '#10b981', border: '1px solid #10b981',
                                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -1858,28 +1809,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     )}
                                     
                                     {msg.systemType === 'ESCROW_RELEASED' && metaObj?.postId && (() => {
-                                        // This line's own trade (lib/trade-review), never the first completed row on its post.
-                                        const relatedTx = tradeOfReleaseLine(userTransactions, metaObj, msg.timestamp);
-                                        const hasRated = relatedTx ? iRated(relatedTx, identity.publicKey) : false;
-                                        // A trade this page doesn't hold (older than the node's page of trades) can't be rated from
-                                        // here: the line opens its post, as the funded line's View Post does (review #1980 N2).
-                                        const canRate = !!relatedTx && !hasRated;
+                                        const relatedTx = completedTransactionsByPostId.get(metaObj.postId);
+                                        const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
+                                        const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
                                         return (
                                             <button
-                                                onClick={() => canRate
-                                                    ? onNavigate?.('marketplace-review', relatedTx!.id)
-                                                    : onNavigate?.('marketplace', metaObj.postId)}
+                                                onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
-                                                    marginTop: '0.5rem', background: 'var(--bg-card)',
-                                                    color: canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)',
-                                                    border: `1px solid ${canRate ? 'var(--bp-ink-warning)' : 'var(--bp-ink-success)'}`,
+                                                    marginTop: '0.5rem', background: '#fff',
+                                                    color: hasRated ? '#10b981' : '#f59e0b',
+                                                    border: `1px solid ${hasRated ? '#10b981' : '#f59e0b'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                             >
-                                                {!relatedTx
-                                                    ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
-                                                    : hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
+                                                {hasRated ? '✓ Rating Submitted' : '⭐ Rate your partner'}
                                             </button>
                                         );
                                     })()}
@@ -2561,11 +2505,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
                         .map(conv => {
-                            // A finished trade with this DM's other person that I haven't rated (lib/trade-review) — the
-                            // same answer the chat's rate button gives, as the phone's chat list does. Not the thread's
-                            // last line: a trade chat is one DM per pair, its post_id NULL, so that read "unrated" forever.
-                            const convPeer = conv.type === 'dm' ? (conv.participants?.find(p => p !== identity.publicKey) || '') : '';
-                            const needsReview = !!convPeer && !!unratedTradeWith(userTransactions, identity.publicKey, convPeer);
+                            const relatedTx = conv.postId ? completedTransactionsByPostId.get(conv.postId) : undefined;
+                            const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
+                            const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
+                            const needsReview = conv.lastMsgType === 'system' && conv.lastSysType === 'ESCROW_RELEASED' && !hasRated;
                             
                             return (
                             <div

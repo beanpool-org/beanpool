@@ -380,7 +380,7 @@ async function wipeAtLast(identity: BeanPoolIdentity): Promise<DeleteOutcome> {
     try {
         // This community dropped the key's push tokens with the account; the other communities it registered with are
         // asked there.
-        await signOutOfThisPhone(identity, { purge: true });
+        await signOutOfThisPhone(identity);
     } catch (e) {
         return { kind: 'wipe-unfinished', reason: reasonOf(e) };
     }

@@ -594,7 +594,7 @@ async function main(): Promise<void> {
         await section('9', async () => {
             await B.send('resetLimits');
             const approve = (p: { pairingId: string }, body: Record<string, unknown>) =>
-                call(B, 'POST', `/api/local/admin/auth/pairing/${p.pairingId}/approve`, {}, JSON.stringify({ memberPubkey: owner.pk, confirm: true, ...body }));
+                call(B, 'POST', `/api/local/admin/auth/pairing/${p.pairingId}/approve`, {}, JSON.stringify({ memberPubkey: owner.pk, ...body }));
             let p = await B.send('pairing');
             const madeAtA = await approve(p, { signature: await core.signSettingsSignin('https://a.test', 'approve', p.pairingId, p.shortCode, owner.sign), signedFor: 'a.test' });
             assert(madeAtA.status === 421 && madeAtA.body?.code === 'wrong_community', `a pairing approved for a.test (A showed B's code) → 421 at B (${show(madeAtA)})`);

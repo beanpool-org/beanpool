@@ -56,12 +56,6 @@ matches the file.
 | `danger.fill` | `#b91c1c` | `#b91c1c` |
 | `danger.hover` | `#991b1b` | `#991b1b` |
 | `danger.on` | `#ffffff` | `#ffffff` |
-| `info.fill` | `#2563eb` | `#2563eb` |
-| `info.hover` | `#1d4ed8` | `#1d4ed8` |
-| `info.on` | `#ffffff` | `#ffffff` |
-| `neutral.fill` | `#555555` | `#555555` |
-| `neutral.hover` | `#333333` | `#333333` |
-| `neutral.on` | `#ffffff` | `#ffffff` |
 | `gold.fill` | `#f59e0b` | `#f59e0b` |
 | `gold.hover` | `#fbbf24` | `#fbbf24` |
 | `gold.on` | `#1d231d` | `#1d231d` |
@@ -79,22 +73,11 @@ matches the file.
 | `chip.accent.tint` | `#eef1ee` | `#384038` |
 | `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` |
 | `chip.accent.border` | `#dce3dc` | `#434e43` |
-| `deal.held.tint` | `#d1fae5` | `#022c22` |
-| `deal.held.ink` | `#065f46` | `#6ee7b7` |
-| `deal.held.border` | `#10b981` | `#34d399` |
-| `deal.released.tint` | `#a7f3d0` | `#064e3b` |
-| `deal.released.ink` | `#065f46` | `#6ee7b7` |
-| `deal.released.border` | `#059669` | `#10b981` |
-| `deal.cancelled.tint` | `#fee2e2` | `#450a0a` |
-| `deal.cancelled.ink` | `#991b1b` | `#fca5a5` |
-| `deal.cancelled.border` | `#ef4444` | `#f87171` |
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
 | `ink.warning` | `#92400e` | `#fbbf24` |
 | `ink.accent` | `#5b6b5b` | `#c0ccc0` |
-| `ink.terra` | `#a3472e` | `#e5967f` |
-| `ink.info` | `#2563eb` | `#93c5fd` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
 
@@ -104,20 +87,15 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `commit` | Accept, Send Beans, Message, Join; the phone's `brand.fill` | 5.48 / 7.68 | same |
 | `action` | the phone's floating + button, the Need toggle | 5.18 / 7.31 | same |
 | `danger` | Submit report, Remove, Delete, alert badges | 6.47 / 8.31 | same |
-| `info` | the web's onboarding blue: Next, Join, Open, Install, Save my area | 5.17 / hover 6.70 | same |
-| `neutral` | grey: a web button while it sends; the install banner's How? while open (hover) | 7.46 / hover 12.63 | same |
 | `gold` | Vouch, Approve, rating (charcoal words) | 7.46 / 9.60 | same |
 | `accent` | chat's send and unread badge, progress, selected toggles | 4.86 / hover 6.66 | 9.65 / 12.26 (charcoal words) |
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
-| `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |
 | `ink.warning` | gold as words: Action Required, tips, nudges | 6.17 | 6.42 |
 | `ink.accent` | the sage accent as words and icons | 4.94 | 6.45 |
-| `ink.terra` | terracotta as words: the manager's links, labels, hovered titles | 5.22 | 4.60 |
-| `ink.info` | the onboarding blue as words, outlines, rings, progress (web only, judged on the web's grounds: `WEB_ONLY_INKS`) | 4.71 | 5.95 |
 
 ## Not covered (they keep their own hex)
 
@@ -140,9 +118,8 @@ five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and cat
   `brandCssVariableMap('light')` / `('dark')` under `:root` / `:root.dark` with `addBase` (the same blocks
   `brandCssVariables()` writes), so no stylesheet is generated or committed. Buttons with words use a fill role
   (`bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`); badges, chips and the tinted buttons that look like
-  them use a chip role (`bg-bp-chip-warn-tint text-bp-chip-warn-ink`; terracotta chips are `chip.need`). Terracotta words and icons are `text-bp-ink-terra`;
-  status dots, meters, rings and deep tints keep the two shades the config defines (`terra-500`, `terra-600`), never
-  another: Tailwind drops an undefined shade without a warning. `src/brand-roles-sources.test.ts` fails on a raw terracotta, emerald, red,
+  them use a chip role (`bg-bp-chip-warn-tint text-bp-chip-warn-ink`; terracotta chips are `chip.need`). Status dots
+  and meters keep their Tailwind shades. `src/brand-roles-sources.test.ts` fails on a raw terracotta, emerald, red,
   rose, amber, orange, green or yellow shade on a control, and on a fill whose words are not its own `on`.
 - **Web app** (next): generate a stylesheet from the same file and use the variables.
 

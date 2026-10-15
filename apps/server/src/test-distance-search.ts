@@ -47,7 +47,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { localFetch } from './keepalive-test-fetch.js';
-import { setMemberPhoto, exactPlacesFor, neighbourhoodOf } from '@beanpool/engine';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -547,29 +547,13 @@ async function main(): Promise<void> {
     // Global's default (a point, no sort, no radius) is searched in widening circles (engine posts.ts). Through the
     // route, each reader's pages are the pages a brute-force haversine over everything that reader may see gives: the
     // hidden post only for its author, the group post only for the group, the removed post for nobody, the posts with
-    // no place last. The global node is one where anyone can join (`openMembership`), so a member's read measures
-    // every post but their own from its NEIGHBOURHOOD (core neighbourhoodOf, about 1.1 km across; engine
-    // PostFilter.neighbourhood, #1965): the brute force does too, with distanceKm in whole km for those, and the posts of
-    // one neighbourhood tie, most recently updated first. Ordered by the exact place, the order inside a neighbourhood
-    // would place each post better than its pin does (memory broadcast-reach-oracle). None of these readers keeps an
-    // enterprise or is Going to an event, so their own posts are the only places they have exactly (checked below).
+    // no place last.
     console.log('\n── 12. global, a point and no sort: each page is the brute-force page ──');
     process.env.NODE_PROFILE = 'global';
     const by = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-    /** How far a post is from the point for this reader: from the place for their own, else from its neighbourhood. */
-    const kmFor = (viewer: Id, lat: number, lng: number, p: { authorPublicKey: string; lat?: number | null; lng?: number | null }) => {
-        if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return null;
-        if (p.authorPublicKey === viewer.pk) return haversine(lat, lng, p.lat, p.lng);
-        const cell = neighbourhoodOf(p.lat, p.lng);
-        return haversine(lat, lng, cell.lat, cell.lng);
-    };
-    /** distanceKm as the route gives it: to 0.1 km from the place, in whole km from a neighbourhood. */
-    const shownKm = (r: { d: number | null; own: boolean }) => r.d === null ? null : r.own ? Math.round(r.d * 10) / 10 : Math.round(r.d);
     const nearestFor = (viewer: Id, lat: number, lng: number) => getPosts({ viewerPubkey: viewer.pk, excludeEvents: true })
-        .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, own: p.authorPublicKey === viewer.pk, d: kmFor(viewer, lat, lng, p) }))
+        .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversine(lat, lng, p.lat, p.lng) : null }))
         .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
-    const exactBeyondOwn = [bea, cal, eve].filter(v => { const e = exactPlacesFor(db, v.pk); return e.authors.join() !== v.pk || e.posts.length > 0; });
-    assert(exactBeyondOwn.length === 0, `setup: Bea, Cal and Eve have exactly their own posts' places, and no other (${exactBeyondOwn.map(v => v.name).join(', ') || 'as said'})`);
     const readers: Array<[Id, Array<[string, number, number]>]> = [
         [bea, [['Mullumbimby', hLat, hLng], ['Fiji', -17.7, 178], ['near the North Pole', 88, 45], ['near the South Pole', -89.5, 0]]],
         [cal, [['Mullumbimby', hLat, hLng], ['on the antimeridian', -12, 180]]],
@@ -588,7 +572,7 @@ async function main(): Promise<void> {
                 const got = await list(viewer, `lat=${lat}&lng=${lng}&limit=7&offset=${offset}`);
                 const want = ref.slice(offset, offset + 7);
                 compared++;
-                if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(shownKm))) wrong.push(offset);
+                if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10))) wrong.push(offset);
             }
             assert(ref.length > 84 && wrong.length === 0,
                 `${viewer.name} at ${where}: ${compared} pages of 7, each the brute-force page, the ${ref.length - located} post(s) with no place last (${wrong.length ? `wrong at offsets ${wrong.join(', ')}` : 'none wrong'})`);
@@ -608,8 +592,7 @@ async function main(): Promise<void> {
     // brute-force pages of what that reader may see, on both paths, deep into the list (1,100 gardens lie within 600 m of
     // Mullumbimby): 'bikes' is 1,060 posts to Bea, and 1,120 to Eve (her 60 hidden by reports) and to Cal (his club's 60);
     // 'garden' is 1,200 to everyone; 40 events are still to come. And each read takes the path its kind of filter says,
-    // with the fields the route really sets. A member's read here measures from the neighbourhood as in 12 (kmFor), so
-    // the 1,100 gardens near Mullumbimby share a handful of neighbourhoods and page by recency inside each.
+    // with the fields the route really sets.
     console.log('\n── 13. global, a point and a filter: circles or one pass, and each page is the brute-force page ──');
     process.env.NODE_PROFILE = 'global';
     const DEEP = 1000;
@@ -645,7 +628,7 @@ async function main(): Promise<void> {
     bumpPostsVersion();
     const filteredFor = (viewer: Id, filter: { type?: string; types?: string[]; category?: string }, lat: number, lng: number) =>
         getPosts({ viewerPubkey: viewer.pk, excludeEvents: filter.type !== 'event' && !filter.types?.includes('event'), ...filter })
-            .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, own: p.authorPublicKey === viewer.pk, d: kmFor(viewer, lat, lng, p) }))
+            .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversine(lat, lng, p.lat, p.lng) : null }))
             .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
     const filters: Array<[string, { type?: string; types?: string[]; category?: string }, string]> = [
         ['offers', { type: 'offer' }, 'type=offer'],
@@ -672,21 +655,20 @@ async function main(): Promise<void> {
                     if (offset < 0) continue;
                     const got = await list(viewer, `lat=${lat}&lng=${lng}&${query}&limit=${limit}&offset=${offset}`);
                     const want = ref.slice(offset, offset + limit);
-                    if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(shownKm))) wrong.push(`${limit}@${offset}`);
+                    if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10))) wrong.push(`${limit}@${offset}`);
                 }
                 assert(wrong.length === 0,
                     `${viewer.name} at ${where}, ${name} (${ref.length}): every page is the brute-force page (${wrong.length ? `wrong: ${wrong.join(', ')}` : 'none wrong'})`);
             }
         }
     }
-    // The reads each route request made: circles (a box joined to the listing), and passes over the listing, which measure
-    // with haversine_km, or with neighbourhood_km for a member's read here (engine posts.ts postRowsNear).
+    // The reads each route request made: circles (a box joined to the listing), and passes over the listing.
     const paths = async (viewer: Id, query: string) => {
         const prepare = db.prepare.bind(db);
         const steps: string[] = [];
         (db as any).prepare = (sql: string) => {
             const st = prepare(sql);
-            const kind = /CROSS JOIN posts p/.test(sql) ? 'circle' : /haversine_km|neighbourhood_km/.test(sql) ? 'pass' : undefined;
+            const kind = /CROSS JOIN posts p/.test(sql) ? 'circle' : /haversine_km/.test(sql) ? 'pass' : undefined;
             if (kind) {
                 const all = st.all.bind(st);
                 (st as any).all = (...params: unknown[]) => { steps.push(kind); return all(...params); };

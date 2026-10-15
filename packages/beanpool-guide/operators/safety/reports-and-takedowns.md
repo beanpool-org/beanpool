@@ -15,8 +15,6 @@ In the app, members report a post, an event, a Pulse item, a project or an enter
 
 The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators).
 
-Owners and admins are told when a report comes in: the kind and how many, never who or what. A child-safety report is told at once. See Updates, health checks and disk space. Moderators are not told: they see reports when they open Reports.
-
 ## Where reports land
 
 Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below).

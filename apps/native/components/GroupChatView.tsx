@@ -53,14 +53,13 @@ import {
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
-import { refusedSendNotice } from '../utils/dm-lock';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
     ENTERPRISE_CHAT_NOTICE,
     type YourChatMute,
 } from '../utils/your-groups';
 import {
-    buildChatListItems, chatActionErrorMessage, chatListIndexOf, hasAnyAction, isTombstone, messageActions,
+    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
     pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
@@ -367,9 +366,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         () => (searchOpen && searchQuery.trim() ? searchShownLines(messages.filter(m => m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed), searchQuery) : messages),
         [messages, searchOpen, searchQuery],
     );
-    // Removed lines in a row drawn as one, but not in search results: hits in a row there need not be in a row in the chat.
-    const searching = searchOpen && !!searchQuery.trim();
-    const listItems = useMemo(() => buildChatListItems(shownMessages, new Date(), searching ? undefined : kind), [shownMessages, searching, kind]);
+    const listItems = useMemo(() => buildChatListItems(shownMessages), [shownMessages]);
     const showAuthorById = useMemo(() => {
         const map = new Map<string, boolean>();
         messages.forEach((m, i) => map.set(m.id, showsAuthorName(m, messages[i - 1], { kind, myPubkey: me })));
@@ -433,10 +430,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             // The bubble stays, marked "not delivered" — tapping it offers Resend or Discard, as in a DM.
             setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'failed' } : x)));
             setSecuring(null);
-            // A key reason (an older key than this phone holds, a key not here yet) is said above the box, and so is a
-            // refusal's one true line: the pins or the DM list can't be read, and where to reset them (#1938 confirmation 7, finding 3).
-            const why = e instanceof GroupChatKeyError ? e.message : refusedSendNotice(e);
-            if (why) setKeyNotice(why);
+            // A key reason (an older key than this phone holds, a key not here yet) is said above the box.
+            if (e instanceof GroupChatKeyError) setKeyNotice(e.message);
             console.warn('[GroupChat] send failed:', e?.message || e);
         }
     }, [kind, id, load, locked, rawMessages, rosterRows]);
@@ -672,8 +667,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 author: parentAuthor,
                 text: parentText,
                 onPress: () => {
-                    // A removed line drawn inside a run of them: the run's row (chatListIndexOf).
-                    const index = chatListIndexOf(listItems, item.metadata.replyToId);
+                    const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
                     if (index > -1) {
                         try { listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 }); }
                         catch (e) { console.warn(e); }

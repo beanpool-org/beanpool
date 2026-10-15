@@ -24,7 +24,7 @@
     </nav>
     <section class="legal-content glass-panel">
         <h1>Privacy Policy</h1>
-        <p><strong style="color: #94a3b8;">Last Updated: October 15, 2026</strong></p>
+        <p><strong style="color: #94a3b8;">Last Updated: October 4, 2026</strong></p>
         
         <h2>1. Your Keys, and What Recovery Costs You</h2>
         <p>BeanPool is a peer-to-peer (P2P) localized protocol natively bypassing centralized tracking silos. Our systems are mathematically verifiable, functioning without a central corporate authority tracking your personal data. Your Ed25519 keypair is generated on your own device. It leaves the device only as a locked copy, if you use a sign-in for recovery (below), or when you copy your account to another device of yours. Where it is kept differs by app, and we would rather say so than round it up: on the <strong>phone apps</strong> it is held in the operating system's secure storage (Android Keystore / iOS Keychain, via SecureStore), and you can put an optional biometric lock on the app itself; in the <strong>browser app</strong> it is held in that browser's own local database on your device, which is not hardware-protected. Your 12-word recovery phrase is the only recovery path that depends on nobody.</p>
@@ -58,10 +58,10 @@
         </ul>
 
         <h2>7. Events, RSVPs &amp; Event Chat</h2>
-        <p>Members can post an event to their own community or to one of its groups. The community node stores what you type into the event &mdash; its title and description, the start and end times, the place name, the map pin you drop, any photos, and the private note for people going &mdash; together with each RSVP: which member marked themselves Going or Interested, and when, and, where the host lets people in, when and by which host they were let in. The host sees who has replied. Members marked Going can see each other in the event chat (where the host lets people in, the ones the host has let in). Everyone else sees only the counts.</p>
+        <p>Members can post an event to their own community or to one of its groups. The community node stores what you type into the event &mdash; its title and description, the start and end times, the place name, the map pin you drop, any photos, and the private note for people going &mdash; together with each RSVP: which member marked themselves Going or Interested, and when. The host sees who has replied. Members marked Going can see each other in the event chat. Everyone else sees only the counts.</p>
         <ul>
-            <li><strong>The private note:</strong> shown only to the host and to members marked Going whom the host has let in, where the host chose that (the global community's default); otherwise to everyone marked Going. It is never part of a public listing.</li>
-            <li><strong>The event chat:</strong> open to the host and everyone marked Going (where the host lets people in, the ones the host has let in). It is <strong>not end-to-end encrypted</strong>, unlike a direct message: the node stores these messages in a form it can read, so that the host can remove a message and so that membership can follow the RSVPs. Your node's operator can read an event chat. The app says so on the chat screen. If the host stops letting people in, everyone marked Going can read the chat so far, and a line in the chat says the host opened it.</li>
+            <li><strong>The private note:</strong> shown only to the host and to members marked Going. It is never part of a public listing.</li>
+            <li><strong>The event chat:</strong> open to the host and everyone marked Going. It is <strong>not end-to-end encrypted</strong>, unlike a direct message: the node stores these messages in a form it can read, so that the host can remove a message and so that membership can follow the RSVPs. Your node's operator can read an event chat. The app says so on the chat screen.</li>
             <li><strong>It stays in your community:</strong> an event is always local. The event, its RSVPs, the private note and the chat are never sent to another community's node &mdash; they stay on your own node and in that node's own backup.</li>
             <li><strong>Thirty days after the event ends:</strong> the RSVPs, the chat messages and the private note are deleted from the node. The event post itself remains, inactive, as other finished posts do.</li>
         </ul>
@@ -105,7 +105,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities. Time zone boundaries © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).</p>
+                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities.</p>
             </div>
         </div>
     </footer>

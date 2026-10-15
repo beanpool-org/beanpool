@@ -44,7 +44,7 @@ import https from 'node:https';
 import { db } from './db/db.js';
 import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getBalance, adminPruneUser, reconcileLedgerFromDb } from './state-engine.js';
 import { grantNodeRole, nodeRoleOf as getMemberNodeRole } from './engine/node-roles.js';
-import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
+import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -87,13 +87,12 @@ function makeKeypair(): Keypair {
 }
 const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(text, 'utf8')]);
 
-/** `phone`: the phone's Manage hand-off, just now (an owner's fresh proof, admin-auth.ts requireFreshProof). */
-function keySession(kp: Keypair, phone = false): string {
+function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
     const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
     const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
-    const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+    const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);
     return ex.sessionId!;
 }
@@ -458,12 +457,7 @@ async function runTests() {
         freshMinute();
         const ivy = join('IvyAdmin');
         grantNodeRole(ivy.pubKeyHex, 'admin', owner.pubKeyHex);
-        // An admin's code moves their role: the owner makes and binds it from the phone, Manage pressed just now (#1984
-        // confirmation R1); a computer's session is sent to the phone.
-        const fromComputer = await issue(ownerSession, ivy.pubKeyHex);
-        assert(fromComputer.status === 403 && fromComputer.json?.code === 'phone_required' && !db.prepare("SELECT 1 FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending'").get(ivy.pubKeyHex),
-            `the owner's computer is sent to the phone for an admin's code, and none is made (got ${fromComputer.status})`);
-        const made = await issue(keySession(owner, true), ivy.pubKeyHex);
+        const made = await issue(ownerSession, ivy.pubKeyHex);
         const code = made.json.code as string;
         assert(made.status === 200 && !!code, 'the owner makes a code for an admin');
         const phone = makeKeypair();
@@ -483,7 +477,7 @@ async function runTests() {
         assert(memberPoll.status === 200 && memberPoll.json.state === 'gone', `a member's signature on the status answers gone (got ${memberPoll.json.state})`);
         const ownerView = await status(ownerSession, ivy.pubKeyHex);
         assert(ownerView.json.proposals.length === 2, 'the owner sees both phones');
-        const byOwner = await complete(keySession(owner, true), ivy.pubKeyHex, code, phone.pubKeyHex);
+        const byOwner = await complete(ownerSession, ivy.pubKeyHex, code, phone.pubKeyHex);
         assert(byOwner.status === 200 && getMemberNodeRole(phone.pubKeyHex) === 'admin', `the owner binds it, and the admin role moves (got ${byOwner.status})`);
         // A code on the operator's own key would end the session that could confirm it: refused, and nothing changes.
         const own = await issue(adminSession, admin.pubKeyHex);
@@ -642,8 +636,7 @@ async function runTests() {
         freshMinute();
         const olly = join('OllyOwnerTwo');
         grantNodeRole(olly.pubKeyHex, 'owner', owner.pubKeyHex);
-        // An owner's code is made from the phone, Manage pressed just now (#1984 confirmation R1).
-        const oc = (await issue(keySession(owner, true), olly.pubKeyHex)).json.code as string;
+        const oc = (await issue(ownerSession, olly.pubKeyHex)).json.code as string;
         const op = makeKeypair();
         const oa = await ask(op, oc);
         const refused = await bindByNumber(adminSession, olly.pubKeyHex, oc, oa.json.match);

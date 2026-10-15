@@ -40,7 +40,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getMember, submitReport } from './state-engine.js';
 import { grantNodeRole } from './engine/node-roles.js';
-import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
+import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 
@@ -72,13 +72,12 @@ function makeKeypair() {
 type Keypair = ReturnType<typeof makeKeypair>;
 
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
-/** `phone`: the phone's Manage hand-off, just now (an owner's fresh proof, admin-auth.ts requireFreshProof). */
-function keySession(kp: Keypair, phone = false): string {
+function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
     const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
     const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
-    const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+    const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);
     return ex.sessionId!;
 }
@@ -177,12 +176,7 @@ async function runTests() {
         const bobSession = keySession(bob);
         assert(signsIn(ada), 'B: Ada (an admin) signs in before any code');
 
-        // An admin's code moves their role, so the owner makes it from the phone with Manage pressed just now (#1984
-        // confirmation R1); a computer's session is sent to the phone. Cancelling gives back: the computer still does that.
-        const fromComputer = await issue(ownerSession, ada.pubKeyHex);
-        assert(fromComputer.status === 403 && fromComputer.json.code === 'phone_required' && heldReason(ada.pubKeyHex) === undefined && signsIn(ada),
-            `B: the owner's computer is sent to the phone for an admin's code, and none is made (${fromComputer.status})`);
-        const made = await issue(keySession(owner, true), ada.pubKeyHex);
+        const made = await issue(ownerSession, ada.pubKeyHex);
         assert(made.status === 200 && !signsIn(ada), `B: the owner makes a code for Ada; she can’t sign in while it waits (${made.status})`);
 
         const nobody = await cancel(null, ada.pubKeyHex);

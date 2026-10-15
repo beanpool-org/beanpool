@@ -13,8 +13,6 @@ import ts from 'typescript';
 
 const SRC = path.resolve(__dirname);
 const BLUE = '#2563eb';
-/** The same blue from the colour library (packages/beanpool-core brand-colours.ts `info`). */
-const BLUE_ROLE = 'var(--bp-info-fill)';
 
 function files(dir: string): string[] {
     return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -34,7 +32,7 @@ export function pageInkOnBlue(text: string, file = 'x.tsx'): number[] {
         if (ts.isObjectLiteralExpression(node)) {
             const bg = prop(node, ['background', 'backgroundColor']);
             const color = prop(node, ['color']);
-            if (bg && color && (bg.initializer.getText(source).toLowerCase().includes(BLUE) || bg.initializer.getText(source).includes(BLUE_ROLE))
+            if (bg && color && bg.initializer.getText(source).toLowerCase().includes(BLUE)
                 && ts.isStringLiteralLike(color.initializer) && color.initializer.text === 'var(--text-primary)') {
                 lines.push(source.getLineAndCharacterOfPosition(color.getStart(source)).line + 1);
             }
@@ -57,8 +55,6 @@ describe('words on the blue fill are the white ink', () => {
     it('catches what it is for', () => {
         expect(pageInkOnBlue(`const s = { background: loading ? '#555' : '#2563eb', color: 'var(--text-primary)' };`)).toEqual([1]);
         expect(pageInkOnBlue(`const s = { background: '#2563eb', color: 'var(--bp-commit-on)' };`)).toEqual([]);
-        expect(pageInkOnBlue(`const s = { background: busy ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)', color: 'var(--text-primary)' };`)).toEqual([1]);
-        expect(pageInkOnBlue(`const s = { background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' };`)).toEqual([]);
         // The pale disabled fill keeps the page's ink: only the blue branch takes the white.
         expect(pageInkOnBlue(`const s = { background: off ? 'var(--border-primary)' : '#2563eb', color: off ? 'var(--text-primary)' : 'var(--bp-commit-on)' };`)).toEqual([]);
         expect(pageInkOnBlue(`const s = { background: 'var(--bg-secondary)', color: 'var(--text-primary)' };`)).toEqual([]);

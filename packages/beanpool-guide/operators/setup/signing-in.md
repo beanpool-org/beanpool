@@ -9,13 +9,14 @@ There are two ways into Settings: the app's Manage button, and a computer you si
 
 ## Before the community has an owner
 
-On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone, or in BeanPool open **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup.
+On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then on your phone open BeanPool and choose **Claim a community**, or scan the QR code on the page. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup.
 
 ## Servers that still have a password
 
-A new server has no admin password, so this section is only for a server set up before the claim code that still has one, or one that got a password from a community it took over or restored.
+A new server has no admin password, so this section is only for a server set up before the claim code that still has one.
 
-An owner can retire it for good (Access and security, **Retire the admin password**); after that the sign-in page shows no password field, every password is refused with "This community's admin password was retired", and you sign in with your phone as below.
+
+Only servers that still have one. An owner can retire it for good (Access and security, **Retire the admin password**); after that the sign-in page shows no password field, every password is refused with "This community's admin password was retired", and you sign in with your phone as below. A server set up with a claim code may have one too, until an owner retires it.
 
 Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Tools that send the password with every request are refused too until then: give them an automation token instead (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.
 

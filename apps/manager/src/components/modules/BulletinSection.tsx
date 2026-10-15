@@ -331,7 +331,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
 
                     {loadingChannels ? (
                         <div className="p-8 text-center text-xs text-nature-400 flex items-center justify-center gap-2">
-                            <span className="animate-spin text-bp-ink-terra">⏳</span>
+                            <span className="animate-spin text-terra-400">⏳</span>
                             <span>Loading channels...</span>
                         </div>
                     ) : (Array.isArray(channels) ? channels : []).length === 0 ? (

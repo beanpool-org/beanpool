@@ -13,7 +13,7 @@ import {
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
     canOperateTreasury,
-    closePoll, votePoll, rsvpEvent, letInEvent,
+    closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
 } from '../state-engine.js';
@@ -32,13 +32,12 @@ import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
-import { createEventFromBody, eventTimeAnswer } from './event-post.js';
-import type { EventTimeOut } from '../engine/posts.js';
-import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
+import { createEventFromBody } from './event-post.js';
+import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
-import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST } from '../engine/posts.js';
+import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
@@ -47,7 +46,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -380,7 +379,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
     if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
-        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined)) {
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
         return;
@@ -460,23 +459,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
         : undefined;
     const wantsEvents = type === 'event' || !!types?.includes('event');
     const excludeEvents = !id && !ids && !wantsEvents;
-    // `online=1`: online events only, wherever they are (DESIGN-event-times §9). They have no place, so a read within a
-    // radius never meets them; an app reading by radius asks for them beside it. Only with events asked for.
-    const eventOnline = wantsEvents && ctx.query.online === '1' ? true : undefined;
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
     // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
-    // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
-    // each listing's place reaches them to its neighbourhood (about 1.1 km across both ways) inside the query, distance and order
-    // too, all but their own and the events they may read in full (engine PostFilter.neighbourhood, exactPlacesFor;
-    // DESIGN-global-member-privacy-fable.md §4). Which places are exact for them is in the ETag: a host letting them in,
-    // or a keeper's binding, changes it without changing any listing. Elsewhere every member's read is as before.
-    const neighbourhood = !!reader && !guestView && switches.openMembership;
-    const exactPart = neighbourhood
-        ? `:nbhd-${crypto.createHash('sha256').update(JSON.stringify(exactPlacesFor(db, reader!))).digest('hex').slice(0, 16)}`
-        : '';
 
     // A member's set, worked out before the ETag, which describes it: any listing of it changing, coming in or leaving
     // changes the tag, and nothing outside it does, so a change 300 km away no longer ends this member's 304. A delta
@@ -489,7 +476,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         const { radiusKm: setKm, max } = nearbyListingsLimits();
         nearbySet = getNearbySet(db, viewerPubkey!, {
             area: area ? { lat: area.lat, lng: area.lng } : null, radiusKm: setKm, max, newestWithoutArea: NEARBY_NEWEST_WITHOUT_AREA,
-            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED, neighbourhood: neighbourhood || undefined,
+            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
         });
         // Or from before its members' face URLs last changed (engine/avatar-keys.ts), as the member directory answers such a
         // delta whole: a phone that keeps no card for its listings' authors has each face from the row (DESIGN-global-
@@ -504,7 +491,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
         // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
         const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue(), ...(exactPart ? [exactPart] : [])].join('\n');
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue()].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
@@ -512,7 +499,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
     const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${exactPart}`;
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -571,8 +558,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // no author's trust profile, photo or trade count per post.
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
-        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
-        neighbourhood: neighbourhood || undefined,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
@@ -700,9 +686,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
         const underDailyPosts = () => assertMayPostToday(authorPublicKey);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
-        const timeOut: EventTimeOut = {};
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
@@ -727,7 +712,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Synchronize Daily Pulse marketplace gate (< 2 threshold)
         syncPulseMarketplaceGate();
 
-        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
+        ctx.body = { success: true, post };
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
@@ -822,14 +807,13 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
-        const timeOut: EventTimeOut = {};
-        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
+        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };
             return;
         }
-        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
+        ctx.body = { success: true, post };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
@@ -998,39 +982,6 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
     }
 });
 
-// Let in: body `{ memberPublicKey } | { everyone: true }`, `letIn` (default true; false takes it back). The host only, on
-// an event whose host lets people in (DESIGN-global-member-privacy-fable.md §2.2, §2.4). Answers the post as the host
-// sees it, `eventRsvps[].letInAt` included. 404 for an event the caller can't see, 403 not the host, 410 ended, 409
-// cancelled, 400 "They haven't tapped Going".
-router.post('/api/marketplace/posts/:id/let-in', async (ctx) => {
-    const actor = ctx.state?.actor as string | undefined;
-    if (!actor) {
-        ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
-        return;
-    }
-    // The answer names the people Going: the visitors' view answers first, as on every route that hands its caller a person.
-    if (!membersOnlyHere(ctx)) return;
-    const body = (ctx as any).requestBody || {};
-    if (body.letIn !== undefined && typeof body.letIn !== 'boolean') {
-        ctx.status = 400;
-        ctx.body = { error: 'letIn must be true or false' };
-        return;
-    }
-    try {
-        ctx.body = letInEvent(ctx.params.id, actor,
-            { memberPublicKey: body.memberPublicKey, everyone: body.everyone === true }, body.letIn !== false);
-    } catch (e: any) {
-        const msg = memberErrorText(e, 'Could not let them in');
-        ctx.status = msg === 'Event not found' ? 404
-            : msg === LET_IN_ONLY_HOST || msg.includes('suspended') || msg === NOT_A_MEMBER_ERROR ? 403
-            : msg === 'This event has ended' ? 410
-            : msg === 'This event has been cancelled' ? 409
-            : 400;
-        ctx.body = { error: msg };
-    }
-});
-
 // --------------------- Event chat (docs/events-on-the-map.md §2.2, slice 4) ---------------------
 //
 // The chat's id IS the event's id. Every call is signed: the host and everyone marked Going may read and
@@ -1044,7 +995,6 @@ function eventChatStatus(msg: string): number {
     if (msg.includes('Event not found')) return 404;
     if (msg.includes('no longer available')) return 410;
     if (msg === EVENT_CHAT_HIDDEN) return 409;
-    if (msg === EVENT_CHAT_WAITING) return 403;
     if (msg.includes('Only the host and people going') || msg.includes('Only the host can remove')) return 403;
     if (msg === NOT_A_MEMBER_ERROR) return 403;
     if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended')
@@ -1052,11 +1002,6 @@ function eventChatStatus(msg: string): number {
         || msg.includes('Device key has been invalidated') || msg.includes('Member not found')) return 403;
     if (msg.includes('Message not found')) return 404;
     return 400;
-}
-
-/** A refusal's body: waiting for the host carries `code: 'waiting_for_host'`, so an app never reads it as "not going". */
-function eventChatRefusalBody(msg: string): { error: string; code?: string } {
-    return msg === EVENT_CHAT_WAITING ? { error: msg, code: EVENT_CHAT_WAITING_CODE } : { error: msg };
 }
 
 router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
@@ -1074,7 +1019,7 @@ router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
     } catch (e: any) {
         const msg = memberErrorText(e, 'Could not open the event chat');
         ctx.status = eventChatStatus(msg);
-        ctx.body = eventChatRefusalBody(msg);
+        ctx.body = { error: msg };
     }
 });
 
@@ -1121,7 +1066,7 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
             return;
         }
         ctx.status = eventChatStatus(msg);
-        ctx.body = eventChatRefusalBody(msg);
+        ctx.body = { error: msg };
     }
 });
 

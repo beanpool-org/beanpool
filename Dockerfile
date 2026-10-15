@@ -47,8 +47,8 @@ ARG APP_VERSION=""
 ENV APP_VERSION=${APP_VERSION}
 # Force PWA rebuild 2026-07-28-v3 (responsive sidebar layout)
 RUN cd apps/pwa && pnpm run build
-# apps/server/static/ holds only the legacy settings page (settings.html, settings.js), which is gone (design case 18, D9;
-# #1984 review N1): nothing from it goes into public/, so a node serves neither file. Settings is the manager, built next.
+# PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/
+COPY apps/server/static/* /app/apps/server/public/
 RUN cd apps/manager && pnpm run build
 # Force server rebuild 2026-07-28-v2
 RUN cd apps/server && pnpm run build

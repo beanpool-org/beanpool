@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitest/config';
-import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
@@ -24,39 +23,11 @@ const resolvedVersion =
     resolvePkgVersion(path.resolve(__dirname, 'package.json')) ||
     '0.0.0';
 
-/**
- * Core's words.ts imports every language's date words through words-dates.ts, which the phone and the server want. The
- * web app wants one language at a time: this puts an empty table (src/lib/words-dates-none.ts) in words-dates.ts's
- * place for core's words module only, and lib/language.ts adds each language's own module as that language loads
- * (#1941 review N-f). e2e/words-chunks-check.mjs proves it on the build output.
- */
-function wordsDatesPerLanguage(): Plugin {
-    const none = path.resolve(__dirname, 'src/lib/words-dates-none.ts');
-    return {
-        name: 'beanpool-words-dates-per-language',
-        enforce: 'pre',
-        resolveId(source, importer) {
-            if (source === './words-dates.js' && importer && /beanpool-core[\\/](?:dist|src)[\\/]words\.(?:js|ts)$/.test(importer)) return none;
-            return null;
-        },
-    };
-}
-
-/**
- * One chunk per language, `words-<lang>`: this app's words/<lang>.json, core's words/<lang>.json and core's
- * words-dates/<lang>.js, fetched together when that language is chosen and never otherwise (lib/language.ts).
- */
-function wordsChunk(id: string): string | undefined {
-    const m = /(?:apps[\\/]pwa[\\/]words|beanpool-core[\\/]words|beanpool-core[\\/](?:dist|src)[\\/]words-dates)[\\/]([A-Za-z]{2,3}(?:-[A-Za-z]{4})?)\.(?:json|js|ts)$/.exec(id);
-    return m ? `words-${m[1]}` : undefined;
-}
-
 export default defineConfig({
     define: {
         __APP_VERSION__: JSON.stringify(resolvedVersion),
     },
     plugins: [
-        wordsDatesPerLanguage(),
         react(),
         VitePWA({
             registerType: 'autoUpdate',
@@ -106,7 +77,6 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: false,
-        rollupOptions: { output: { manualChunks: wordsChunk } },
     },
     test: {
         globals: true,

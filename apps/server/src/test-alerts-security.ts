@@ -116,7 +116,7 @@ async function main(): Promise<void> {
     const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { getAdminQueue } = await import('./engine/admin-queue.js');
     const { burnClaimFromShell, claimLogAdmit, resetClaimBrake } = await import('./claim-code.js');
@@ -160,15 +160,12 @@ async function main(): Promise<void> {
         [moderator, 'ExponentPushToken[mo-moderator]'], [member, 'ExponentPushToken[zed-member]'], [helper, 'ExponentPushToken[hal-helper]']]) {
         putPushTokenRow(pk, token, 'android');
     }
-    const session = (pk: string, role: 'owner' | 'admin' | 'moderator', phone = false) => {
-        const ex = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+    const session = (pk: string, role: 'owner' | 'admin' | 'moderator') => {
+        const ex = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken);
         if (!ex.ok || ex.role !== role) throw new Error(`setup: no ${role} session: ${ex.error}`);
         return ex.sessionId!;
     };
     const asOwner = { 'x-admin-session': session(owner, 'owner') };
-    // Granting or taking admin, and retiring the password, ask the owner's fresh proof (design case 18, C4, C8): Manage on
-    // the phone, pressed just now, a new hand-off session for each.
-    const asOwnerPhone = () => ({ 'x-admin-session': session(owner, 'owner', true) });
 
     await initTls();
     const port = await https.startHttpsServer(0);
@@ -202,7 +199,7 @@ async function main(): Promise<void> {
     // ── 1. Grant admin through the real route ───────────────────────────────────────────────────────────────────────
     const p0 = ownerPushes().length;
     const h0 = topicHits().length;
-    const grant = await call('POST', '/api/local/admin/node-roles', { pubkey: helper, role: 'admin' }, asOwnerPhone());
+    const grant = await call('POST', '/api/local/admin/node-roles', { pubkey: helper, role: 'admin' }, asOwner);
     assert(grant.status === 200, `1. the owner grants admin through the real route (${grant.status} ${grant.json?.error ?? ''})`);
     await settle(300);
     const pushed = ownerPushes().slice(p0);
@@ -220,11 +217,11 @@ async function main(): Promise<void> {
     assert(st1.json?.recent?.length === 1 && st1.json.recent[0].key === 'sec.role' && st1.json.acknowledge === true,
         `1. the Alerts card lists it under the last day's security events, to acknowledge (${st1.json?.recent?.length})`);
 
-    const again = await call('POST', '/api/local/admin/node-roles', { pubkey: helper, role: 'admin' }, asOwnerPhone());
+    const again = await call('POST', '/api/local/admin/node-roles', { pubkey: helper, role: 'admin' }, asOwner);
     await settle(300);
     assert(again.status === 200 && ownerPushes().length === p0 + 1 && topicHits().length === h0 + 1, '1. a grant that changes nothing tells nothing');
 
-    const revoke = await call('DELETE', `/api/local/admin/node-roles/${helper}/admin`, {}, asOwnerPhone());
+    const revoke = await call('DELETE', `/api/local/admin/node-roles/${helper}/admin`, {}, asOwner);
     await settle(300);
     assert(revoke.status === 200, `1. the owner takes it away through the real route (${revoke.status})`);
     assert(ownerPushes().length === p0 + 2 && topicHits().length === h0 + 2, `1. one more push and one more line (${ownerPushes().length - p0}, ${topicHits().length - h0})`);
@@ -388,7 +385,7 @@ async function main(): Promise<void> {
 
     // The admin password retired, through the real route (last: it ends password sign-in).
     issueBreakGlassCode(owner, 'a test', 'app');
-    const retire = await call('POST', '/api/local/admin/auth/retire-password', { acceptOneOwner: true }, asOwnerPhone());
+    const retire = await call('POST', '/api/local/admin/auth/retire-password', { acceptOneOwner: true }, asOwner);
     await settle();
     assert(retire.status === 200 && /The admin password was retired for good, by an owner/.test(lastHistory('sec.keys')?.detail ?? ''),
         `2. the admin password retired through the real route (${retire.status} ${retire.json?.error ?? ''})`);
@@ -679,8 +676,7 @@ async function main(): Promise<void> {
     assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. one told on the main server is in both (${banner('owner')})`);
 
     // ── 5e. A re-key moves an owner's or admin's role to a new key (the deciding review of #1807, finding 5) ─────────
-    // Through the real routes: an owner issues the code and binds the new key, from the phone with Manage pressed just now
-    // (an owner's or admin's re-key asks the fresh proof, #1984 confirmation R1). Told to the owners as sec.keys, under the
+    // Through the real routes: an owner issues the code and binds the new key. Told to the owners as sec.keys, under the
     // owner's own bound (the re-key drops the old key's push tokens: the owners are pushed); a moderator's re-key tells
     // nothing; nobody named.
     alerts.resetAlertsForTests();
@@ -697,9 +693,9 @@ async function main(): Promise<void> {
     putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
     await settle(300);
     const rekey = async (pk: string) => {
-        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwnerPhone());
+        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwner);
         const fresh = pubkey();
-        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwnerPhone());
+        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwner);
         await settle(300);
         return { issued: issued.status, done: done.status, error: done.json?.error ?? issued.json?.error, fresh };
     };

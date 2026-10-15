@@ -39,7 +39,7 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
-import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
+import { lookUpMembers, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
 
@@ -133,9 +133,9 @@ export default function PeopleScreen() {
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
         addBtnTextFriended: { color: colors.brand.primary },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
+        msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },
-        removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
+        removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
         removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.fg, fontWeight: '700' },
 
         // Community virtualized row (fixed height)
@@ -686,16 +686,10 @@ export default function PeopleScreen() {
     // Listen for blocklist changes to auto-refresh member list
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => {
-            // On demand the list is the node's answer: a block takes the person out of it here, never asks the node
-            // again (each search and "near you" counts against the member's day where anyone can join).
-            if (membersOnDemand) {
-                getBlockedUsers().then(blocked => setMembers(prev => prev.filter(m => !blocked.includes(m.public_key)))).catch(() => {});
-                return;
-            }
             loadMembers(searchQuery, sortOption);
         });
         return () => sub.remove();
-    }, [searchQuery, sortOption, membersOnDemand]);
+    }, [searchQuery, sortOption]);
 
     // Debounced Search Effect
     useEffect(() => {
@@ -745,8 +739,7 @@ export default function PeopleScreen() {
             if (membersOnDemand) {
                 if (await loadMembersOnDemand(query)) return;
                 // One letter asked the node nothing: the cards held, but not "Connect" to a phone that is online.
-                const spent = lookUpSpentKind();
-                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : spent === 'near' ? 'spentNear' : spent === 'search' ? 'spent' : 'held');
+                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : 'held');
             } else {
                 setListNote(null);
             }

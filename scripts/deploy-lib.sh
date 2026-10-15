@@ -140,7 +140,7 @@ first_password_notice() {
   echo "🔑 This is a new install: it has no admin password, and ignores ADMIN_PASSWORD. Its first owner claims it with a one-time claim code."
   echo "   Once it is up, run:"
   echo "     ssh -t $target 'cd $(dirname "$data_dir") && sudo docker compose exec beanpool-node beanpool claim'"
-  echo "   It sets the community's address, then shows the claim code and a QR code: scan it with your phone, or open BeanPool, then Find a community, type the address and tap Claim ‹name›."
+  echo "   It sets the community's address, then shows the claim code and a QR code: open BeanPool on your phone, then Claim a community."
 }
 
 # COPIES OF A NODE'S DATA. deploy.sh parks data/ at <home>/beanpool-data-backup-<DIR> and .env at

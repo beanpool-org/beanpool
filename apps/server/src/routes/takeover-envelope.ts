@@ -28,7 +28,7 @@
 import Router from '@koa/router';
 import { RecoveryCodeError } from '@beanpool/core';
 import { getLocalConfig, verifyReplicationToken } from '../config/local-config.js';
-import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
+import { requireAdminRole } from '../admin-auth.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { recordReplicationAccess } from '../state-engine.js';
@@ -91,9 +91,6 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx as any))) return;
         if (!requireAdminRole(ctx, ['owner'], OWNER_ONLY)) return;
         const replace = (ctx as any).requestBody?.replace === true;
-        // Replacing the code a backup is sealed to, then downloading one, would hand a stolen session the whole community:
-        // the fresh proof (design case 18, A11). The FIRST code stays plain, so setting up has no hard gate (amendment 1).
-        if (replace && !(await requireFreshProof(ctx, (ctx as any).requestBody?.code, 'replace the recovery code'))) return;
         try {
             const made = await makeRecoveryCode({ replace });
             ctx.set('Cache-Control', 'no-store');

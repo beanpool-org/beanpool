@@ -41,12 +41,6 @@
  * 10. Reconstructs seed = combineHubAndWhole(A, B) and derives the Ed25519 keypair.
  * 11. Validates and saves the restored identity and node anchor URL.
  *
- * Before any of it, the community's public lookup is asked which accounts it has by that name ({@link lookupRestorable}),
- * and the key rebuilt in 10 must be one of them, as the web's restore checks (apps/pwa/src/lib/web-restore.ts
- * `openRestoredAccount`; launch-readiness review 3, 2026-10-15). It is saved under the name the lookup lists for that
- * key. Another key (a wrong or stale copy, or a community answering for someone else), no account by that name, or no
- * answer from the lookup: nothing on the phone changes.
- *
  * A single-blob fragment (the only kind the app deposits now) skips 9 and 10: it holds the whole seed, and
  * the 12 words too when the sign-in was connected from a phone that had them. The words are saved only if
  * they make the restored key; a copy without them restores the key alone, as it always did.
@@ -149,82 +143,6 @@ async function fetchReleasedFragments(anchorUrl: string, collectionId: string, e
     }
 }
 
-/** One account a community's public lookup lists for a name: the name it has there, its key, and whether a sign-in can bring it back. */
-export interface RestorableAccount {
-    publicKey: string;
-    callsign: string;
-    canRecoverBySso: boolean;
-    /** Sent by a community from before 2026-10-01; null from every one since. */
-    joinedAt?: string | null;
-    avatarUrl?: string | null;
-}
-
-const HEX_KEY = /^[0-9a-f]{64}$/;
-
-/**
- * The accounts at `anchorUrl` whose name is `name`, case forgiven (a community matches the whole name only), as its
- * public lookup lists them (`GET /api/recovery/lookup/:callsign`, rate limited, unsigned: the phone holds no key for
- * the account yet). Keys lower-cased, as the web's restore reads them (apps/pwa/src/lib/web-restore.ts
- * `lookupRestorable`). Null when the community could not be asked or did not answer with a list. Never throws.
- *
- * The one way the phone asks it: welcome.tsx's "Is this you?" as the member types, and {@link recoverAccountWithSso}'s
- * check of the key it rebuilt.
- */
-export async function lookupRestorable(anchorUrl: string, name: string): Promise<RestorableAccount[] | null> {
-    const typed = name.trim();
-    if (!typed) return [];
-    try {
-        const res = await fetch(`${anchorUrl}/api/recovery/lookup/${encodeURIComponent(typed)}`);
-        if (!res.ok) return null;
-        const all: unknown = await res.json();
-        if (!Array.isArray(all)) return null;
-        return all.flatMap((c): RestorableAccount[] => {
-            const publicKey = typeof c?.publicKey === 'string' ? c.publicKey.trim().toLowerCase() : '';
-            const callsign = typeof c?.callsign === 'string' ? c.callsign : '';
-            if (!HEX_KEY.test(publicKey) || !callsign.trim()) return [];
-            return [{
-                publicKey,
-                callsign,
-                canRecoverBySso: c.canRecoverBySso === true,
-                joinedAt: typeof c.joinedAt === 'string' ? c.joinedAt : null,
-                avatarUrl: typeof c.avatarUrl === 'string' ? c.avatarUrl : null,
-            }];
-        });
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Why {@link recoverAccountWithSso} stopped, as data: a code, and the name the member typed. The screen says it in the
- * member's language (community-restore-copy.ts `restoreRefusalText`, welcome.tsx). Never a sentence here: this module
- * turns a sign-in copy into the key and checks its 12 words, so nothing in it reaches the words layer
- * (packages/beanpool-core/src/__tests__/recovery-path-files.test.ts).
- *
- * - `lookup_unreachable`: before it began, the community's lookup couldn't be had. Nothing was released or saved.
- * - `no_restorable_account`: before it began, the community listed no account by that name that a sign-in can bring back.
- * - `two_accounts_one_name`: before it began, two accounts here have this name in different cases (a pair from before
- *   names were folded, kept, never renamed), each with a sign-in copy, and this screen has no list to pick one from. The
- *   community's own answer (409) is English and says "callsign" and "node", so it is never shown.
- * - `not_that_account`: with the copy open, it made another key than the account the community lists. Nothing was saved.
- */
-export type CommunityRestoreRefusal =
-    | { code: 'lookup_unreachable' }
-    | { code: 'no_restorable_account'; name: string }
-    | { code: 'two_accounts_one_name' }
-    | { code: 'not_that_account'; name: string };
-
-/** {@link recoverAccountWithSso} refused, for one of the {@link CommunityRestoreRefusal} reasons. */
-export class CommunityRestoreRefused extends Error {
-    readonly refusal: CommunityRestoreRefusal;
-
-    constructor(refusal: CommunityRestoreRefusal) {
-        super(`Community restore refused: ${refusal.code}`);
-        this.name = 'CommunityRestoreRefused';
-        this.refusal = refusal;
-    }
-}
-
 /** Why {@link recoverAccountWithSso} refused in a build with a vault: never met by a member (the screen doesn't offer it). */
 export const COMMUNITY_RESTORE_NOT_OFFERED = "Getting back in with a sign-in goes through BeanPool's key vault in this version "
     + 'of the app. Your 12 words work any time.';
@@ -244,12 +162,6 @@ export async function recoverAccountWithSso(options: {
      * away). Not after the release: see below. The providers' own sheets have their own cancel.
      */
     signal?: AbortSignal;
-    /**
-     * Runs once the provider has handed back its token, before anything is released. From then on its page may still be
-     * in front of the app (Android's Custom Tab), so a screen that shows a refusal brings the app back first
-     * (welcome.tsx), as the vault's {@link startSsoRestore} does here. Never run when the sign-in itself didn't finish.
-     */
-    onSignedIn?: () => void | Promise<void>;
     /**
      * Asked before this restore writes another account over the one the phone holds ("Replace this phone's
      * account?", restore-account.ts). Called after the account has been rebuilt and before anything is written: the
@@ -277,13 +189,6 @@ export async function recoverAccountWithSso(options: {
         throw new Error('That node address is insecure (http on a public host). Use https:// instead.');
     }
 
-    // 0. The accounts the community has by this name, as the web's restore asks first. The key this restore rebuilds
-    // must be one of them. Without the community's answer, or with no such account, nothing is released or saved.
-    const listed = await lookupRestorable(finalAnchorUrl, rawCallsign);
-    if (!listed) throw new CommunityRestoreRefused({ code: 'lookup_unreachable' });
-    const restorable = listed.filter(a => a.canRecoverBySso);
-    if (!restorable.length) throw new CommunityRestoreRefused({ code: 'no_restorable_account', name: rawCallsign });
-
     // 1. Generate throwaway ephemeral keypair to bind this recovery session
     const ephSeed = Crypto.getRandomBytes(32);
     const ephKey = await seedToKeypair(ephSeed);
@@ -294,17 +199,13 @@ export async function recoverAccountWithSso(options: {
         createdAt: new Date().toISOString(),
     };
 
-    // 2. Open recovery collection. With one account listed, for that account's key (`candidatePublicKey`): the community
-    // opens it even when another account holds the same name in another case (routes/recovery-collect.ts resolveCallsign).
-    // With several, by the name alone, as before: this screen has no list to pick from.
+    // 2. Open recovery collection
     options.onProgress?.({ step: 'opening', message: 'Connecting to node recovery session...' });
     const openRes = await signedPost(finalAnchorUrl, '/api/recovery/collect', {
         callsign: rawCallsign,
-        ...(restorable.length === 1 ? { candidatePublicKey: restorable[0].publicKey } : {}),
     }, ephIdentity);
 
     if (!openRes.ok) {
-        if (openRes.status === 409) throw new CommunityRestoreRefused({ code: 'two_accounts_one_name' });
         const err = await openRes.json().catch(() => ({}));
         throw new Error(err.error || `Could not open recovery session (${openRes.status})`);
     }
@@ -343,7 +244,6 @@ export async function recoverAccountWithSso(options: {
     } else {
         signInResult = await signInWithFacebook(nonce);
     }
-    await options.onSignedIn?.();
     const sub = parseJwtSub(signInResult.idToken);
 
     // The last point a cancel can be honoured: nothing has been released yet, so nothing is. The release cannot be
@@ -466,15 +366,6 @@ export async function recoverAccountWithSso(options: {
 
     const restoredKeypair = await seedToKeypair(restoredSeed);
 
-    // The key must be an account the community listed for this name (step 0), compared case-folded as the web compares
-    // it. Another key (a wrong or stale copy, a community answering for someone else) stops here, before the gate below:
-    // nothing on the phone changes.
-    const account = restorable.find(a => a.publicKey === restoredKeypair.publicKeyHex.toLowerCase());
-    if (!account) {
-        console.log(`[SSO-RECOVERY] ${options.provider}: the copy opened to another key than the account the community lists; nothing saved`);
-        throw new CommunityRestoreRefused({ code: 'not_that_account', name: rawCallsign });
-    }
-
     // The words are kept only if they make the key being saved, compared by public key. openSeedFromSso
     // already checked them against the seed; this checks them against the identity actually written.
     let mnemonic: string[] | undefined;
@@ -489,8 +380,7 @@ export async function recoverAccountWithSso(options: {
     const restoredIdentity: BeanPoolIdentity = {
         publicKey: restoredKeypair.publicKeyHex,
         privateKey: restoredKeypair.privateKeyHex,
-        // The name the community lists for this key, not the case it was typed in.
-        callsign: account.callsign,
+        callsign: rawCallsign,
         createdAt: new Date().toISOString(),
         ...(mnemonic ? { mnemonic } : {}),
     };

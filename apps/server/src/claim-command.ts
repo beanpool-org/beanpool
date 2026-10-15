@@ -34,8 +34,7 @@ export const CLAIM_USAGE = `Usage: beanpool claim [--name <label> | --address ht
        beanpool claim --key <64-hex public key> --callsign <name>
 
 The last step of an install: gives this community its address, then shows the one-time claim code and a QR code.
-On your phone, scan the QR code, or open BeanPool → Find a community, type this server's address in the search box and
-tap "Claim ‹name›": that phone becomes the owner.
+Open BeanPool on your phone → Claim a community, or scan the QR code: that phone becomes the owner.
 
   --name <label>      ask for <label>.beanpool.org (3–32 letters, digits or -). Asked for on a terminal.
   --address <url>     your own address (https://…); no beanpool.org name is asked for.
@@ -269,24 +268,6 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     io.out(await QRCode.toString(link, { type: 'terminal', small: true }));
     if (!address) io.out('The QR code carries no address: the phone will ask for this server\'s address.');
     else io.out(`Address: ${address}`);
-    io.out('');
-    for (const line of phoneSteps(address)) io.out(line);
+    io.out('Open BeanPool on your phone → Claim a community, or scan this. The code works once.');
     return 0;
-}
-
-/**
- * The steps on the member's phone, named as the phone shows them: the QR opens apps/native/app/claim-community.tsx
- * (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks for the address); by hand it is
- * Find a community (app/find-community.tsx, reached from Home's "Communities near you"), whose search box offers
- * "Claim ‹name›" for a typed address with no owner. test-claim-cli checks each label is still in those files.
- */
-function phoneSteps(address: string | null): string[] {
-    const finish = 'fill in "Your name here" and tap "Claim and become owner".';
-    return [
-        address
-            ? `On your phone, scan this QR code. BeanPool opens "Claim ‹name›" with the code filled in: ${finish}`
-            : `On your phone, scan this QR code. BeanPool opens "Claim a community" with the code filled in: type this server's address under "Server address", tap "Check this server", ${finish}`,
-        `Or open BeanPool → Find a community ("Communities near you" on Home), type ${address ?? "this server's address"} in the search box, tap "Claim ‹name›", type the code under "Claim code", ${finish}`,
-        'That phone becomes the owner. The code works once.',
-    ];
 }

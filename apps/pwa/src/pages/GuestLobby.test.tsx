@@ -159,10 +159,9 @@ type Call = { path: string; headers: Record<string, string>; method: string; bod
 
 /**
  * The node, answering a visitor as the global node does. `members`: keys the membership probe says are members;
- * `peerNodes`: the peer communities `/api/node/info` names. `gone`: listings taken down since Home was read — no post
- * read returns them, by id or in the list, while Home's cards still name them.
+ * `peerNodes`: the peer communities `/api/node/info` names.
  */
-function stubNode(info: unknown, members: Map<string, string> = new Map(), peerNodes: unknown[] = [], gone: string[] = []) {
+function stubNode(info: unknown, members: Map<string, string> = new Map(), peerNodes: unknown[] = []) {
     const calls: Call[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const url = String(input);
@@ -174,8 +173,7 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         if (path === '/api/community/health') return json(200, { status: 'ok', version: '1.2.26' });
         if (path === '/api/marketplace/posts') {
             const id = new URLSearchParams(url.split('?')[1] ?? '').get('id');
-            const shown = GUEST_POSTS.filter(p => !gone.includes(p.id));
-            return json(200, id ? shown.filter(p => p.id === id) : shown);
+            return json(200, id ? GUEST_POSTS.filter(p => p.id === id) : GUEST_POSTS);
         }
         if (path === '/api/node/config') return json(200, { serviceRadius: null });
         if (path === '/api/node/info') return json(200, { peerNodes });
@@ -649,34 +647,6 @@ describe('a listing shared by link, read in the lobby, opens again once the visi
         expect(await screen.findByRole('button', { name: /Back to Market/ })).toBeInTheDocument();
         expect(screen.getAllByText('Sourdough loaves').length).toBeGreaterThan(0);
         expect(sessionStorage.length).toBe(0);
-    });
-
-    // Two ways a listing that has gone reaches the Market (#1980, Marty 15 Oct: "View Post just takes me to the marketplace
-    // screen"). A link the app arrived on lands quietly, as decided above; a member's own tap is told why nothing opened.
-    async function memberHere(member: BeanPoolIdentity) {
-        await savePendingJoin({ identity: member, provider: 'google', nonce: null, startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: true, sentAt: Date.now() });
-        render(<App />);
-        await screen.findByTestId('mobile-bottom-nav');
-    }
-
-    it('a shared link to a listing that has gone, for a member already here: the Market, quietly', async () => {
-        const member = await generateIdentity('Rowan');
-        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]), [], ['p-need']);
-        await memberHere(member);
-        leaveAndComeBack();
-        window.history.replaceState(null, '', '/app?post=p-need');
-        render(<App />);
-        await memberListWithNothingOpen();
-    });
-
-    it("a member's own tap on a listing that has gone (Home's Market card): the Market says so in one sentence", async () => {
-        const member = await generateIdentity('Rowan');
-        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]), [], ['p-need']);
-        await memberHere(member);
-        fireEvent.click(await screen.findByText('Borrow a ladder'));
-        expect(await screen.findByText('That listing can no longer be opened. It may have been taken down.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Back to Market/ })).toBeNull();
-        expect(screen.getAllByText('Sourdough loaves').length).toBeGreaterThan(0);
     });
 });
 

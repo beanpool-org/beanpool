@@ -48,16 +48,11 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: () => ({ theme: 'light', colors }), useStyles: (f: any) => f({ theme: 'light', colors }) };
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'me'.repeat(32) } }) }));
-const node = vi.hoisted(() => ({ fail: false, leftOut: undefined as undefined | 'private' | 'unread', sent: [] as unknown[][] }));
+const node = vi.hoisted(() => ({ fail: false, sent: [] as unknown[][] }));
 vi.mock('../db', () => ({
     fetchEventDetail: async () => null,
     rsvpEvent: vi.fn(), deletePost: vi.fn(),
-    // As utils/db's reportAbuse answers: `wordsLeftOut` only when the reason carried words and the guard left them out.
-    reportAbuse: async (...a: unknown[]) => {
-        if (node.fail) throw new Error('Could not reach the node.');
-        node.sent.push(a);
-        return node.leftOut && String(a[2]).includes(': ') ? { success: true, wordsLeftOut: node.leftOut } : { success: true };
-    },
+    reportAbuse: async (...a: unknown[]) => { if (node.fail) throw new Error('Could not reach the node.'); node.sent.push(a); return { success: true }; },
 }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
@@ -66,10 +61,9 @@ vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }))
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
 
 import { EventDetail } from '../../components/EventDetail';
-import { REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
 
 let root: Root; let host: HTMLDivElement;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); alerts.length = 0; node.fail = false; node.leftOut = undefined; node.sent.length = 0; });
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); alerts.length = 0; node.fail = false; node.sent.length = 0; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 const button = (name: string | RegExp) => Array.from(host.querySelectorAll('[role=button]')).find((b) => (typeof name === 'string' ? (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name : name.test(b.textContent ?? ''))) as HTMLElement | undefined;
 const click = async (el: HTMLElement | undefined) => { expect(el).toBeTruthy(); await act(async () => { el!.click(); await new Promise((r) => setTimeout(r, 0)); }); };
@@ -120,45 +114,5 @@ describe('the event screen reports through the shared box (drawn)', () => {
         expect(kav).toBeTruthy();
         expect(kav!.contains(host.querySelector('input[aria-label="Add a few words (optional)"]'))).toBe(true);
         expect(kav!.contains(button('Submit report')!)).toBe(true);
-    });
-
-    // #1938 case 14 (adopted): the "Reported" dialog says the one thanks, and, when the guard left the member's words out,
-    // why ('private': a known DM's id; 'unread': it couldn't tell), with the Child safety pair when that was picked. The
-    // box closes and clears as it does for any accepted report; the title is never "Not sent".
-    const reportWith = async (reason: string, words: string) => {
-        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
-        await click(button('Report event'));
-        await click(button(reason));
-        if (words) await type(words);
-        await click(button('Submit report'));
-        const closed = !host.textContent!.includes('WHY ARE YOU REPORTING IT?');
-        await click(button('Report event'));
-        const input = host.querySelector('input[aria-label="Add a few words (optional)"]') as HTMLInputElement;
-        return { alerts: [...alerts], closed, cleared: input.value === '' && host.querySelectorAll('[aria-selected=true]').length === 0 };
-    };
-    const childBoth = `${REPORT_CHILD_SAFETY_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
-    for (const [leftOut, why] of [['private', REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT], ['unread', REPORT_WORDS_LEFT_OUT_UNREAD_TEXT]] as const) {
-        it(`words typed, left out (${leftOut}): "Reported", the thanks and why; with Child safety, that it still alerts and the emergency sentence`, async () => {
-            node.leftOut = leftOut;
-            const child = await reportWith('Child safety', 'he asked my son for photos');
-            expect(child).toEqual({ alerts: [{ title: 'Reported', msg: `${REPORT_SENT_TEXT} ${why} ${childBoth}` }], closed: true, cleared: true });
-            act(() => root.unmount()); root = createRoot(host); alerts.length = 0;
-            const other = await reportWith('Other', 'loud music after midnight');
-            expect(other).toEqual({ alerts: [{ title: 'Reported', msg: `${REPORT_SENT_TEXT} ${why}` }], closed: true, cleared: true });
-            expect(node.sent.map((a) => a[2])).toEqual(['Child safety: he asked my son for photos', 'Other: loud music after midnight']);
-        });
-
-        it(`no words typed (${leftOut} would apply): only the thanks, Child safety or not`, async () => {
-            node.leftOut = leftOut;
-            expect(await reportWith('Child safety', '')).toEqual({ alerts: [{ title: 'Reported', msg: REPORT_SENT_TEXT }], closed: true, cleared: true });
-            act(() => root.unmount()); root = createRoot(host); alerts.length = 0;
-            expect(await reportWith('Spam or scam', '')).toEqual({ alerts: [{ title: 'Reported', msg: REPORT_SENT_TEXT }], closed: true, cleared: true });
-        });
-    }
-
-    it('words typed and sent: only the thanks, Child safety or not', async () => {
-        expect(await reportWith('Child safety', 'he asked my son for photos')).toEqual({ alerts: [{ title: 'Reported', msg: REPORT_SENT_TEXT }], closed: true, cleared: true });
-        act(() => root.unmount()); root = createRoot(host); alerts.length = 0;
-        expect(await reportWith('Other', 'loud music')).toEqual({ alerts: [{ title: 'Reported', msg: REPORT_SENT_TEXT }], closed: true, cleared: true });
     });
 });

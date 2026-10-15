@@ -292,28 +292,6 @@ shape (`global` and `earth` by hand, no `ssh-global`) it leaves 0005 unrecorded,
 `ssh-global`; and the guard refuses a database never bootstrapped, including one whose empty `d1_migrations` a
 `migrations list` made.
 
-### Hand records, and restoring D1 to an earlier time (standing process)
-
-The registrar refuses a claim that finds a record or `bp-` tunnel at its name it did not make (`outsideRegistrar`):
-the claimant gets 409 "name in use outside the registrar", and the admin is told once a week per name ("Claim refused
-… add a name_policy row (blocked) by migration"). Two rules follow from it:
-
-- **Before making any new record by hand under beanpool.org**, add its label to `name_policy` as `blocked` in a
-  migration first, and look in /admin for a row at that label. A row there is a community's (or a pending claim's)
-  name: pick another label.
-- **After a D1 time-travel restore** (`wrangler d1 time-travel restore`), every row changed since the restore point
-  reverts, but Cloudflare does not. A row created or claimed since is gone while its record and tunnel stay: that
-  community's node keeps running, yet its own claims now read "Claim refused … outside the registrar", and the
-  registrar can't heal or rotate its name. A takeover since goes back to the old holder's row. A release, block or
-  pause since is undone: a released name comes back `live` and the sweep routes it again, and an admin's block is
-  lifted. Take an export before restoring (`wrangler d1 export beanpool-registrar --remote --output
-  <scratch>/before.sql`) and one after (`… --output <scratch>/after.sql`), then diff them:
-  `node scratch/registrar/compare-registrar-dbs.mjs rows <scratch>/before.sql <scratch>/after.sql` (the director's
-  rehearsal script, outside the repo; its "0002" status check doesn't apply here) names every row missing, changed or
-  new. Re-apply every row that differs from the export, admin decisions included. Don't block those names, and don't
-  delete their records: the node is still serving on them. (Deploy below takes a bookmark just before a run that
-  migrates, so only rows changed since that bookmark are at risk.)
-
 ## Signed request scheme (node → registrar)
 
 Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128 hex), and `x-bp-proto` (the
@@ -378,13 +356,6 @@ yourself, from `main`. Once approved, it refuses any branch but `main`, checks t
 3. `wrangler deploy --var GIT_SHA:<the commit>`;
 4. fails unless `https://beanpool.org/api/registrar/health` answers that `commit` and an `accepted_proto` that
    includes every protocol in the node's `PROTOCOLS` (`scripts/deploy-checks.mjs`, polled for up to 3 minutes).
-
-**Before a run that applies a migration** (the dry run lists what is pending), note where a rollback goes back to:
-`npx wrangler deployments list` (the active version id) and `npx wrangler d1 time-travel info beanpool-registrar
---json` (a bookmark and its time). To roll back, the Worker first: `npx wrangler rollback <version id>`. Then, only if
-the data must go back too, `npx wrangler d1 time-travel restore beanpool-registrar --bookmark=<bookmark>`, never
-while the new Worker is live (it would fail on the missing columns and tables). A restore reverts every row changed
-since the bookmark and leaves Cloudflare as it is: follow "Hand records, and restoring D1 to an earlier time" above.
 
 **Who can deploy is GitHub's rule, not the workflow file's.** The deploy token is a secret of the
 `registrar-production` environment and nowhere else. GitHub hands an environment's secrets only to a job that names

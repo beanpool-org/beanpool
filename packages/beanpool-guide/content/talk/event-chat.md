@@ -7,7 +7,7 @@ related: events, messages, pin-locations, reporting
 
 ## Who is in it
 
-Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. Where the host lets people in, it is the people going whom the host has let in: until then the chat says **Chat opens when the host lets you in.** If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it.
+Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it.
 
 ## Opening it
 
@@ -22,7 +22,7 @@ Type in **Message everyone going…** and tap the send button. You can send up t
 
 ## Good to know
 
-- Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.
+- Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.
 - The host can remove any message. Tap it, then **Remove**. It then says "removed by the host".
 - An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.
 - When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away.

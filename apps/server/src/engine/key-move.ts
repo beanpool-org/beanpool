@@ -103,8 +103,6 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // (g) poll_votes
     move('poll_votes', 'voter_pubkey');
     move('event_rsvps', 'member_pubkey');
-    // The host who let a member in (DESIGN-global-member-privacy-fable.md §2.4).
-    move('event_rsvps', 'let_in_by');
 
     // (h) conversations & participants
     move('conversations', 'created_by');

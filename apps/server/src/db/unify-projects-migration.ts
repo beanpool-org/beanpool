@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { foldName, setMemberPhoto } from '@beanpool/engine';
+import { setMemberPhoto } from '@beanpool/engine';
 
 /**
  * Migration: Unify crowdfund projects and Commons proposals into Enterprises.
@@ -28,8 +28,8 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
     const getUniqueCallsign = (title: string, selfPubkey: string): string => {
         const base = (title || 'Project').trim().slice(0, 40) || 'Project';
         const existing = targetDb.prepare(
-            "SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-        ).get(foldName(base), selfPubkey) as any;
+            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+        ).get(base, selfPubkey) as any;
         if (!existing) return base;
         const suffix = selfPubkey.slice(0, 6);
         return `${base.slice(0, 33)}-${suffix}`;

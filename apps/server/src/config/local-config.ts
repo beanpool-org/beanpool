@@ -882,46 +882,21 @@ export function updateThresholds(updates: Partial<Thresholds>): Thresholds {
 }
 
 /**
- * How often a standby asks its main server what changed, in seconds, and how often it re-reads everything, in minutes
- * (0: never routinely). Bounded both ways (#1984 review N2): under 5 s is a busy loop against the main server, and an
- * interval past Node's timer (about 24.8 days) fires at once, so the puller would loop with no wait; long before that
- * the standby has silently stopped copying. The route refuses outside these, and the puller reads a stored value
- * through them.
- */
-export const MIN_BACKUP_PULL_SECONDS = 5;
-export const MAX_BACKUP_PULL_SECONDS = 3600;
-export const MAX_BACKUP_RECONCILE_MINUTES = 1440;
-export const clampBackupPullSeconds = (s: number): number => Math.min(MAX_BACKUP_PULL_SECONDS, Math.max(MIN_BACKUP_PULL_SECONDS, Math.round(s)));
-export const clampBackupReconcileMinutes = (m: number): number => Math.min(MAX_BACKUP_RECONCILE_MINUTES, Math.max(0, Math.round(m)));
-
-/** Why a cadence change is refused, or null: each given value is null (back to .env or the default) or a whole number in bounds. */
-export function backupCadenceRefusal(updates: { pullSeconds?: unknown; reconcileMinutes?: unknown }): string | null {
-    const { pullSeconds: s, reconcileMinutes: m } = updates;
-    if (s !== undefined && s !== null && !(Number.isInteger(s) && (s as number) >= MIN_BACKUP_PULL_SECONDS && (s as number) <= MAX_BACKUP_PULL_SECONDS)) {
-        return `pullSeconds must be a whole number of seconds from ${MIN_BACKUP_PULL_SECONDS} to ${MAX_BACKUP_PULL_SECONDS}, or null for the default`;
-    }
-    if (m !== undefined && m !== null && !(Number.isInteger(m) && (m as number) >= 0 && (m as number) <= MAX_BACKUP_RECONCILE_MINUTES)) {
-        return `reconcileMinutes must be a whole number of minutes from 0 (off) to ${MAX_BACKUP_RECONCILE_MINUTES}, or null for the default`;
-    }
-    return null;
-}
-
-/**
  * Update the backup pull cadence (delta poll seconds and/or full-reconcile minutes).
  * Read live by the backup puller on its next tick, so a change takes effect without a
  * restart. `null` clears an override (falls back to env/default); a number sets it;
- * reconcileMinutes = 0 disables the routine full reconcile. Values are clamped to the
- * bounds above (the route refuses outside them; this is for any other caller).
+ * reconcileMinutes = 0 disables the routine full reconcile. Values are clamped to sane
+ * bounds so an operator can't set a 0-second busy loop or a negative interval.
  */
 export function updateBackupCadence(updates: { pullSeconds?: number | null; reconcileMinutes?: number | null }): { backupPullSeconds: number | null; backupReconcileMinutes: number | null } {
     const config = getLocalConfig();
     if (updates.pullSeconds !== undefined) {
         const val = updates.pullSeconds === null ? null : Math.round(updates.pullSeconds);
-        config.backupPullSeconds = (val !== null && Number.isFinite(val)) ? clampBackupPullSeconds(val) : null;
+        config.backupPullSeconds = (val !== null && Number.isFinite(val)) ? Math.max(5, val) : null;
     }
     if (updates.reconcileMinutes !== undefined) {
         const val = updates.reconcileMinutes === null ? null : Math.round(updates.reconcileMinutes);
-        config.backupReconcileMinutes = (val !== null && Number.isFinite(val)) ? clampBackupReconcileMinutes(val) : null;
+        config.backupReconcileMinutes = (val !== null && Number.isFinite(val)) ? Math.max(0, val) : null;
     }
     saveLocalConfig(config);
     console.log('⚙️ Backup cadence updated:', { backupPullSeconds: config.backupPullSeconds, backupReconcileMinutes: config.backupReconcileMinutes });

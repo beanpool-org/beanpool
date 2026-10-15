@@ -11,8 +11,7 @@ import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
 import { PLACE_AFTER_JOIN, visitorDistanceText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
-import { listPhotoUrl, t } from '@beanpool/core';
-import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
+import { listPhotoUrl } from '@beanpool/core';
 
 function typeLabel(post: MarketplacePost): string {
     return post.type === 'offer' ? 'Offer' : post.type === 'need' ? 'Need' : post.type === 'event' ? 'Event' : 'Poll';
@@ -150,11 +149,8 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                         {post.type === 'event' && (
                             <div data-testid="visitor-detail-when" className="mb-3">
                                 <p className="m-0 text-lg font-black text-violet-800 dark:text-violet-200">{formatEventWhen(post)}</p>
-                                {/* An online event has no place to hold back (the node sends visitors eventOnline): it says so, as its card does. */}
-                                <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                    {post.eventOnline
-                                        ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
-                                        : <><span aria-hidden="true">📍 </span>{PLACE_AFTER_JOIN}</>}
+                                <p className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                                    <span aria-hidden="true">📍 </span>{PLACE_AFTER_JOIN}
                                 </p>
                             </div>
                         )}
@@ -187,13 +183,6 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
             >
                 {joinToSeeLabel(post)}
             </button>
-            {/* A visitor can't report from here (a report is a member's, signed): where they can (rehearsal 14 Oct N3). */}
-            <p data-testid="visitor-report" className="m-0 mt-3 text-sm text-nature-700 dark:text-nature-300 break-words">
-                <span>{t(REPORT_WORDS.visitorLine)}</span>{' '}
-                <a href={VISITOR_REPORT_URL} target="_blank" rel="noopener noreferrer" className="font-semibold underline text-bp-ink-accent">
-                    {t(REPORT_WORDS.visitorLink)}
-                </a>
-            </p>
         </div>
     );
 }

@@ -116,7 +116,6 @@ beforeEach(async () => {
     community = new CommunityKeepingCopies('Sam');
     net.community.handle = (req) => community.handle(req);
     member = await draftIdentity('Sam');
-    community.publicKey = member.publicKey;
 });
 
 afterEach(() => {
@@ -159,7 +158,6 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         // The vault was asked for a ticket and the restore, and nothing else; the community for its restore, as main does.
         expect(paths(VAULT)).toEqual(['POST /v1/ticket', 'POST /v1/restore']);
         expect(paths(COMMUNITY)).toEqual([
-            'GET /api/recovery/lookup/Sam',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/sso-nonce', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/fragments',
         ]);
         // The community's sign-in carried the community's own nonce, never the vault ticket's.

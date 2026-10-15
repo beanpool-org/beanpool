@@ -171,7 +171,6 @@
     },
     "plugins": [
       "./plugins/withAndroidLargeHeap",
-      "./plugins/withAppLanguages",
       "expo-router",
       "expo-notifications",
       "expo-image",

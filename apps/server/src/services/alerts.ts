@@ -140,8 +140,7 @@ export type AlertKey =
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
     | 'sec.log'
-    | 'reports.new' | 'reports.child' | 'reports.child-more'
-    | 'door.busy';
+    | 'reports.new' | 'reports.child' | 'reports.child-more';
 
 interface Row {
     title: string;
@@ -190,8 +189,6 @@ const ROWS: Record<AlertKey, Row> = {
     'reports.child': { title: 'a child-safety report waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** The child-safety reports past those bounds, counted: one urgent line, told within about 10 minutes. */
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
-    /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
-    'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
 };
 
 /** Told because members reported: urgent ones too are never kept over another line (keepIn), and the same line is counted. */

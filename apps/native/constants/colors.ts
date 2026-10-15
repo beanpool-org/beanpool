@@ -29,7 +29,7 @@
  *   gray     → text, surfaces, metadata      (the calm majority)
  */
 
-import { brandColours, rgbaOf } from '@beanpool/core';
+import { brandColours } from '@beanpool/core';
 
 const brandLight = brandColours('light');
 const brandDark = brandColours('dark');
@@ -305,10 +305,9 @@ export const lightColors = {
     chatSystem: {
         defaultBg: 'rgba(243, 244, 246, 0.8)',
         defaultBorder: 'rgba(229, 231, 235, 1)',
-        // A trade's lines: the library's deal tints (the web's too), laid at 0.7.
-        fundedBg: rgbaOf(brandLight.deal.held.tint, 0.7),
-        releasedBg: rgbaOf(brandLight.deal.released.tint, 0.7),
-        cancelledBg: rgbaOf(brandLight.deal.cancelled.tint, 0.7),
+        fundedBg: 'rgba(209, 250, 229, 0.7)',
+        releasedBg: 'rgba(167, 243, 208, 0.7)',
+        cancelledBg: 'rgba(254, 226, 226, 0.7)',
     },
 } as const;
 
@@ -432,9 +431,9 @@ export const darkColors = {
     chatSystem: {
         defaultBg: 'rgba(38, 38, 38, 0.8)',
         defaultBorder: 'rgba(64, 64, 64, 1)',
-        fundedBg: rgbaOf(brandDark.deal.held.tint, 0.7),
-        releasedBg: rgbaOf(brandDark.deal.released.tint, 0.7),
-        cancelledBg: rgbaOf(brandDark.deal.cancelled.tint, 0.7),
+        fundedBg: 'rgba(2, 44, 34, 0.7)',
+        releasedBg: 'rgba(6, 78, 59, 0.7)',
+        cancelledBg: 'rgba(69, 10, 10, 0.7)',
     },
 } as const;
 

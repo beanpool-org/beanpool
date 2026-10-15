@@ -38,7 +38,7 @@ export function PhoneTopBar({ communityName, tab, sub, menuOpen, onOpenMenu, bac
                     ☰
                 </button>
                 <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-bp-ink-terra m-0 truncate">{`${communityName || 'BeanPool'} · Settings`}</p>
+                    <p className="text-xs font-semibold text-terra-400 m-0 truncate">{`${communityName || 'BeanPool'} · Settings`}</p>
                     <p className="text-sm font-bold text-white m-0 truncate" aria-live="polite">{where}</p>
                 </div>
                 {back && <PhoneReturnLink back={back} />}

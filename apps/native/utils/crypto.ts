@@ -3,7 +3,7 @@ import { getPublicKey, sign, verify, etc, hashes } from '@noble/ed25519';
 import * as Crypto from 'expo-crypto';
 import { WORDLIST } from '../../pwa/src/lib/bip39-wordlist';
 import {
-    toEd25519Seed, lowercaseRecoveryWords, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
+    toEd25519Seed, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
     type Signer,
 } from '@beanpool/core';
 import { requestSigningFormatFor } from './request-signing-version';
@@ -157,15 +157,14 @@ export function generateMnemonic(): string[] {
 
 export function validateMnemonic(words: string[]): boolean {
     if (words.length !== 12) return false;
-    return words.every(w => WORDLIST.includes(lowercaseRecoveryWords(w).trim()));
+    return words.every(w => WORDLIST.includes(w.toLowerCase().trim()));
 }
 
 export async function mnemonicToKeypair(words: string[]): Promise<{
     publicKeyHex: string;
     privateKeyHex: string;
 }> {
-    // Lowercased as the list is written (core recovery-words.ts): a Turkish keyboard's İ and ı are an i.
-    const phrase = words.map(w => lowercaseRecoveryWords(w).trim()).join(' ');
+    const phrase = words.map(w => w.toLowerCase().trim()).join(' ');
     const phraseBytes = encodeUtf8(phrase);
 
     // Double SHA256 -> 32 byte seed

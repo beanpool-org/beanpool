@@ -9,7 +9,7 @@ A private preview keeps a new server closed while you and a few people you choos
 
 ## Turning it on and off
 
-Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it. It takes 1, true, yes or on, and 0, false, no or off. Any other value, or one kept in quotes, stops the server at start, and the log says why: a typo never leaves it open.
+Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it.
 
 Either way, members' faces may change address with the restart. Phones that already hold the community fetch the new addresses at their next sync, so faces don't disappear.
 

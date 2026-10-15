@@ -349,7 +349,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             const eph = makeEphemeralKey();
             let opened;
             try {
-                opened = await openRestoreSession(eph, account.callsign, account.publicKey);
+                opened = await openRestoreSession(eph, account.callsign);
             } catch (e) {
                 if (!(e instanceof DoorUnreachableError)) throw e;
                 setNotice({ tone: 'error', text: UNREACHABLE });

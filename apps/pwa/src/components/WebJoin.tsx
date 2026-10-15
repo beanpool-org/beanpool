@@ -229,7 +229,7 @@ async function accountHeldElsewhere(p: PendingJoin | null): Promise<BeanPoolIden
 
 export const primaryButton: React.CSSProperties = {
     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
-    background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700,
+    background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
 };
 
@@ -286,7 +286,7 @@ export function WorkBar({ done, of = DOOR_WORK_PARTS }: { done: number; of?: num
             {Array.from({ length: of }, (_, i) => (
                 <span key={i} style={{
                     flex: 1, minWidth: 0, height: '0.5rem', borderRadius: '0.25rem',
-                    background: i < done ? 'var(--bp-ink-info)' : 'var(--border-primary)',
+                    background: i < done ? '#2563eb' : 'var(--border-primary, #334155)',
                 }} />
             ))}
         </div>
@@ -1669,9 +1669,7 @@ export function WebJoin({
                             {showWords && (
                                 // As the Safety Backup step lays them out: as many columns as whole words fit (one on a
                                 // 320px phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
-                                // The words are English in every language: the browser's page translation may not rewrite
-                                // them (translate="no" + notranslate; #1947 confirmation N-B).
-                                <ol id={wordsId} data-testid="join-taken-words" translate="no" className="notranslate" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                <ol id={wordsId} data-testid="join-taken-words" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
                                     listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                     gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                 }}>

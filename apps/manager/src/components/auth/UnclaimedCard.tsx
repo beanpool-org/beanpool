@@ -79,7 +79,7 @@ export function UnclaimedCard({ codeId, primaryAddress, address, addresses, orig
                 </code>
             </div>
             <p className="text-sm text-nature-300 m-0 leading-relaxed">
-                Then on your phone, scan this, or open <strong className="text-nature-100">BeanPool → Find a community</strong>, type this server&apos;s address in the search box and tap <strong className="text-nature-100">Claim ‹name›</strong>.
+                Then on your phone, open <strong className="text-nature-100">BeanPool → Claim a community</strong>, or scan this.
             </p>
             {showQr ? (
                 <>

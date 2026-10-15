@@ -13,9 +13,8 @@
  *      - each 503 carries Retry-After, no-store, no ETag and `code: heavy_read_busy`;
  *      - every 200 is the whole directory, the same bytes as a read made afterwards;
  *      - the server lives and answers;
- *      - then 512 at once, from 16 reader processes (readersAtOnce says why): each served the one shared directory
- *        (members-snapshot.ts) byte for byte or told "busy" with Retry-After, none cut off; at least as many served as
- *        the budget holds sends of it at once; the heap under 75% of its 256 MB.
+ *      - then 512 at once, from 16 reader processes (readersAtOnce says why), all served the one shared directory
+ *        (members-snapshot.ts), byte for byte, the heap under 75% of its 256 MB.
  *      How many are told "busy" depends on how fast the machine builds and sends (here, 24 to 40 of the 64).
  *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
  *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget over what as many connections
@@ -137,10 +136,6 @@ async function serve(): Promise<void> {
         if (line === 'peak') { say({ peak }); peak = process.memoryUsage().heapUsed; }
         // Imported here so that the burst in 1 runs on a server from before the cap too (the fail-first run).
         if (line === 'stats') import('./heavy-reads.js').then((m) => say({ stats: m.heavyReadStats() }), () => say({ stats: null }));
-        // The budget this server runs with and what one send of a ready snapshot weighs under it: from the modules the
-        // server runs, here, not the orchestrator's (which would open a database of its own to import them).
-        if (line === 'cap') Promise.all([import('./heavy-reads.js'), import('./members-snapshot.js')])
-            .then(([h, s]) => say({ cap: { budgetBytes: h.heavyReadSettings().budgetBytes, sendWeight: s.SNAPSHOT_SEND_WEIGHT } }), () => say({ cap: null }));
         // The whole process, not only the heap: TLS keeps each socket's ciphertext off the V8 heap.
         if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers, footprint: footprint() } }); }
         // The same after a full collection: what is held, not the garbage of the builds before it (1c builds one each version).
@@ -175,8 +170,7 @@ async function read(a: { port: number; keys: { pk: string; der: string }[]; coun
     await say({ ready: true });
     await new Promise((r) => process.stdin.once('data', r));
     const answers = await Promise.all(Array.from({ length: a.count }, (_, i) => open({ port: a.port, tls: true }, '/api/members', signed('/api/members', keys[i % keys.length])).done));
-    // A refusal's headers and text too, to tell the cap's "busy" from any other answer (isBusy); a 200's are left here.
-    await say(answers.map(({ status, bytes, sha, ms, error, headers, text }) => ({ status, bytes, sha, ms, error, headers: status === 200 ? {} : headers, text: status === 200 ? '' : text })));
+    await say(answers.map(({ status, bytes, sha, ms, error }) => ({ status, bytes, sha, ms, error })));
 }
 
 /**
@@ -358,7 +352,7 @@ function isBusy(a: Answer): boolean {
         && a.headers['cache-control'] === 'no-store' && a.headers.etag === undefined;
 }
 
-type Got = Pick<Answer, 'status' | 'bytes' | 'sha' | 'ms' | 'error' | 'headers' | 'text'>;
+type Got = Pick<Answer, 'status' | 'bytes' | 'sha' | 'ms' | 'error'>;
 
 /**
  * `count` directory reads at once, made by `procs` processes of this file (`read`), each started and ready before any
@@ -465,36 +459,20 @@ async function main(): Promise<void> {
         // The shared directory (members-snapshot.ts; slice 2): 512 at once on the same 256 MB heap, every one served the
         // one snapshot (the design measured its prototype at 512 on the emulated 1 GB droplet: docs/global-heavy-lists.md §5(d)).
         // The readers are 16 processes of 32 (readersAtOnce: one process can't read this many big TLS answers at once). A
-        // reader lost to its own process's decryption is counted apart: it says nothing about the server.
-        // The cap's promise under overload: an honest reader is served the whole directory, byte for byte, or told "busy"
-        // (503, Retry-After), never cut off and never any other answer. Each send of the ready snapshot weighs a window
-        // (SNAPSHOT_SEND_WEIGHT) and the body once among them all (heavy-reads.ts holdSharedBody), so the budget holds
-        // (budget − body) / window sends at once: the first that many to arrive are let in, however slow the machine.
-        // Past them up to 64 wait 6 s and the rest are told "busy" at once, so how many more are served is a race
-        // between arriving and sending: CI's slower runner told one "busy" (511 served).
+        // reader lost to its own process's decryption is counted apart: it says nothing about the server. Anything else
+        // that isn't the whole directory (busy, an error, cut off, other bytes) fails.
         const BIG = 512;
-        const cap = (await server.ask('cap')).cap as { budgetBytes: number; sendWeight: number };
-        const capacity = Math.max(1, Math.floor((cap.budgetBytes - after.bytes) / cap.sendWeight));
         await server.ask('peak');
-        const t512 = performance.now();
         const { answers: big, ms: bigMs } = await readersAtOnce(server.port, readers.slice(0, BURST), BIG, 16, dir);
-        // The snapshot is no older at the go than the burst's start (members-snapshot.ts rebuilds it at 60 s).
-        const startingS = (performance.now() - t512 - bigMs) / 1000;
-        const snapshotAgeS = (performance.now() - b0 - bigMs) / 1000;
         await sleep(300);
         const bigOk = big.filter((a) => a.status === 200);
         const bigP95 = bigOk.length ? Math.round(bigOk.map((a) => a.ms).sort((x, y) => x - y)[Math.ceil(0.95 * bigOk.length) - 1]) : null;
         const bigPeak = (await server.ask('peak')).peak / MB;
         const clientLost = big.filter((a) => a.status === 'error' && a.error === 'ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC');
-        const whole = big.filter((a) => a.status === 200 && a.sha === after.sha && a.bytes === after.bytes);
-        const bigBusy = big.filter((a) => isBusy(a));
-        const wrong = big.filter((a) => !whole.includes(a) && !bigBusy.includes(a) && !clientLost.includes(a));
+        const wrong = big.filter((a) => !(a.status === 200 && a.sha === after.sha && a.bytes === after.bytes) && !clientLost.includes(a));
         console.log(`  (${BIG} at once from 16 processes: ${JSON.stringify(tally(big))} in ${Math.round(bigMs)} ms; served p95 ${bigP95} ms; heap peak ${bigPeak.toFixed(0)} MB; ${clientLost.length} lost to a reader process's own TLS decryption)`);
-        console.log(`  (${bigBusy.length} of ${BIG} told "busy"; the budget holds ${capacity} sends at once; the snapshot at most ${snapshotAgeS.toFixed(1)} s old at the go, ${startingS.toFixed(1)} s of it starting the reader processes)`);
         assert(!server.exited(), `the server lives through ${BIG} directory reads at once`);
-        assert(wrong.length === 0, `every one is served the whole directory, byte for byte, or told "busy" with Retry-After: none cut off, no other answer (${whole.length} served, ${bigBusy.length} busy, ${clientLost.length} lost on the reader's side${wrong.length ? `; wrong: ${[...new Set(wrong.map((a) => `${a.status} ${a.error ?? ''}`))].slice(0, 4).join('; ')}, ${wrong.length} of them, ${wrong.filter((a) => a.status === 'error' && a.bytes > 0).length} after some of the body` : ''})`);
-        assert(whole.length >= capacity,
-            `at least as many served as the budget holds sends at once: (${(cap.budgetBytes / MB).toFixed(0)} MB − the ${(after.bytes / MB).toFixed(1)} MB directory) / ${(cap.sendWeight / 1024).toFixed(0)} KB a send = ${capacity} (${whole.length} served)`);
+        assert(wrong.length === 0, `every one is served the whole directory, byte for byte: none told "busy", none cut off (${bigOk.length} served, ${clientLost.length} lost on the reader's side${wrong.length ? `; wrong: ${[...new Set(wrong.map((a) => `${a.status} ${a.error ?? ''}`))].slice(0, 4).join('; ')}` : ''})`);
         assert(bigOk.length > BURST, `more served at once than the ${BURST} of the burst above (${bigOk.length} of ${BIG})`);
         assert(bigPeak < HEAP_MB * 0.75, `and the heap peaked at ${bigPeak.toFixed(0)} MB of ${HEAP_MB} MB`);
 

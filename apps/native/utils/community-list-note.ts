@@ -4,9 +4,7 @@
  * near to show, and offline the cards held are what there is. One letter typed asks the node nothing (a search is 2 or
  * more): the cards held, with the words for that ('short'), never the offline ones while the phone is online.
  */
-import { t } from '@beanpool/core';
-
-export type CommunityListNote = 'near' | 'search' | 'noArea' | 'held' | 'short' | 'spent' | 'spentNear';
+export type CommunityListNote = 'near' | 'search' | 'noArea' | 'held' | 'short';
 
 export function communityListNote(note: CommunityListNote, typed: string): string {
     switch (note) {
@@ -15,10 +13,6 @@ export function communityListNote(note: CommunityListNote, typed: string): strin
         case 'noArea': return "Set your area to see who's near you. Search a name to find anyone.";
         case 'held': return "People you've dealt with. Connect to search everyone.";
         case 'short': return "People you've dealt with. Type at least 2 letters to search everyone.";
-        // The node's day budget (where anyone can join): online, so never "Connect".
-        case 'spent': return t("People you've dealt with. You've looked people up as often as one account can today. Try again later.");
-        // Only "near you" is spent: a search by name still works, as the node's own refusal says.
-        case 'spentNear': return t("People you've dealt with. You've looked up who's near you as often as one account can today. Search a name to find anyone.");
     }
 }
 
@@ -46,7 +40,5 @@ export function communityListEmpty(note: CommunityListNote | null, typed: string
     if (note === 'noArea') return 'Type at least 2 letters of a name.';
     if (note === 'held') return typed.trim() ? 'No one you have dealt with matches. Connect to search everyone.' : 'No one yet. Connect to search everyone.';
     if (note === 'short') return 'No one you have dealt with matches. Type at least 2 letters to search everyone.';
-    if (note === 'spent') return t('No one you have dealt with matches. Try the search again later.');
-    if (note === 'spentNear') return t('No one you have dealt with yet. Search a name to find anyone.');
     return typed ? 'No members match your search.' : 'Loading community...';
 }

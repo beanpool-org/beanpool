@@ -305,8 +305,6 @@ async function main(): Promise<void> {
     const ev = createPost('event', 'other', 'Hidden gathering', 'An event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${ev}/rsvp`, { status: 'going' });
-    // On global the host lets each Going person in to the note and the chat (#1953); this suite is about moderation, so the host does.
-    await call('POST', ava, `/api/marketplace/posts/${ev}/let-in`, { memberPublicKey: viewer.pk });
     const vicChatBefore = await call('GET', viewer, `/api/marketplace/posts/${ev}/chat`);
     const vicListBefore = (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body?.conversations ?? [];
     const vicYoursBefore = (await call('GET', viewer, '/api/your-groups')).body?.items ?? [];
@@ -429,8 +427,6 @@ async function main(): Promise<void> {
     const meetup = createPost('event', 'other', 'Hidden meetup', 'Another event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
-    // On global the host lets each Going person in to the note and the chat (#1953); this suite is about moderation, so the host does.
-    await call('POST', ava, `/api/marketplace/posts/${meetup}/let-in`, { memberPublicKey: viewer.pk });
     const hostLine = await call('POST', ava, `/api/marketplace/posts/${meetup}/chat/message`, { text: 'Doors at six' });
     // A line the host has unread, so their badge has the event's chat in it too (Vic's own line never counts for Vic).
     const goerLine = await call('POST', viewer, `/api/marketplace/posts/${meetup}/chat/message`, { text: 'Save me a seat' });

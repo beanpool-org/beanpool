@@ -16,9 +16,9 @@ A project or an enterprise is a group with its own account: a community garden, 
 Owners and admins can:
 
 - make an enterprise. One made here starts with a credit line of 0;
-- set its **working capital ceiling** when you make it (Settings can't change it afterwards): the most Beans it keeps. Surplus it has earned above that is swept to the Commons;
+- set its **working capital ceiling**, the most Beans it keeps: surplus it has earned above that is swept to the Commons;
 - add or remove keepers;
-- post an offer in the enterprise's name (**Seed Offer**). A need is posted by a keeper from the app;
+- post an offer or a need in the enterprise's name;
 - put it on the map, or take its pin off.
 
 An enterprise can spend more than it holds only while it has at least one live offer. It cannot vote or propose, and it pays no circulation fee.

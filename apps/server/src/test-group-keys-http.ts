@@ -46,7 +46,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
     dmPublicKeyOf, groupEpochCanonical, groupKeyCommit, groupMembersDigest, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp,
-    isLockedAwayLine, openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GROUP_NONCE_PREFIX,
+    openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GROUP_NONCE_PREFIX,
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -434,14 +434,6 @@ async function main(): Promise<void> {
     const lockedLine = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED' ORDER BY rowid DESC LIMIT 1").get(other.id) as any;
     assert(!!lockedLine && lockedLine.ciphertext === groupThread.GROUP_CHAT_LOCKED_TEXT, 'and the group gets one line saying its chat is now end-to-end encrypted');
     assert(!db.prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED'").get(G), 'a group with nothing readable gets no such line');
-    // What the apps tell it by (core isLockedAwayLine): the node's own removedBy and lockedAway, served as such; and the
-    // node's own words for it are the truth, never "removed by a convenor" (Marty's screenshot, 15 Oct).
-    const servedWiped = ((await call('GET', dov, `/api/groups/${other.id}/chat`)).body.messages ?? []).find((m: any) => m.id === legacy);
-    const servedMeta = typeof servedWiped?.metadata === 'string' ? JSON.parse(servedWiped.metadata) : servedWiped?.metadata;
-    assert(servedMeta?.removed === true && servedMeta.removedBy === 'SYSTEM' && servedMeta.lockedAway === true && isLockedAwayLine(servedMeta),
-        `the wiped line is served with removedBy SYSTEM and lockedAway, the marker the apps read (got ${JSON.stringify(servedMeta)})`);
-    const servedWords = String(servedWiped?.text ?? Buffer.from(String(servedWiped?.ciphertext ?? ''), 'base64').toString('utf8'));
-    assert(servedWords === groupThread.GROUP_CHAT_WIPED_TEXT && !/convenor/i.test(servedWords), `and its words are "${groupThread.GROUP_CHAT_WIPED_TEXT}" (got "${servedWords}")`);
     // The rows are clean; so must the files be. secure_delete zeroes the old words in the pages the wipe writes, but
     // state.db-wal still holds the pages as they were (and state.db once a checkpoint folds them back) until the WAL is
     // emptied, as an account deletion does (review of #1762, finding 2).

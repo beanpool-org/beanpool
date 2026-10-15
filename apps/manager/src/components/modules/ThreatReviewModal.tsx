@@ -284,7 +284,7 @@ export function ThreatReviewModal({
                                                 👤
                                             </div>
                                             <div className="min-w-0">
-                                                <span className="font-bold text-white block leading-tight group-hover:text-bp-ink-terra transition-colors">
+                                                <span className="font-bold text-white block leading-tight group-hover:text-terra-400 transition-colors">
                                                     {displayName}
                                                 </span>
                                                 <span className="font-mono text-[10px] text-nature-400 break-all">{pub}</span>

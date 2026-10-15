@@ -184,6 +184,7 @@ async function main() {
         type Route = { method: string; path: string; body?: any; ok: number; owner: boolean; after?: () => void | Promise<void> };
         // `ok` is what the route answers once past auth. Bodies are chosen to have no lasting effect where possible:
         // the connector routes stop at "address is required", 2FA verify at "code is required".
+        const restoreAfterReset = () => { setPassword(); set2fa(true); };
         // Each call of change-password below makes a new hash of the same password, and a 2FA session ends with the
         // password it was made under unless it made the change itself (isValid2faSession): put the password back and
         // sign in again, so the next rows have a 2FA session.
@@ -204,6 +205,7 @@ async function main() {
             { method: 'POST', path: '/api/local/federation/links/ceiling', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/disconnect', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/remove', body: {}, ok: 400, owner: false },
+            { method: 'POST', path: '/api/local/reset', body: {}, ok: 200, owner: true, after: restoreAfterReset },
             { method: 'POST', path: '/api/admin/thresholds', body: {}, ok: 200, owner: false },
             { method: 'POST', path: '/api/admin/check-update', body: {}, ok: 200, owner: false },
             { method: 'GET', path: '/api/local/admin/2fa/status', ok: 200, owner: false },
@@ -252,14 +254,6 @@ async function main() {
             assert(g.status === r.ok, `${name}: break-glass mode still lets the owner's key session through (got ${g.status})`);
             await r.after?.();
             setBreakGlassMode(false);
-        }
-
-        // No route resets the node any more (design case 18, A1): 404 to every credential, the password and 2FA kept.
-        for (const [who, creds] of [['the password alone', pwOnly], ['the password + 2FA session', pwWith2fa], ["the owner's key session", asOwner], ["an admin's key session", asAdmin]] as const) {
-            resetAdminAuthTarpit();
-            const r = await call('POST', '/api/local/reset', creds, {});
-            assert(r.status === 404 && !!getLocalConfig().adminHash && getLocalConfig().totpEnabled === true,
-                `POST /api/local/reset is gone: ${who} → 404, the password and 2FA kept (got ${r.status})`);
         }
 
         // Change password: a key session still has to know the current password.

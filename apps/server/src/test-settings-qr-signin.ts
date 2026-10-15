@@ -17,9 +17,7 @@
  *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
  *      "same network" when the phone's address matches.
  *   9. Number matching: a new app's approval gives two digits; the page must type them. Wrong digits, three tries,
- *      30 s, a replay, or a browser without the binding cookie: no session. An older app (no `confirm`) is refused,
- *      426 app_too_old (fable-security-signin finding 2). Every sign-in in sections 1-6 therefore approves as the app
- *      does (`confirm: true`) and types the two digits it is shown (typeDigits) before the browser has a session.
+ *      30 s, a replay, or a browser without the binding cookie: no session. An older app signs in as before.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -112,32 +110,16 @@ async function poll(b: Browser, opts: { cookie?: string | null; wait?: boolean }
     return { ...r, sessionId: session ? session.split(';')[0].slice('admin_session='.length) : null };
 }
 
-/** The two digits each approval showed on the phone, by pairing: the member reads them off the phone. */
-const shownDigits = new Map<string, string>();
-
-/** What the app does after the phone's unlock: it can show the two digits (`confirm: true`), as every app now must. */
-async function approve(pairingId: string, shortCode: string, signer: Identity, opts: { claimed?: string; totpCode?: string; ip?: string; olderApp?: boolean } = {}) {
-    const r = await call('POST', `/api/local/admin/auth/pairing/${pairingId}/approve`, {
+/** What the app does after the phone's unlock. */
+async function approve(pairingId: string, shortCode: string, signer: Identity, opts: { claimed?: string; totpCode?: string; ip?: string } = {}) {
+    return call('POST', `/api/local/admin/auth/pairing/${pairingId}/approve`, {
         body: {
             memberPubkey: opts.claimed ?? signer.pub,
             signature: signText(signer, pairingMessage('approve', pairingId, shortCode)),
             ...(opts.totpCode ? { totpCode: opts.totpCode } : {}),
-            ...(opts.olderApp ? {} : { confirm: true }),
         },
         headers: via(opts.ip ?? freshIp()),
     });
-    if (typeof r.body?.confirmCode === 'string') shownDigits.set(pairingId, r.body.confirmCode);
-    return r;
-}
-
-/** The member types the phone's two digits on the computer: the page's answer, a session when they are right. */
-async function typeDigits(b: Browser) {
-    const r = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
-        body: { code: shownDigits.get(b.pairingId) },
-        headers: { ...via(b.ip), Cookie: b.cookie },
-    });
-    const session = r.cookies.find(c => c.startsWith('admin_session='));
-    return { ...r, sessionId: session ? session.split(';')[0].slice('admin_session='.length) : null };
 }
 
 /** The phone's lookup, signed as the app signs a GET (format 2, for this node's host). */
@@ -208,10 +190,8 @@ async function main() {
         const ok = await approve(b.pairingId, b.shortCode, owner);
         assert(ok.status === 200 && ok.body.role === 'owner', `the owner approves (got ${ok.status})`);
         assert(!('handshakeToken' in (ok.body || {})), 'the phone is never given the sign-in token');
-        const woke = await longPoll;
+        const got = await longPoll;
         assert(Date.now() - t0 < 5_000, 'the long-poll wakes on approval');
-        assert(woke.status === 200 && woke.body.status === 'confirm' && !woke.sessionId, 'with the digits to type, and no session yet');
-        const got = await typeDigits(b);
         assert(got.status === 200 && got.body.status === 'signed-in' && got.body.role === 'owner' && got.body.memberPubkey === owner.pub,
             'the browser is signed in as the owner');
         assert(typeof got.body.csrfToken === 'string' && got.body.csrfToken.length > 0, 'with a CSRF token for cookie-authenticated changes');
@@ -230,14 +210,14 @@ async function main() {
         // An admin works the same way.
         const b2 = await newPairing();
         assert((await approve(b2.pairingId, b2.shortCode, admin)).status === 200, 'an admin can approve too');
-        const got2 = await typeDigits(b2);
+        const got2 = await poll(b2);
         assert(got2.body.status === 'signed-in' && got2.body.role === 'admin', 'and the browser gets an admin session');
 
         // A moderator too: the browser gets a moderator session, which reaches reports and nothing else.
         const b3 = await newPairing();
         const modOk = await approve(b3.pairingId, b3.shortCode, moderator);
         assert(modOk.status === 200 && modOk.body.role === 'moderator', `a moderator can approve (got ${modOk.status})`);
-        const got3 = await typeDigits(b3);
+        const got3 = await poll(b3);
         assert(got3.body.status === 'signed-in' && got3.body.role === 'moderator' && !!got3.sessionId, 'and the browser gets a moderator session');
         const s3 = await sessionInfo(got3.sessionId!);
         assert(s3.authenticated === true && s3.role === 'moderator', 'the session says moderator');
@@ -261,7 +241,7 @@ async function main() {
         assert(wrongCookie.status === 403 && !wrongCookie.sessionId, "another pairing's secret under this name is refused");
         const forged = await poll(b, { cookie: `${bindingCookieName(b.pairingId)}=${'a'.repeat(64)}` });
         assert(forged.status === 403 && !forged.sessionId, 'a guessed secret is refused');
-        const real = await typeDigits(b);
+        const real = await poll(b);
         assert(real.body.status === 'signed-in' && !!real.sessionId, 'the browser that asked is still signed in afterwards');
         assert(auditLines().some(l => l.includes('without its binding secret') && l.includes(b.pairingId.slice(0, 8))), 'the attempt from another browser is logged');
     }
@@ -273,11 +253,9 @@ async function main() {
         const body = {
             memberPubkey: owner.pub,
             signature: signText(owner, pairingMessage('approve', b.pairingId, b.shortCode)),
-            confirm: true,
         };
         const first = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, { body, headers: via(freshIp()) });
         assert(first.status === 200, 'the first approval is accepted');
-        shownDigits.set(b.pairingId, first.body.confirmCode);
         const again = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, { body, headers: via(freshIp()) });
         assert(again.status === 409 && again.body.reason === 'used', `the same approval replayed is refused (got ${again.status})`);
 
@@ -287,12 +265,12 @@ async function main() {
         assert((await poll(b2)).body.status === 'waiting', 'and that other pairing is still waiting');
 
         const wrongCode = await call('POST', `/api/local/admin/auth/pairing/${b2.pairingId}/approve`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', b2.pairingId, 'AAAAAA')), confirm: true },
+            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', b2.pairingId, 'AAAAAA')) },
             headers: via(freshIp()),
         });
         assert(wrongCode.status === 403, 'an approval over a different short code is refused');
 
-        const s1 = await typeDigits(b);
+        const s1 = await poll(b);
         assert(s1.body.status === 'signed-in', 'the browser redeems once');
         const s2 = await poll(b);
         assert(s2.status === 410 && s2.body.status === 'used' && !s2.sessionId, 'a second redemption is refused');
@@ -344,19 +322,16 @@ async function main() {
         const lateRedeem = redeemPairing(b.pairingId, secret, Date.now() + PAIRING_TTL_MS + 1_000);
         assert(lateRedeem.kind === 'expired', 'an expired pairing tells the page so');
 
-        // Approved, and the browser comes back at 61 s: past the 30 s to type the digits, and the token's 60 s.
+        // Approved, but the handshake token's 60 s has passed before the browser came back.
         const b2 = await newPairing();
         assert((await approve(b2.pairingId, b2.shortCode, owner)).status === 200, 'approved');
-        // The digits redeem the token the moment they are right, within 30 s, so the token's 60 s can't lapse first:
-        // the browser that comes back at 61 s is past both.
-        const stale = confirmPairing(b2.pairingId, b2.cookie.split('=')[1], shownDigits.get(b2.pairingId), Date.now() + 61_000);
-        assert(stale.kind === 'expired', 'the right digits typed at 61 s (past the 30 s to type them, and the 60 s token) give no session');
-        assert(redeemPairing(b2.pairingId, b2.cookie.split('=')[1], Date.now() + 61_000).kind === 'expired', 'nor does a poll then');
+        const stale = redeemPairing(b2.pairingId, b2.cookie.split('=')[1], Date.now() + 61_000);
+        assert(stale.kind === 'expired', 'a redemption after the 60 s sign-in token has lapsed gives no session');
 
         const b3 = await newPairing();
         assert((await approve(b3.pairingId, b3.shortCode, admin)).status === 200, 'the admin approves');
         revokeNodeRole(admin.pub, 'admin', owner.pub);
-        const revoked = await typeDigits(b3);
+        const revoked = await poll(b3);
         assert(revoked.status === 401 && !revoked.sessionId, 'the admin lost the role before the browser redeemed → no session');
         grantNodeRole(admin.pub, 'admin', owner.pub);
     }
@@ -369,7 +344,7 @@ async function main() {
         const b = await newPairing();
         const noCode = await approve(b.pairingId, b.shortCode, owner);
         assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `with 2FA on, the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
-        assert((await typeDigits(b)).body.status === 'signed-in', 'and the browser is signed in');
+        assert((await poll(b)).body.status === 'signed-in', 'and the browser is signed in');
         const b2 = await newPairing();
         const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' === generateTotpCode(secret) ? '111111' : '000000' });
         assert(stale.status === 200, 'a code an older app still sends is not looked at');
@@ -525,17 +500,12 @@ async function main() {
         assert(auditLines().some(l => l.includes('wrong digits')), 'the burn is logged');
     }
     {
-        // An older app sends no `confirm`, so it cannot show the digits: refused (finding 2). Letting it through would sign
-        // in whoever made the QR, with nothing typed.
+        // An older app sends no `confirm`: it signs the browser in as today.
         const b = await newPairing();
-        const old = await approve(b.pairingId, b.shortCode, owner, { olderApp: true });
-        assert(old.status === 426 && old.body.code === 'app_too_old' && old.body.reason === 'app-too-old' && !('confirmCode' in old.body),
-            `an older app's approval is refused, 426 app_too_old (${old.status} ${JSON.stringify(old.body)})`);
-        assert(/Update the BeanPool app/.test(old.body.error || ''), 'and it says to update the app');
+        const ok = await approve(b.pairingId, b.shortCode, owner);
+        assert(ok.status === 200 && !('confirmCode' in ok.body), 'an older app gets no digits');
         const r = await poll(b);
-        assert(r.body.status === 'waiting' && !r.sessionId, 'the browser is not signed in: the pairing still waits');
-        assert((await approve(b.pairingId, b.shortCode, owner)).status === 200 && (await typeDigits(b)).body.status === 'signed-in',
-            'and the same pairing then signs in from an app that shows the digits');
+        assert(r.body.status === 'signed-in' && !!r.sessionId, 'and the browser is signed in as before');
     }
     {
         // Expiry, at the module level with a clock: 30 s for the digits.

@@ -14,17 +14,11 @@
  * The world: the member near Byron Bay, 520 listings within 100 km of them (the node's cap is 500), 30 in London, the
  * member's own listing in London, and on the phone a listing in Perth they have a conversation about.
  *
- * The global node is one where anyone can join (`openMembership`): every listing but the member's own reaches the phone
- * at its NEIGHBOURHOOD (core neighbourhoodOf, about 1.1 km across; #1965), and the node measures its set from there.
- * So the set worked out here (expectedSet) measures each listing from its neighbourhood, a listing's row on the phone
- * holds its neighbourhood, never the place, and an edit is told to have landed by the row's change time.
- *
  * Nothing else is contacted: the phone's fetch is held to this node's address, and the node's own fetch refuses every
  * host but this machine.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { neighbourhoodOf } from '@beanpool/core';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -151,11 +145,9 @@ const idReads = () => sent.filter(r => r.url.startsWith('/api/marketplace/posts?
 const heldIds = () => new Set((sql.prepare('SELECT id FROM posts').all() as { id: string }[]).map(r => r.id));
 const sorted = (s: Iterable<string>) => [...s].sort();
 
-/** The node's set for an area, worked out here by brute force: the nearest `max` within 250 km, plus the member's own.
- * Each listing measured from its neighbourhood, as the node measures another member's listing. */
+/** The node's set for an area, worked out here by brute force: the nearest `max` within 250 km, plus the member's own. */
 function expectedSet(area: { lat: number; lng: number }, places: Place[], own: string[], max = 500): Set<string> {
-    const kmTo = (p: Place) => { const cell = neighbourhoodOf(p.lat, p.lng); return nearbyKm(area.lat, area.lng, cell.lat, cell.lng); };
-    const within = places.map(p => ({ p, d: kmTo(p) })).filter(x => x.d <= 250)
+    const within = places.map(p => ({ p, d: nearbyKm(area.lat, area.lng, p.lat, p.lng) })).filter(x => x.d <= 250)
         .sort((a, b) => a.d - b.d).slice(0, max).map(x => x.p.id);
     return new Set([...within, ...own]);
 }
@@ -296,8 +288,7 @@ afterAll(async () => {
 }, START_MS);
 
 const tagHeld = () => (sql.prepare("SELECT v FROM nearby_held WHERE k = 'tag'").get() as { v: string } | undefined)?.v ?? null;
-const rowOnPhone = (id: string) => sql.prepare('SELECT lat, lng, updated_at FROM posts WHERE id = ?').get(id) as { lat: number; lng: number; updated_at: string } | undefined;
-const placeOnPhone = (id: string) => { const r = rowOnPhone(id); return r ? { lat: r.lat, lng: r.lng } : null; };
+const latOnPhone = (id: string) => (sql.prepare('SELECT lat FROM posts WHERE id = ?').get(id) as { lat: number } | undefined)?.lat ?? null;
 const dropCursor = () => { for (const k of [...mem.async.keys()].filter(x => x.startsWith('pillar_sync_') && x.endsWith('_last-sync'))) mem.async.delete(k); };
 const nearbyBodies = () => bodies.filter(b => b.path.includes('nearby=1'));
 
@@ -305,8 +296,6 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
     it('a listing edited while the phone pages through a read: the pages\' tags differ, the read keeps none, and the next delta brings the edit', async () => {
         let editedId = '';
         let newLat = 0;
-        let editedAt = '';
-        let was = { lat: 0, lng: 0 };
         // Between page 1 and page 2: a listing page 1 carried is moved, so it sorts above every key this read hands out.
         beforeFetch = async (path) => {
             if (editedId || !path.includes('pageAfter=') || !path.includes('nearby=1')) return;
@@ -314,9 +303,7 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
             const row = rows.find(r => r.authorPublicKey !== me.publicKey && near.some(n => n.id === r.id));
             const n = near.find(x => x.id === row.id)!;
             editedId = row.id;
-            was = { lat: n.lat, lng: n.lng };
             newLat = n.lat + 0.0007;
-            editedAt = new Date().toISOString();
             await control('edit', { post: editedId, lat: newLat, lng: n.lng });
         };
         bodies.length = 0;
@@ -325,18 +312,15 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
         expect(postsReads()).toHaveLength(3);
         const tags = nearbyBodies().map(b => b.etag);
         expect(tags[0]).not.toBe(tags[2]);
-        // No page of this read carried the edit (the row is from before it, at the old place's neighbourhood), and its last
-        // page's tag describes it: the read keeps no tag.
-        expect(rowOnPhone(editedId)!.updated_at < editedAt).toBe(true);
-        expect(placeOnPhone(editedId)).toEqual(neighbourhoodOf(was.lat, was.lng));
+        // No page of this read carried the edit, and its last page's tag describes it: the read keeps no tag.
+        expect(latOnPhone(editedId)).not.toBeCloseTo(newLat, 6);
         expect(tagHeld()).toBeNull();
         near = near.map(p => (p.id === editedId ? { ...p, lat: newLat } : p));
         // The next delta goes without a tag: a 200 from the read's start, with the edit.
         await control('limiters');
         await sync();
         expect(postsReads().map(r => `${r.status}${r.ifNoneMatch ? ' (tag)' : ''}`)).toEqual(['200']);
-        expect(rowOnPhone(editedId)!.updated_at >= editedAt).toBe(true);
-        expect(placeOnPhone(editedId)).toEqual(neighbourhoodOf(newLat, was.lng));
+        expect(latOnPhone(editedId)).toBeCloseTo(newLat, 6);
         // That read landed whole on one page: its tag is kept, and with nothing changed the cycle after is a 304.
         expect(tagHeld()).toMatch(/^W\/"near-/);
         await control('limiters');

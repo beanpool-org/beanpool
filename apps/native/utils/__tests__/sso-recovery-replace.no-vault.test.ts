@@ -59,7 +59,6 @@ import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
-import { stubCommunityLookup } from './community-lookup';
 
 // Test phrase only (a BIP-39 vector), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -141,24 +140,20 @@ function restore(confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolea
 
 let phone: BeanPoolIdentity;
 let restoredPub: string;
-/** Every request but the community's lookup: in these tests, only the old account's push unregister. */
-let elsewhere: ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>>;
 const quietError = console.error;
 
 beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
     vi.clearAllMocks();
-    // The node's recovery routes are signedPost (stubbed above). fetch is the community's lookup, which lists Marty with
-    // the restored key (community-lookup.ts), and otherwise only the old account's unregister (`elsewhere`).
-    elsewhere = vi.fn(async () => { throw new Error('No node may be contacted from a test'); });
-    restoredPub = (await mnemonicToKeypair(WORDS)).publicKeyHex;
-    stubCommunityLookup(NODE, [{ publicKey: restoredPub, callsign: 'Marty' }], (input, init) => elsewhere(input, init));
+    // The node's recovery routes are signedPost (stubbed above); fetch is only the old account's unregister.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No node may be contacted from a test'); }));
     // identity.ts's legacy migration reaches AsyncStorage through `require`, which no vi.mock reaches: quietened.
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
         if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
         quietError(...args);
     });
+    restoredPub = (await mnemonicToKeypair(WORDS)).publicKeyHex;
     phone = await draftIdentity('Kim');
 });
 
@@ -325,7 +320,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
         const sent: { url: string; init?: RequestInit; keyOnPhone?: string }[] = [];
-        elsewhere.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
             sent.push({ url: String(input), init, keyOnPhone: (await loadIdentity())?.publicKey });
             return new Response('{"success":true}', { status: 200 });
         });
@@ -355,17 +350,17 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
-        elsewhere.mockRejectedValue(new TypeError('Network request failed'));
+        vi.mocked(fetch).mockRejectedValue(new TypeError('Network request failed'));
 
         const result = await restore(async () => true);
 
-        expect(elsewhere).toHaveBeenCalledTimes(2);
+        expect(fetch).toHaveBeenCalledTimes(2);
         expect(result.identity.publicKey).toBe(restoredPub);
         const { [PUSH_LEAVE_STATEMENTS_STORE_KEY]: leaves, [PUSH_STAMP_STORE_KEY]: stamp, ...rest } = asyncStorage();
         expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
         // Kept on purpose: the old account's leave statements for the communities it couldn't reach, presented later
         // until each confirms (push-leave.ts), and the phone's push stamp.
-        const asked = elsewhere.mock.calls.map(([url]) => new URL(String(url)).origin).sort();
+        const asked = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url)).origin).sort();
         expect(JSON.parse(leaves).map((l: any) => [l.community, l.publicKey, l.token, l.leftAt]).sort())
             .toEqual(asked.map((c) => [c, phone.publicKey, PHONE_TOKEN, Number(stamp)]));
     });
@@ -379,10 +374,7 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
 
         await restore();
 
-        expect(elsewhere).not.toHaveBeenCalled();
-        // The one request: the community's lookup, before the restore.
-        expect(fetch).toHaveBeenCalledTimes(1);
-        expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe(`${NODE}/api/recovery/lookup/Marty`);
+        expect(fetch).not.toHaveBeenCalled();
         expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(true);
         expect(removeCommunityCaches).not.toHaveBeenCalled();

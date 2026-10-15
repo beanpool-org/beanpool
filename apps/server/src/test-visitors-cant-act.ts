@@ -102,7 +102,7 @@ import { startHttpsServer, getKoaApp, resetAdminRateLimit } from './https-server
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
-import { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
@@ -280,11 +280,7 @@ async function main(): Promise<void> {
     initStateEngine();
     // Step 7c: the password alone opens no admin route with 2FA off: the admin calls go under an owner's key session,
     // made once here, before any section measures what changes.
-    const ownerPub = seedOwnerForTests('visitorsOwner');
-    const ownerAuth = ownerSessionHeaders(ownerPub);
-    // Granting or taking a role above moderator, and enrolling such a key, ask the owner's fresh proof (design case 18, C6,
-    // C8): those calls go under a session from the phone's Manage, pressed just now, one each.
-    const roleChange = (path: string) => /^\/api\/local\/admin\/(node-roles|auth\/enrol)/.test(path);
+    const ownerAuth = ownerSessionHeaders();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // The signature middleware refuses every signed write from a visitor's row that VISITOR_WRITES doesn't name
@@ -492,8 +488,7 @@ async function main(): Promise<void> {
         };
         const admin = async (method: string, path: string, body?: unknown): Promise<Res> => {
             resetGatewayRateLimit();
-            const auth = roleChange(path) ? ownerPhoneSessionHeaders(ownerPub) : ownerAuth;
-            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...auth },
+            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...ownerAuth },
                 body: body !== undefined ? JSON.stringify(body) : undefined });
             let json: any; try { json = await res.json(); } catch { /* empty */ }
             return { status: res.status, body: json };

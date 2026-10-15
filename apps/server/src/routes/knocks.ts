@@ -215,7 +215,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         const applicant = signer(ctx, 'This request must be signed by the key you are asking to join with.');
         if (!applicant) return;
         if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
-        if (!rateLimit(ctx, 'knock')) return;
+        if (!rateLimit(ctx)) return;
         // Who can't knock at all is told before their words are read, so a member's app learns it plainly.
         const refusal = knockerRefusal(applicant);
         if (refusal) return refuseKnock(ctx, refusal);

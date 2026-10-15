@@ -5,15 +5,14 @@
  * Boots the real server and reads through the real middleware over HTTPS, signed, as members of different standing:
  *   1. A local community (NODE_PROFILE unset): every read answers as before (whole directory, its delta and its
  *      nearest-first list, the per-reader directory, the whole invite tree, the feed's "joined" lines, an open group's
- *      roster to a member outside it), the nearest-people form and the search by name have no day budget, and `features` has no
+ *      roster to a member outside it), the nearest-people form has no day budget, and `features` has no
  *      `openMembership`. With OPEN_MEMBERSHIP_BODIES_OUT set, the status and body of every read is written there, so a
  *      run on origin/main and one on this branch can be compared byte for byte.
  *   2. The global node: `features.openMembership` is true; the whole forms of GET /api/members (no parameters, a delta
  *      without keys, a point without a limit) and GET /api/community/members answer 403 `members_on_demand`, If-None-Match
  *      or not, with heavyReadStats() unmoved (nothing read, no room asked for under the cap); `keys=`, `q=` and
  *      `lat&lng&limit=` answer 200 as before; the 101st nearest read in a day is 429 (another member's are not), a search
- *      still answers; the 101st search by name in a day is 429 too (Marty's call 3, 15 Oct 2026), a search by key and a
- *      nearest read still answer, and another member's searches are their own; the whole invite tree and someone else's branch are 403, the signer's own branch 200; the feed has
+ *      still answers; the whole invite tree and someone else's branch are 403, the signer's own branch 200; the feed has
  *      no `member_joined` line and keeps the posts; an open group's roster is 403 `join_to_see` to a member outside it and
  *      to an invitee, 200 to its members and convenor; the card keeps its count and convenor, and an invitee's card keeps
  *      who invited them, face and all (amendment 1 item 2); an invite-only group is still 404 to an outsider; which groups
@@ -88,7 +87,7 @@ async function main() {
     const { heavyReadStats } = await import('./heavy-reads.js');
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     // Absent on origin/main: the suite still runs to the end there, and reports what fails.
-    const budget = await import('./nearest-people-budget.js' as string).catch(() => null) as null | { resetNearestPeopleBudget(): void; resetPeopleSearchBudget?(): void };
+    const budget = await import('./nearest-people-budget.js' as string).catch(() => null) as null | { resetNearestPeopleBudget(): void };
 
     await initTls();
     se.initStateEngine();
@@ -204,9 +203,6 @@ async function main() {
     let localNearest = 0;
     for (let i = 0; i < 101; i++) if ((await get(`/api/members?${at}&limit=2`, carol)).status === 200) localNearest++;
     assert(localNearest === 101, `local: 101 nearest reads in a day all answer, no budget (${localNearest} of 101)`);
-    let localSearches = 0;
-    for (let i = 0; i < 101; i++) if ((await get('/api/members?q=Al', carol)).status === 200) localSearches++;
-    assert(localSearches === 101, `local: 101 searches by name in a day all answer, no budget (${localSearches} of 101)`);
 
     // ── 2. The global node ──
     console.log('\n── 2. The global node (NODE_PROFILE=global) ──');
@@ -247,22 +243,6 @@ async function main() {
     assert(/100 times today/.test(over.body?.error ?? '') && !/Ʀ/.test(over.text), `global: and says so in words ("${over.body?.error}")`);
     assert((await get('/api/members?q=Al', carol)).status === 200, 'global: past the budget, a search by name still answers');
     assert((await get(`/api/members?${at}&limit=2`, dan)).status === 200, 'global: another member\'s nearest reads are their own');
-    // The search by name's own day budget (READ_LIMITS.peopleSearchesPerDay): Eve has searched nothing since the reset.
-    budget?.resetPeopleSearchBudget?.();
-    let eveOk = 0;
-    for (let i = 0; i < 100; i++) if ((await get(`/api/members?q=${['Al', 'Bo', 'Ca', 'Da'][i % 4]}`, eve)).status === 200) eveOk++;
-    assert(eveOk === 100, `global: 100 searches by name in a day answer (${eveOk} of 100)`);
-    const overSearch = await get('/api/members?q=Ca', eve);
-    assert(overSearch.status === 429 && overSearch.body?.code === 'people_search_day_budget' && Number(overSearch.headers.get('retry-after')) > 0,
-        `global: the 101st search by name is 429 people_search_day_budget with Retry-After (got ${overSearch.status} ${overSearch.text.slice(0, 120)})`);
-    assert(/searched for people by name 100 times today/.test(overSearch.body?.error ?? '') && !overSearch.text.includes('Carol'),
-        `global: and says so in words, naming nobody ("${overSearch.body?.error}")`);
-    const byKey = await get(`/api/members?q=${carol.pubKeyHex}`, eve);
-    assert(byKey.status === 200 && byKey.body?.[0]?.callsign === 'Carol', `global: past it, a search by a member's key still answers: one member, not a walk (got ${byKey.status})`);
-    assert((await get(`/api/members?${at}&limit=2`, eve)).status === 200, 'global: past it, the nearest read is its own budget and answers');
-    assert((await get('/api/members?q=Ca', bob)).status === 200, 'global: another member\'s searches are their own');
-    const tooShort = await get('/api/members?q=C', bob);
-    assert(tooShort.status === 400, `global: a refused search (one letter) is still 400, never counted (got ${tooShort.status})`);
     const badLimit = await get(`/api/members?${at}&limit=0`, dan);
     assert(badLimit.status === 400, `global: a refused limit is still 400, never counted (got ${badLimit.status})`);
     // The invite tree.
@@ -335,7 +315,6 @@ async function main() {
     assert((await get(`/api/groups/${open.id}/members`, dan)).status === 200, 'override: the open group\'s roster answers a member outside it');
     assert((await get(`/api/groups/${open.id}/members?status=active`, eve)).status === 200, 'override: and the invitee\'s landing reads the faces');
     assert((await get(`/api/members?${at}&limit=2`, carol)).status === 200, 'override: the nearest read has no budget (Carol, spent above, reads)');
-    assert((await get('/api/members?q=Ca', eve)).status === 200, 'override: the search by name has no budget (Eve, spent above, searches)');
     const othersOff = await get(`/api/groups?member=${bob.pubKeyHex}`, dan);
     assert(othersOff.status === 200 && othersOff.text.includes('Open Garden'), `override: ?member= answers for another member's key (got ${othersOff.status})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.openMembership`);

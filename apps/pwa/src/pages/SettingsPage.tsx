@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, LANGS, describeArea, isLang, t } from '@beanpool/core';
+import { AREA_STEP_WORDS, describeArea } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
@@ -30,9 +30,6 @@ import {
 } from '../lib/event-extras';
 import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
-import { LANGUAGE_NAMES, WORDS_FEEDBACK_URL } from '../lib/language';
-import { useLanguage } from '../lib/useLanguage';
-import { LanguageLoadNote } from '../components/LanguageSwitch';
 import { loadPatternPreference, setPatternPreference } from '../lib/usePatternBackground';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
@@ -109,44 +106,6 @@ function ToggleSwitch({
         </button>
     );
 }
-
-/**
- * Settings → Language: the same choice as the first screen's switch, kept in this browser only. Every language but
- * English is a machine draft until native speakers have read it (design M4): one line says so, with where to tell us.
- */
-function LanguageRow() {
-    const [lang, choose] = useLanguage();
-    const value = isLang(lang) ? lang : 'en';
-    return (
-        <div data-testid="settings-language" className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
-            <label className="flex items-center gap-3 cursor-pointer">
-                <span className="text-xl" aria-hidden="true">🌐</span>
-                <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Language')}</div>
-                    <div className="text-xs text-nature-500 dark:text-nature-400">{t('The words of the app, on this device')}</div>
-                </div>
-            </label>
-            <select
-                aria-label={t('Language')}
-                value={value}
-                onChange={(e) => { if (isLang(e.target.value)) void choose(e.target.value); }}
-                className="mt-3 w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-[15px] text-nature-900 dark:text-white cursor-pointer"
-            >
-                {LANGS.map((l) => <option key={l} value={l} lang={l}>{LANGUAGE_NAMES[l]}</option>)}
-            </select>
-            <LanguageLoadNote className="mt-2 empty:mt-0" />
-            {value !== 'en' && (
-                <p data-testid="settings-language-draft" className="mt-2 flex flex-wrap gap-x-1 text-xs leading-relaxed text-nature-600 dark:text-nature-300">
-                    <span>{t('These translations are new.')}</span>
-                    <a href={WORDS_FEEDBACK_URL} target="_blank" rel="noopener noreferrer" className="underline font-semibold text-nature-800 dark:text-nature-100">
-                        {t('Tell us what reads wrong')}
-                    </a>
-                </p>
-            )}
-        </div>
-    );
-}
-
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, initialGuidePage, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area'>(initialMode || 'menu');
@@ -978,9 +937,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                 </div>
 
-                                {/* Language: per device, like Appearance (lib/language.ts). Each language listed in itself. */}
-                                <LanguageRow />
-
                                 {/* Background pattern: the doodle wallpaper, or a plain colour. Per device. */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
                                     <label className="flex items-center gap-3 cursor-pointer">
@@ -1398,11 +1354,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                   The grid holds its height while the words load. They arrive a
                                   tick after this screen opens, and without the placeholder the
                                   panel drew as an empty box and then jumped as twelve cells
-                                  appeared underneath the buttons. The words are English in every
-                                  language, so the browser's page translation may not rewrite them
-                                  (translate="no" + notranslate; #1947 confirmation N-B).
+                                  appeared underneath the buttons.
                                 */}
-                                <div data-testid="seed-words" translate="no" className="notranslate grid grid-cols-3 gap-2 mb-6 min-h-[7.5rem]">
+                                <div className="grid grid-cols-3 gap-2 mb-6 min-h-[7.5rem]">
                                     {seedWords ? seedWords.map((word, i) => (
                                         <div key={i} className="bg-oat-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl p-2.5 text-center">
                                             <span className="text-[10px] text-nature-400 block font-mono mb-0.5">{i + 1}.</span>

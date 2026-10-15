@@ -25,7 +25,7 @@ export function IdlePausedBanner() {
             <button
                 type="button"
                 onClick={resume}
-                className="min-h-[36px] px-3 rounded-lg bg-nature-800 hover:bg-nature-700 border border-nature-700 text-nature-100 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-500"
+                className="min-h-[36px] px-3 rounded-lg bg-nature-800 hover:bg-nature-700 border border-nature-700 text-nature-100 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
             >
                 Resume
             </button>

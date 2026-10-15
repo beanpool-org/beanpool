@@ -71,7 +71,6 @@ import {
     enrolAdminOwnerKey,
     pruneExpiredAuthEntries,
     verifyEd25519Signature,
-    PHONE_HANDOFF_IDLE_TTL_MS,
 } from './admin-key-auth.js';
 import { checkAdminAuth, resetAdminAuthTarpit, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import {
@@ -379,9 +378,7 @@ async function main() {
             signature: aliceKeys.sign(chalAliceNew.challenge),
         });
         assert(solveAliceNew.ok === true, 'New challenge for Alice solved');
-        // From the phone's Manage (its hand-off session): granting admin and break-glass mode, below, ask the owner's fresh
-        // proof (design case 18, C5, C8), which a computer's session is sent to the phone for.
-        const exchangeAliceNew = consumeHandshakeToken(solveAliceNew.handshakeToken!, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+        const exchangeAliceNew = consumeHandshakeToken(solveAliceNew.handshakeToken!);
         assert(exchangeAliceNew.ok === true, 'New token exchanged successfully');
         const aliceSessionId2 = exchangeAliceNew.sessionId!;
         const aliceSession2Valid = validateAdminSession(aliceSessionId2);

@@ -13,8 +13,6 @@ Type the current password and a new one. The new one needs at least 8 characters
 
 Change it whenever someone who knew it steps down. Everyone who has it is an owner.
 
-A new server has no admin password, but this screen still shows the password and two-factor cards. There is nothing to change there: owners and admins sign in with their phones. Leave them alone. They go away once the password is retired.
-
 If an older version of the server made up the first password (ADMIN_PASSWORD was empty; a new install makes none), changing it deletes data/first-admin-password.txt at once. The log says so.
 
 On a server whose password is retired (below) there is nothing to change: this card is refused.
@@ -32,7 +30,7 @@ What happens: the password and the two-factor sign-in that guarded it are delete
 
 What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more, and the old settings page points to the phone.
 
-It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so at every start until you take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in).
+It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so once; take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in).
 
 ## Two-factor sign-in
 
@@ -75,8 +73,7 @@ A break-glass code belongs to one owner. It starts with **bg-** and does one thi
 - The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
 - If two-factor sign-in is on, it still asks for the code. If it is off, the code alone is enough: the admin password alone does not add a key.
 - When an owner signs out everywhere (see Signing out everywhere, below), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out leaves their code alone.
-- Adding the key of someone who is already an owner again keeps their code. A new owner added in Settings, or one who claimed the community from their phone, has no code until they make one (**Make a break-glass code**, or **Break-glass code** in the app). beanpool recover and beanpool claim --key print one.
-- There is no screen to type the code into yet. It is sent to your server's /api/local/admin/auth/enrol, in the X-Break-Glass-Code header, with the new key, which must already be a member.
+- Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.
 - In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one.
 
 Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.

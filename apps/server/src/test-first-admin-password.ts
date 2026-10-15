@@ -17,7 +17,7 @@
  *      Changing the password deletes the file at once, and the log says so.
  *   C. A start after the change: no file, no reminder, neither password printed.
  *   D. ADMIN_PASSWORD from .env on a new install: no file, nothing printed, and it does not sign in (it is ignored).
- *   E. Wipe & Reset is gone (design case 18, A1): the route answers 404; the file, the hash and the sign-in are as they were.
+ *   E. Wipe & Reset deletes the file; the next start is a new install: no password, no file, the old one does not sign in.
  *   F. A file that no longer holds the admin password (a restore or a take-over replaced it) is deleted at boot.
  *   G. A new install never writes the file: a folder in its place does not stop the start, and nothing is locked.
  *   H. A password change that never reached the disk is reported as a failure and keeps the file: it still holds the
@@ -300,22 +300,27 @@ async function main(): Promise<void> {
     assert(!(await signsIn(d, ENV_PW)), 'D4. it does not sign in: a new install ignores ADMIN_PASSWORD');
     await d.stop();
 
-    // ── E. Wipe & Reset is gone ─────────────────────────────────────────────────────────────
-    // No route resets the node (design case 18, A1): starting again is the server's own (stop, move local-config.json
-    // aside or remove ./data). The route answers 404, and the password and its file are as they were.
-    console.log('\nE. Wipe & Reset is gone: the route answers 404 and nothing changes');
+    // ── E. Wipe & Reset ─────────────────────────────────────────────────────────────────────
+    console.log('\nE. Wipe & Reset, then the start after it');
     const dirE = path.join(root, 'e');
     olderInstall(dirE, OLD_PW);
-    const e = await started(dirE);
+    let e = await started(dirE);
     const pwBefore = fs.existsSync(fileIn(dirE)) ? readFile(dirE) : '';
     assert(!!pwBefore && await signsIn(e, pwBefore), 'E1. (setup) a first password in the file, and it signs in');
-    const hashBefore = JSON.parse(fs.readFileSync(path.join(dirE, 'local-config.json'), 'utf-8')).adminHash;
+    const beforeReset = e.output().length;
     const reset = await postAsOwner(e, pwBefore, '/api/local/reset', { password: pwBefore });
-    assert(reset === 404, `E2. POST /api/local/reset is gone (${reset})`);
-    assert(fs.existsSync(fileIn(dirE)) && readFile(dirE) === pwBefore, 'E3. the file is still there, with the same password');
+    if (reset === 200) twoFactorOf.delete(dirE); // Wipe & Reset wipes the 2FA with the rest
+    assert(reset === 200, `E2. Wipe & Reset works (${reset})`);
+    assert(!fs.existsSync(fileIn(dirE)), 'E3. it deletes the file at once: the password in it is gone');
+    await new Promise((r) => setTimeout(r, 200));
+    assert(/deleted/i.test(e.output().slice(beforeReset)), 'E4. and the log says so');
+    await e.stop();
+    e = await started(dirE);
+    assert(!fs.existsSync(fileIn(dirE)), 'E5. the next start is a new install: it makes no password and no file');
     const cfgE = JSON.parse(fs.readFileSync(path.join(dirE, 'local-config.json'), 'utf-8'));
-    assert(!!cfgE.adminHash && cfgE.adminHash === hashBefore, 'E4. the password hash is as it was');
-    assert(await signsIn(e, pwBefore), 'E5. and the password still signs in');
+    assert(!cfgE.isLocked && !cfgE.adminHash, 'E6. no password hash, not locked');
+    assert(!printed(e.output(), pwBefore), 'E7. the old one is printed nowhere');
+    assert(!(await signsIn(e, pwBefore)), 'E8. the old one does not sign in');
     await e.stop();
 
     // ── F. A file whose password is no longer the admin password ────────────────────────────

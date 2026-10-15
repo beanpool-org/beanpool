@@ -189,7 +189,7 @@ export function AnalyticsModule({
                         </span>
                         {peakThresholdBreached && <span className="text-lg">🚨</span>}
                     </div>
-                    <span className="text-[11px] text-bp-ink-terra font-semibold truncate block">
+                    <span className="text-[11px] text-terra-400 font-semibold truncate block">
                         {peakNodeName ? `Peak Node: ${peakNodeName}` : 'All nodes quiet'}
                     </span>
                 </div>
@@ -323,7 +323,7 @@ export function AnalyticsModule({
                                 : `${peakValue} Streams`}
                         </span>
                         {peakNodeName && (
-                            <span className="text-[11px] text-bp-ink-terra font-semibold">({peakNodeName})</span>
+                            <span className="text-[11px] text-terra-400 font-semibold">({peakNodeName})</span>
                         )}
                     </div>
 
@@ -581,7 +581,7 @@ export function AnalyticsModule({
                                     </div>
                                     <div className="bg-nature-950/80 rounded-xl p-2.5 border border-nature-800/80">
                                         <span className="text-[9px] font-extrabold uppercase text-nature-400 block">Recorded Peak</span>
-                                        <span className="text-sm font-black text-bp-ink-terra block">
+                                        <span className="text-sm font-black text-terra-400 block">
                                             {metricType === 'cpu'
                                                 ? `${stat.peak.toFixed(1)}%`
                                                 : metricType === 'memory'
@@ -616,7 +616,7 @@ export function AnalyticsModule({
                                 <div className="flex items-center justify-between pt-1">
                                     <button
                                         onClick={() => onSelectNode(p.id)}
-                                        className="text-[11px] font-bold text-bp-ink-terra hover:text-oat-50 transition-colors"
+                                        className="text-[11px] font-bold text-terra-400 hover:text-terra-300 transition-colors"
                                     >
                                         Target Node →
                                     </button>

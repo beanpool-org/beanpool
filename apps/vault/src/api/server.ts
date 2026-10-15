@@ -108,18 +108,6 @@ export const LIMITS = {
     restoresPerAccountPerDay: 5,
     depositsPerKeyPerDay: 10,
     ceremonyCallsPerAddressPerMinute: 20,
-    /**
-     * Signed member calls from one address (case 16 NOTE: none had a limit; each refusal costs a keyholder signature,
-     * each call a stored nonce). A phone makes a handful in a sign-in, so 60 a minute leaves room for many members behind
-     * one carrier's shared address. Counted before the signature is checked, so a flood costs neither.
-     */
-    signedCallsPerAddressPerMinute: 60,
-    /**
-     * `GET /v1/report` from one address (case 16 NOTE: unmetered; each one scans the copies table and asks the keyholder
-     * for a signature). Ten a second: what a poller reading it every 100 ms needs (handover.test.ts does; 10 a minute
-     * broke it), while one address can no longer ask for signatures as fast as it can send.
-     */
-    reportsPerAddressPerMinute: 600,
 } as const;
 
 export interface VaultApiOptions {
@@ -254,12 +242,6 @@ interface Route {
     auth: 'none' | 'signed' | 'custodian';
     /** Answers while the keyholder is locked or fresh. */
     whenLocked: boolean;
-    /**
-     * On a fresh vault, also answers a key that the backup named in the body (`backup`) lists as its custodians (V1):
-     * the hello and the restore, so the custodians in force at a backup can rebuild a vault whose image pins only the
-     * genesis keys. See {@link backupListsKey}.
-     */
-    backupListed?: boolean;
     handler: Handler;
 }
 
@@ -419,8 +401,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         restores: new RateLimiter(LIMITS.restoresPerAccountPerDay, DAY_MS),
         deposits: new RateLimiter(LIMITS.depositsPerKeyPerDay, DAY_MS),
         ceremony: new RateLimiter(LIMITS.ceremonyCallsPerAddressPerMinute, 60_000),
-        signed: new RateLimiter(LIMITS.signedCallsPerAddressPerMinute, 60_000),
-        reports: new RateLimiter(LIMITS.reportsPerAddressPerMinute, 60_000),
     };
 
     // Tickets spent, by their `n`, until they expire. In memory: see auth.ts on restarts.
@@ -498,10 +478,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     // ─── The database, a restore in progress, and re-wrapping ───────────────────────────────
 
     let restoreRetryAt = 0;
-    /**
-     * Why the last try failed: for the custodians (the unlock's answer, /v1/unlock/backups) and the host's log, never
-     * for every caller.
-     */
+    /** Why the last try failed: for the custodians' unlock answer and the host's log, never for every caller. */
     let restoreFailure: string | null = null;
 
     function restoreWaiting(): HttpError {
@@ -536,7 +513,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                     restoreFailure = null;
                 } catch (e) {
                     restoreRetryAt = clock() + RESTORE_RETRY_MS;
-                    restoreFailure = (e instanceof Error ? e.message : String(e)).slice(0, 320);
+                    restoreFailure = (e instanceof Error ? e.message : String(e)).slice(0, 200);
                     counters.counts.errors++;
                     console.error(`vault-api: the restore from backup is not finished: ${restoreFailure}`);
                     throw restoreWaiting();
@@ -571,18 +548,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * newer backup's deletion records are applied to it, so a copy deleted after that backup was made is dropped again
      * (§1.7), and only then does it go into place. A newer backup that can't be listed, fetched or opened fails the
      * whole restore, which is tried again: skipping one would bring back copies its members deleted. (A file of another
-     * vault in the same store is not one of this vault's backups and says nothing about its copies. It is passed over
-     * unnamed, and so is a file of this vault whose header's vaultId was changed: the copies deleted in it come back.
-     * Carried, review #1981 N5.)
-     *
-     * So that one damaged file doesn't stop a restore for good (V2, case 16), every store's copy of a newer backup is
-     * tried, and its deletion records are read by their own seal, which holds when the snapshot or the signature beside
-     * them is damaged ({@link newerDeletions}). Other than a header naming another vault, one whose records open in no
-     * store is never skipped by the vault itself (review #1981, B2): the restore waits, locked as before, and the file
-     * is named to the custodians (the unlock's 503 and /v1/unlock/backups). The way out is a good copy put in a store,
-     * if one exists (no custodian command fetches a backup file), or the file deleted from the off-box store with the
-     * bucket's own credentials, which loses the deletions in it. The vault's own store can't be edited (the image has no
-     * login), so a file bad there and missing or bad off the box leaves only a wipe.
+     * vault in the same store is not one of this vault's backups and says nothing about its copies.)
      *
      * A record the backup already holds is older than the backup and is left alone: a copy deposited again after it
      * must survive. The keyholder forgets the backup (`restoreDone`) only once the built database is in place: a crash
@@ -606,11 +572,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const built = VaultDb.open(opts.dataDir, RESTORE_BUILD);
         let reheld: HoldRow[];
         try {
-            const listing = await backupListing();
-            const newer = listing.names.filter(n => compareBackupNames(n, opened.result.header.name) > 0);
+            const newer = (await allBackupNames()).filter(n => compareBackupNames(n, opened.result.header.name) > 0);
             for (const name of newer) {
-                const records = await newerDeletions(name, listing.holders(name), opened.result.header.vaultId);
-                if (!records) continue;
+                const bytes = await readBackup(name);
+                if (parseBackupFile(bytes).header.vaultId !== opened.result.header.vaultId) continue;
+                const d = await call<{ deletions: string }>('openBackupDeletions', {}, bytes, 300_000);
+                const records = JSON.parse(d.deletions) as WireDeletion[];
                 built.transaction(() => {
                     for (const w of records) {
                         const rec: DeletionRow = { copy_id: w.id, pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
@@ -642,54 +609,13 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     }
 
     /**
-     * Every backup name in the vault's own store and the off-box one, oldest first, and which of the two hold each (the
-     * vault's own first). An off-box store that can't be listed fails it: a restore that skipped one could bring back
-     * copies their members deleted (completeRestore).
+     * Every backup name in the vault's own store and the off-box one, oldest first. An off-box store that can't be
+     * listed fails it: a restore that skipped one could bring back copies their members deleted (completeRestore).
      */
-    async function backupListing(): Promise<{ names: string[]; holders: (name: string) => BackupStore[] }> {
-        const local = new Set(await store.list());
-        const remote = offsite ? { store: offsite, names: new Set(await offsite.list()) } : null;
-        const names = [...new Set([...local, ...(remote?.names ?? [])])].sort(compareBackupNames);
-        return { names, holders: n => [...(local.has(n) ? [store] : []), ...(remote?.names.has(n) ? [remote.store] : [])] };
-    }
-
-    /**
-     * A newer backup's deletion records for a restore (B2, review #1981), from the first store whose copy opens: the
-     * vault's own, then the off-box one. The keyholder reads them by their own seal, so a copy whose snapshot or
-     * signature is damaged still gives them. `null` only when every copy is another vault's file. When no copy opens, a
-     * copy that couldn't be fetched fails the try (it may be the good one), and so does a file of this vault whose
-     * records open in no store, named: the vault never skips one itself, since the copies deleted in it would come back.
-     */
-    async function newerDeletions(name: string, holders: BackupStore[], vaultId: string): Promise<WireDeletion[] | null> {
-        let fetchError: unknown = null;
-        let why: string | null = null;
-        let otherVault = false;
-        for (const holder of holders) {
-            let bytes: Buffer;
-            try {
-                bytes = await holder.get(name);
-            } catch (e) {
-                fetchError = e;
-                continue;
-            }
-            try {
-                if (parseBackupFile(bytes).header.vaultId !== vaultId) {
-                    otherVault = true;
-                    continue;
-                }
-                const d = await call<{ deletions: string; signed: boolean }>('openBackupDeletions', {}, bytes, 300_000);
-                if (!d.signed) console.error(`vault-api: the newer backup ${name} is not signed by this vault; its deletion records opened by their own seal`);
-                return JSON.parse(d.deletions) as WireDeletion[];
-            } catch (e) {
-                if (e instanceof KeyholderCallError ? e.code !== 'bad_backup' : !/^Not a vault backup:/.test((e as Error)?.message ?? '')) throw e;
-                why = ((e as Error).message ?? '').slice(0, 80);
-            }
-        }
-        if (why !== null) {
-            throw new Error(`the newer backup ${name} does not open${fetchError ? ', nor can its other copy be fetched' : ' in any store'} (${why})${fetchError ? ': it is tried again, and opens if that copy is good; delete nothing while it cannot be fetched' : ': put a good copy in a store, or delete it from the off-box store if it is there and lose its deletions'}`);
-        }
-        if (fetchError || !otherVault) throw fetchError ?? new Error(`the newer backup ${name} is in neither store`);
-        return null;
+    async function allBackupNames(): Promise<string[]> {
+        const names = new Set(await store.list());
+        if (offsite) for (const n of await offsite.list()) names.add(n);
+        return [...names].sort(compareBackupNames);
     }
 
     /** A backup by name: from the vault's own store, or else the off-box one (the cold path: a new machine has none). */
@@ -864,8 +790,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     // ─── Routes ─────────────────────────────────────────────────────────────────────────────
 
     const routes: Record<string, Route> = {};
-    const route = (method: string, p: string, auth: Route['auth'], whenLocked: boolean, handler: Handler, backupListed = false) => {
-        routes[`${method} ${p}`] = { auth, whenLocked, handler, backupListed };
+    const route = (method: string, p: string, auth: Route['auth'], whenLocked: boolean, handler: Handler) => {
+        routes[`${method} ${p}`] = { auth, whenLocked, handler };
     };
 
     // A vault still finishing a restore from backup serves nothing yet: locked, to the outside.
@@ -1035,8 +961,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 cancelled_at: null, released_at: null,
             };
             database.transaction(() => {
-                // A hold past its wait that its device never collected gives way to this one; that device's collect then
-                // answers `stopped` too, which the phone words as stopped or replaced (case 16 F6).
                 if (open) database.cancelHold(open.id, ctx.now);
                 database.insertHold(hold);
             });
@@ -1115,7 +1039,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     route('GET', '/v1/report', 'none', false, async ctx => {
-        limited(limits.reports.take(ctx.address, ctx.now), 'reports from this address');
         const database = await ensureDb();
         await rollReport(ctx.now);
         const text = reportText(ctx.now, counters.day, counters.counts, database, ctx.status);
@@ -1172,7 +1095,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     route('POST', '/v1/unlock/hello', 'custodian', true, async ctx => {
         if (ctx.status.state === 'open') throw new HttpError(409, 'open', 'The vault is already open.');
         return json(200, await call('hello', { custodianNonce: ctx.body.custodianNonce }));
-    }, true);
+    });
 
     /** Nothing is in force after a genesis until two custodians confirm their shares (/v1/unlock/confirm). */
     route('POST', '/v1/unlock/genesis', 'custodian', true, async ctx => {
@@ -1265,7 +1188,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             db = null;
         });
         return json(200, { state: 'locked', vaultId: header.vaultId, generation: header.generation });
-    }, true);
+    });
 
     route('POST', '/v1/reshare/hello', 'custodian', false, async ctx => json(200, await call('hello', { custodianNonce: ctx.body.custodianNonce })));
 
@@ -1367,7 +1290,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     /** The backups the vault can see, by name: its own store's and the off-box store's (for the cold path's restore). */
-    route('POST', '/v1/unlock/backups', 'custodian', true, async ctx => {
+    route('POST', '/v1/unlock/backups', 'custodian', true, async () => {
         let remote: string[] | null = null;
         let offsiteError: string | null = null;
         if (offsite) {
@@ -1377,10 +1300,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 offsiteError = e instanceof OffsiteError ? e.short : 'failed';
             }
         }
-        // Why a restore from backup is still waiting (B2, review #1981): on the image the unlock answers before the data
-        // partition is mounted and the restore runs, so this is where a custodian reads it; never in a public answer.
-        const restoreWaiting = ctx.status.restorePending ? restoreFailure : null;
-        return json(200, { local: await store.list(), offsite: remote, offsiteError, restoreWaiting });
+        return json(200, { local: await store.list(), offsite: remote, offsiteError });
     });
 
     // ─── Backups ────────────────────────────────────────────────────────────────────────────
@@ -1698,67 +1618,6 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         }
     }
 
-    /**
-     * V1 (case 16): a fresh vault's custodians in force are the genesis keys its image pins, so after a reshare the new
-     * custodians alone could not rebuild one. A fresh vault also lets a key make the hello and the restore when the
-     * backup the request names, read by name from the vault's own stores (never from the request), lists that key in
-     * its state's `custodians`, and so does the newest backup of that vault the stores hold (B1, review #1981), and the
-     * named backup is of that newest backup's generation (#1981 confirmation 1): an older backup still lists custodians
-     * a later reshare retired, and its state unlocks with their shares, so neither their own keys nor a custodian the
-     * reshare kept may start it. A newer file this can't read might be that newest backup, so it refuses (the image's
-     * pinned genesis keys still start the restore). This is about the keys a request is signed by: the pinned genesis
-     * keys, the rebuild keys, start a restore of any generation (README "Rebuild keys"), and the newest backup is the
-     * newest the stores list, so someone who can remove files from a store can make an older one the newest.
-     * Never a key the backup doesn't list: the keyholder's `adoptState` checks the list again on the very state it
-     * adopts, with the key's signature over the restore statement for this boot and that name.
-     *
-     * The header is checked here only for which keys it names: a fresh vault has no keys to check its signature with.
-     * It is authenticated by the restore that follows, before anything is served: the state it adopts opens only with
-     * an `M` that two shares of custodians it lists rebuild (its mCheck, and its sealed working keys take the header's
-     * vaultId, generation, custodians and threshold as associated data; keyholder `submitShare` refuses shares from keys
-     * outside the list), and `openBackup` then takes only a file signed by that state's ticket key, with the name and
-     * state hash the adoption recorded. What it can't tell is a whole vault someone else made, with their own `M`,
-     * written into the vault's stores: that needs write access to them (the vault's own partition or the off-box
-     * bucket's key), and the genesis keys handed to the new custodians as rebuild keys at the reshare are the way that
-     * needs nothing of the stores (apps/vault/README.md, "Rebuild keys").
-     */
-    async function backupListsKey(raw: string, key: string): Promise<boolean> {
-        let name: unknown;
-        try {
-            name = (JSON.parse(raw) as { backup?: unknown })?.backup;
-        } catch {
-            return false;
-        }
-        if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) return false;
-        const generationOf = (state: unknown) => (state as { generation?: unknown } | null)?.generation;
-        const lists = (state: unknown) => {
-            const custodians = (state as { custodians?: unknown } | null)?.custodians;
-            return Array.isArray(custodians) && custodians.includes(key);
-        };
-        try {
-            const named = parseBackupFile(await readBackup(name)).header;
-            if (!lists(named.state)) return false;
-            const listing = await backupListing();
-            for (const n of listing.names.filter(n => compareBackupNames(n, name as string) > 0).reverse()) {
-                let unreadable = false;
-                for (const holder of listing.holders(n)) {
-                    try {
-                        const header = parseBackupFile(await holder.get(n)).header;
-                        // And of the newest backup's generation: an older generation's state unlocks with its own
-                        // custodians' shares, retired ones included, so a re-appointed custodian would let them in.
-                        if (header.vaultId === named.vaultId) return lists(header.state) && generationOf(header.state) === generationOf(named.state);
-                    } catch {
-                        unreadable = true;
-                    }
-                }
-                if (unreadable) return false;
-            }
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
     async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         const origin = req.headers.origin;
         const cors: Record<string, string> = origin === GLOBAL_ORIGIN ? { 'Access-Control-Allow-Origin': GLOBAL_ORIGIN, Vary: 'Origin' } : {};
@@ -1785,21 +1644,15 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const raw = await readBody(req);
             const status = await keyholderStatus();
             if (!r.whenLocked && status.state !== 'open') throw new HttpError(503, 'locked', 'The key vault is locked.', { locked: true });
-            // Every signed call is counted per address before its signature is checked (B3, review #1981): a flood costs no
-            // keyholder signature and stores no nonce, so no one address can fill the nonce store's cap for everyone.
-            if (r.auth === 'signed') limited(limits.signed.take(clientAddress(req), now), 'requests from this address');
-            if (r.auth === 'custodian') limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
             if (r.auth !== 'none') {
                 const check = verifySignedRequest({ headers: req.headers, method, path: url.pathname, body: raw, hosts: opts.hosts, nonces, now });
                 if (!check.ok) throw new HttpError(check.status, check.code, check.error);
                 key = check.key;
-                if (r.auth === 'custodian' && !status.custodians.includes(key) && !status.pending?.custodians.includes(key)) {
-                    if (!r.backupListed || status.state !== 'fresh') {
+                if (r.auth === 'custodian') {
+                    if (!status.custodians.includes(key) && !status.pending?.custodians.includes(key)) {
                         throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians.');
                     }
-                    if (!(await backupListsKey(raw, key))) {
-                        throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians, nor of the backup named.');
-                    }
+                    limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
                 }
             }
             if (raw) {

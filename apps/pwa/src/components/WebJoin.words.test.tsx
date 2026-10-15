@@ -10,7 +10,7 @@
  * own check), so a join here is one the node would take. Nothing leaves the test.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
     checkDoorWorkChallenge,
     checkDoorWorkSolution,
@@ -337,10 +337,7 @@ describe('the two doors', () => {
         const s = heldSolver(true);
         renderJoin({ wordsDoor: true, solveWork: s.solver });
         await toTheDoors();
-        await waitFor(() => expect(s.progress.length).toBeGreaterThan(0));
-        act(() => {
-            s.progress.at(-1)?.({ done: 1, of: 8, tries: 1_000, rate: 500 });
-        });
+        s.progress.at(-1)?.({ done: 1, of: 8, tries: 1_000, rate: 500 });
         expect(await screen.findByTestId('join-busy')).toHaveTextContent(
             'Lots of people are joining right now. Setting up a 12-words account will take about 15 seconds in this browser. Or sign in to join now.');
         expect(screen.getByTestId('join-words')).not.toBeDisabled();

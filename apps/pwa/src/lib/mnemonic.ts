@@ -9,7 +9,7 @@
  */
 
 import { WORDLIST } from './bip39-wordlist';
-import { lowercaseRecoveryWords, toEd25519Pkcs8 } from '@beanpool/core';
+import { toEd25519Pkcs8 } from '@beanpool/core';
 
 /**
  * Generate a new 12-word mnemonic from cryptographically secure random entropy.
@@ -45,7 +45,7 @@ export function generateMnemonic(): string[] {
  */
 export function validateMnemonic(words: string[]): boolean {
     if (words.length !== 12) return false;
-    return words.every(w => WORDLIST.includes(lowercaseRecoveryWords(w).trim()));
+    return words.every(w => WORDLIST.includes(w.toLowerCase().trim()));
 }
 
 /**
@@ -56,8 +56,8 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     publicKeyHex: string;
     privateKeyHex: string;
 }> {
-    // Normalise and join words. Lowercased as the list is written (core recovery-words.ts): a Turkish keyboard's İ and ı are an i.
-    const phrase = words.map(w => lowercaseRecoveryWords(w).trim()).join(' ');
+    // Normalise and join words
+    const phrase = words.map(w => w.toLowerCase().trim()).join(' ');
     const phraseBytes = new TextEncoder().encode(phrase);
 
     // Double SHA-256 → 32-byte seed

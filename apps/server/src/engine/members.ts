@@ -5,7 +5,7 @@
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
-import { foldName, getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -129,10 +129,10 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
  * ("every name is taken") — and tsc cannot catch it, since `!someObject` is valid TS.
  */
 export function isCallsignAvailable(callsign: string, excludePublicKey?: string): boolean {
-    const norm = foldName(callsign.trim());
-    if (callsign.trim().length < 2) return false;
+    const norm = callsign.trim().toLowerCase();
+    if (norm.length < 2) return false;
     const row = db.prepare(
-        `SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
+        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
     ).get(norm, excludePublicKey ?? '');
     return !row;
 }
@@ -171,19 +171,15 @@ export interface RecoveryCandidate {
  * row, which was N+1 queries on that same public endpoint.
  */
 export function findRecoveryCandidates(callsign: string, options: { exact?: boolean } = {}): RecoveryCandidate[] {
-    const norm = foldName(callsign.trim());
+    const norm = callsign.trim().toLowerCase();
     if (!norm) return [];
     // PREFIX by default. Callsigns are unique per node, so the member who wanted `paul` and was
     // given `paul12` has no reason to remember the digits months later — and an exact match returns
     // nothing, which reads as "your account is gone" rather than "try harder". That was the case for
     // a prefix and avatars, while callsigns were public; they are members' now on every community
     // (2026-10-01), and a prefix listed every member with a sign-in copy, face and join date to
-    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' reads the whole index
-    // rather than a range of it (EXPLAIN: SCAN … USING INDEX; review of #1956, N5), which no route pays now; a leading
-    // wildcard is not offered.
-    //
-    // Never a visitor's row (a member of another community, or a key someone sent to): no restore here brings one back,
-    // and /api/recovery/collect's resolveCallsign leaves them out too, so the key the lookup lists is one it accepts.
+    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
+    // leading wildcard would not, and is not offered.
     //
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
@@ -209,8 +205,8 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
-            WHERE ${options.exact ? 'm.callsign_fold = ?' : "m.callsign_fold LIKE ? ESCAPE '\\'"}
-              AND m.status NOT IN ('migrated', 'pruned') AND m.is_visitor = 0
+            WHERE ${options.exact ? 'lower(m.callsign) = ?' : "lower(m.callsign) LIKE ? ESCAPE '\\'"}
+              AND m.status NOT IN ('migrated', 'pruned')
         )
         WHERE sso_count > 0
         ORDER BY length(callsign), callsign
@@ -298,7 +294,7 @@ export function registerMemberInternal(
     if (existing && !existing.is_visitor) {
         // Re-registration for a known key. Only touch the callsign if it actually
         // changed, and uniquify it (excluding self) so a re-register never collides.
-        if (foldName(callsign) !== foldName(String(existing.callsign || ''))) {
+        if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
             callsign = uniquifyCallsign(callsign, publicKey);
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
@@ -369,17 +365,9 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     // lines below: an enterprise or a project is keyed on its id. A reserved id is no one's key and no request names
     // one (the send and conversation routes refuse it): the admin inbox's own `system` sender gets its row, as before.
     if (!existing && !isMemberKeySpelling(publicKey) && !isSyntheticAccount(publicKey)) throw badKeyError();
-    // The name a peer or a sender gives a visitor is a member name here like any other, so it takes the one name rule
-    // (isCallsignAvailable) and a member's length (32, as updateProfile cuts a rename): one held by anyone else (a
-    // member, another visitor) is not written, and the row keeps or gets its "Visitor-" name (visitorPlaceholder).
-    // Written unchecked, it read as that member's to anything that resolves a name (review of #1956, N3).
-    // Only a string: a peer's null or number is no name (a null written as one read "null").
-    const given = typeof callsign === 'string' ? callsign.trim().slice(0, 32).trim() : '';
-    callsign = given && isCallsignAvailable(given, publicKey) ? given : undefined;
     if (existing) {
         let changed = false;
-        // A visitor's own placeholder only: a member who named themselves "Visitor-…" is never renamed by a peer.
-        if (callsign && existing.is_visitor && existing.callsign.startsWith('Visitor-')) {
+        if (callsign && existing.callsign.startsWith('Visitor-')) {
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
@@ -396,7 +384,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
         if (changed) bumpMembersVersion();
         return false;
     }
-    const generatedCallsign = callsign || visitorPlaceholder(publicKey);
+    const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
     // A visitor's row (is_visitor = 1, the engine's isVisitorKey): it receives what is sent to it and reads only what a
     // non-member reads. An existing row, above, is never made one: a member stays a member.
     db.transaction(() => {
@@ -407,26 +395,6 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
     return true;
-}
-
-/**
- * A new visitor's name when it brings none that is free: "Visitor-" and the key's first 8 characters, else its first 12,
- * 16 … up to the whole key, the first that is free by the one name rule (isCallsignAvailable), else the whole key and a
- * number. Names are not reserved and a key's first 8 are public, so a member may hold "Visitor-<first 8>" of a key someone
- * means to reach; written unchecked, that name made the key's row impossible to write, so nobody here could message the
- * key or send it Beans, and every federation path naming it threw (deciding review of #1977, B1).
- */
-function visitorPlaceholder(publicKey: string): string {
-    for (let n = 8; ; n += 4) {
-        const name = `Visitor-${publicKey.slice(0, n)}`;
-        if (isCallsignAvailable(name, publicKey)) return name;
-        if (n >= publicKey.length) break;
-    }
-    for (let i = 2; i < 1000; i++) {
-        const name = `Visitor-${publicKey}-${i}`;
-        if (isCallsignAvailable(name, publicKey)) return name;
-    }
-    return `Visitor-${publicKey}-${Date.now()}`;
 }
 
 export const NOT_A_MEMBER_ERROR = 'Only members of this community can do this.';
@@ -494,11 +462,9 @@ export function updateProfile(
         const requested = update.callsign.trim().slice(0, 32);
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
-            // Any change, a change of case included: the member's own row is left out of the check, so "marty" →
-            // "Marty" is free, but where a node already holds two names that fold the same (db.ts migrateCallsignFold),
-            // one of them may not take the other's spelling exactly (the unique index on lower(callsign) would refuse
-            // it as a raw error) or any other case of it.
-            if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
+            if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+                if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
+            }
             callsign = requested;
         }
     }

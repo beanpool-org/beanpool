@@ -33,9 +33,8 @@ export function readVaultConfig(url: string | undefined, ticketKeys: string | un
 
 /**
  * This build's vault. Expo writes `process.env.EXPO_PUBLIC_*` into the app when it is built (babel-preset-expo), so
- * each is read by its full name, never through a variable. Public keys and an address: nothing secret. A real build
- * may point at the live vault (Marty, 2026-10-05): until the reshare one person holds all three shares, as
- * apps/vault/README.md says, and the reshare comes before the public launch.
+ * each is read by its full name, never through a variable. Public keys and an address: nothing secret. Until the
+ * custodians' parts are reshared, only a test vault's values go in a build: never point a real build at a live vault.
  */
 export function vaultConfig(): VaultConfig | null {
     return readVaultConfig(

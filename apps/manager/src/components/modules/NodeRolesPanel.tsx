@@ -356,7 +356,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 )}
                 {loading && roles === null && !loadError && (
                     <p className="text-sm text-nature-400 m-0 flex items-center gap-2" data-testid="roles-loading">
-                        <span className="animate-spin text-bp-ink-terra">⏳</span>
+                        <span className="animate-spin text-terra-400">⏳</span>
                         <span>Loading current roles…</span>
                     </p>
                 )}
@@ -527,7 +527,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                                 <span>Adding</span>
                                 <strong className="text-white break-words min-w-0">{target.pubkey === myKey ? `${target.name} (you)` : target.name}</strong>
                                 <span className="font-mono text-xs text-nature-400">{shortKey(target.pubkey)}</span>
-                                <button type="button" onClick={resetAdd} disabled={busy} className="min-h-[48px] px-2 text-sm text-bp-ink-terra underline">
+                                <button type="button" onClick={resetAdd} disabled={busy} className="min-h-[48px] px-2 text-sm text-terra-400 underline">
                                     Change
                                 </button>
                             </div>

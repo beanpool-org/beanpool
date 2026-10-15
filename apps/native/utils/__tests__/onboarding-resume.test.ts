@@ -92,12 +92,10 @@ describe('the welcome screen', () => {
         expect(s).toMatch(/if \(plan\.mode === 'globalJoin' && plan\.identity\) \{\s*\/\/[^\n]*\n\s*setGlobalKey\(\{ identity: plan\.identity, createdHere: plan\.freshKey \}\);/);
     });
 
-    // One line in English at the floor's width, shrinking first; a second line for a longer language, which one line
-    // can't hold even at 0.6 (21 of the 24 other languages: utils/__tests__/language-switch-render.test.ts).
-    it('offers the two doors as two full-width buttons of at most two lines, and no longer says BeanPool is invite-only', () => {
+    it('offers the two doors as two full-width, one-line buttons, and no longer says BeanPool is invite-only', () => {
         const s = src();
-        expect(s).toMatch(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🎟️ Join with an invite'\)\}</);
-        expect(s).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🌍 Explore BeanPool worldwide'\)\}</);
+        expect(s).toMatch(/numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>🎟️ Join with an invite</);
+        expect(s).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>🌍 Explore BeanPool worldwide</);
         expect(s).not.toMatch(/BeanPool is invite-only/);
         expect(s).toMatch(/No invite\? Explore BeanPool worldwide and find a community near you\./);
     });

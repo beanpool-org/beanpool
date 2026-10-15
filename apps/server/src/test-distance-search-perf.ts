@@ -25,12 +25,6 @@
  *   6. a visitor's read on the global node (G9a: `coarse`, every place read as its 0.1° area inside the query) is no
  *      slower than the member's read of the same shape beyond a timer's noise, takes the same path (circles, or one
  *      pass), and its pages are the brute-force pages by distance from each post's area
- *   8. a member's read where anyone can join (`neighbourhood`, every other member's place read as its 0.01° neighbourhood
- *      inside the query, the reader's own exact; DESIGN-global-member-privacy-fable.md §4) is no slower than the plain
- *      member's read beyond a timer's noise, takes the same path, and its pages are the brute-force pages by distance
- *      from each post's neighbourhood (the reader's own from the place); their set (getNearbySet) no slower than the plain
- *      set beyond a timer's noise (the three small reads of the reader's exact places are a fixed ~0.2 ms, which a 6× bound
- *      on a 0.14 ms lean pass at the small town can't hold: 0.88 against the plain set's 0.71 ms, 2026-10-15)
  *
  * Every bound compares two times measured in the same run, medians of interleaved reads, and is generous, so a slow or
  * busy machine can't fail it. The timings are printed as the table for the PR.
@@ -39,19 +33,9 @@
  */
 delete process.env.NODE_PROFILE;
 
-// With DISTANCE_PERF_OUT set, everything this run prints is also written there (the runner keeps no log of a passing run),
-// so the tables can go in a PR.
-if (process.env.DISTANCE_PERF_OUT) {
-    const out = process.env.DISTANCE_PERF_OUT;
-    fs.writeFileSync(out, '');
-    const log = console.log.bind(console);
-    console.log = (...args: unknown[]) => { log(...args); fs.appendFileSync(out, args.map(String).join(' ') + '\n'); };
-}
-
 import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
-import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, getNearbySet, exactPlacesFor, neighbourhoodOf, ONE_PASS_MAX_MEASURED, type PostFilter, type RowsNear } from '@beanpool/engine';
+import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, getNearbySet, ONE_PASS_MAX_MEASURED, type PostFilter, type RowsNear } from '@beanpool/engine';
 import { db } from './db/db.js';
-import fs from 'node:fs';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -190,8 +174,6 @@ const before = (f: PostFilter) => getPostsRankedBy(db, asRead(f), rowsNear743b5d
 const now = (f: PostFilter) => getPostsEngine(db, asRead(f));
 // As the route reads for a visitor on the global node (G9a): nobody in particular, every place read as its area.
 const guest = (f: PostFilter) => getPostsEngine(db, { ...asRead(f), viewerPubkey: undefined, coarse: true });
-// As the route reads for a member where anyone can join (`openMembership`): every other member's place as its neighbourhood.
-const neighbourhood = (f: PostFilter) => getPostsEngine(db, { ...asRead(f), neighbourhood: true });
 
 // A town few posts gather around (towns late in the list are chosen least).
 const SPARSE = towns[250];
@@ -235,7 +217,7 @@ function trace(f: PostFilter, read: (f: PostFilter) => unknown = now): { circles
     const out = { circles: 0, passes: 0 };
     (db as any).prepare = (sql: string) => {
         const st = prepare(sql);
-        const kind = /CROSS JOIN posts p/.test(sql) ? 'circles' : /haversine_km|area_km|neighbourhood_km/.test(sql) && !/WHERE p\.id IN/.test(sql) ? 'passes' : undefined;
+        const kind = /CROSS JOIN posts p/.test(sql) ? 'circles' : /haversine_km|area_km/.test(sql) && !/WHERE p\.id IN/.test(sql) ? 'passes' : undefined;
         if (kind) {
             const all = st.all.bind(st);
             (st as any).all = (...params: unknown[]) => { out[kind]++; return all(...params); };
@@ -273,8 +255,6 @@ interface Row {
     size: string; shape: Shape; before: number; now: number; reads: string; same: boolean;
     /** The member's read and the visitor's, raced against each other (G9a). */
     member: number; guest: number; guestReads: string; guestSamePath: boolean;
-    /** The member's read and the neighbourhood read, raced against each other (§4). */
-    nbhdMember: number; nbhd: number; nbhdReads: string; nbhdSamePath: boolean;
 }
 function measure(size: string): Row[] {
     return SHAPES.map(shape => {
@@ -286,10 +266,7 @@ function measure(size: string): Row[] {
         const same = JSON.stringify(a.map(p => [p.id, p.distanceKm])) === JSON.stringify(b.map(p => [p.id, p.distanceKm]));
         const g = race(f, slow ? 9 : 15, now, guest);
         const guestPath = trace(f, guest);
-        const nb = race(f, slow ? 9 : 15, now, neighbourhood);
-        const nbPath = trace(f, neighbourhood);
-        return { size, shape, ...t, reads: readsOf(path), same, member: g.before, guest: g.now, guestReads: readsOf(guestPath), guestSamePath: samePath(path, guestPath),
-            nbhdMember: nb.before, nbhd: nb.now, nbhdReads: readsOf(nbPath), nbhdSamePath: samePath(path, nbPath) };
+        return { size, shape, ...t, reads: readsOf(path), same, member: g.before, guest: g.now, guestReads: readsOf(guestPath), guestSamePath: samePath(path, guestPath) };
     });
 }
 
@@ -323,7 +300,7 @@ const fullNear500 = (at: { lat: number; lng: number }) => getPostsEngine(db, {
     limit: 500, offset: 0, excludeEvents: true, viewerPubkey: VIEWER(), types: ['offer', 'need'],
     near: { lat: at.lat, lng: at.lng, radiusKm: 250 }, sortByDistance: true, measureAtMost: ONE_PASS_MAX_MEASURED,
 });
-interface SetRow { size: string; place: string; within: number; ms: number; lean: number; full: number; count: number; nbhd: number }
+interface SetRow { size: string; place: string; within: number; ms: number; lean: number; full: number; count: number }
 let smallTown: { lat: number; lng: number } | null = null;
 function measureSet(size: '20k' | '100k'): SetRow[] {
     const posts = db.prepare('SELECT lat, lng FROM posts WHERE lat IS NOT NULL').all() as Array<{ lat: number; lng: number }>;
@@ -338,7 +315,6 @@ function measureSet(size: '20k' | '100k'): SetRow[] {
             [[], () => { count = getNearbySet(db, members[0], q).near.length; }],
             [[], () => leanSet(at, 250, 500)],
             [[], () => fullNear500(at)],
-            [[], () => getNearbySet(db, members[0], { ...q, neighbourhood: true })],
         ];
         for (let w = 0; w < 3; w++) for (const [, read] of reads) read();
         // 15 rounds, each in a turned order, so each read goes first, second and third equally often.
@@ -350,8 +326,8 @@ function measureSet(size: '20k' | '100k'): SetRow[] {
                 into.push(performance.now() - t0);
             }
         }
-        const [set, lean, full, nbhd] = reads.map(([xs]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)]);
-        return { size, place, within: within(at), ms: set, lean, full, count, nbhd };
+        const [set, lean, full] = reads.map(([xs]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)]);
+        return { size, place, within: within(at), ms: set, lean, full, count };
     });
 }
 
@@ -392,13 +368,6 @@ async function main(): Promise<void> {
         const cells = sizes.map(size => { const r = rows.find(x => x.size === size && x.shape === shape)!; return `${r.member.toFixed(1)} → ${r.guest.toFixed(1)}`; });
         console.log(`| ${shape.name} | ${cells.join(' | ')} | ${rows.find(x => x.shape === shape && x.size === '100k / 200k')!.guestReads} |`);
     }
-    console.log(`\nMedians in ms, a member's read → the same member's where anyone can join (§4, every other place read as its neighbourhood), per posts / transactions.\n`);
-    console.log(`| read | ${sizes.join(' | ')} | neighbourhood reads |`);
-    console.log(`|---|${sizes.map(() => '---').join('|')}|---|`);
-    for (const shape of SHAPES) {
-        const cells = sizes.map(size => { const r = rows.find(x => x.size === size && x.shape === shape)!; return `${r.nbhdMember.toFixed(1)} → ${r.nbhd.toFixed(1)}`; });
-        console.log(`| ${shape.name} | ${cells.join(' | ')} | ${rows.find(x => x.shape === shape && x.size === '100k / 200k')!.nbhdReads} |`);
-    }
     console.log('');
 
     // ── 1. no read slower than 743b5d57's ────────────────────────────────────────────────────────
@@ -419,13 +388,6 @@ async function main(): Promise<void> {
     }
     const otherPath = rows.filter(r => !r.guestSamePath).map(r => `${r.size}, ${r.shape.name}: ${r.reads} → ${r.guestReads}`);
     assert(otherPath.length === 0, `a visitor's read takes the member's path: circles where the member's does, one pass where it does (${otherPath.join('; ') || 'all the same'})`);
-
-    // ── 8a. the neighbourhood read, against the member's ────────────────────────────────────────
-    for (const r of rows) {
-        assert(noSlower(r.nbhd, r.nbhdMember), `${r.size}, ${r.shape.name}: a neighbourhood read ${r.nbhd.toFixed(1)} ms, no slower than the member's ${r.nbhdMember.toFixed(1)} ms`);
-    }
-    const nbOtherPath = rows.filter(r => !r.nbhdSamePath).map(r => `${r.size}, ${r.shape.name}: ${r.reads} → ${r.nbhdReads}`);
-    assert(nbOtherPath.length === 0, `a neighbourhood read takes the member's path (${nbOtherPath.join('; ') || 'all the same'})`);
 
     // ── 4. the index ─────────────────────────────────────────────────────────────────────────────
     const prepare = db.prepare.bind(db);
@@ -493,42 +455,11 @@ async function main(): Promise<void> {
         guestResults.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
     }
     assert(guestSame, `a visitor's pages at offsets 0, 50, 1,000 and near the end are the brute-force pages by distance from each post's area, on both paths (${guestResults.join('; ')})`);
-    // ── 8b. the neighbourhood read's pages ───────────────────────────────────────────────────────
-    // Each other post from its neighbourhood, as the node rounds them; the reader's own (and their club's events, which they
-    // host as its convenor) from the place itself.
-    // Each place's neighbourhood as the node works it out (@beanpool/core neighbourhoodOf: 0.01° rows, the longitude step
-    // widened by latitude band; its own tests hold the rule).
-    const nbhdOf = (lat: number, lng: number) => neighbourhoodOf(lat, lng);
-    const places = exactPlacesFor(db, VIEWER());
-    const ownAuthors = new Set(places.authors), ownPosts = new Set(places.posts);
-    const authorOf = new Map((db.prepare(`SELECT id, author_pubkey FROM posts WHERE id LIKE 'perf-%'`).all() as Array<{ id: string; author_pubkey: string }>).map(r => [r.id, r.author_pubkey]));
-    const nbResults: string[] = [];
-    let nbSame = true;
-    for (const [name, f, keep] of brute) {
-        const ref = all.filter(keep).map(p => {
-            const exact = ownAuthors.has(authorOf.get(p.id)!) || ownPosts.has(p.id);
-            return { id: p.id, u: p.updated_at, c: p.created_at, d: p.lat === null || p.lng === null ? null
-                : exact ? haversine(HUB.lat, HUB.lng, p.lat, p.lng) : (() => { const c = nbhdOf(p.lat, p.lng); return haversine(HUB.lat, HUB.lng, c.lat, c.lng); })() };
-        }).sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
-        const wrong: number[] = [];
-        for (const offset of [0, 50, 1000, ref.length - 20]) {
-            if (offset < 0) continue;
-            const got = neighbourhood({ ...f, ...nearest(HUB), offset }).map(p => p.id);
-            if (JSON.stringify(got) !== JSON.stringify(ref.slice(offset, offset + 50).map(r => r.id))) wrong.push(offset);
-        }
-        if (wrong.length) nbSame = false;
-        nbResults.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
-    }
-    assert(nbSame, `a neighbourhood read's pages at offsets 0, 50, 1,000 and near the end are the brute-force pages by distance from each other post's neighbourhood, the reader's own from the place, on both paths (${nbResults.join('; ')})`);
 
     console.log('\nA member\'s set at depth 500 within 250 km (getNearbySet), against the lean pass and the read it replaces, medians of 15 interleaved, ms:\n');
-    console.log('| posts | place | within 250 km | nearest in the set | set ms | lean ms | set/lean | nearest-500 ms | set/nearest-500 | neighbourhood set ms | its /lean |');
-    console.log('|---|---|---|---|---|---|---|---|---|---|---|');
-    for (const r of setRows) console.log(`| ${r.size} | ${r.place} | ${r.within} | ${r.count} | ${r.ms.toFixed(2)} | ${r.lean.toFixed(2)} | ${(r.ms / r.lean).toFixed(2)} | ${r.full.toFixed(2)} | ${(r.ms / r.full).toFixed(2)} | ${r.nbhd.toFixed(2)} | ${(r.nbhd / r.lean).toFixed(2)} |`);
-    for (const r of setRows) {
-        assert(noSlower(r.nbhd, r.ms),
-            `${r.size}, ${r.place}: the set where anyone can join (neighbourhoods) ${r.nbhd.toFixed(2)} ms, no slower than the plain set's ${r.ms.toFixed(2)} ms`);
-    }
+    console.log('| posts | place | within 250 km | nearest in the set | set ms | lean ms | set/lean | nearest-500 ms | set/nearest-500 |');
+    console.log('|---|---|---|---|---|---|---|---|---|');
+    for (const r of setRows) console.log(`| ${r.size} | ${r.place} | ${r.within} | ${r.count} | ${r.ms.toFixed(2)} | ${r.lean.toFixed(2)} | ${(r.ms / r.lean).toFixed(2)} | ${r.full.toFixed(2)} | ${(r.ms / r.full).toFixed(2)} |`);
     for (const r of setRows) {
         assert(r.count === Math.min(500, r.within), `${r.size}, ${r.place}: the set holds the nearest ${r.count} of the ${r.within} listings within 250 km`);
         assert(r.ms <= SET_LEAN_TIMES * r.lean,

@@ -91,7 +91,7 @@ async function runSuite() {
     updateLocalConfig({ adminHash, salt, totpEnabled: false, totpSecret: null });
     const repToken = 'rep-token-secret-999';
     setReplicationToken(repToken);
-    const snap = createSnapshot('scheduled');
+    const snap = createSnapshot();
 
     const app = new Koa();
     app.use(createBackupRoutes(deps).routes());

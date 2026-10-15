@@ -232,10 +232,9 @@ async function main(): Promise<void> {
             `with faces keyed, Ann's in-window URL carries a key the route takes (${keyedServed?.status}), and a wrong key is refused (${wrongKey?.status})`);
 
         // ── 2. While the cause lasts, the timer retries, each wait twice the last ──
-        await sleep(2500); // turns near 200, 400 (+200), 800 (+400), 1600 (+800) ms after boot; 2.5 s so a late runner still sees the 1600 one (a constant wait is told apart only from the 4th gap on)
+        await sleep(1700); // turns near 200, 400 (+200), 800 (+400), 1600 (+800) ms after boot
         const gaps = attempts.slice(1).map((t, i) => t - attempts[i]);
-        const baseWait = Number(process.env.MEMBER_PHOTO_RESUME_MS) || 200;
-        const doubling = gaps.length >= 4 && gaps.slice(1).every((g, n) => g >= baseWait * (2 ** n) - 50);
+        const doubling = gaps.slice(2).every((g, i) => g >= gaps[i + 1] * 1.6);
         assert(attempts.length >= 4 && attempts.length <= 6 && doubling && hasColumn() && photo(ann.pk) === null,
             `while it keeps stopping the resumed move retries with a doubling wait (${attempts.length - 1} turns, gaps ${gaps.join('/')} ms)`);
 

@@ -1438,16 +1438,16 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             data-sidebar-show
                             aria-label="Show menu"
                             aria-expanded={false}
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl leading-none text-nature-100 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-500"
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl leading-none text-nature-100 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
                         >
                             <span aria-hidden="true">☰</span>
                         </button>
-                        <p className="text-sm font-semibold text-bp-ink-terra m-0 truncate flex-1 min-w-0">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
+                        <p className="text-sm font-semibold text-terra-400 m-0 truncate flex-1 min-w-0">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
                         {returnLinks && <PhoneReturnLink back={returnLinks.back} />}
                         <button
                             type="button"
                             onClick={handleLogout}
-                            className="min-h-[48px] px-3 rounded-xl text-sm font-medium text-nature-400 hover:text-red-400 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-500"
+                            className="min-h-[48px] px-3 rounded-xl text-sm font-medium text-nature-400 hover:text-red-400 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
                         >
                             Log Out
                         </button>
@@ -1462,7 +1462,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             <span className="text-nature-400">Target Control Node:</span>
                             <span className="text-white font-bold">{activeNode?.name}</span>
                             <span className="text-nature-600">|</span>
-                            <code className="text-bp-ink-terra">{activeNode?.url}</code>
+                            <code className="text-terra-400">{activeNode?.url}</code>
                         </div>
                         <button
                             onClick={() => setEditingNode(activeNode)}

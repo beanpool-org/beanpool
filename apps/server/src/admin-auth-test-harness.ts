@@ -8,8 +8,6 @@
  *     session, 2FA or token routes (isRefusedToEveryToken).
  *   - ownerSessionHeaders: an owner's key session, as a computer's key sign-in opens one. For owner-only routes, which
  *     no token reaches.
- *   - ownerPhoneSessionHeaders: an owner's key session from the phone's Manage hand-off, just unlocked: for the owner
- *     changes that ask a fresh proof (requireFreshProof), which a computer's session is sent to the phone for.
  *   - turnOn2faForTests: for a suite whose purpose is the password itself. It turns the node's 2FA on, and
  *     `headers()` sends the password with a fresh code, as an owner with an authenticator does.
  *
@@ -21,7 +19,7 @@ import { grantNodeRole } from './state-engine.js';
 import { issueAutomationToken, type TokenScope } from './automation-tokens.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
-import { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
+import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 
 /** Seed a member that holds the owner role, and return its key. */
 export function seedOwnerForTests(callsign = 'testOwner'): string {
@@ -51,19 +49,6 @@ export function ownerSessionHeaders(ownerPubkey?: string): Record<string, string
     const { handshakeToken } = mintHandshakeToken(pub, 'owner');
     const s = consumeHandshakeToken(handshakeToken);
     if (!s.ok || !s.sessionId) throw new Error(`could not open a test key session: ${s.error}`);
-    return { 'X-Admin-Session': s.sessionId };
-}
-
-/**
- * Headers carrying an owner's key session opened by the phone's Manage hand-off, just now (an owner is seeded unless
- * `ownerPubkey` is given): the one key session an owner's fresh proof takes (admin-auth.ts requireFreshProof), within 90
- * seconds of this call. A computer's session (ownerSessionHeaders) is sent to the phone for those changes.
- */
-export function ownerPhoneSessionHeaders(ownerPubkey?: string): Record<string, string> {
-    const pub = ownerPubkey ?? seedOwnerForTests(`phoneOwner${crypto.randomBytes(3).toString('hex')}`);
-    const { handshakeToken } = mintHandshakeToken(pub, 'owner');
-    const s = consumeHandshakeToken(handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
-    if (!s.ok || !s.sessionId) throw new Error(`could not open a test hand-off session: ${s.error}`);
     return { 'X-Admin-Session': s.sessionId };
 }
 

@@ -11,9 +11,9 @@ import Router from '@koa/router';
 import crypto from 'node:crypto';
 import { Transform } from 'node:stream';
 import type { RouteDeps } from './types.js';
-import { requireAdminRole, requirePhoneStepUp, requireFreshProof } from '../admin-auth.js';
+import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
 import {
-    getOffboxStatus, listOffboxBackups, openOffboxBackup, runOffboxBackups, updateOffboxSettings, offboxRetention, readOffboxSettings,
+    getOffboxStatus, listOffboxBackups, openOffboxBackup, runOffboxBackups, updateOffboxSettings,
 } from '../services/offbox-backups.js';
 import { OffboxS3Error } from '../services/offbox-s3.js';
 
@@ -50,13 +50,6 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/offbox-backups/settings', async (ctx) => {
         if (!(await ownerOnly(ctx))) return;
         const b = body(ctx);
-        // Removing a destination, changing one, or keeping backups for fewer days loses remote copies on the next run: the
-        // fresh proof (amendment 1 to design case 18). Adding a destination, or keeping them longer, stays plain.
-        const changesExisting = b.removeId !== undefined
-            || (b.destination !== undefined && b.destination !== null && typeof (b.destination as any).id === 'string' && (b.destination as any).id !== '');
-        const shortens = b.retentionDays !== undefined
-            && offboxRetention(b.retentionDays === null ? null : b.retentionDays).days < readOffboxSettings().retentionDays;
-        if ((changesExisting || shortens) && !(await requireFreshProof(ctx, b.code, 'remove, change or shorten where backups go off the box'))) return;
         const result = updateOffboxSettings({
             intervalHours: b.intervalHours, retentionDays: b.retentionDays,
             destination: b.destination as any, removeId: b.removeId,

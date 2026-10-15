@@ -38,8 +38,8 @@ const OWNER_ONLY_FOR_TOKENS: readonly RegExp[] = [
     /^\/api\/local\/admin\/csrf-token$/,
     // Owner-only whatever is asked (requireAdminRole(['owner']) or requirePhoneStepUp on every request). A route that is
     // owner-only only sometimes (snapshots/config when it changes the schedule) is not here: the node's 403 relay below
-    // covers it, so a read a token may make is never blocked (backup-config too: reading it is any admin's, changing the
-    // standby's cadence an owner's). Takeover status, words-checks and progress are any admin's (checkAdminAuth only).
+    // covers it, so a read a token may make is never blocked. Takeover status, words-checks and progress, and
+    // backup-config, are any admin's (checkAdminAuth only).
     /^\/api\/local\/admin\/stranded-escrows\/[^/]+\/write-off$/,
     /^\/api\/local\/admin\/public-address\/(claim|update|offline)$/,
     /^\/api\/local\/admin\/takeover\/(recovery-code(\/check)?|open|confirm|cancel|phone\/(start|wait))$/,

@@ -62,7 +62,7 @@ Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and 
 
 - Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button, whoever may invite. A moderator cannot.
 - If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: "This community doesn’t use invites".
-- In the community's invite tree, an invite made in Settings comes from the community's founding account, not from you: on an older server the member called Admin, on a new one the built-in BeanPool account. The server also records which owner or admin made it (or "the admin password"), in its security log.
+- In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
 ![The Invites and QR screen in Settings](images/people-invites.webp)
 

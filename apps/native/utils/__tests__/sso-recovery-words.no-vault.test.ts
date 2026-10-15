@@ -2,7 +2,7 @@
  * A sign-in restore from a copy that carries the 12 words saves them, only when they make the restored key.
  * A copy without words (every copy made before copies carried them) restores exactly as before: the key alone.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -42,7 +42,6 @@ import {
 import { signedPost } from '../node-post';
 import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
-import { stubCommunityLookup } from './community-lookup';
 
 // Test phrases only (BIP-39 vectors), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -106,12 +105,6 @@ async function withWordsBox(sealed: SealedShare, words: string[]): Promise<Seale
 describe('a sign-in restore and the 12 words', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // The community lists Marty with this key (community-lookup.ts); nothing else is contacted.
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: PUB, callsign: 'Marty' }]);
-    });
-
-    afterEach(() => {
-        vi.unstubAllGlobals();
     });
 
     it('saves the words when the copy carries them, and they make the restored key', async () => {

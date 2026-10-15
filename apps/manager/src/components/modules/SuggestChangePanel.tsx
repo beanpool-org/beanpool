@@ -101,7 +101,7 @@ export function SuggestChangePanel({ appVersion, submit = submitFeedback }: Prop
                                     aria-checked={on}
                                     onClick={() => setKind(k.id)}
                                     className={`min-h-[48px] px-5 rounded-full text-sm font-semibold border transition-colors ${on
-                                        ? 'bg-terra-600/20 border-terra-500 text-bp-ink-terra'
+                                        ? 'bg-terra-900/40 border-terra-500 text-terra-200'
                                         : 'bg-nature-800 border-nature-700 text-nature-300 hover:bg-nature-700'}`}
                                 >
                                     {k.label}

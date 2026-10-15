@@ -74,7 +74,7 @@ export function OnboardingGuide() {
                     <span aria-hidden="true">🚀 </span>Where to Start?
                 </h4>
                 <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                    <span aria-hidden="true">📍 </span>Explore the <strong>Map</strong> to find offers (green) and needs (orange) near you.
+                    <span aria-hidden="true">📍 </span>Explore the <strong>Map</strong> to find offers (blue) and needs (orange) near you.
                 </p>
                 <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                     <span aria-hidden="true">💬 </span>Tap <strong>Message</strong> on any post to chat securely (E2E encrypted) with neighbors.

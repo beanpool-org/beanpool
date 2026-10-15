@@ -34,7 +34,6 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - They are suspended at once and their role, if any, is set aside.
 - A 7-day vote opens: "Keep the suspension?". One member, one vote, 60% to keep it.
 - If it does not pass, the suspension lifts by itself and their role comes back.
-- If it passes, they stay suspended until someone lifts it, and any role it set aside is gone for good.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The suspended person gets no notification. Tell them yourself.
 - In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
@@ -60,5 +59,5 @@ Halting overrides the community. Use it for a mistake or an abuse of the process
 
 ## Know this
 
-- A suspension by Decision takes away the person's role for good. So does an emergency suspension that members vote to keep. An emergency suspension only sets the role aside while its vote is open: if the vote fails, or you lift or halt it first, the role comes back.
+- A suspension by Decision takes away the person's role for good. An emergency suspension only sets it aside.
 - Lifting a suspension by hand is refused while a removal is waiting out its grace period. Halt the removal instead.

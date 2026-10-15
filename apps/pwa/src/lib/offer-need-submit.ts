@@ -25,7 +25,7 @@ export function offerNeedSubmit(f: OfferNeedForm): { disabled: boolean; label: s
     const fieldsMissing = !f.title.trim() || !f.description.trim() || priceMissing;
     const disabled = f.needBlocked || f.posting || fieldsMissing || !f.hasLocation || (f.photoRequired !== false && f.photoCount === 0);
     const label = f.posting ? 'Posting...'
-        : f.needBlocked ? '🟢 List an Offer first to post Needs'
+        : f.needBlocked ? '🔵 List an Offer first to post Needs'
         : !f.hasLocation ? '📍 Map location required'
         : fieldsMissing ? '✏️ Fill required fields'
         : `Post ${f.type === 'offer' ? 'Offer' : 'Need'}`;

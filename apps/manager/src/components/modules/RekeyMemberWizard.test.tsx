@@ -417,26 +417,6 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
         vi.restoreAllMocks();
     });
 
-    it("an owner's re-key refused for want of a fresh proof shows the node's own sentence, and binds nothing (#1984 confirmation R1)", async () => {
-        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
-            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
-            proposals: [{ newPubkey: phone, proposedAt: new Date().toISOString() }], wrongNumbers: 0, history: [],
-        });
-        const askCode = 'Enter a current code from your authenticator app (or a backup code) to re-key an owner or admin';
-        vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockRejectedValue(new nodeClient.RekeyBindError(askCode));
-        const onSuccess = vi.fn();
-        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onSuccess={onSuccess} onClose={() => {}} />);
-        const box = await screen.findByLabelText('The number on their phone');
-        fireEvent.change(box, { target: { value: '47' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind their phone' }));
-        // The error banner (⚠️ and the sentence) holds the sentence as the node wrote it, with no tries counted onto it.
-        const said = await screen.findByText((_, el) => el?.tagName === 'DIV' && el.textContent?.trim() === `⚠️ ${askCode}`);
-        expect(said).toBeDefined();
-        expect(screen.getByTestId('rekey-type-number').textContent).not.toMatch(/Wrong so far/);
-        expect(screen.queryByText('Re-Keying Complete!')).toBeNull();
-        expect(onSuccess).not.toHaveBeenCalled();
-    });
-
     it('the QR holds the node\'s own address with ?rekey=<code>', async () => {
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
             isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], history: [],

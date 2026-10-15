@@ -61,10 +61,10 @@ const DAY = 86400_000;
 const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
 /**
  * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 5 was this suite's (G3), 6 members' devices' (G4), 7 a
- * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events.
+ * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked.
  * The one before G3's, a standby to re-seed.
  */
-const FORMAT = '12';
+const FORMAT = '9';
 const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */
@@ -597,8 +597,7 @@ async function main(): Promise<void> {
             closesAt: new Date(Date.now() + 2500).toISOString(),
         })).decision;
         for (const v of [gwen, kip, nia, bo]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${removal.id}/vote`, { support: true }));
-        // Granting owner asks the owner's fresh proof (design case 18, C8): Manage on the phone, pressed just now.
-        built('the admin makes Lou an owner', await api(m, 'POST', '/api/local/admin/node-roles', { admin: await main.send('owner-phone-session'), body: { pubkey: lou.pk, role: 'owner' } }));
+        built('the admin makes Lou an owner', await A('/api/local/admin/node-roles', { pubkey: lou.pk, role: 'owner' }));
         const suspended = built('and suspends her: a vote on keeping it opens, her role held aside', await A(`/api/local/admin/users/${lou.pk}/suspend`, { reason: 'An emergency on the street' }));
         const suspensionId = suspended.decision?.id as string;
         built('the admin makes Moe a moderator', await A('/api/local/admin/node-roles', { pubkey: moe.pk, role: 'moderator' }));

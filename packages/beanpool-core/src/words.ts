@@ -272,37 +272,22 @@ const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July
 const EN_DATE_PATTERNS = { 'day-month': '{d} {M}', 'day-month-year': '{d} {M} {y}', 'weekday-day-month': '{W} {d} {M}' } as const;
 
 /** English as the apps have always printed it ("3 Oct", "Sat 3 Oct", "9:05"); every other language from CLDR. */
-const EN_DATE_WORDS: DateWords = Object.freeze({
-    monthsLong: EN_MONTHS,
-    // Ours, not CLDR's en-GB ("Sept"): the apps have always printed three letters.
-    monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    monthsStandalone: EN_MONTHS,
-    daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-    daysLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    patterns: { short: EN_DATE_PATTERNS, long: EN_DATE_PATTERNS },
-    time: '{h}:{mm}',
-    decimal: '.',
-    digits: null,
-    caps: 'upper',
+export const DATE_WORDS: Readonly<Record<Lang, DateWords>> = Object.freeze({
+    en: {
+        monthsLong: EN_MONTHS,
+        // Ours, not CLDR's en-GB ("Sept"): the apps have always printed three letters.
+        monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        monthsStandalone: EN_MONTHS,
+        daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        daysLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        patterns: { short: EN_DATE_PATTERNS, long: EN_DATE_PATTERNS },
+        time: '{h}:{mm}',
+        decimal: '.',
+        digits: null,
+        caps: 'upper',
+    },
+    ...CLDR_DATE_WORDS,
 });
-
-const dateTables: Partial<Record<Lang, DateWords>> = { en: EN_DATE_WORDS, ...CLDR_DATE_WORDS };
-
-/**
- * The date words of each language this build carries. The phone and the server carry all of them (words-dates.ts
- * gathers every language's module). The web app's first chunk carries English alone: its build puts an empty table in
- * words-dates.ts's place, and a language's dates arrive with its words, in that language's own chunk, through
- * `addDateWords` (apps/pwa/src/lib/language.ts; #1941 review N-f). A language whose table has not arrived writes its
- * dates and numbers in English, never a throw.
- */
-export const DATE_WORDS: Readonly<Partial<Record<Lang, DateWords>>> = dateTables;
-
-/** Add one language's date words (packages/beanpool-core/src/words-dates/<lang>.ts), as the web app loads that language. */
-export function addDateWords(lang: Lang, words: DateWords): void {
-    if (isLang(lang) && lang !== 'en') dateTables[lang] = words;
-}
-
-const dateWordsOf = (lang: UiLang): DateWords => dateTables[isLang(lang) ? lang : 'en'] ?? EN_DATE_WORDS;
 
 export interface DateOptions {
     /** 'short' (default): "3 Oct", "Sat"; 'long': "3 October", "Saturday". */
@@ -328,15 +313,17 @@ function inCapitals(text: string, caps: DateWords['caps']): string {
     return text.toUpperCase();
 }
 
+const dateLang = (lang: UiLang): Lang => (isLang(lang) ? lang : 'en');
+
 function numberIn(lang: UiLang, n: number, decimals?: number): string {
     if (!Number.isFinite(n)) return String(n);
-    const w = dateWordsOf(lang);
+    const w = DATE_WORDS[dateLang(lang)];
     const text = decimals === undefined ? String(n) : n.toFixed(decimals);
     return withDigits(w.decimal === '.' ? text : text.replace('.', w.decimal), w.digits);
 }
 
 function dateIn(lang: UiLang, d: Date, pattern: DatePattern, opts: DateOptions): string {
-    const w = dateWordsOf(lang);
+    const w = DATE_WORDS[dateLang(lang)];
     const width = opts.width === 'long' ? 'long' : 'short';
     const utc = opts.utc === true;
     const month = utc ? d.getUTCMonth() : d.getMonth();
@@ -375,26 +362,11 @@ const ACCENTED: Record<string, string> = {
 export const PSEUDO_OPEN = '[';
 export const PSEUDO_CLOSE = ']';
 
-/** A pad this long or longer may break: see pseudoLocalise. */
-const PSEUDO_PAD_BREAKS_FROM = 7;
-const PSEUDO_PAD_WORD = 5;
-const ZERO_WIDTH_SPACE = '\u200B';
-
-/**
- * "Save" → "[Šāṽé~~]": accented, padded ~35 % (at least one ~), placeholders and `**bold**` marks kept intact.
- *
- * A long pad breaks the way the longer words of a real translation do: a zero-width space before it and after every
- * five tildes. Glued to the last word as one run, 35 % of a long sentence is a "word" no screen can wrap (a 100-letter
- * sentence ends in 35 tildes), and a 320 px check then fails on the padding rather than on the layout: the web app's
- * welcome page measured 668 px wide in 320 (apps/pwa/e2e/words-screens-check.mjs). Pads under seven stay one run.
- */
+/** "Save" → "[Šāṽé~~]": accented, padded ~35 % (at least one ~), placeholders and `**bold**` marks kept intact. */
 export function pseudoLocalise(source: string): string {
     const parts = source.split(/(\{[A-Za-z0-9_]+\})/);
     const body = parts.map((part) => (/^\{[A-Za-z0-9_]+\}$/.test(part) ? part : part.replace(/[A-Za-z]/g, (c) => ACCENTED[c] ?? c))).join('');
-    const length = Math.max(1, Math.ceil(source.length * 0.35));
-    const pad = length < PSEUDO_PAD_BREAKS_FROM
-        ? '~'.repeat(length)
-        : ZERO_WIDTH_SPACE + Array.from({ length: Math.ceil(length / PSEUDO_PAD_WORD) }, (_, i) => '~'.repeat(Math.min(PSEUDO_PAD_WORD, length - i * PSEUDO_PAD_WORD))).join(ZERO_WIDTH_SPACE);
+    const pad = '~'.repeat(Math.max(1, Math.ceil(source.length * 0.35)));
     return `${PSEUDO_OPEN}${body}${pad}${PSEUDO_CLOSE}`;
 }
 

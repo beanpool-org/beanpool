@@ -42,7 +42,6 @@
 import Router from '@koa/router';
 
 import { db } from '../db/db.js';
-import { foldName } from '@beanpool/engine';
 import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice } from '@beanpool/core';
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
@@ -76,25 +75,12 @@ import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recov
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
-/**
- * The account a sign-in restore by `callsign` is for: by the one name rule (`foldName`, the engine's names.ts), with the
- * status predicate of idx_members_callsign_unique, and never a visitor's row (a member of another community, or a key
- * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3), nor an
- * enterprise's or a project's row, which no one restores and which may hold a member's name in another case from before
- * #1956, making an older app's restore by name ambiguous for nothing (deciding review of #1977, N6).
- *
- * `publicKey`, when the device sends one (`candidatePublicKey`, a candidate's key from the lookup, findRecoveryCandidates,
- * which lists the same rows; named so the middleware's spoof check reads it as someone else's key, as it is: the device
- * signs with a throwaway key), is the account it chose: it must be one of the rows here, so two members whose names fold the same (kept, never renamed, by
- * db.ts migrateCallsignFold) can each still restore theirs, while a key this name does not hold opens nothing. With no key
- * (an app from before), a name two accounts hold is ambiguous, as it always was.
- */
-function resolveCallsign(callsign: string, publicKey?: string): { pubkey?: string; ambiguous: boolean } {
+/** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
+function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND is_visitor = 0 AND COALESCE(is_treasury, 0) = 0
-    `).all(foldName(callsign)) as { public_key: string }[];
-    if (publicKey !== undefined) return { pubkey: rows.find((r) => r.public_key === publicKey)?.public_key, ambiguous: false };
+        WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')
+    `).all(callsign) as { public_key: string }[];
     if (rows.length > 1) return { ambiguous: true };
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
@@ -186,21 +172,16 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // Hard-limited: this is the closest thing to an unauthenticated write in the system, since
         // anybody can mint a keypair. This bounds the sessions in their sign-in window, which nothing evicts; the cap
         // in pruneCollectionsFor bounds the idle ones.
-        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        if (!rateLimit(ctx)) return;
 
-        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
+        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim().toLowerCase();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
 
-        // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
-        const sentKey = (ctx as any).requestBody?.candidatePublicKey;
-        if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
-            ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return;
-        }
-        const { pubkey, ambiguous } = resolveCallsign(callsign, sentKey ?? undefined);
+        const { pubkey, ambiguous } = resolveCallsign(callsign);
         if (ambiguous) { ctx.status = 409; ctx.body = { error: 'That callsign is ambiguous on this node.' }; return; }
         if (!pubkey) {
             // Same shape a member with no split gets from openCollection, so this endpoint is no
-            // sharper an oracle than the public keeper summary already is. A key the name does not hold gets it too.
+            // sharper an oracle than the public keeper summary already is.
             ctx.status = 400;
             ctx.body = { error: 'That account has no recovery fragments to collect.' };
             return;
@@ -327,7 +308,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso-nonce', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        if (!rateLimit(ctx)) return;
         ctx.status = 200;
         ctx.body = {
             nonce: issueNonce(collection.requesterEphemeralPubkey),
@@ -341,7 +322,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        if (!rateLimit(ctx)) return;
 
         const body = (ctx as any).requestBody || {};
         if (!isSsoProvider(body.provider)) {

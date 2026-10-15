@@ -364,8 +364,6 @@ export class CommunityKeepingCopies {
     private seq = 0;
     /** The sign-in the restore under way proved, whose copy it collects. */
     private collecting: string | null = null;
-    /** The member's key, which the public lookup lists for their name while a copy is kept here. Set once the member is made. */
-    publicKey: string | null = null;
     constructor(readonly callsign: string) {}
 
     handle(req: SentRequest): { status: number; body: unknown } {
@@ -388,14 +386,6 @@ export class CommunityKeepingCopies {
         if (req.method === 'DELETE' && del) {
             if (!this.copies.delete(del[1])) return { status: 404, body: { error: 'not connected' } };
             return ok({ removed: del[1], enrolledSso: [...this.copies.keys()] });
-        }
-        const lookup = /^\/api\/recovery\/lookup\/([^/]+)$/.exec(req.path);
-        if (req.method === 'GET' && lookup) {
-            // The public lookup (routes/community.ts): the whole name, case forgiven, listed only with a sign-in copy here.
-            const asked = decodeURIComponent(lookup[1]).trim().toLowerCase();
-            return ok(asked === this.callsign.toLowerCase() && this.publicKey && this.copies.size
-                ? [{ publicKey: this.publicKey, callsign: this.callsign, canRecoverBySso: true, joinedAt: null, avatarUrl: null }]
-                : []);
         }
         if (req.method === 'POST' && req.path === '/api/recovery/collect') {
             return b.callsign === this.callsign ? ok({ collectionId: 'c-1' }) : { status: 404, body: { error: 'No such account.' } };

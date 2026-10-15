@@ -138,7 +138,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                         onChange={(e) => setTotpCode(e.target.value)}
                         placeholder="6-digit code (e.g. 123456)"
                         autoFocus
-                        className="w-full bg-nature-950 border border-terra-500/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-nature-500 font-mono tracking-widest text-center focus:outline-none focus:border-terra-500"
+                        className="w-full bg-nature-950 border border-terra-500/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-nature-500 font-mono tracking-widest text-center focus:outline-none focus:border-terra-400"
                     />
                 </div>
             )}
@@ -146,7 +146,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
             <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover active:scale-[0.98] text-bp-cta-on font-bold text-sm shadow-lg shadow-terra-600/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full mt-2 py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover active:scale-[0.98] text-bp-cta-on font-bold text-sm shadow-lg shadow-terra-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
                 {loading ? (
                     <>
@@ -238,7 +238,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                 <div className="mt-6 text-center">
                     <a
                         href="/settings-legacy"
-                        className="text-xs text-nature-400 hover:text-bp-ink-terra transition-colors underline"
+                        className="text-xs text-nature-400 hover:text-terra-400 transition-colors underline"
                     >
                         Switch to Legacy Settings Page
                     </a>

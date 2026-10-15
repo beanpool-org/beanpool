@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { lowercaseRecoveryWords } from '@beanpool/core';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { NoScreenCapture } from './WordsOnScreen';
 
@@ -17,7 +16,7 @@ export function wordsAfterTyping(words: readonly string[], i: number, text: stri
     const tokens = text.trim().split(/\s+/).filter(Boolean);
     if (tokens.length > 1) return wordsFromText(text) ?? [...words];
     const updated = [...words];
-    updated[i] = lowercaseRecoveryWords(text).trim();
+    updated[i] = text.toLowerCase().trim();
     return updated;
 }
 
@@ -26,7 +25,7 @@ export function wordsFromText(text: string): string[] | null {
     const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return null;
     const updated: string[] = Array(12).fill('');
-    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w); });
+    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
     return updated;
 }
 

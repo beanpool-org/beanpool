@@ -74,11 +74,6 @@ export const MAX_OFFBOX_INTERVAL_HOURS = 168;
 export const DEFAULT_OFFBOX_RETENTION_DAYS = 30;
 /** The deletion promise: a deleted member's data is in no off-box backup after 30 days. */
 export const MAX_OFFBOX_RETENTION_DAYS = 30;
-/**
- * The shortest time a destination keeps backups (amendment 1 to design case 18): a retention of 1 day and one run would
- * delete every remote copy older than a day, so nobody may set fewer days than this, from Settings or from .env.
- */
-export const MIN_OFFBOX_RETENTION_DAYS = 7;
 export const MAX_OFFBOX_DESTINATIONS = 5;
 /** BACKUP_OFFBOX_1_… and BACKUP_OFFBOX_2_…, the two docker-compose.yml passes through; more go in Settings. */
 const ENV_SLOTS = 2;
@@ -242,27 +237,7 @@ function writeStoredSettings(s: StoredSettings): void {
 }
 
 const isInterval = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_OFFBOX_INTERVAL_HOURS;
-const isRetention = (v: unknown): v is number =>
-    Number.isInteger(v) && (v as number) >= MIN_OFFBOX_RETENTION_DAYS && (v as number) <= MAX_OFFBOX_RETENTION_DAYS;
-
-/**
- * How many days backups are kept, from what Settings stored (null: none) and .env: Settings wins, then .env, then the
- * default. Either one is read through the bounds, never longer than the promise, never shorter than the floor: a stored
- * row under the floor (saved before it, or brought back by a restore) is read as the floor, as .env's is and as a low
- * snapshot `keep` is (#1984 review N6).
- */
-export function offboxRetention(stored: unknown, env: NodeJS.ProcessEnv = process.env): { days: number; from: 'settings' | 'env' | 'default' } {
-    if (isRetention(stored)) return { days: stored, from: 'settings' };
-    if (Number.isInteger(stored) && (stored as number) >= 1) {
-        return { days: Math.max(MIN_OFFBOX_RETENTION_DAYS, Math.min(stored as number, MAX_OFFBOX_RETENTION_DAYS)), from: 'settings' };
-    }
-    const raw = String(env.BACKUP_OFFBOX_RETENTION_DAYS ?? '').trim();
-    const envRetention = raw ? Number(raw) : null;
-    if (envRetention !== null && Number.isInteger(envRetention) && envRetention >= 1) {
-        return { days: Math.max(MIN_OFFBOX_RETENTION_DAYS, Math.min(envRetention, MAX_OFFBOX_RETENTION_DAYS)), from: 'env' };
-    }
-    return { days: DEFAULT_OFFBOX_RETENTION_DAYS, from: 'default' };
-}
+const isRetention = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_OFFBOX_RETENTION_DAYS;
 
 export interface OffboxSettings {
     intervalHours: number;
@@ -290,10 +265,14 @@ export function readOffboxSettings(env: NodeJS.ProcessEnv = process.env): Offbox
         return raw ? Number(raw) : null;
     };
     const envInterval = envNumber('BACKUP_OFFBOX_INTERVAL_HOURS');
+    const envRetention = envNumber('BACKUP_OFFBOX_RETENTION_DAYS');
     const [intervalHours, intervalFrom] = isInterval(stored.intervalHours) ? [stored.intervalHours, 'settings' as const]
         : isInterval(envInterval) ? [envInterval, 'env' as const] : [DEFAULT_OFFBOX_INTERVAL_HOURS, 'default' as const];
-    // Past the promise from .env is read as the promise, never as longer; under the floor, as the floor.
-    const { days: retentionDays, from: retentionFrom } = offboxRetention(stored.retentionDays, env);
+    // Past the promise from .env is read as the promise, never as longer.
+    const [retentionDays, retentionFrom] = isRetention(stored.retentionDays) ? [stored.retentionDays, 'settings' as const]
+        : envRetention !== null && Number.isInteger(envRetention) && envRetention >= 1
+            ? [Math.min(envRetention, MAX_OFFBOX_RETENTION_DAYS), 'env' as const]
+            : [DEFAULT_OFFBOX_RETENTION_DAYS, 'default' as const];
 
     const destinations: OffboxDestination[] = [];
     const broken: BrokenDestination[] = [];
@@ -352,7 +331,7 @@ export function updateOffboxSettings(update: SettingsUpdate): { ok: true } | { o
     }
     if (update.retentionDays !== undefined) {
         if (update.retentionDays !== null && !isRetention(update.retentionDays)) {
-            return { ok: false, error: `retentionDays must be a whole number of days from ${MIN_OFFBOX_RETENTION_DAYS} to ${MAX_OFFBOX_RETENTION_DAYS}: a deleted `
+            return { ok: false, error: `retentionDays must be a whole number of days from 1 to ${MAX_OFFBOX_RETENTION_DAYS}: a deleted `
                 + `member's data must be gone from every off-box backup within ${MAX_OFFBOX_RETENTION_DAYS} days` };
         }
         next.retentionDays = update.retentionDays as number | null;

@@ -55,7 +55,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
     const wipe = db.prepare(`
         UPDATE posts
            SET title = ?, description = '', search_keywords = ?,
-               lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL, event_link = NULL,
+               lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL,
                updated_at = ?
          WHERE id = ?`);
     const renameChat = db.prepare(`UPDATE conversations SET name = ? WHERE id = ? AND type = 'event_thread'`);

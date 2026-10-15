@@ -4,19 +4,17 @@
  * in Settings → Your area. Plain words, says why, says the limits honestly: 0.1° is 11 km north-south and narrower
  * east-west, so "about 10 km". No currency.
  */
-import { t, word } from './words.js';
-
 export const AREA_STEP_WORDS = {
-    title: word('Roughly where are you?'),
+    title: 'Roughly where are you?',
     // A poll has no place of its own and is shown at its author's area (§3.4, Q4), to every reader of it, so this line
     // says so rather than "only a distance" (deciding review of #1766, B1; wording: director, 2026-10-11).
-    privacy: word('We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.'),
-    useLocation: word('Use my location'),
-    typeTown: word('Type a town or suburb'),
-    skip: word('Skip for now'),
-    later: word('You can change or clear this any time in Settings → Your area.'),
-    settingsRow: word('Your area'),
-    notSet: word('Not set'),
+    privacy: 'We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.',
+    useLocation: 'Use my location',
+    typeTown: 'Type a town or suburb',
+    skip: 'Skip for now',
+    later: 'You can change or clear this any time in Settings → Your area.',
+    settingsRow: 'Your area',
+    notSet: 'Not set',
 } as const;
 
 /** What an address search says, so a form that reuses the event form's search can say it in its own words. */
@@ -37,15 +35,14 @@ export interface AddressSearchWords {
  * The area step's town search (deciding review of #1766, N3): there is no map on the step, so no map or pin; it asks for
  * a town or suburb, not a street address, since only a 10 km area is kept and Nominatim gets whatever is typed.
  */
-export const AREA_TOWN_SEARCH_WORDS = {
-    // word() keys, so the phone shows each through t() in the member's language (Your area, translation S1).
-    label: word('Find your town or suburb'),
-    placeholder: word('Town or suburb'),
-    unavailable: word("Town search isn't working right now. Use my location instead, or skip for now."),
-    noMatches: word('No matches. Try the name of a town or suburb nearby.'),
-    source: word('Places from OpenStreetMap. What you type here is sent to them.'),
-    pickLabel: (place: string) => t('Choose {place}', { place }),
-} satisfies AddressSearchWords;
+export const AREA_TOWN_SEARCH_WORDS: AddressSearchWords = {
+    label: 'Find your town or suburb',
+    placeholder: 'Town or suburb',
+    unavailable: "Town search isn't working right now. Use my location instead, or skip for now.",
+    noMatches: 'No matches. Try the name of a town or suburb nearby.',
+    source: 'Places from OpenStreetMap. What you type here is sent to them.',
+    pickLabel: (place) => `Choose ${place}`,
+};
 
 /**
  * "Find your community"'s town search (Marty, 14 Oct: "find your community using your location or enter your location
@@ -71,14 +68,14 @@ export const NOT_HERE_TYPE_YOUR_TOWN = 'Not here? Type your town';
 export function areaWhyLine(limits?: { radiusKm: number; max: number } | null): string {
     const max = limits?.max ?? 500;
     const km = limits?.radiusKm ?? 250;
-    return t("The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.", { max, km });
+    return `The worldwide community shows you what's on offer near you: the nearest ${max} listings within ${km} km.`;
 }
 
 /** Settings' line: "About 10 km around <town or lat, lng>", or "Not set". */
 export function describeArea(area: { lat: number; lng: number } | null | undefined, placeName?: string | null): string {
-    if (!area) return t(AREA_STEP_WORDS.notSet);
+    if (!area) return AREA_STEP_WORDS.notSet;
     const where = placeName?.trim() || `${area.lat.toFixed(1)}, ${area.lng.toFixed(1)}`;
-    return t('About 10 km around {place}', { place: where });
+    return `About 10 km around ${where}`;
 }
 
 /**

@@ -35,8 +35,7 @@ describe('PWA Messaging Parity & Review Fixes', () => {
                 '/api/messages/edit',
                 expect.objectContaining({
                     method: 'POST',
-                    // The member's language goes with every request to this node (lib/language.ts); English in tests.
-                    headers: { 'Content-Type': 'application/json', 'X-Language': 'en' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messageId: 'msg-1',
                         authorPubkey: 'pub1',
@@ -64,8 +63,7 @@ describe('PWA Messaging Parity & Review Fixes', () => {
                 '/api/messages/react',
                 expect.objectContaining({
                     method: 'POST',
-                    // The member's language goes with every request to this node (lib/language.ts); English in tests.
-                    headers: { 'Content-Type': 'application/json', 'X-Language': 'en' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messageId: 'msg-1',
                         authorPubkey: 'pub1',
@@ -89,8 +87,7 @@ describe('PWA Messaging Parity & Review Fixes', () => {
                 '/api/messages/mark-read',
                 expect.objectContaining({
                     method: 'POST',
-                    // The member's language goes with every request to this node (lib/language.ts); English in tests.
-                    headers: { 'Content-Type': 'application/json', 'X-Language': 'en' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         pubkey: 'pub1',
                         conversationId: 'conv-1',

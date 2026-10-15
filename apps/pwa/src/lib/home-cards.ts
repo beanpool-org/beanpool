@@ -19,7 +19,6 @@
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { deviceLocalClock, eventWhenParts } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
@@ -109,11 +108,7 @@ export interface HomeFind {
 export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
-export interface HomeEventItem {
-    id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
-    /** The host's clock and its zone, and an online event (DESIGN-event-times §4); absent from a node before them. */
-    startLocal?: string; tz?: string; online?: boolean;
-}
+export interface HomeEventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
 
 export interface HomeCards {
     needs?: { items: NeedsItem[] };
@@ -359,24 +354,6 @@ export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & 
 }
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
-
-/**
- * A "Coming up" line's time (DESIGN-event-times §4): the place's clock, "FRI 16 OCT · 20:50", with its zone named only when
- * it is not the reader's own ("FRI 17 OCT · 20:50 · Lagos time"); an online event in the reader's own time, "FRI 16 OCT ·
- * 10:50 your time". A node that sends no clock gives the reader's own, as the cards do.
- */
-export function homeEventWhen(item: Pick<HomeEventItem, 'startsAt' | 'startLocal' | 'tz' | 'online'>): string {
-    const start = new Date(item.startsAt);
-    if (!Number.isFinite(start.getTime())) return '';
-    const parts = eventWhenParts({
-        startAt: item.startsAt, startLocal: item.startLocal ?? null, tz: item.tz ?? null, online: item.online === true,
-        deviceStart: deviceLocalClock(start),
-    });
-    if (!parts) return dayLabel(item.startsAt);
-    const line = `${parts.first}${parts.sep}${parts.second}`;
-    const zone = parts.note ? parts.note.slice(0, parts.note.indexOf(' · ')) : '';
-    return zone ? `${line} · ${zone}` : line;
-}
 
 /** "Sat 3 Oct", in the member's own time. */
 export function dayLabel(iso: string): string {

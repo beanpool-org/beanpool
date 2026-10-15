@@ -19,7 +19,6 @@
  */
 
 import { createPost } from '../state-engine.js';
-import type { EventTimeOut } from '../engine/posts.js';
 
 /**
  * @param body      the parsed request body
@@ -27,9 +26,8 @@ import type { EventTimeOut } from '../engine/posts.js';
  * @param createdBy the member who really did it, when that is not the author (a keeper acting for an
  *                  enterprise). Recorded as `created_by`, exactly as the enterprise's Offer and Need are.
  * @param beforeWrite the route's own limit on new posts (W-main), which the engine runs once every refusal has passed
- * @param out       where the engine leaves `eventTimeAdjusted` when a clock the host set was adjusted (eventTimeAnswer)
  */
-export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut) {
+export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void) {
     const b = body || {};
     return createPost(
         'event', 'community', b.title, b.description || '',
@@ -47,21 +45,8 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             audienceScope: b.audienceScope, targetGroupId: b.targetGroupId,
             eventStartAt: b.eventStartAt, eventEndAt: b.eventEndAt,
             eventPlaceName: b.eventPlaceName, eventPrivateNote: b.eventPrivateNote,
-            eventHostLetsIn: b.eventHostLetsIn,
-            eventStartLocal: b.eventStartLocal, eventEndLocal: b.eventEndLocal, eventTz: b.eventTz,
-            eventOnline: b.eventOnline, eventLink: b.eventLink,
-            eventRepeat: b.eventRepeat, eventRepeatUntil: b.eventRepeatUntil,
             createdBy,
             beforeWrite,
-            out,
         }
     );
-}
-
-/**
- * What an event's create or edit answers besides the post: `eventTimeAdjusted` next to it (never on it), only when a clock
- * the host set was adjusted (engine/posts.ts EventTimeAdjusted; DESIGN-event-times §3).
- */
-export function eventTimeAnswer(out: EventTimeOut): { eventTimeAdjusted?: EventTimeOut['eventTimeAdjusted'] } {
-    return out.eventTimeAdjusted ? { eventTimeAdjusted: out.eventTimeAdjusted } : {};
 }

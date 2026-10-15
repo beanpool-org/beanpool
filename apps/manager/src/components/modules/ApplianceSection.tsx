@@ -935,7 +935,7 @@ export function ApplianceSection({
                                     <div className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <span className="text-xs font-bold text-nature-300 flex items-center gap-1.5">
-                                                <span className="w-2 h-2 rounded-full bg-terra-500"></span>
+                                                <span className="w-2 h-2 rounded-full bg-terra-400"></span>
                                                 <span>Media</span>
                                             </span>
                                             <span className="text-xs font-mono font-bold text-white">
@@ -1093,7 +1093,7 @@ export function ApplianceSection({
                             </p>
 
                             {restoreStatus && (
-                                <div className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra font-mono">
+                                <div className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-terra-300 font-mono">
                                     {restoreStatus}
                                 </div>
                             )}
@@ -1175,7 +1175,7 @@ export function ApplianceSection({
                                             type="checkbox"
                                             checked={scheduleConfig.enabled}
                                             onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
-                                            className="rounded border-nature-700 text-bp-ink-terra focus:ring-0"
+                                            className="rounded border-nature-700 text-terra-500 focus:ring-0"
                                         />
                                         <span>Enable automated snapshots</span>
                                     </label>
@@ -1520,7 +1520,7 @@ export function ApplianceSection({
                                     <div className="space-y-3 p-4 rounded-xl bg-nature-950 border border-nature-800">
                                         <img src={tfaStatus.qrDataUrl} alt="2FA QR Code" className="w-44 h-44 mx-auto rounded-lg" />
                                         {tfaStatus.secret && (
-                                            <div className="text-center font-mono text-xs text-bp-ink-terra font-bold">
+                                            <div className="text-center font-mono text-xs text-terra-400 font-bold">
                                                 Secret: {tfaStatus.secret}
                                             </div>
                                         )}
@@ -1661,7 +1661,7 @@ export function ApplianceSection({
                                 <strong className="text-white">Audit Trail Safeguard:</strong> Using break-glass is rate-limited
                                 and automatically writes a loud, permanent public entry to the system audit feed:
                                 <br />
-                                <span className="font-mono text-bp-ink-terra text-[11px] block mt-1">
+                                <span className="font-mono text-terra-400 text-[11px] block mt-1">
                                     &ldquo;Break-glass recovery used to authorise a new admin key for @callsign.&rdquo;
                                 </span>
                             </p>
@@ -1877,7 +1877,7 @@ export function ApplianceSection({
 
                                     <div className="flex items-center justify-between pt-1 font-bold text-sm">
                                         <span className="text-white">Estimated Space Reclaimed:</span>
-                                        <span className="text-bp-ink-terra font-mono">{formatBytes(cleanPreview.totalReclaimableBytes)}</span>
+                                        <span className="text-terra-400 font-mono">{formatBytes(cleanPreview.totalReclaimableBytes)}</span>
                                     </div>
                                 </div>
                             </div>

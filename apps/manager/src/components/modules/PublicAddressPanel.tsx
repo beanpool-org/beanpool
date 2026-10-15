@@ -561,7 +561,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <span>Public Address &amp; DNS Tunnel</span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-0.5">
-                            Connect your node to a memorable <code className="text-bp-ink-terra font-mono">&lt;name&gt;.beanpool.org</code> address for browser access and mobile invite deep-links without SSH.
+                            Connect your node to a memorable <code className="text-terra-400 font-mono">&lt;name&gt;.beanpool.org</code> address for browser access and mobile invite deep-links without SSH.
                         </p>
                     </div>
                     <button
@@ -644,7 +644,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
                     {loading && !statusData ? (
                         <div className="text-xs text-nature-400 flex items-center gap-2">
-                            <span className="animate-spin text-bp-ink-terra">⏳</span>
+                            <span className="animate-spin text-terra-400">⏳</span>
                             <span>Checking registrar status…</span>
                         </div>
                     ) : isLive ? (
@@ -664,7 +664,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                     href={hostname ? `https://${hostname}` : '#'}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-bp-ink-terra hover:text-oat-50 font-bold font-mono underline break-all"
+                                    className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-400 hover:text-terra-300 font-bold font-mono underline break-all"
                                 >
                                     {hostname || 'your-node.beanpool.org'}
                                 </a>
@@ -728,7 +728,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                             <button
                                                 type="button"
                                                 onClick={handleCopyToken}
-                                                className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-bp-ink-terra hover:text-oat-50 border border-nature-700 shrink-0 min-h-[44px]"
+                                                className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-terra-400 hover:text-terra-300 border border-nature-700 shrink-0 min-h-[44px]"
                                             >
                                                 {copySuccess ? '✓ Copied' : '📋 Copy'}
                                             </button>
@@ -777,7 +777,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         </div>
                     ) : isNone ? (
                         <div className="text-xs text-nature-400">
-                            No public address currently assigned. Set <code className="text-bp-ink-terra font-mono">PUBLIC_ADDRESS_NAME</code> on your container or claim a domain below.
+                            No public address currently assigned. Set <code className="text-terra-400 font-mono">PUBLIC_ADDRESS_NAME</code> on your container or claim a domain below.
                         </div>
                     ) : (
                         <div className="text-xs text-red-400">
@@ -786,7 +786,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     )}
 
                     {/* Operational Action Buttons */}
-                    <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-nature-800">
+                    <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-nature-850">
                         <button
                             type="button"
                             onClick={requestRestartConfirmation}
@@ -835,7 +835,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     </div>
                     <div className="flex items-center gap-2">
                         {isPollingLogs && (
-                            <span className="w-2 h-2 rounded-full bg-terra-500 animate-ping" />
+                            <span className="w-2 h-2 rounded-full bg-terra-400 animate-ping" />
                         )}
                         <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">
                             Step {currentStep}
@@ -892,7 +892,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         <span>Claim a Public Web Address (.beanpool.org)</span>
                     </h3>
                     <p className="text-xs text-nature-400 m-0 mt-0.5">
-                        Register a custom <strong className="text-bp-ink-terra font-bold">.beanpool.org</strong> subdomain for your node so members can discover and access your community securely from any browser.
+                        Register a custom <strong className="text-terra-400 font-bold">.beanpool.org</strong> subdomain for your node so members can discover and access your community securely from any browser.
                     </p>
                 </div>
 

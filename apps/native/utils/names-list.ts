@@ -683,6 +683,9 @@ export function myKeyCheck(identity: Pick<BeanPoolIdentity, 'publicKey'>): { qr:
     return { qr: namesKeyQr(identity.publicKey), code: namesKeyCode(identity.publicKey) };
 }
 
+/** A key's code, to show beside a callsign. */
+export const keyCodeOf = (pubkey: string): string => namesKeyCode(pubkey);
+
 /** Whether what was scanned or typed is `pubkey`'s key. */
 export function inPersonResult(scannedOrTyped: string, pubkey: string): 'match' | 'unreadable' | 'mismatch' {
     if (!readNamesKeyCheck(scannedOrTyped)) return 'unreadable';

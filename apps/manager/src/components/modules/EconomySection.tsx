@@ -522,7 +522,7 @@ export function EconomySection({
 
                     {loadingTreasuries ? (
                         <div className="p-8 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
-                            <span className="animate-spin text-bp-ink-terra">⏳</span>
+                            <span className="animate-spin text-terra-400">⏳</span>
                             <span>Loading enterprises...</span>
                         </div>
                     ) : treasuries.length === 0 ? (
@@ -577,7 +577,7 @@ export function EconomySection({
                                             {/* Working capital ceiling badge */}
                                             {t.workingCapitalCeiling != null && (
                                                 <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-nature-950 border border-nature-800 text-[10px] text-nature-300 mb-3">
-                                                    <span className="text-bp-ink-terra font-bold">Ceiling:</span>
+                                                    <span className="text-terra-400 font-bold">Ceiling:</span>
                                                     <span className="font-mono">{t.workingCapitalCeiling} beans</span>
                                                 </div>
                                             )}
@@ -590,7 +590,7 @@ export function EconomySection({
                                                     </span>
                                                     <button
                                                         onClick={() => handleOpenManageKeepers(t)}
-                                                        className="text-[10px] font-bold text-bp-ink-terra hover:text-oat-50 transition-colors"
+                                                        className="text-[10px] font-bold text-terra-400 hover:text-terra-300 transition-colors"
                                                     >
                                                         Manage
                                                     </button>
@@ -632,7 +632,7 @@ export function EconomySection({
                                                     <button
                                                         type="button"
                                                         onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
-                                                        className="text-[10px] font-bold text-bp-ink-terra hover:text-oat-50 transition-colors"
+                                                        className="text-[10px] font-bold text-terra-400 hover:text-terra-300 transition-colors"
                                                     >
                                                         {editingLocationPubkey === pubkeyStr ? 'Close' : (t.lat != null && t.lng != null ? 'Edit' : 'Set Location')}
                                                     </button>
@@ -689,7 +689,7 @@ export function EconomySection({
                                                 </button>
                                                 <button
                                                     onClick={() => setSeedOfferTreasury(t)}
-                                                    className="px-2.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-600/50 transition-all"
+                                                    className="px-2.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-xs font-bold text-bp-chip-need-ink border border-terra-700/50 transition-all"
                                                 >
                                                     Seed Offer
                                                 </button>
@@ -713,7 +713,7 @@ export function EconomySection({
                         <h3 className="text-base font-bold text-white m-0">Pending Commons Proposals ({commonsData.proposed.length})</h3>
                         {loadingCommons ? (
                             <div className="py-6 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
-                                <span className="animate-spin text-bp-ink-terra">⏳</span>
+                                <span className="animate-spin text-terra-400">⏳</span>
                                 <span>Loading proposals...</span>
                             </div>
                         ) : commonsData.proposed.length === 0 ? (
@@ -731,7 +731,7 @@ export function EconomySection({
                                             <h4 className="text-sm font-bold text-white m-0">{p.title}</h4>
                                             <p className="text-xs text-nature-400 m-0 mt-0.5">{p.description}</p>
                                             {p.requestedAmount && (
-                                                <span className="text-xs text-bp-ink-terra font-semibold mt-1 inline-block">
+                                                <span className="text-xs text-terra-400 font-semibold mt-1 inline-block">
                                                     Requesting: {p.requestedAmount} beans
                                                 </span>
                                             )}
@@ -802,7 +802,7 @@ export function EconomySection({
                                         onClick={() => handleApplyPreset(p)}
                                         className="p-2.5 rounded-xl bg-nature-950 hover:bg-nature-800/80 border border-nature-800 text-left transition-all group min-h-[48px]"
                                     >
-                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-bp-ink-terra">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-terra-300">
                                             <Avatar
                                                 src={p.avatar}
                                                 alt=""
@@ -987,7 +987,7 @@ export function EconomySection({
                                                             className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
                                                         >
                                                             <div className="flex items-center gap-2.5 min-w-0">
-                                                                <div className="w-7 h-7 rounded-lg bg-nature-800 border border-nature-700 flex items-center justify-center text-xs font-bold text-bp-ink-terra">
+                                                                <div className="w-7 h-7 rounded-lg bg-nature-800 border border-nature-700 flex items-center justify-center text-xs font-bold text-terra-400">
                                                                     {(name || '?').charAt(0).toUpperCase()}
                                                                 </div>
                                                                 <div className="min-w-0">

@@ -113,7 +113,6 @@ beforeEach(async () => {
     community = new CommunityKeepingCopies('Sam');
     net.community.handle = (req) => community.handle(req);
     member = await draftIdentity('Sam');
-    community.publicKey = member.publicKey;
     await importIdentity(member);
     mem.async.set(ANCHOR, COMMUNITY);
 });

@@ -12,7 +12,7 @@
  *      refused; with `updatedAfter` only those changed since, as the old delta has them, with the epoch header.
  *   3. `q=`: under 2 characters refused; a prefix of the name (case forgiven), never a substring, shortest first, at
  *      most 20 or `limit`; `%` and `_` are characters, not wildcards; 64 hexadecimal characters are one member's key;
- *      the statement's plan searches idx_members_callsign_fold (the fold of names in any alphabet, #1956).
+ *      the statement's plan searches idx_members_callsign_unique.
  *   4. `lat&lng&limit=n` (n at most 50): exactly the first n of today's nearest-first list, with the null-distance tail
  *      while fewer than n have an area, at a busy place, a small one and nowhere; a non-member refused.
  *   5. An unsigned read of each form gets the read gate's answer, as the whole directory does; a visitor is refused.
@@ -293,12 +293,12 @@ async function main() {
     // The plan of the very statement the route runs: caught at prepare.
     const prepare = db.prepare.bind(db);
     let searchSql = '';
-    (db as any).prepare = (sql: string) => { if (sql.includes('callsign_fold >=')) searchSql = sql; return prepare(sql); };
+    (db as any).prepare = (sql: string) => { if (sql.includes('lower(callsign) >=')) searchSql = sql; return prepare(sql); };
     // Absent on a server from before the search (origin/main, fail-first): the plan check then fails, and the suite goes on.
     (se as any).searchMemberDirectoryRows?.('ab', 20);
     (db as any).prepare = prepare;
     const plan = !searchSql ? '(no search statement)' : (prepare(`EXPLAIN QUERY PLAN ${searchSql}`).all({ p: 'ab', like: 'ab%', limit: 20 }) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
-    assert(!!searchSql && plan.includes('idx_members_callsign_fold') && !/SCAN members\b(?! USING)/.test(plan), `the search's plan searches idx_members_callsign_fold (${plan})`);
+    assert(!!searchSql && plan.includes('idx_members_callsign_unique') && !/SCAN members\b(?! USING)/.test(plan), `the search's plan searches idx_members_callsign_unique (${plan})`);
 
     // ── 4. lat&lng&limit= ──
     console.log('\n── 4. lat&lng&limit= ──');

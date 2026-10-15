@@ -118,11 +118,6 @@ describe('Settings: sign-in recovery', () => {
         expect(await screen.findByText('abandon')).toBeInTheDocument();
         expect(screen.getByText(/Write these words on paper/)).toBeInTheDocument();
         expect(screen.queryByTestId('seed-not-here')).toBeNull();
-        // English in every language, and never rewritten by the browser's page translation (#1947 confirmation N-B).
-        const grid = screen.getByTestId('seed-words');
-        expect(grid).toHaveTextContent('abandon');
-        expect(grid).toHaveAttribute('translate', 'no');
-        expect(grid).toHaveClass('notranslate');
     });
 
     describe('a browser without its 12 words', () => {

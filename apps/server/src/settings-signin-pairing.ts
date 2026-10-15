@@ -17,11 +17,10 @@
  *      gets the same admin_session a key sign-in gets. A photographed QR is useless elsewhere: without the
  *      binding secret a browser can only be told "this sign-in belongs to another browser".
  *
- *   2b. Number matching, always. The app sends `confirm: true` and gets two digits back from its approval; the page
- *      must type them (confirmPairing) within 30 s before the held token is redeemed. Someone who only sent the owner
- *      a QR never sees the phone, so a fooled "Sign in" still gives them nothing. Three wrong tries burn the pairing.
- *      An app that sends no flag (built before #1527) is refused, 426 app_too_old (fable-security-signin finding 2):
- *      letting it through would sign in whoever made the QR. No app was in the stores when this changed.
+ *   2b. Number matching. An app that can show them (it sends `confirm: true`) gets two digits back from its approval;
+ *      the page must type them (confirmPairing) within 30 s before the held token is redeemed. Someone who only
+ *      sent the owner a QR never sees the phone, so a fooled "Sign in" still gives them nothing. Three wrong tries
+ *      burn the pairing. An older app sends no flag and signs the browser in as before.
  *
  * The phone is also shown where and when the computer asked: the address the node saw the request from, how long
  * ago, the time left, and "same network" when the phone's own address is the computer's (describePairing).
@@ -258,8 +257,6 @@ export type ApproveResult =
     | { ok: true; role: MemberNodeRole; confirmCode?: string; confirmExpiresAt?: number }
     | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' | 'not-owner-or-admin' };
 
-/** An app that sends no `confirm` cannot show the two digits: it cannot approve a sign-in (finding 2). */
-export const SIGNIN_APP_TOO_OLD = 'Update the BeanPool app to sign in on a computer: this version cannot show you the two digits to type there.';
 /** An app that can show which assistant asks sends this with its approval; an older one cannot approve an assistant. */
 export const AGENT_APP_TOO_OLD = 'Update the BeanPool app to connect an AI assistant: this version cannot show you which assistant is asking.';
 
@@ -299,7 +296,7 @@ export function approvePairing(params: {
     signature: string;
     /** The host the phone signed for (format 2); absent from an old app. */
     signedFor?: unknown;
-    /** The app shows two digits for the page to type (number matching). Absent from an older app, which is refused. */
+    /** The app can show two digits for the page to type (number matching). Absent from an older app. */
     confirm?: boolean;
     /** The app showed the assistant's name and where its answers go (describePairing's `agent`). */
     agentShown?: boolean;
@@ -316,11 +313,6 @@ export function approvePairing(params: {
     // sign in" must not hand an assistant the member's role (a phishing link would look like a Settings sign-in).
     if (p.agent && (params.confirm !== true || params.agentShown !== true)) {
         return { ok: false, status: 426, error: AGENT_APP_TOO_OLD, code: 'agent_app_too_old', reason: 'app-too-old' };
-    }
-    // Every sign-in needs an app that shows the two digits (finding 2): without them, a member fooled into tapping
-    // Sign in on a QR someone sent them would sign that someone's browser in.
-    if (params.confirm !== true) {
-        return { ok: false, status: 426, error: SIGNIN_APP_TOO_OLD, code: 'app_too_old', reason: 'app-too-old' };
     }
     const memberPubkey = String(params.memberPubkey || '').trim();
     // The signature is checked FIRST here (authorizeKeySigner checks it after the role): only a real key holder
@@ -360,10 +352,14 @@ export function approvePairing(params: {
     p.approvedBy = memberPubkey;
     p.role = signer.role;
     p.notice = undefined;
-    p.status = 'confirming';
-    p.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
-    p.confirmExpiresAt = now + PAIRING_CONFIRM_TTL_MS;
-    p.confirmTries = 0;
+    if (params.confirm === true) {
+        p.status = 'confirming';
+        p.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
+        p.confirmExpiresAt = now + PAIRING_CONFIRM_TTL_MS;
+        p.confirmTries = 0;
+    } else {
+        p.status = 'approved';
+    }
     logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser})${p.confirmCode ? ', waiting for the digits on the computer' : ''}`);
     notify(p.id);
     return p.confirmCode

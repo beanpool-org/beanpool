@@ -70,7 +70,7 @@ async function main() {
     const { updateLocalConfig, getLocalConfig, setReplicationToken } = await import('./config/local-config.js');
     const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { resetPasswordBrake } = await import('./password-brake.js');
-    const { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const svc = await import('./services/takeover-envelope.js');
     const core = await import('@beanpool/core');
@@ -295,13 +295,12 @@ async function main() {
     assert(ownersIn(headerNow()).length === 1 && headerNow().recipients.filter((r: any) => r.type === 'code').length === 1, '6. sealed to one owner and one code only');
 
     // ── 7. Check the code ──
-    // phone: the session the phone's Manage hand-off opens (its 15-minute idle limit), not a computer's.
-    const keySession = (w: Who, phone = false): string => {
+    const keySession = (w: Who): string => {
         const chal = createAdminChallenge();
         const signature = Buffer.from(ed25519.sign(Buffer.from(chal.challenge, 'utf-8'), w.seed)).toString('hex');
         const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: w.pub, signature });
         if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
-        const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+        const ex = consumeHandshakeToken(solved.handshakeToken!);
         if (!ex.ok) throw new Error('handshake failed: ' + ex.error);
         return ex.sessionId!;
     };
@@ -386,13 +385,8 @@ async function main() {
     assert(moCheck.status === 403, '9. …nor check one');
     const moStatus = await call('POST', '/api/local/admin/takeover/status', { headers: { 'x-admin-session': moSession } });
     assert(moStatus.status === 200 && moStatus.body.state === 'sealed', '9. an admin may read the status');
-    // Replacing the code asks the owner's fresh proof (design case 18, A11): a computer's session is sent to the phone; the
-    // phone's Manage, just pressed, replaces it.
-    const annaComputer = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': keySession(anna) }, body: { replace: true } });
-    assert(annaComputer.status === 403 && annaComputer.body?.code === 'phone_required' && !annaComputer.body?.codeId,
-        `9. an owner's computer session is sent to the phone to replace the code (got ${annaComputer.status})`);
-    const annaMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': keySession(anna, true) }, body: { replace: true } });
-    assert(annaMake.status === 200 && annaMake.body.codeId === 3, "9. an owner's key session from the phone, just unlocked, makes code #3");
+    const annaMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': keySession(anna) }, body: { replace: true } });
+    assert(annaMake.status === 200 && annaMake.body.codeId === 3, "9. an owner's key session makes code #3");
     assert(JSON.stringify(annaMake.body.status).indexOf(annaMake.body.code) === -1, '9. the status in that response does not repeat the code');
     // With 2FA on, the password alone reaches none of the admin routes here (checkAdminAuth); the token is unaffected.
     const { generateTotpSecret, generateTotpCode } = await import('./totp.js');

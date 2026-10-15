@@ -191,8 +191,35 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     }
 });
 
-// The legacy settings page (/settings-legacy and its /settings.js) is gone (design case 18, D9): every button it had that
-// could wipe or delete has a copy there. Settings is the manager.
+router.get('/settings-legacy', async (ctx) => {
+    useDocumentPolicy(ctx);
+    const staticPath = resolveServerPath('static/settings.html');
+    const publicPath = resolveServerPath('public/settings.html');
+    const resolvedPath = fs.existsSync(staticPath) ? staticPath : publicPath;
+    if (fs.existsSync(resolvedPath)) {
+        ctx.type = 'html';
+        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ctx.body = fs.createReadStream(resolvedPath);
+    } else {
+        ctx.status = 404;
+        ctx.body = 'Legacy settings page not found.';
+    }
+});
+
+router.get('/settings.js', async (ctx) => {
+    const publicPath = resolveServerPath('public/settings.js');
+    const staticPath = resolveServerPath('static/settings.js');
+    const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
+
+    if (fs.existsSync(resolvedPath)) {
+        ctx.type = 'application/javascript';
+        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ctx.body = fs.createReadStream(resolvedPath);
+    } else {
+        ctx.status = 404;
+        ctx.body = '// settings.js not found';
+    }
+});
 
 
 // ===================== ROOT REDIRECT =====================

@@ -19,7 +19,6 @@ import {
 } from '@beanpool/signin';
 import { LocalDirectoryStore, type BackupStore } from '../api/backup-store.js';
 import { createVaultApi, type VaultApi, type VaultApiOptions } from '../api/server.js';
-import { parseBackupFile } from '../shared/backup-format.js';
 import { LocalDirectoryFeed } from '../shared/release-feed.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import type { MemoryHygiene } from '../keyholder/hygiene.js';
@@ -246,13 +245,6 @@ export async function signed(v: VaultUnderTest, p: string, body: unknown, seed: 
 export async function get(v: VaultUnderTest, p: string): Promise<Reply> {
     const res = await fetch(`${v.baseUrl}${p}`);
     return { status: res.status, body: await res.json() as Record<string, any> };
-}
-
-/** A backup file with one byte of its sealed deletion records flipped: they open nowhere, and nor does the file. */
-export function breakDeletions(file: Buffer): Buffer {
-    const at = file.indexOf(Buffer.from(parseBackupFile(file).deletions.ct));
-    file[at] ^= 1;
-    return file;
 }
 
 export interface Genesis {

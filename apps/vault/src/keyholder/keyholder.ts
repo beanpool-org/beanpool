@@ -934,8 +934,7 @@ export class Keyholder {
         }
     }
 
-    /** A backup file whose header names this vault. */
-    private ownBackup(file: Buffer) {
+    private checkBackup(keys: WorkingKeys, file: Buffer) {
         let parsed;
         try {
             parsed = parseBackupFile(file);
@@ -944,25 +943,16 @@ export class Keyholder {
         }
         const state = this.stateFile as VaultStateFile;
         if (parsed.header.vaultId !== state.vaultId) fail('bad_backup', 'That backup is another vault\'s.');
-        return parsed;
-    }
-
-    /** Whether one of this vault's ticket keys signed the whole file. */
-    private signedHere(keys: WorkingKeys, parsed: ReturnType<typeof parseBackupFile>): boolean {
         const digest = crypto.createHash('sha512').update(parsed.signed).digest();
         const signedBytes = Buffer.concat([Buffer.from(BACKUP_SIG_TAG), digest]);
-        return keys.ticketPublicKeys.some(k => {
+        const ok = keys.ticketPublicKeys.some(k => {
             try {
                 return ed25519.verify(parsed.signature, signedBytes, Buffer.from(k, 'hex'), { zip215: false });
             } catch {
                 return false;
             }
         });
-    }
-
-    private checkBackup(keys: WorkingKeys, file: Buffer) {
-        const parsed = this.ownBackup(file);
-        if (!this.signedHere(keys, parsed)) fail('bad_backup', 'The backup is not signed by this vault.');
+        if (!ok) fail('bad_backup', 'The backup is not signed by this vault.');
         return parsed;
     }
 
@@ -1004,29 +994,18 @@ export class Keyholder {
         }
     }
 
-    /**
-     * A backup's deletion records only. Opens across reshares (they are under K_index, which a reshare keeps).
-     *
-     * They are read by their own seal, signed or not (B2, review #1981): sealed under a key from K_index with the whole
-     * header as associated data, only a holder of K_index makes records that open, and every state that holds K_index
-     * holds the ticket keys that sign backups too (keys.ts `WorkingKeys`), so they authenticate as strongly as the
-     * signature. A file damaged elsewhere (its snapshot, its signature) still gives its deletions, which a restore must
-     * not lose: skipping them brings back copies their members deleted. `signed` says whether the whole file checked.
-     */
-    openBackupDeletions(file: Buffer): { name: string; createdAt: number; deletions: string; signed: boolean } {
+    /** A backup's deletion records only. Opens across reshares (they are under K_index, which a reshare keeps). */
+    openBackupDeletions(file: Buffer): { name: string; createdAt: number; deletions: string } {
         const keys = this.requireOpen();
-        const parsed = this.ownBackup(file);
-        const signed = this.signedHere(keys, parsed);
+        const parsed = this.checkBackup(keys, file);
         const k = this.backupKeys(keys, parsed.header.vaultId);
         try {
             const plain = xchacha20poly1305(k.deletions, parsed.deletions.nonce,
                 Buffer.concat([Buffer.from(BACKUP_DELETIONS_AAD), parsed.headerBytes])).decrypt(parsed.deletions.ct);
-            return { name: parsed.header.name, createdAt: parsed.header.createdAt, deletions: Buffer.from(plain).toString('utf8'), signed };
+            return { name: parsed.header.name, createdAt: parsed.header.createdAt, deletions: Buffer.from(plain).toString('utf8') };
         } catch (e) {
             if (e instanceof KeyholderError) throw e;
-            fail('bad_backup', signed
-                ? 'The backup\'s deletion records do not open with this vault\'s keys.'
-                : 'The backup is not signed by this vault, and its deletion records do not open.');
+            fail('bad_backup', 'The backup\'s deletion records do not open with this vault\'s keys.');
         } finally {
             k.deletions.fill(0);
             k.body.fill(0);

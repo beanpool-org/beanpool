@@ -8,26 +8,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const calls: string[] = [];
 const writes: any[] = [];
 const writtenTo: unknown[][] = [];
-let answer: { ok: boolean; body: unknown; status?: number } | 'throw' = { ok: true, body: [] };
+let answer: { ok: boolean; body: unknown } | 'throw' = { ok: true, body: [] };
 vi.mock('../db', () => ({
     signedGet: vi.fn(async (path: string) => {
         calls.push(path);
         if (answer === 'throw') throw new TypeError('Network request failed');
         const a = answer;
-        return { ok: a.ok, status: a.status ?? (a.ok ? 200 : 503), json: async () => a.body };
+        return { ok: a.ok, json: async () => a.body };
     }),
     applyDelta: vi.fn(async (delta: any, ...copy: unknown[]) => { writes.push(delta); writtenTo.push(copy); return true; }),
     copyForRead: vi.fn(async () => ({ dbName: 'beanpool_global.example.db', generation: 3 })),
 }));
 
-import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, keepCards, asHeldRow, CARD_FRESH_MS, forgetRecentLookups, lookUpWasSpent, lookUpSpentKind, RECENT_LOOKUP_MS } from '../members-lookup';
-import { membersKeysPath } from '../members-on-demand';
+import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, keepCards, asHeldRow, CARD_FRESH_MS } from '../members-lookup';
 import { communityListEmpty, communityListNote } from '../community-list-note';
 
 const KEY = 'c'.repeat(64);
 
 beforeEach(() => {
-    forgetRecentLookups();
     calls.length = 0;
     writes.length = 0;
     writtenTo.length = 0;
@@ -56,61 +54,6 @@ describe('the node search and near reads', () => {
     it('a row with no name shows the key\'s first 8 characters', () => {
         expect(asHeldRow({ publicKey: KEY, callsign: '' })?.callsign).toBe(KEY.slice(0, 8));
         expect(asHeldRow({})).toBeNull();
-    });
-});
-
-describe('never spending a member\'s day of lookups in the background (Marty\'s call 3, 15 Oct 2026)', () => {
-    const CY = [{ publicKey: KEY, callsign: 'Cy', avatarUrl: null, joinedAt: '2026-01-01T00:00:00Z' }];
-    it('the same search or "near you" asked again soon is answered without asking the node; after two minutes it asks', async () => {
-        answer = { ok: true, body: CY };
-        const t0 = 1_000_000;
-        for (const path of ['/api/members?q=Cy&limit=20', nearPath({ lat: -28.5, lng: 153.5 })]) {
-            calls.length = 0;
-            const first = await lookUpMembers(path, undefined, t0);
-            const again = await lookUpMembers(path, undefined, t0 + RECENT_LOOKUP_MS - 1);
-            expect(calls).toEqual([path]);
-            expect(again).toBe(first);
-            await lookUpMembers(path, undefined, t0 + RECENT_LOOKUP_MS);
-            expect(calls).toEqual([path, path]);
-        }
-    });
-    it('a read by key is never kept (it is never counted), nor a refusal', async () => {
-        answer = { ok: true, body: CY };
-        const byKey = membersKeysPath([KEY]);
-        await lookUpMembers(byKey);
-        await lookUpMembers(byKey);
-        expect(calls).toEqual([byKey, byKey]);
-        calls.length = 0;
-        answer = { ok: false, body: { code: 'heavy_read_busy' } };
-        expect(await lookUpMembers('/api/members?q=Zo&limit=20')).toBeNull();
-        answer = { ok: true, body: CY };
-        expect(await lookUpMembers('/api/members?q=Zo&limit=20')).not.toBeNull();
-        expect(calls).toEqual(['/api/members?q=Zo&limit=20', '/api/members?q=Zo&limit=20']);
-    });
-    it('a day budget used up is said as such, never "Connect": the phone is online', async () => {
-        answer = { ok: false, status: 429, body: { code: 'people_search_day_budget', error: 'You have searched for people by name 100 times today' } };
-        expect(await lookUpMembers('/api/members?q=Al&limit=20')).toBeNull();
-        expect(lookUpWasSpent()).toBe(true);
-        expect(communityListNote('spent', 'Al')).not.toMatch(/Connect/);
-        expect(communityListEmpty('spent', 'Al')).not.toMatch(/Connect|Loading/);
-        answer = { ok: false, status: 429, body: { code: 'rate_limited' } };
-        await lookUpMembers('/api/members?q=Bo&limit=20');
-        expect(lookUpWasSpent()).toBe(false);
-        answer = { ok: true, body: CY };
-        await lookUpMembers('/api/members?q=Al&limit=20');
-        expect(lookUpWasSpent()).toBe(false);
-    });
-    it('a spent "near you" is told apart from a spent search: a search by name still works then (#1965 review N4)', async () => {
-        answer = { ok: false, status: 429, body: { code: 'nearest_people_day_budget', error: 'You have looked up the people near a place 100 times today' } };
-        expect(await lookUpMembers(nearPath({ lat: -28.5, lng: 153.5 }))).toBeNull();
-        expect(lookUpSpentKind()).toBe('near');
-        expect(communityListNote('spentNear', '')).toMatch(/Search a name to find anyone\./);
-        expect(communityListNote('spentNear', '')).not.toMatch(/Connect|Try again later/);
-        expect(communityListEmpty('spentNear', '')).toMatch(/Search a name/);
-        answer = { ok: false, status: 429, body: { code: 'people_search_day_budget', error: 'You have searched for people by name 100 times today' } };
-        await lookUpMembers('/api/members?q=Al&limit=20');
-        expect(lookUpSpentKind()).toBe('search');
-        expect(communityListNote('spent', 'Al')).toMatch(/Try again later/);
     });
 });
 

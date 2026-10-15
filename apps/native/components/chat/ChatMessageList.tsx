@@ -25,8 +25,8 @@ import React, { useCallback } from 'react';
 import { FlatList, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
-import { isAtBottom, isDaySeparator, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
-import { ChatDaySeparator, ChatRemovedRunLine } from './ChatBubble';
+import { isAtBottom, isDaySeparator, type ChatListItem } from '../../utils/chat-actions';
+import { ChatDaySeparator } from './ChatBubble';
 import type { ChatStyles } from './styles';
 
 /** The list is inverted, so "the bottom" is offset 0. */
@@ -87,7 +87,6 @@ export function ChatMessageList({
 
     const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
         if (isDaySeparator(item)) return <ChatDaySeparator label={item.label} styles={styles} />;
-        if (isRemovedRun(item)) return <ChatRemovedRunLine run={item} styles={styles} />;
         return renderMessage(item);
     }, [renderMessage, styles]);
 

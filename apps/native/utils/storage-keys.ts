@@ -39,56 +39,6 @@ export function blockedUsersStoreKey(publicKey: string): string {
 }
 
 /**
- * The key each of one account's direct messages in one community file is sealed to, as this phone pinned it
- * (utils/dm-peer-pins.ts): `{ pins }`, conversation id lower-cased → pin. One value per (account, file), so no community's
- * node can grow another's or reach its pins (§3.4 amendment 6); its presence is the record that the update's seed of that
- * file ran. Outside SQLite, so no sync, prune or wipe-and-fetch of the conversation rows can move it. Kept when the account
- * leaves the phone, as its block list is (Marty, 13 Oct), and never read for another account. `file`: the name db.ts opens
- * the community under.
- */
-export function dmPeerPinsStoreKey(publicKey: string, file: string): string {
-    return `beanpool_dm_peer_pins:${publicKey.toLowerCase()}:${file}`;
-}
-
-/**
- * What the member's reset of one community's chat memory set aside (utils/dm-peer-pins.ts, §3.4 amendment 6 §3): the raw
- * pins value as storage returned it, the newest kept. Never read by the app; kept for the record, as the pins are.
- */
-export function dmPeerPinsSetAsideStoreKey(publicKey: string, file: string): string {
-    return `beanpool_dm_peer_pins_set_aside:${publicKey.toLowerCase()}:${file}`;
-}
-
-/**
- * The conversations one account's phone has seen as DMs in one community file (utils/dm-guard-list.ts, the DM guard: §3.4
- * amendment 7 §3): a JSON array of ids as the node spelt them. One value per (account, file), beside the pins, so one
- * community's node can neither grow another's list nor make it forget a DM; seeded once from that file's own `dm` rows.
- * `file`: the name db.ts opens the community under.
- */
-export function dmConversationsSeenStoreKey(publicKey: string, file: string): string {
-    return `beanpool_dm_conversations_seen:${publicKey.toLowerCase()}:${file}`;
-}
-
-/**
- * Where the member's reset of one community file's DM guard list (§3.4 amendment 8) keeps the value it replaced, as storage
- * returned it, the newest kept. Never read by the app, as the pins' set-aside isn't.
- */
-export function dmConversationsSeenSetAsideStoreKey(publicKey: string, file: string): string {
-    return `beanpool_dm_conversations_seen_set_aside:${publicKey.toLowerCase()}:${file}`;
-}
-
-/**
- * The encrypted lines one account's phone held, at the update, in one community file, of each DM its rows there didn't pin
- * (utils/db.ts, the update's seed of that file, §3.4 amendment 5): an object, conversation id lower-cased → those lines.
- * Written the first time a build with pins reads that file for the account and never overwritten (only shrunk), so a DM
- * judged in a later run is judged on what the phone held then, not on what the node wrote since; one key per file, so a
- * conversation id two communities share is judged in each on its own lines. Kept with {@link dmPeerPinsStoreKey} when the
- * account leaves the phone, and never read for another account. `file`: the name db.ts opens the community under.
- */
-export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string {
-    return `beanpool_dm_lines_at_update:${publicKey.toLowerCase()}:${file}`;
-}
-
-/**
  * The communities this phone has been to, for the community switcher (utils/nodes.ts). Sign Out and "Replace this
  * phone's account" remove it with the account (utils/account-leaves-phone.ts).
  */

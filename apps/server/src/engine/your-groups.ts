@@ -9,7 +9,7 @@
 
 import { db } from '../db/db.js';
 import { COUNTS_AS_UNREAD_SQL, isEventHost } from '@beanpool/engine';
-import { ensureGroupThread, syncGroupThreadMembership, GROUP_CHAT_WIPED_TEXT, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
+import { ensureGroupThread, syncGroupThreadMembership, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
 import {
     ensureEnterpriseThread, isKeeperOfEnterprise, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
     ensureKeeperReadCursor, getKeeperReadCursor,
@@ -19,7 +19,7 @@ import {
 } from './event-thread.js';
 import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
-import { avatarUrlOf, groupPictureUrlOf, isGroupEncryptedNonce, isLockedAwayLine } from '@beanpool/core';
+import { avatarUrlOf, groupPictureUrlOf, isGroupEncryptedNonce } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 
@@ -108,8 +108,6 @@ function tombstonePreview(row: any, removedText: string, authorDeleteText: strin
     if (!authorDeleteText) return removedText;
     let meta: any = null;
     if (row.metadata) { try { meta = JSON.parse(row.metadata); } catch { /* unreadable: fall through */ } }
-    // A line this node removed when the chat was locked: nobody removed it, a convenor least of all.
-    if (isLockedAwayLine(meta)) return GROUP_CHAT_WIPED_TEXT;
     const by = meta?.removedBy;
     if (by && row.author_pubkey && by === row.author_pubkey) return authorDeleteText;
     if (by) return removedText;

@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -589,12 +589,11 @@ export function assertGroupChatReplyTarget(groupId: string, replyToId: string): 
 /**
  * What a tombstone reads as: an author's own delete says so, a convenor's removal keeps the words it has always
  * had. The apps tell the two apart by `metadata.removedBy` (the contract), but the node's own text should not
- * blame a convenor for a delete the author made themselves, nor for a line this node removed when the chat was locked.
+ * blame a convenor for a delete the author made themselves.
  */
 export function removedMarkerFor(row: { author_pubkey?: string | null; metadata?: string | null }): string {
     let meta: any = {};
     try { meta = row.metadata ? JSON.parse(row.metadata) : {}; } catch { meta = {}; }
-    if (isLockedAwayLine(meta)) return GROUP_CHAT_WIPED_TEXT;
     return meta?.removedBy && meta.removedBy === row.author_pubkey ? GROUP_THREAD_DELETED_TEXT : GROUP_THREAD_REMOVED_TEXT;
 }
 

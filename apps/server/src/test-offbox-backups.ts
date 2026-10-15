@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { readSealedHeader } = await import('@beanpool/core');
@@ -222,15 +222,12 @@ async function main(): Promise<void> {
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
-    const session = (pk: string, role: 'owner' | 'admin' | 'moderator', phone = false) => {
-        const ex = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+    const session = (pk: string, role: 'owner' | 'admin' | 'moderator') => {
+        const ex = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken);
         if (!ex.ok || ex.role !== role) throw new Error(`setup: no ${role} session: ${ex.error}`);
         return ex.sessionId!;
     };
     const asOwner = { 'x-admin-session': session(owner, 'owner') };
-    // Removing a destination, changing one or keeping backups for fewer days asks the owner's fresh proof (amendment 1 to
-    // design case 18): Manage pressed on the phone just now, a new hand-off session for each such call.
-    const asOwnerPhone = () => ({ 'x-admin-session': session(owner, 'owner', true) });
     const asAdmin = { 'x-admin-session': session(admin, 'admin') };
     const asMod = { 'x-admin-session': session(moderator, 'moderator') };
     const asPassword = { 'x-admin-password': PW };
@@ -338,7 +335,7 @@ async function main(): Promise<void> {
     const r4 = await offbox.runOffboxBackups({ now: Date.now() + 25 * HOUR });
     assert(r4.sent.slice().sort().join() === ['env-1', idB].sort().join(), `2. past the interval both are due (${JSON.stringify(r4)})`);
     // An edit that does not send the secret keeps the stored one (the screen never has it).
-    const rename = await call('POST', '/api/local/admin/offbox-backups/settings', asOwnerPhone(), { destination: { ...B, id: idB, name: 'Outside store (renamed)', accessKeyId: '', secretAccessKey: '' } });
+    const rename = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, id: idB, name: 'Outside store (renamed)', accessKeyId: '', secretAccessKey: '' } });
     await storeB.clearLog();
     const r5 = await offbox.runOffboxBackups({ force: true });
     assert(rename.status === 200 && r5.sent.includes(idB) && (await puts(storeB)).every((e) => e.authOk),
@@ -410,7 +407,7 @@ async function main(): Promise<void> {
     process.env.BACKUP_OFFBOX_RETENTION_DAYS = '90';
     assert((await status()).retentionDays === 30, '4. 90 days in .env is read as 30');
     delete process.env.BACKUP_OFFBOX_RETENTION_DAYS;
-    const seven = await call('POST', '/api/local/admin/offbox-backups/settings', asOwnerPhone(), { retentionDays: 7 });
+    const seven = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { retentionDays: 7 });
     await offbox.runOffboxBackups({ force: true });
     leftA = await objects(storeA);
     assert(seven.status === 200 && seven.json.status.retentionDays === 7 && !leftA.includes(k29) && !leftA.includes(k10),
@@ -590,7 +587,7 @@ async function main(): Promise<void> {
     const run = await call('POST', '/api/local/admin/offbox-backups/run', asOwner);
     assert(run.status === 200 && run.json?.started === true, '8. an owner sends one now');
     for (let i = 0; i < 100 && (await status()).running; i++) await new Promise((r) => setTimeout(r, 100));
-    const removed = await call('POST', '/api/local/admin/offbox-backups/settings', asOwnerPhone(), { removeId: idB });
+    const removed = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: idB });
     assert(removed.status === 200 && !removed.json.status.destinations.some((d: any) => d.id === idB) && (await objects(storeB)).length > 0,
         '8. an owner removes a destination; what it holds stays there');
 
@@ -679,7 +676,7 @@ async function main(): Promise<void> {
         `10. three runs: each fails the down destination and still sends to the other (${JSON.stringify(deadRuns.map((r) => r.failed.map((f) => f.id)))})`);
     assert(openAfter <= openBefore, `10. …and no deleted backup is held open after them: their disk is free (${openBefore} before, ${openAfter} after)`);
     assert(leftInData().length === 0, `10. …and nothing of theirs is left in the data folder (${leftInData().join(', ')})`);
-    await call('POST', '/api/local/admin/offbox-backups/settings', asOwnerPhone(), { removeId: idDead });
+    await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: idDead });
 
     // c) A run whose backup can't be made (tar fails): no staging copy and no file left behind.
     const fakeBin = path.join(work, 'fake-bin');
@@ -764,7 +761,7 @@ async function main(): Promise<void> {
     assert([1, 2, 3, 4, 5].every((i) => !leftB.includes(oldKey(i))), `10. …and still pruned: the 40-day-old backups went from all five folders (${leftB.filter((k) => k.startsWith('many/')).length} left under many/)`);
     const sixth = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, name: 'Store 6', prefix: 'many/6' } });
     assert(sixth.status === 400 && /At most 5/.test(sixth.json?.error), `10. …and an eighth is refused (${sixth.json?.error})`);
-    for (const id of many) await call('POST', '/api/local/admin/offbox-backups/settings', asOwnerPhone(), { removeId: id });
+    for (const id of many) await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: id });
     for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_2_')) delete process.env[k];
 
     // f) A name in any script is kept as typed; only control and formatting characters go.

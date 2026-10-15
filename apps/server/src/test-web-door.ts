@@ -18,7 +18,7 @@
  *      would): an encoded separator, a double encoding, a backslash, a dot or empty segment outside /api and /ws is
  *      404 with no document; /ws and /api spellings never reach the static files; whatever else reaches index.html
  *      (a case variant on a case-insensitive disk, a query, a fragment) has the app document's policy
- *   4. the pages that need the older header still get it and render: the old settings.html (/settings-legacy is gone),
+ *   4. the pages that need the older header still get it and render: the old settings.html and /settings-legacy,
  *      the /auth/ pages, the invite page and the Apple probe; Settings (and its deep links and its index.html) and the
  *      manager render under the app document's policy; the PWA's assets are still served, and /api routes still take
  *      an encoded `/` in a value
@@ -319,7 +319,7 @@ async function main(): Promise<void> {
     // ── 4. the pages that keep the older header ───────────────────────────────────────────────────
     console.log('\n── 4. the pages that need the older header still get it; Settings and the manager do not ──');
     const pages: Array<[string, string]> = [
-        ['/settings.html', 'window.page = "old settings"'],
+        ['/settings.html', 'window.page = "old settings"'], ['/settings-legacy', '<script'],
         ['/auth/facebook.html', 'window.page = "facebook"'],
         ['/?invite=BP-TEST-0002', '<script>'], ['/apple-probe', '<script>'],
     ];
@@ -329,12 +329,6 @@ async function main(): Promise<void> {
             `GET ${pagePath} renders its page, inline script and all (got ${res.status} ${res.type})`);
         assert(res.csp === TODAYS_DOCUMENT_CSP && res.referrer === null,
             `GET ${pagePath} keeps today's header, which lets that script run, and no Referrer-Policy (got ${policyName(res.csp)}, ${res.referrer})`);
-    }
-    // The legacy settings page and its script are gone (design case 18, D9): no document, no script, under any header.
-    for (const gone of ['/settings-legacy', '/settings.js']) {
-        const res = await rawGet(gone);
-        assert(res.status === 404 && !res.type.includes('html') && !res.body.includes('<script') && !res.body.includes('the web app'),
-            `GET ${gone} is gone: 404 with no document (got ${res.status} ${res.type})`);
     }
     // The manager's pages, every way they are reached: the route, a deep link, the file itself, the SPA fallback.
     const managerPages: Array<[string, string]> = [

@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RecoveryKitButton } from './RecoveryKitButton';
-import { KIT_WEB_RESTORE_STEPS, brandColours, contrastRatio } from '@beanpool/core';
+import { KIT_WEB_RESTORE_STEPS } from '@beanpool/core';
 import { KIT_FRAME_FALLBACK_MS, printKitInFrame, removeKitFrame } from '../lib/recovery-kit';
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
@@ -135,10 +135,7 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
     const app = src('../App.tsx');
     const lobby = src('../pages/GuestLobby.tsx');
     const join = src('./WebJoin.tsx');
-    // The words as a member reads them in English: the emoji beside its words, and a sentence through the words layer
-    // ({t('…')}, translated for other languages) as its English.
-    const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ')
-        .replace(/\{t\('((?:[^'\\]|\\.)*)'\)\}/g, '$1');
+    const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ');
     const between = (text: string, from: string, to: string) => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from)));
     const named = KIT_WEB_RESTORE_STEPS.join('\n').match(/“[^”]+”/g)!.map((q) => q.slice(1, -1));
 
@@ -205,33 +202,5 @@ describe('where the button is', () => {
     it('is a 44px target whose label wraps', () => {
         expect(button).toMatch(/minHeight: 44|min-h-\[44px\]/);
         expect(button).toMatch(/whiteSpace: 'normal'|whitespace-normal/);
-    });
-});
-
-describe('the kit button reads in both themes (rehearsal 14 Oct S12)', () => {
-    /** The web's page and card grounds per theme, read from index.css as the brand-colours test reads them. */
-    function grounds(): Record<'light' | 'dark', string[]> {
-        const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
-        const block = (from: number) => css.slice(from, css.indexOf('}', from));
-        const darkAt = css.indexOf('--bg-primary: #1d231d');
-        const pick = (text: string) => ['--bg-primary', '--bg-secondary', '--bg-card'].map(v => text.match(new RegExp(`${v}:\\s*(#[0-9a-f]{6})`, 'i'))![1].toLowerCase());
-        return { light: pick(block(css.indexOf('--bg-primary: #f6f4f0'))), dark: pick(block(darkAt)) };
-    }
-
-    it('names the library ink, not a hex, and clears 4.5:1 on every web ground in light and dark', () => {
-        render(<RecoveryKitButton words={WORDS} />);
-        const button = screen.getByRole('button', { name: /recovery kit/i });
-        // jsdom keeps a var() colour only in the style attribute.
-        expect(button.getAttribute('style')).toMatch(/border: 1px solid var\(--bp-ink-accent\);.*color: var\(--bp-ink-accent\)/);
-        expect(button.getAttribute('style')).not.toMatch(/#[0-9a-f]{3,6}/i);
-        const g = grounds();
-        expect(g.dark).toContain('#384038');
-        for (const theme of ['light', 'dark'] as const) {
-            for (const ground of g[theme]) {
-                expect(contrastRatio(brandColours(theme).ink.accent, ground), `${theme} on ${ground}`).toBeGreaterThanOrEqual(4.5);
-            }
-        }
-        // What it was: the blue on dark's --bg-secondary.
-        expect(contrastRatio('#2563eb', '#384038')).toBeLessThan(2.1);
     });
 });

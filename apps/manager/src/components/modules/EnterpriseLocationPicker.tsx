@@ -207,9 +207,9 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 Approximate option stays right beside it. */}
             <div
                 data-testid="enterprise-location-visibility"
-                className="p-2.5 rounded-lg bg-terra-600/10 border border-terra-600/30 text-xs text-bp-ink-terra space-y-1.5"
+                className="p-2.5 rounded-lg bg-terra-950/40 border border-terra-800/60 text-xs text-terra-200 space-y-1.5"
             >
-                <p className="font-semibold text-bp-ink-terra m-0">
+                <p className="font-semibold text-terra-100 m-0">
                     Anyone who opens this node&apos;s map will see this spot.
                 </p>
                 <p className="text-[11px] text-nature-300 m-0">
@@ -219,7 +219,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     type="button"
                     onClick={handleApproximate}
                     disabled={lat == null || lng == null}
-                    className="px-2.5 py-1 rounded-md bg-bp-chip-need-tint hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-bp-chip-need-ink border border-terra-600/60 transition-colors"
+                    className="px-2.5 py-1 rounded-md bg-bp-chip-need-tint hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-bp-chip-need-ink border border-terra-700/60 transition-colors"
                 >
                     Approximate (~100m)
                 </button>
@@ -239,7 +239,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         <span>Lat: {lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         <span>Lng: {lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         {isApproximate && (
-                            <span className="px-1.5 py-0.2 rounded bg-terra-600/20 text-bp-ink-terra text-[10px] font-sans font-semibold border border-terra-600/50">
+                            <span className="px-1.5 py-0.2 rounded bg-terra-900/60 text-terra-300 text-[10px] font-sans font-semibold border border-terra-700/50">
                                 ~100m
                             </span>
                         )}

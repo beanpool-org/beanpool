@@ -799,12 +799,12 @@ export function MembersModule({
                                                         className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border overflow-hidden ${
                                                             isMemberFrozen
                                                                 ? 'bg-red-950 text-red-400 border-red-800'
-                                                                : 'bg-terra-600/30 text-bp-ink-terra border-terra-500/30'
+                                                                : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
                                                         }`}
                                                         fallbackGlyph={initial}
                                                     />
                                                     <div className="min-w-0">
-                                                        <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-bp-ink-terra transition-colors">
+                                                        <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>
                                                             {knownFloorMarks[pubkey] && (
                                                                 <span
@@ -969,7 +969,7 @@ export function MembersModule({
                                 {searchTerm.trim() && (
                                     <button
                                         onClick={() => setSearchTerm('')}
-                                        className="mt-2 px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-bp-ink-terra font-bold transition-all text-[11px] border border-nature-700"
+                                        className="mt-2 px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-terra-400 font-bold transition-all text-[11px] border border-nature-700"
                                     >
                                         Clear Search Filter
                                     </button>
@@ -1067,7 +1067,7 @@ export function MembersModule({
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Assign tier badge & granted credit floor for <code className="text-bp-ink-terra font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
+                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
                                 </p>
                             </div>
                             <button
@@ -1093,7 +1093,7 @@ export function MembersModule({
                                             key={t.id}
                                             className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                                                 selectedTierValue === t.id
-                                                    ? 'bg-terra-600/15 border-terra-500 text-white'
+                                                    ? 'bg-terra-950/60 border-terra-500 text-white'
                                                     : 'bg-nature-950/60 border-nature-800 text-nature-300 hover:border-nature-700'
                                             }`}
                                         >

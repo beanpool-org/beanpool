@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS } from '@beanpool/core';
+import { placelessListingNote } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -23,14 +23,8 @@ import {
     getMarketplacePosts, createMarketplacePost, updateMarketplacePost, treasuryPostEvent, getNodeInfo, getRemotePosts,
     getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
     getEnterpriseMapPins, type EnterpriseMapPin,
-    getGroups, getCommunityMe, type MarketplacePost, type PostReach, type ReachablePeer, type Group,
-    getEventZone, getEventZones, type EventZone,
+    getGroups, getCommunityMe, type MarketplacePost, type PostReach, type ReachablePeer, type Group
 } from '../lib/api';
-import {
-    approxInstantMs, deviceZone, deviceZoneId, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptions,
-    type EventZoneSource,
-} from '../lib/event-zone';
-import { offsetMinutesOf, t, zoneLabelFor } from '@beanpool/core';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
@@ -57,8 +51,7 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
-    eventInWindow, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
-    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
+    eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
@@ -177,22 +170,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [eventEnd, setEventEnd] = useState('');
     const [eventPlaceName, setEventPlaceName] = useState('');
     const [eventNote, setEventNote] = useState('');
-    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): null until the host touches
-    // it, so the node's default (ticked where anyone can join in a minute) holds even when its info arrives late.
-    const [eventHostLetsInChoice, setEventHostLetsIn] = useState<boolean | null>(null);
     const [postApproximate, setPostApproximate] = useState(false);
-    // The spot a new pin was placed at, kept while the pin shows Approximate, so the member can still choose it.
-    const exactPinRef = useRef<{ lat: number; lng: number } | null>(null);
-    // Where and when (DESIGN-event-times §3): at a place or online, the link to join, and the zone the typed times are in
-    // with where it came from. The picker's list is the node's, read the first time Change is tapped.
-    const [eventOnline, setEventOnline] = useState(false);
-    const [eventJoinLink, setEventJoinLink] = useState('');
-    const [eventZone, setEventZone] = useState<EventZone | null>(null);
-    const [eventZoneSource, setEventZoneSource] = useState<EventZoneSource | null>(null);
-    const [eventZonePicking, setEventZonePicking] = useState(false);
-    const [eventZoneList, setEventZoneList] = useState<EventZone[] | null>(null);
-    /** The pin the zone was looked up for, so the same pin is not looked up twice and a stored zone is not replaced on open. */
-    const eventZonePinRef = useRef<string | null>(null);
     // Who hosts: 'me', `ent:<enterprise pubkey>` for a keeper, or `group:<id>` for a convenor.
     const [eventHost, setEventHost] = useState('me');
     const [keeperOf, setKeeperOf] = useState<string[]>([]);
@@ -224,11 +202,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Until the node's info arrives, the local rules stand.
     const nodeInfo = useCommunityInfo(!visitor);
     const postRules = postRulesFor((nodeInfo?.features as { beans?: unknown } | undefined)?.beans !== false);
-    const openMembership = hostLetsInDefault(nodeInfo?.features as { openMembership?: boolean } | undefined);
-    // Read by the map's tap handler, which is bound once per pin-drop mode.
-    const openMembershipRef = useRef(openMembership);
-    openMembershipRef.current = openMembership;
-    const eventHostLetsIn = eventHostLetsInChoice ?? openMembership;
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -681,8 +654,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
                     getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
                     near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
-                    // No read for online events (the Market makes one beside its radius read): they have no place, so the
-                    // map has nothing to draw for them (review of #1952, finding 8).
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
                 const ownIds = new Set(localData.map(p => p.id));
@@ -785,90 +756,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         return () => { offView(); offTie(); };
     }, [identity?.publicKey, fitsMap]);
 
-    // The zone of an in-person event's pin (DESIGN-event-times §2): looked up by the node when the pin lands or moves, unless
-    // the host picked one. A stored zone is not replaced when the form opens on its own pin.
-    useEffect(() => {
-        if (!showNewPost || newPostType !== 'event' || eventOnline || eventZoneSource === 'picked') return;
-        if (postLat == null || postLng == null) return;
-        const key = `${postLat},${postLng}`;
-        if (eventZonePinRef.current === key) return;
-        eventZonePinRef.current = key;
-        let live = true;
-        getEventZone(postLat, postLng)
-            .then(z => { if (live && z?.tz) { setEventZone(z); setEventZoneSource('pin'); } })
-            .catch(() => { /* the node takes the pin's zone itself when none is sent */ });
-        return () => { live = false; };
-    }, [showNewPost, newPostType, eventOnline, eventZoneSource, postLat, postLng]);
-
-    function chooseEventOnline(online: boolean) {
-        if (online === eventOnline) return;
-        setEventOnline(online);
-        setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); n.delete('event_link'); return n; });
-        if (eventZoneSource === 'picked') return;
-        if (online) {
-            // Online: the host's own zone (§3), named by this device; when it cannot be, the line asks for one.
-            const own = deviceZone();
-            setEventZone(own);
-            setEventZoneSource(own ? 'device' : null);
-        } else {
-            // Back at a place: the pin's zone again, looked up afresh.
-            setEventZone(null);
-            setEventZoneSource(null);
-            eventZonePinRef.current = null;
-        }
-    }
-
-    function openEventZonePicker() {
-        setEventZonePicking(true);
-        if (eventZoneList) return;
-        getEventZones()
-            .then(r => setEventZoneList(Array.isArray(r?.zones) ? r.zones : []))
-            .catch(() => setEventZoneList([]));
-    }
-
-    function pickEventZone(tz: string) {
-        const z = eventZoneList?.find(x => x.tz === tz);
-        if (!z) return;
-        setEventZone(z);
-        setEventZoneSource('picked');
-        setEventZonePicking(false);
-    }
-
     // Create a new post from the map
     function resetEventForm() {
         setEventStart('');
         setEventEnd('');
         setEventPlaceName('');
         setEventNote('');
-        setEventHostLetsIn(null);
         setEventHost('me');
         setPostApproximate(false);
         setEventIsCopy(false);
         setEventEdit(null);
-        setEventOnline(false);
-        setEventJoinLink('');
-        setEventZone(null);
-        setEventZoneSource(null);
-        setEventZonePicking(false);
-        eventZonePinRef.current = null;
-    }
-
-    /**
-     * The zone the form's times go to the node in. An event from a node before clocks opens in this device's time with no
-     * zone, and keeps sending instants until the host picks one; otherwise the form's zone, or none (the node takes the pin's).
-     */
-    function eventFormZone(): EventZone | null {
-        if (eventEdit && !eventEdit.before.tz && eventZoneSource !== 'picked') return null;
-        return eventZone;
     }
 
     /** The event form as it stands, in the shape the edit diff compares. */
     function currentEventForm(): EventEditForm {
         return {
             title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
-            placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
-            photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
-            hostLetsIn: eventHostLetsIn,
+            placeName: eventPlaceName, lat: postLat, lng: postLng, privateNote: eventNote, photos: newPostPhotos,
         };
     }
 
@@ -897,14 +801,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     async function handleSaveEvent() {
         if (!eventEdit) return;
         const errors = new Set<string>();
-        const zone = eventFormZone();
-        const startMs = approxInstantMs(eventStart, zone);
-        const endMs = approxInstantMs(eventEnd, zone);
+        const startIso = localInputToIso(eventStart);
+        const endIso = localInputToIso(eventEnd);
         if (!newPostTitle.trim()) errors.add('title');
-        if (!Number.isFinite(startMs) || (eventStart !== eventEdit.before.start && startMs <= Date.now())) errors.add('event_start');
-        if (eventEnd && (!Number.isFinite(endMs) || !Number.isFinite(startMs) || endMs <= startMs)) errors.add('event_end');
-        if (!eventOnline && (postLat == null || postLng == null)) errors.add('location');
-        if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
+        if (!startIso || (eventStart !== eventEdit.before.start && Date.parse(startIso) <= Date.now())) errors.add('event_start');
+        if (eventEnd && (!endIso || !startIso || Date.parse(endIso) <= Date.parse(startIso))) errors.add('event_end');
+        if (postLat == null || postLng == null) errors.add('location');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
         setValidationErrors(errors);
@@ -920,8 +822,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPosting(true);
         try {
             // The signed caller's own key: the node checks it against the host set (author, keeper, convenor).
-            const res = await updateMarketplacePost(id, identity?.publicKey || '', payload);
-            tellAdjusted(res?.eventTimeAdjusted, res?.post);
+            await updateMarketplacePost(id, identity?.publicKey || '', payload);
             closeEventForm();
             refreshPosts();
             onNavigate?.('marketplace', id);
@@ -931,28 +832,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPosting(false);
     }
 
-    /**
-     * A clock the node had to move or choose (a DST gap or overlap, #1937's eventTimeAdjusted), said once the event is
-     * saved: "2:30 does not exist on 4 Oct in Sydney (clocks go forward). It was saved as 3:30." (§3, §7).
-     */
-    function tellAdjusted(adjusted: Parameters<typeof eventAdjustedWords>[0], post: MarketplacePost | undefined) {
-        const tz = post?.eventTz || eventZone?.tz;
-        if (!adjusted || !tz) return;
-        const label = eventZone?.tz === tz ? eventZone.label : zoneLabelFor(tz, offsetMinutesOf(post?.eventStartLocal, post?.eventStartAt));
-        const words = eventAdjustedWords(adjusted, label);
-        if (words.length > 0) alert(words.join('\n\n'));
-    }
-
     async function handleCreateEvent() {
         const errors = new Set<string>();
-        const zone = eventFormZone();
-        const startMs = approxInstantMs(eventStart, zone);
-        const endMs = approxInstantMs(eventEnd, zone);
+        const startIso = localInputToIso(eventStart);
+        const endIso = localInputToIso(eventEnd);
         if (!newPostTitle.trim()) errors.add('title');
-        if (!Number.isFinite(startMs) || startMs <= Date.now()) errors.add('event_start');
-        if (eventEnd && (!Number.isFinite(endMs) || !Number.isFinite(startMs) || endMs <= startMs)) errors.add('event_end');
-        if (!eventOnline && (postLat == null || postLng == null)) errors.add('location');
-        if (eventOnline && eventLinkProblem(eventJoinLink)) errors.add('event_link');
+        if (!startIso || Date.parse(startIso) <= Date.now()) errors.add('event_start');
+        if (eventEnd && (!endIso || !startIso || Date.parse(endIso) <= Date.parse(startIso))) errors.add('event_end');
+        if (postLat == null || postLng == null) errors.add('location');
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
         setValidationErrors(errors);
@@ -966,21 +853,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             // An enterprise hosts for the whole community; the form does not let the pair be chosen, and
             // this is the second lock, so no stale state can post one the node would refuse (#1054).
             const eventAudienceScope = hostEnterprise ? 'public' as const : audienceScope;
-            // The typed clock and its zone, for the node to resolve (DESIGN-event-times §2): online has no pin and no
-            // place name, and may carry a link; in person has its pin.
             const event = {
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                ...(eventOnline ? { eventOnline: true } : { lat: postLat!, lng: postLng! }),
+                lat: postLat!,
+                lng: postLng!,
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
                 audienceScope: eventAudienceScope,
                 ...(eventAudienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
-                ...eventClockBody(eventStart, eventEnd, eventOnline, zone),
-                ...(!eventOnline && eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
-                ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
+                eventStartAt: startIso!,
+                ...(endIso ? { eventEndAt: endIso } : {}),
+                ...(eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
-                // Always the host's choice, never left to the node's default.
-                eventHostLetsIn,
             };
             // Hosting AS an enterprise goes through the enterprise's own route, with the enterprise in the
             // PATH. Naming it in the body is refused by the node's spoof check before the route runs — every
@@ -988,7 +872,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             // used to fail with "Signature validation failed". Me and a group still post as the signer, so
             // they keep the marketplace route.
             const res = hostEnterprise
-                ? await treasuryPostEvent(hostEnterprise, event as Parameters<typeof treasuryPostEvent>[1])
+                ? await treasuryPostEvent(hostEnterprise, event)
                 : await createMarketplacePost({
                     type: 'event',
                     category: 'community',
@@ -1012,7 +896,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 pinDropMarkerRef.current = null;
             }
             setShowNewPost(false);
-            tellAdjusted(res?.eventTimeAdjusted, res?.post);
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', res?.post?.id);
         } catch (e: any) {
@@ -1152,8 +1035,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             mapRef.current,
             false,
             (latlng) => {
-                placeFreshPin(Math.round(latlng.lat * 10000) / 10000, Math.round(latlng.lng * 10000) / 10000);
+                setPostLat(Math.round(latlng.lat * 10000) / 10000);
+                setPostLng(Math.round(latlng.lng * 10000) / 10000);
+                setPostApproximate(false);
                 setPinDropMode(false);
+                placePreviewPin(latlng.lat, latlng.lng);
             },
             () => {
                 setPinDropMode(true);
@@ -1167,41 +1053,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPostLat(null);
         setPostLng(null);
         setPostApproximate(false);
-        exactPinRef.current = null;
         if (pinDropMarkerRef.current) {
             pinDropMarkerRef.current.remove();
             pinDropMarkerRef.current = null;
         }
     }
 
-    /**
-     * A new pin from a tap, the member's location or an address. Where anyone can join in a minute (`openMembership`, the
-     * global node) it starts Approximate, rounded to about 100 m, and the member can still choose the exact spot
-     * (DESIGN-global-member-privacy-fable.md, director amendment 1 item 3); elsewhere it is the spot, as always.
-     */
-    function placeFreshPin(lat: number, lng: number) {
-        exactPinRef.current = { lat, lng };
-        const at = openMembershipRef.current ? approximateLocation(lat, lng) : { lat, lng };
-        setPostLat(at.lat);
-        setPostLng(at.lng);
-        setPostApproximate(openMembershipRef.current);
-        placePreviewPin(at.lat, at.lng);
-    }
-
-    /** Back to the spot the pin was placed at, after Approximate (placeFreshPin, approximatePin). */
-    function chooseExactSpot() {
-        const exact = exactPinRef.current;
-        if (!exact) return;
-        setPostLat(exact.lat);
-        setPostLng(exact.lng);
-        setPostApproximate(false);
-        placePreviewPin(exact.lat, exact.lng);
-    }
-
     // One tap rounds the pin to roughly 100 m before it is sent, as for enterprise pins (§2.3).
     function approximatePin() {
         if (postLat == null || postLng == null) return;
-        if (!postApproximate) exactPinRef.current = { lat: postLat, lng: postLng };
         const approx = approximateLocation(postLat, postLng);
         setPostLat(approx.lat);
         setPostLng(approx.lng);
@@ -1215,10 +1075,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     function pickAddress(result: AddressResult) {
         const lat = Math.round(result.lat * 10000) / 10000;
         const lng = Math.round(result.lng * 10000) / 10000;
-        placeFreshPin(lat, lng);
+        setPostLat(lat);
+        setPostLng(lng);
+        setPostApproximate(false);
         setPinDropMode(false);
         setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); if (result.shortName) n.delete('event_place'); return n; });
         setEventPlaceName(prev => prev.trim() ? prev : result.shortName.slice(0, EVENT_PLACE_NAME_MAX));
+        placePreviewPin(lat, lng);
         const map = mapRef.current;
         if (map) {
             centredRef.current = true;
@@ -1265,7 +1128,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         const map = mapRef.current;
         function onMapClick(e: L.LeafletMouseEvent) {
             if (!pinDropMode) return;
-            placeFreshPin(Math.round(e.latlng.lat * 10000) / 10000, Math.round(e.latlng.lng * 10000) / 10000);
+            const lat = Math.round(e.latlng.lat * 10000) / 10000;
+            const lng = Math.round(e.latlng.lng * 10000) / 10000;
+            setPostLat(lat);
+            setPostLng(lng);
+            setPostApproximate(false);
+            placePreviewPin(lat, lng);
         }
         map.on('click', onMapClick);
         return () => { map.off('click', onMapClick); };
@@ -1533,8 +1401,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .map(e => [e.lat!, e.lng!] as [number, number]),
     ], [posts, enterprises, blockedSet]);
     // Read by area and nothing near (lib/listings-near): its own line, never a dead end (DESIGN-global-sync-by-area §5).
-    // Online events never pin (they have no place), so a map holding only those still has nothing near to show.
-    const nearEmpty = !!near && pinsLoaded && posts.every(p => p.eventOnline === true);
+    const nearEmpty = !!near && pinsLoaded && posts.length === 0;
     const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0 && !nearEmpty;
     useEffect(() => {
         if (centredRef.current || !mapRef.current) return;
@@ -1590,12 +1457,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setValidationErrors(new Set());
             setEventEdit(null);
             setEventIsCopy(true);
-            setEventOnline(copy.online);
-            setEventJoinLink(copy.link);
-            // The copy keeps the zone its host's times were in; a moved pin looks it up again.
-            setEventZone(copy.tz ? { tz: copy.tz, label: zoneLabelFor(copy.tz, offsetMinutesOf(source.eventStartLocal, source.eventStartAt)), offsetMinutes: offsetMinutesOf(source.eventStartLocal, source.eventStartAt) } : null);
-            setEventZoneSource(copy.tz ? (copy.online && copy.tz === deviceZoneId() ? 'device' : null) : null);
-            eventZonePinRef.current = copy.tz && copy.lat != null && copy.lng != null ? `${copy.lat},${copy.lng}` : null;
             if (copy.lat != null && copy.lng != null) {
                 placePreviewPin(copy.lat, copy.lng);
                 centredRef.current = true;
@@ -1646,7 +1507,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setEventEnd(form.end);
             setEventPlaceName(form.placeName);
             setEventNote(form.privateNote);
-            setEventHostLetsIn(form.hostLetsIn);
             setAudienceScope(source.audienceScope === 'group' ? 'group' : 'public');
             setTargetGroupId(source.audienceScope === 'group' ? (source.targetGroupId ?? '') : '');
             setPostLat(form.lat);
@@ -1655,13 +1515,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setPinDropMode(false);
             setValidationErrors(new Set());
             setEventEdit({ id, before: form });
-            setEventOnline(form.online === true);
-            setEventJoinLink(form.link ?? '');
-            // The zone the stored clock is in. An event from before clocks has none, and shows in this device's time.
-            const offset = offsetMinutesOf(source.eventStartLocal, source.eventStartAt);
-            setEventZone(form.tz ? { tz: form.tz, label: zoneLabelFor(form.tz, offset), offsetMinutes: offset } : null);
-            setEventZoneSource(form.tz && form.online && form.tz === deviceZoneId() ? 'device' : null);
-            eventZonePinRef.current = form.lat != null && form.lng != null ? `${form.lat},${form.lng}` : null;
             if (form.lat != null && form.lng != null) {
                 placePreviewPin(form.lat, form.lng);
                 centredRef.current = true;
@@ -1685,8 +1538,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         onFocusPostHandled?.();
     }, [focusPostId, posts, onFocusPostHandled]);
 
-    // Only an event the map can pin: an online one has no place, so the chips would filter nothing (review of #1952, finding 8).
-    const hasOpenEvents = posts.some(p => p.type === 'event' && p.lat != null && p.lng != null && isEventOpen(p) && !(p as any)._remoteNode);
+    const hasOpenEvents = posts.some(p => p.type === 'event' && isEventOpen(p) && !(p as any)._remoteNode);
     // The notes about where the pins were read from take the event chips' spot, so while the chips show they sit under
     // them (#1770): the chips' row is its 48px buttons with 0.25rem above and below, then a 0.25rem gap.
     const nearNoteTop = hasOpenEvents ? 'top-[calc(5rem+48px)] md:top-[calc(1.5rem+48px)]' : 'top-[4.25rem] md:top-3';
@@ -1718,28 +1570,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
                     ✓ Location set
                 </p>
-            )}
-            {/* Where anyone can join, a listing's pin starts Approximate; the member may choose the exact spot. The event
-                form has its own Approximate box below the address search. */}
-            {openMembership && newPostType !== 'event' && postLat != null && postLng != null && (
-                <div data-testid="listing-pin-precision" className="mb-3 flex items-center gap-2 flex-wrap">
-                    <p className="m-0 flex-1 min-w-0 text-xs text-nature-600 dark:text-nature-300 break-words">
-                        {postApproximate ? t('Saved to about 100 m. Other members see about 1 km.') : t('Saved at the exact spot. Other members see about 1 km.')}
-                    </p>
-                    {postApproximate ? (
-                        exactPinRef.current && (
-                            <button type="button" onClick={chooseExactSpot}
-                                className="min-h-[48px] px-3 rounded-md border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100">
-                                {t('Use the exact spot')}
-                            </button>
-                        )
-                    ) : (
-                        <button type="button" onClick={approximatePin}
-                            className="min-h-[48px] px-3 rounded-md border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100">
-                            {t('Approximate (~100m)')}
-                        </button>
-                    )}
-                </div>
             )}
             </>
         );
@@ -1805,8 +1635,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }
 
     const submitDisabled = newPostType === 'event'
-        // An online event has no pin (DESIGN-event-times §9).
-        ? (posting || !newPostTitle.trim() || !eventStart || (!eventOnline && postLat == null))
+        ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
             : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).disabled;
@@ -2201,11 +2030,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
-                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
-                            {t === 'offer' ? '🟢 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
+                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
                         </button>
                     ))}
                 </div>
@@ -2377,112 +2206,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             {validationErrors.has('event_end') && (
                                 <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">The end must be after the start.</p>
                             )}
-                            {(() => {
-                                // Which zone the times are in (DESIGN-event-times §3): said only when it is not this device's, and
-                                // always for an online event, whose zone anchors it. Change opens the node's list.
-                                const line = eventZoneLine(eventOnline, eventZone, eventZoneSource, deviceZoneId());
-                                if (!line) return null;
-                                return (
-                                    <div data-testid="event-zone-line" className="mt-2 text-sm text-nature-600 dark:text-nature-300">
-                                        {(() => {
-                                            // Whole sentences for the words layer; the zone's name is then set in bold where the
-                                            // sentence (in whatever language) puts it.
-                                            const zone = line.label;
-                                            const sentence = !zone ? t('Pick the time zone these times are in')
-                                                : line.why === 'pin' ? t('Times are {zone} (where the pin is)', { zone })
-                                                : line.why === 'device' ? t('Times are {zone} (your device)', { zone })
-                                                : t('Times are {zone}', { zone });
-                                            const at = zone ? sentence.indexOf(zone) : -1;
-                                            return at >= 0 ? (
-                                                <span>{sentence.slice(0, at)}<strong className="font-bold text-nature-800 dark:text-nature-100">{zone}</strong>{sentence.slice(at + zone!.length)}</span>
-                                            ) : <span>{sentence}</span>;
-                                        })()}
-                                        <span> · </span>
-                                        {!eventZonePicking && (
-                                            <button
-                                                type="button"
-                                                data-testid="event-zone-change"
-                                                onClick={openEventZonePicker}
-                                                className="inline-flex items-center min-h-[48px] bg-transparent border-0 p-0 font-bold text-violet-800 dark:text-violet-200 underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm"
-                                            >
-                                                {t('Change')}
-                                            </button>
-                                        )}
-                                        {eventZonePicking && (
-                                            <div className="mt-1">
-                                                <label htmlFor="event-zone" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Time zone')}</label>
-                                                {eventZoneList == null ? (
-                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('Loading the list…')}</p>
-                                                ) : eventZoneList.length === 0 ? (
-                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('The list could not be loaded. Try again in a moment.')}</p>
-                                                ) : (
-                                                    <select
-                                                        id="event-zone"
-                                                        data-testid="event-zone-select"
-                                                        value={eventZone?.tz ?? ''}
-                                                        onChange={e => pickEventZone(e.target.value)}
-                                                        className="w-full min-w-0 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 border-nature-200 dark:border-nature-700"
-                                                    >
-                                                        {!eventZone && <option value="">{t('Pick a time zone')}</option>}
-                                                        {zoneOptions(eventZone && !eventZoneList.some(z => z.tz === eventZone.tz) ? [eventZone, ...eventZoneList] : eventZoneList).map(o => (
-                                                            <option key={o.tz} value={o.tz}>{o.text}</option>
-                                                        ))}
-                                                    </select>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
                         </div>
 
-                        {/* Online only where the node carries it (features.onlineEvents), or for an event that already is one. */}
-                        {(nodeInfo?.features?.onlineEvents === true || eventOnline) && (
-                        <div role="radiogroup" aria-label={t('Where')} data-testid="event-where" className="flex flex-col gap-1">
-                            <span className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Where')}</span>
-                            <div className="flex flex-wrap gap-2">
-                                {[false, true].map(online => (
-                                    <button
-                                        key={String(online)}
-                                        type="button"
-                                        role="radio"
-                                        aria-checked={eventOnline === online}
-                                        onClick={() => chooseEventOnline(online)}
-                                        className={`min-h-[48px] px-4 rounded-xl border-2 text-sm font-bold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
-                                            eventOnline === online
-                                                ? 'border-violet-600 dark:border-violet-400 bg-violet-50 dark:bg-violet-950/60 text-violet-900 dark:text-violet-100'
-                                                : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200'
-                                        }`}
-                                    >
-                                        <span aria-hidden="true">{eventOnline === online ? '◉ ' : '○ '}</span>{online ? t('Online') : t('At a place')}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        )}
-
-                        {eventOnline && (
-                            <div>
-                                <label htmlFor="event-link" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Link to join')}</label>
-                                <input
-                                    id="event-link"
-                                    type="url"
-                                    inputMode="url"
-                                    placeholder={t('https://')}
-                                    maxLength={500}
-                                    value={eventJoinLink}
-                                    onChange={e => { setEventJoinLink(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_link'); return n; }); }}
-                                    className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_link') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
-                                />
-                                {validationErrors.has('event_link') ? (
-                                    <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{eventLinkProblem(eventJoinLink)}</p>
-                                ) : (
-                                    <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">{t('Only people who tap Going see it.')}</p>
-                                )}
-                            </div>
-                        )}
-
-                        {!eventOnline && (<>
                         <div>
                             <label htmlFor="event-place" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Place name</label>
                             <input
@@ -2493,13 +2218,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => { setEventPlaceName(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_place'); return n; }); }}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('event_place') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
-                            {/* Where anyone can join, the place name is the one place everyone who can see the event reads
-                                (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
-                            {openMembership && (
-                                <p data-testid="event-place-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400 break-words">
-                                    {looksLikeStreetAddress(eventPlaceName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
-                                </p>
-                            )}
                         </div>
 
                         <div>
@@ -2532,19 +2250,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                             ~100m
                                         </span>
                                     )}
-                                    {postApproximate && exactPinRef.current && (
-                                        <button
-                                            type="button"
-                                            onClick={chooseExactSpot}
-                                            className="min-h-[48px] px-3 py-1 rounded-md bg-white dark:bg-nature-800 text-sm font-semibold text-nature-800 dark:text-nature-100 border border-nature-300 dark:border-nature-600"
-                                        >
-                                            {t('Use the exact spot')}
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         </div>
-                        </>)}
 
                         <div>
                             <label htmlFor="event-description" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Description (optional)</label>
@@ -2571,26 +2279,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 rows={2}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all resize-y ${validationErrors.has('event_note') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
-                            <p data-testid="event-note-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">{privateNoteHelper(eventHostLetsIn, openMembership)}</p>
-                            <label className="mt-2 flex items-start gap-2 min-h-[44px] cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    data-testid="event-host-lets-in"
-                                    checked={eventHostLetsIn}
-                                    onChange={e => setEventHostLetsIn(e.target.checked)}
-                                    className="mt-1 h-5 w-5 flex-shrink-0 accent-violet-700"
-                                />
-                                <span className="min-w-0">
-                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{hostLetsInLabel()}</span>
-                                    <span className="block text-xs text-nature-500 dark:text-nature-400">{hostLetsInHint()}</span>
-                                </span>
-                            </label>
-                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
-                            {eventEdit && hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn) && (
-                                <p data-testid="event-host-lets-in-off" role="status" className="m-0 mt-1 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">
-                                    {hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn)}
-                                </p>
-                            )}
+                            <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see this.</p>
                         </div>
                         {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
                             <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
@@ -2733,7 +2422,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 text-sm">
                                 <p className="font-bold mb-1">💡 Contributions First</p>
                                 <p className="text-[13px] leading-snug">
-                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🟢 Offer</span> above. (Or ask an Elder to vouch for you.)
+                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🔵 Offer</span> above. (Or ask an Elder to vouch for you.)
                                 </p>
                             </div>
                         )}
@@ -2961,7 +2650,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     }`}
                 >
                     {posting ? 'Posting...' :
-                     newPostType === 'event' ? (!eventOnline && postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
+                     newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
                      offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>

@@ -95,7 +95,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
-import { chargeNearestPeopleRead, chargePeopleSearch } from '../nearest-people-budget.js';
+import { chargeNearestPeopleRead } from '../nearest-people-budget.js';
 import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
@@ -115,14 +115,6 @@ function joiningAtOpenDoor(ctx: any): string | null {
  * can lock the other admins out or wipe the node. Owner or admin: running the node from day to day.
  */
 const OWNER_ONLY: readonly AdminRole[] = ['owner'];
-/**
- * A `mirror` peer link is an owner's to add, change or remove (design case 18, A10): a mirror's key is one a standby's
- * restore trusts for the community's bundle. `peer` and `blocked` links stay an admin's.
- */
-const MIRROR_OWNER_ONLY = 'Only an owner of this node can add, change or remove a mirror link';
-function isMirrorLink(address: unknown): boolean {
-    return typeof address === 'string' && getConnectors().some(c => c.address === address && c.trustLevel === 'mirror');
-}
 const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -368,7 +360,7 @@ router.get('/api/local/community-info', async (ctx) => {
 const CLIENT_FUNNEL_EVENTS = ['protection_shown', 'protection_choice', 'guide_complete'] as const;
 
 router.post('/api/funnel-event', async (ctx) => {
-    if (!rateLimit(ctx, 'funnel-event')) return;
+    if (!rateLimit(ctx)) return;
     const { event, variant } = (ctx as any).requestBody || {};
 
     // Allowlisted rather than passed through. The counted events include the invite
@@ -518,7 +510,6 @@ router.post('/api/local/connectors', async (ctx) => {
 
     const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
     const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
-    if ((level === 'mirror' || isMirrorLink(address)) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
     //
@@ -766,7 +757,6 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
-    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     await disconnectFromAddress(address);
     ctx.body = { success: true };
@@ -785,7 +775,6 @@ router.post('/api/local/connectors/remove', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
-    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     await disconnectFromAddress(address);
     const removed = removeConnector(address);
@@ -793,8 +782,33 @@ router.post('/api/local/connectors/remove', async (ctx) => {
 });
 
 // ===================== RESET =====================
-// No route wipes the node (design case 18, A1): POST /api/local/reset is gone, for every credential. Starting again is
-// the server's own: stop, move data/local-config.json aside (settings only) or remove ./data (the whole community).
+
+router.post('/api/local/reset', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    const config = getLocalConfig();
+
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can reset it')) return;
+
+    saveLocalConfig({
+        isLocked: false,
+        callsign: null,
+        location: null,
+        adminHash: null,
+        salt: null,
+        joinedAt: null,
+        communityName: null,
+        contactEmail: null,
+        contactPhone: null,
+        // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
+        ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
+    });
+    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
+    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
+    if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
+
+    ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };
+});
 
 // ===================== COMMUNITY API (PUBLIC) =====================
 
@@ -2297,8 +2311,8 @@ router.post('/api/friends/remove', async (ctx) => {
 
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
-    if (!rateLimit(ctx, 'names')) return; // SRV-4: throttle callsign enumeration
-    const callsign = ctx.params.callsign.trim(); // folded by the one name rule (engine names.ts), not lower-cased first
+    if (!rateLimit(ctx)) return; // SRV-4: throttle callsign enumeration
+    const callsign = ctx.params.callsign.trim().toLowerCase();
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
     // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
@@ -2318,12 +2332,11 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
-    // joining through the open door, signing its own name check, counts against the door's limiter instead
-    // (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the auth limiter's 15 a minute per address on
-    // names alone.
+    // Throttle enumeration, same as recovery lookup. A key joining through the open door, signing its own name check,
+    // counts against the door's limiter instead (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the
+    // auth limiter's 15 a minute per address on names alone.
     const joining = joiningAtOpenDoor(ctx);
-    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx, 'names'))) return;
+    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx))) return;
     const raw = (ctx.params.callsign || '').trim();
     const exclude = (ctx.query.exclude as string | undefined) || undefined;
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
@@ -2415,20 +2428,7 @@ function answerMembersOnDemand(ctx: any, point: Point | null): void {
         const n = wholeUpTo(limit, MEMBERS_SEARCH_MAX, MEMBERS_SEARCH_MAX);
         if (typed.length < MEMBERS_SEARCH_MIN_CHARS) return refuse(400, `q is at least ${MEMBERS_SEARCH_MIN_CHARS} characters of a name`);
         if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_SEARCH_MAX}`);
-        const byKey = MEMBER_KEY_ANY_CASE.test(typed);
-        // Where anyone can join in a minute, a day's budget of searches by name per member too (READ_LIMITS
-        // .peopleSearchesPerDay), so two letters after two letters never walks the whole community. A key is one member,
-        // never counted. Elsewhere none.
-        if (!byKey && getProfileSwitches().openMembership) {
-            const spent = chargePeopleSearch(ctx.state.actor as string);
-            if (spent) {
-                ctx.status = 429;
-                ctx.set('Retry-After', String(spent.retryAfterSec));
-                ctx.body = spent.body;
-                return;
-            }
-        }
-        const rows = byKey
+        const rows = MEMBER_KEY_ANY_CASE.test(typed)
             ? getMemberDirectoryRowsByKeys([typed.toLowerCase()])
             : searchMemberDirectoryRows(typed, n);
         body = directoryMembers(directoryPeople(rows));

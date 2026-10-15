@@ -303,24 +303,6 @@ describe('createPost: who the event is hosted by decides the route', () => {
         expect(body).toMatchObject({ authorPublicKey: 'me-pub', audienceScope: 'group', targetGroupId: 'grp-1' });
     });
 
-    // #1953 review B1: the form's "Only people I let in" choice reaches the node on both routes, ticked or not; left out,
-    // the node would apply its own default (a local node: everyone Going reads the note).
-    for (const [route, author, url] of [
-        ['marketplace', 'me-pub', 'https://test.beanpool.org/api/marketplace/posts'],
-        ['treasury', 'ent-pub', 'https://test.beanpool.org/api/treasury/ent-pub/event'],
-    ] as const) {
-        for (const tick of [true, false]) {
-            it(`the host's let-in choice (${tick}) is in the body on the ${route} route`, async () => {
-                fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'ev-new' } }));
-                await createPost(draft(author, { eventHostLetsIn: tick }));
-
-                const { url: sentTo, body } = sent();
-                expect(sentTo).toBe(url);
-                expect(body.eventHostLetsIn).toBe(tick);
-            });
-        }
-    }
-
     it('an offer is untouched by the event rule, even when it names another author', async () => {
         fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'off-new' } }));
         await createPost({ ...draft('ent-pub'), id: 'off-new', type: 'offer', credits: 5 });

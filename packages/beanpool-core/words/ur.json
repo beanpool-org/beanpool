@@ -121,8 +121,8 @@
     "other": "اس چیٹ کے مقفل ہونے پر سابقہ {n} پیغامات ہٹا دیے گئے تھے"
   },
   "{n} message removed by a convenor|{n} messages removed by a convenor": {
-    "one": "منتظم کی طرف سے {n} پیغام ہٹا دیا گیا",
-    "other": "منتظم کی طرف سے {n} پیغامات ہٹا دیے گئے"
+    "one": "کنوینر کی طرف سے {n} پیغام ہٹا دیا گیا",
+    "other": "کنوینر کی طرف سے {n} پیغامات ہٹا دیے گئے"
   },
   "{n} message was deleted|{n} messages were deleted": {
     "one": "{n} پیغام حذف کر دیا گیا تھا",

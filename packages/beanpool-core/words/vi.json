@@ -110,7 +110,7 @@
     "other": "{n} tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa"
   },
   "{n} message removed by a convenor|{n} messages removed by a convenor": {
-    "other": "{n} tin nhắn đã bị người điều hành xóa"
+    "other": "{n} tin nhắn đã bị điều phối viên xóa"
   },
   "{n} message was deleted|{n} messages were deleted": {
     "other": "{n} tin nhắn đã bị xóa"

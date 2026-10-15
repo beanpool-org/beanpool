@@ -179,7 +179,7 @@
   "Your other phone gets your account the next time it checks, in about a minute.": "你的另一部手机将在下次检查时（约一分钟内）获取你的账户。",
   "Your {name} sign-in is now linked, in every community. If you lose this phone, sign in with {name} to get back in: it takes a day, or less if another phone of yours says it's you.": "你的 {name} 登录方式现已在每个社区绑定。如果你丢失了这部手机，用 {name} 登录即可找回：需要一天时间，如果你的另一部手机确认是你本人，则所需时间更短。",
   "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. Your 12 words work any time.": "你的社区中用于 {name} 的账户副本已删除，BeanPool 的密钥保险库中也没有保留任何副本。在你重新绑定前，{name} 将无法通过你的社区或密钥保险库恢复你的账户。你的 12 个词随时可用。",
-  "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.": "你的社区中用于 {name} 的账户副本已删除，BeanPool 密钥保险库中也没有副本。在你重新绑定前，{name} 无法恢复你的账户。这部手机上没有这 12 个词：在此之后如果丢失手机，将无法找回账户。",
+  "Your community's copy of your account for {name} is deleted, and none is kept at BeanPool's key vault. {name} won't bring your account back through your community or the key vault until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.": "你的社区中用于 {name} 的账户副本已删除，BeanPool 密钥保险库中也没有副本。在你重新绑定前，{name} 将无法通过你的社区或密钥保险库恢复你的账户。这部手机上没有这 12 个词：在此之后如果丢失手机，将无法找回账户。",
   "Key code: {code}": "密钥代码：{code}",
   "Chat memory": "聊天记忆",
   "Reset": "重置",

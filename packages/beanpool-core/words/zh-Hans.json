@@ -110,7 +110,7 @@
     "other": "此聊天被锁定时已移除之前的 {n} 条消息"
   },
   "{n} message removed by a convenor|{n} messages removed by a convenor": {
-    "other": "召集人已移除 {n} 条消息"
+    "other": "协调人已移除 {n} 条消息"
   },
   "{n} message was deleted|{n} messages were deleted": {
     "other": "已删除 {n} 条消息"

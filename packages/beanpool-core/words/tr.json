@@ -121,8 +121,8 @@
     "other": "Bu sohbet kilitlendiğinde önceki {n} mesaj kaldırıldı"
   },
   "{n} message removed by a convenor|{n} messages removed by a convenor": {
-    "one": "Bir kolaylaştırıcı tarafından {n} mesaj kaldırıldı",
-    "other": "Bir kolaylaştırıcı tarafından {n} mesaj kaldırıldı"
+    "one": "Bir koordinatör tarafından {n} mesaj kaldırıldı",
+    "other": "Bir koordinatör tarafından {n} mesaj kaldırıldı"
   },
   "{n} message was deleted|{n} messages were deleted": {
     "one": "{n} mesaj silindi",

@@ -213,7 +213,11 @@ interface KeyholderStatus {
     since: number;
     custodians: string[];
     /** A genesis or reshare waiting for two of its custodians to confirm their shares. */
-    pending: { purpose: string; generation: number; custodians: string[]; confirmed: string[] } | null;
+    pending: {
+        purpose: string; generation: number; custodians: string[]; confirmed: string[];
+        /** The new state's public keys: listed by global's door, the registrar and the app before the switch. */
+        publicKeys: { ticket: string[]; deposit: { kid: string; key: string }[] };
+    } | null;
     /** The genesis or reshare that switched at this boot: who has shown they hold their new share (in memory only). */
     switched: { generation: number; custodians: string[]; confirmed: string[] } | null;
     generation: number | null;
@@ -1137,6 +1141,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             pushes: { sent: push.sent, failed: push.failed },
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
+            // A reshare waiting for its custodians: the new ticket and deposit keys, public, for the pins to list before
+            // the switch (the old ticket key signs until then, this report included).
+            pending: status.pending ? { generation: status.pending.generation, publicKeys: status.pending.publicKeys } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
             api: about().api, update: about().update, restart: about().restart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),

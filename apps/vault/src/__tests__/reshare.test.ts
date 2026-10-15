@@ -3,14 +3,28 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
+import { checkVaultAnswer, checkVaultTicket, newVaultChallenge, openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
 import { cancelPending, confirmShare, custodianKey, fetchPendingShare, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
 import { KeyholderError } from '../keyholder/keyholder.js';
 import { PENDING_FILE, readStateFile, writePendingFile } from '../keyholder/keys.js';
 import { buildConfirmation, confirmStatement, shareCheck, signStatement, type CustodianShare } from '../shared/ceremony.js';
-import { confirmWith, deposit, doGenesis, get, newMember, signed, startRestore, startVault, type Member, type VaultUnderTest } from './harness.js';
+import {
+    confirmWith,
+    credential,
+    deposit,
+    depositBody,
+    doGenesis,
+    get,
+    newMember,
+    signed,
+    startRestore,
+    startVault,
+    ticketFor,
+    type Member,
+    type VaultUnderTest,
+} from './harness.js';
 
 /**
  * A reshare (key vault design §2.4; V2's "Reshare" test): two custodians hand the vault to a new set, the envelopes
@@ -316,7 +330,9 @@ describe('a reshare switches only once two new custodians hold their shares', ()
         expect((await confirmShare(v.baseUrl, c2, fresh[1], v.call())).body).toMatchObject({ state: 'open', switched: true });
         // As if the keyholder died between writing state.json and removing state.next.json.
         const state = readStateFile(v.stateDir)!;
-        writePendingFile(v.stateDir, { v: 1, purpose: 'reshare', state, shareChecks: ['a', 'b', 'c'], confirmed: [c1.publicKey, c2.publicKey] });
+        writePendingFile(v.stateDir, {
+            v: 1, purpose: 'reshare', state, shareChecks: ['a', 'b', 'c'], confirmed: [c1.publicKey, c2.publicKey], publicKeys: v.keyholder().status().publicKeys!,
+        });
         await v.restartKeyholder();
         expect(v.keyholder().status()).toMatchObject({ state: 'locked', generation: 2, pending: null });
         expect(existsSync(path.join(v.stateDir, PENDING_FILE))).toBe(false);
@@ -324,5 +340,168 @@ describe('a reshare switches only once two new custodians hold their shares', ()
         expect((await present(v, c2, g.shares[1])).body).toMatchObject({ error: 'wrong_m' });
         await present(v, c1, fresh[0]);
         expect((await present(v, c4, fresh[2])).body).toMatchObject({ state: 'open' });
+    });
+});
+
+/**
+ * The reshare makes a new ticket key and a new deposit key (reshare rotation design §2.4, tests §2.8). The retiring
+ * custodians hold the old master secret, so they can work out every key the old state holds, offline and for good;
+ * with the old ticket key they could sign what every phone and global's door believe, and with the old deposit key
+ * open every deposit box in flight. So the new keys are made in the new state, under a master secret they never hold,
+ * and their public halves are shown while it waits, for the pins to list them before they sign.
+ */
+describe('a reshare gives the vault new signing keys', () => {
+    type WaitingKeys = { ticket: string[]; deposit: { kid: string; key: string }[] };
+
+    async function reshareTo(v: VaultUnderTest, by: [CustodianKey, CustodianKey], shares: [CustodianShare, CustodianShare], newSet: string[]) {
+        await present(v, by[0], shares[0], { purpose: 'reshare', newCustodians: newSet });
+        const r = await present(v, by[1], shares[1], { purpose: 'reshare', newCustodians: newSet });
+        expect(r.status).toBe(200);
+        return { fresh: r.body.custodianShares as CustodianShare[], waiting: (r.body.pending as { publicKeys: WaitingKeys }).publicKeys };
+    }
+
+    /** A deposit as the phone makes it, sealed to `depositKey`, with a challenge for its receipt. */
+    async function depositTo(v: VaultUnderTest, depositKey: string, member: Member, sub: string) {
+        const ticket = await ticketFor(v, member.seed, 'deposit', 'google');
+        const cred = await credential(v, member.seed, 'google', sub, ticket);
+        const { box } = await depositBody({ shares: [], ticketKey: '', depositKey }, member, 'google', sub);
+        const challenge = newVaultChallenge();
+        return { challenge, reply: await signed(v, '/v1/copies', { ticket, provider: 'google', ...cred, box, challenge }, member.seed) };
+    }
+
+    const reportOf = async (v: VaultUnderTest) => {
+        const r = await get(v, '/v1/report');
+        return { ticketKey: r.body.ticketKey as string, text: JSON.parse(r.body.report.text) as Record<string, any> };
+    };
+
+    /** Which of `keys` a fresh ticket from `v` checks out under: `ok`, or why not. */
+    async function ticketUnder(v: VaultUnderTest, keys: string[]): Promise<string> {
+        const check = checkVaultTicket(await ticketFor(v, newMember().seed, 'deposit', 'google'), { ticketKeys: keys, now: v.clock.now() });
+        return check.ok ? 'ok' : check.reason;
+    }
+
+    it('the new ticket and deposit keys are made in the waiting state and shown before the switch; after it the new ticket key alone signs', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const m1 = newMember();
+        expect((await deposit(v, g, m1, 'google', 'rotate-before')).status).toBe(200);
+
+        const { fresh, waiting } = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        const newTicket = waiting.ticket[0];
+        expect(waiting.ticket).toEqual([newTicket]);
+        expect(newTicket).not.toBe(g.ticketKey);
+        // The new deposit key first; the old one kept behind it, for boxes sealed by builds that still pin it.
+        expect(waiting.deposit.map(d => d.key)).toEqual([expect.any(String), g.depositKey]);
+        expect(waiting.deposit[0].key).not.toBe(g.depositKey);
+        expect(v.keyholder().status().pending?.publicKeys).toEqual(waiting);
+        // The report, which is public and signed by the key in force, names the keys to list.
+        const waitingReport = await reportOf(v);
+        expect(waitingReport.ticketKey).toBe(g.ticketKey);
+        expect(waitingReport.text.pending).toEqual({ generation: 2, publicKeys: waiting });
+        // Until the switch the old ticket key signs.
+        expect(await ticketUnder(v, [g.ticketKey])).toBe('ok');
+        expect(await ticketUnder(v, [newTicket])).toBe('signature');
+
+        expect((await confirmWith(v, fresh, [0, 2], [c1, c2, c4]))[1].body).toMatchObject({ state: 'open', switched: true, generation: 2 });
+        expect(v.keyholder().status().publicKeys).toEqual(waiting);
+        expect(await ticketUnder(v, [g.ticketKey])).toBe('signature');
+        expect(await ticketUnder(v, [newTicket])).toBe('ok');
+        expect(await ticketUnder(v, [newTicket, g.ticketKey])).toBe('ok');
+
+        // A box sealed to the old deposit key still opens, and its receipt is signed by the new ticket key only.
+        const m2 = newMember();
+        const old = await depositTo(v, g.depositKey, m2, 'rotate-old-box');
+        expect(old.reply.status).toBe(200);
+        const receipt = { kinds: ['receipt' as const], key: m2.key, challenge: old.challenge };
+        expect(checkVaultAnswer(old.reply.body.signed, { ...receipt, ticketKeys: [newTicket] }).ok).toBe(true);
+        expect(checkVaultAnswer(old.reply.body.signed, { ...receipt, ticketKeys: [g.ticketKey] })).toEqual({ ok: false, reason: 'signature' });
+        // One sealed to the new deposit key opens.
+        const m3 = newMember();
+        expect((await depositTo(v, waiting.deposit[0].key, m3, 'rotate-new-box')).reply.status).toBe(200);
+        // The copy from before the reshare, and both after it, restore.
+        await expectCopy(v, 'google', 'rotate-before', m1);
+        await expectCopy(v, 'google', 'rotate-old-box', m2);
+        await expectCopy(v, 'google', 'rotate-new-box', m3);
+        const switched = await reportOf(v);
+        expect(switched.ticketKey).toBe(newTicket);
+        expect(switched.text.pending).toBeNull();
+    });
+
+    it('the waiting keys survive a keyholder restart, and are the ones the switch puts in force', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const { fresh, waiting } = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+
+        await v.restartKeyholder();
+        expect(v.keyholder().status()).toMatchObject({ state: 'locked', generation: 1, pending: { generation: 2, sharesHeld: false, publicKeys: waiting } });
+        // The new custodians confirm the shares they saved; the switch leaves it locked, and their shares open it.
+        expect((await confirmWith(v, fresh, [0, 2], [c1, c2, c4]))[1].body).toMatchObject({ state: 'locked', switched: true });
+        await present(v, c1, fresh[0]);
+        expect((await present(v, c4, fresh[2])).body.state).toBe('open');
+        expect(v.keyholder().status().publicKeys).toEqual(waiting);
+        expect(await ticketUnder(v, waiting.ticket)).toBe('ok');
+    });
+
+    it('a vault rebuilt from a backup made before the reshare cannot pose as the vault after it', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const m1 = newMember();
+        expect((await deposit(v, g, m1, 'google', 'rotate-pose')).status).toBe(200);
+        const before = await v.api.runBackup();
+        const { fresh, waiting } = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        await confirmWith(v, fresh, [0, 2], [c1, c2, c4]);
+        const newTicket = waiting.ticket[0];
+
+        // The retiring custodians stand up the old state from the backup, with a genesis key and the old shares (allowed
+        // while no backup of the new generation exists: see backup.test.ts for the rule after one does).
+        const posing = await vault({ stub: v.stub, clock: v.clock, custodians: v.custodians, storeDir: v.storeDir });
+        expect((await restoreFromBackup(posing.baseUrl, c1, before, posing.call())).body.state).toBe('locked');
+        await present(posing, c1, g.shares[0]);
+        expect((await present(posing, c2, g.shares[1])).body.state).toBe('open');
+        await expectCopy(posing, 'google', 'rotate-pose', m1);
+
+        // What it signs, nobody who lists the new key believes: its tickets, and its answers.
+        expect(await ticketUnder(posing, [newTicket])).toBe('signature');
+        const m2 = newMember();
+        const box = await depositTo(posing, g.depositKey, m2, 'rotate-pose-2');
+        expect(box.reply.status).toBe(200);
+        expect(checkVaultAnswer(box.reply.body.signed, { kinds: ['receipt'], key: m2.key, challenge: box.challenge, ticketKeys: [newTicket] }))
+            .toEqual({ ok: false, reason: 'signature' });
+        // And a box sealed to the new deposit key does not open there.
+        const sealedToNew = await depositTo(posing, waiting.deposit[0].key, newMember(), 'rotate-pose-3');
+        expect(sealedToNew.reply).toMatchObject({ status: 400, body: { code: 'bad_box' } });
+    });
+
+    it('two reshares in a row: each replaces the ticket key and puts a new deposit key first; a box sealed to the first still opens', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const c4 = custodianKey(crypto.randomBytes(32));
+        const c5 = custodianKey(crypto.randomBytes(32));
+        const second = await reshareTo(v, [c1, c2], [g.shares[0], g.shares[1]], [c1.publicKey, c2.publicKey, c4.publicKey]);
+        await confirmWith(v, second.fresh, [0, 2], [c1, c2, c4]);
+        const at = (shares: CustodianShare[], who: CustodianKey) => shares.find(s => s.custodian === who.publicKey) as CustodianShare;
+        const third = await reshareTo(v, [c1, c4], [at(second.fresh, c1), at(second.fresh, c4)], [c4.publicKey, c5.publicKey, c2.publicKey]);
+        await confirmWith(v, third.fresh, [0, 1], [c4, c5]);
+        expect(v.keyholder().status()).toMatchObject({ generation: 3, pending: null });
+
+        const ticketKeys = [g.ticketKey, second.waiting.ticket[0], third.waiting.ticket[0]];
+        expect(new Set(ticketKeys).size).toBe(3);
+        expect(third.waiting.ticket).toEqual([ticketKeys[2]]);
+        expect(third.waiting.deposit.map(d => d.key)).toEqual([third.waiting.deposit[0].key, second.waiting.deposit[0].key, g.depositKey]);
+        expect(new Set(third.waiting.deposit.map(d => d.key)).size).toBe(3);
+        expect(v.keyholder().status().publicKeys).toEqual(third.waiting);
+        expect(await ticketUnder(v, ticketKeys.slice(0, 2))).toBe('signature');
+        expect(await ticketUnder(v, [ticketKeys[2]])).toBe('ok');
+
+        const m1 = newMember();
+        expect((await depositTo(v, g.depositKey, m1, 'rotate-gen1-box')).reply.status).toBe(200);
+        await expectCopy(v, 'google', 'rotate-gen1-box', m1);
     });
 });

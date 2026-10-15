@@ -15,7 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { InvitePage } from './InvitePage';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import {
-    useMembersOnDemand, useMemberSearch, membersNear, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
+    useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
 } from '../lib/members-on-demand';
 import { readMyArea } from '../lib/member-area';
 
@@ -113,6 +113,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     // 'none': the member has set no area; 'failed': it couldn't be read, or the nearest couldn't be.
     const [nearState, setNearState] = useState<'loading' | 'done' | 'none' | 'failed'>('loading');
     const [nearTry, setNearTry] = useState(0);
+    // With 'failed': the node's words when today's "near you" reads are spent (dayBudgetWords), else null.
+    const [nearRefusal, setNearRefusal] = useState<string | null>(null);
 
     useEffect(() => { loadFriends(); loadAddedYou(); }, []);
     useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
@@ -122,6 +124,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         if (view !== 'community' || onDemand !== true) return;
         let cancelled = false;
         setNearState('loading');
+        setNearRefusal(null);
         (async () => {
             const area = await readMyArea();
             if (cancelled) return;
@@ -130,15 +133,15 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             try {
                 const people = await membersNear(area);
                 if (!cancelled) { setNear(people); setNearState('done'); }
-            } catch {
-                if (!cancelled) setNearState('failed');
+            } catch (e) {
+                if (!cancelled) { setNearRefusal(dayBudgetWords(e)); setNearState('failed'); }
             }
         })();
         return () => { cancelled = true; };
     }, [view, onDemand, nearTry]);
 
     // The search goes to the node once the typing pauses, from 2 characters.
-    const { found, state: searchState } = useMemberSearch(searchQuery, onDemand === true);
+    const { found, state: searchState, refusal: searchRefusal } = useMemberSearch(searchQuery, onDemand === true);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {
@@ -432,7 +435,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                             {searchQuery.trim() && searchQuery.trim().length < MEMBERS_SEARCH_MIN_CHARS
                                 ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
                                 : searchState === 'searching' ? 'Searching…'
-                                : searchState === 'failed' ? "Couldn't search just now. Check your connection and try again."
+                                : searchState === 'failed' ? (searchRefusal ?? "Couldn't search just now. Check your connection and try again.")
                                 : visibleFound ? (visibleFound.length === 0
                                     ? 'Nobody here has a name starting with that.'
                                     : `${visibleFound.length} member${visibleFound.length !== 1 ? 's' : ''} found${(found?.length ?? 0) >= MEMBERS_SEARCH_LIMIT ? ` (the first ${MEMBERS_SEARCH_LIMIT}: type more of the name to narrow it)` : ''}`)
@@ -453,8 +456,11 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         <p className={lineText} data-testid="people-no-area">Set your area to see who's near you (Settings → Your area). Search works without it.</p>
                     ) : nearState === 'failed' ? (
                         <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-near-failed">
-                            <span>Couldn't check who's near you just now.</span>
-                            <button type="button" onClick={() => setNearTry(n => n + 1)} className={linkButton}>Try again</button>
+                            {/* A spent day says so in the node's words, which say when it lets up: no Try again for it. */}
+                            {nearRefusal ? <span>{nearRefusal}</span> : <>
+                                <span>Couldn't check who's near you just now.</span>
+                                <button type="button" onClick={() => setNearTry(n => n + 1)} className={linkButton}>Try again</button>
+                            </>}
                         </p>
                     ) : visibleNear.length === 0 ? (
                         <p className={lineText}>Nobody else is here yet. Search by name, or invite someone.</p>

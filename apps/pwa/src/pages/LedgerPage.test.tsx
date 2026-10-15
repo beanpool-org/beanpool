@@ -1,5 +1,9 @@
 import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { forgetRecentLookups } from '../lib/members-on-demand';
+
+// Each case asks the node afresh: an answer kept from the last case (the search's and near read's recent answers) isn't this one's.
+beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';

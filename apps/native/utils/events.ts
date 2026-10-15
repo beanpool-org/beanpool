@@ -33,6 +33,16 @@ export function approximatePin(lat: number, lng: number): { lat: number; lng: nu
     return { lat: Math.round(lat * 1000) / 1000, lng: Math.round(lng * 1000) / 1000 };
 }
 
+/**
+ * A new pin from a tap, the host's location or an address. Where anyone can join in a minute (`features.openMembership`,
+ * the global node) it starts Approximate, rounded to about 100 m, and the host can still choose the exact spot, kept as
+ * `exact` (DESIGN-global-member-privacy-fable.md, director amendment 1 item 3; #1965). Elsewhere it is the spot, as always.
+ */
+export function freshEventPin(lat: number, lng: number, openMembership: boolean): { pin: { lat: number; lng: number }; approximate: boolean; exact: { lat: number; lng: number } } {
+    const exact = { lat, lng };
+    return openMembership ? { pin: approximatePin(lat, lng), approximate: true, exact } : { pin: exact, approximate: false, exact };
+}
+
 /** End time when the host leaves it blank: start + 2 hours (decision 32). */
 export function defaultEventEnd(start: Date): Date {
     return new Date(start.getTime() + EVENT_DEFAULT_DURATION_MS);

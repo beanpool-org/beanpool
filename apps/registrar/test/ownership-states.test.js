@@ -544,8 +544,14 @@ test('ensure: an existing record is PATCHed, never POSTed over; an intact name i
     const w = await world();
     try {
         const [owner, n1] = await Promise.all([makeKey(), makeKey()]);
-        // A record already at the hostname, pointing elsewhere (a leftover, or a host tunnel being moved).
+        // The owner's name, whose record at the hostname now points elsewhere under another id (a leftover, or a host
+        // tunnel being moved). A NEW tenure never adopts a record it did not make (F1 of the 2026-10-15 review:
+        // test/outside-registrar-2026-10-15.test.js); its owner's heal does.
+        const first = (await w.claim(owner, { name: 'meadow' })).body;
+        assert.equal(first.status, 'live', JSON.stringify(first));
+        w.cf.dns.delete((await w.row('meadow')).dns_record_id);
         w.cf.dns.set('dns-stale', { id: 'dns-stale', type: 'CNAME', name: 'meadow.beanpool.org', content: 'old-host.cfargotunnel.com', proxied: true });
+        const since = w.cf.calls.length;
 
         const r = await w.claim(owner, { name: 'meadow' });
         assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -553,8 +559,8 @@ test('ensure: an existing record is PATCHed, never POSTed over; an intact name i
         const row = await w.row('meadow');
         assert.equal(row.dns_record_id, 'dns-stale', 'the existing record is adopted');
         assert.equal(w.cf.dns.get('dns-stale').content, `${row.tunnel_id}.cfargotunnel.com`);
-        assert.ok(w.cf.calls.includes('PATCH /zones/zone/dns_records/dns-stale'));
-        assert.ok(!w.cf.calls.includes('POST /zones/zone/dns_records'), 'never POST over an existing record');
+        assert.ok(w.cf.calls.slice(since).includes('PATCH /zones/zone/dns_records/dns-stale'));
+        assert.ok(!w.cf.calls.slice(since).includes('POST /zones/zone/dns_records'), 'never POST over an existing record');
         assert.equal([...w.cf.dns.values()].filter((d) => d.name === 'meadow.beanpool.org').length, 1);
 
         // A heal of an intact live name: nothing re-made, nothing deleted, no second tunnel or record.

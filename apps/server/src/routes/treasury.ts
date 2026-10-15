@@ -34,7 +34,8 @@ import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERAT
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { createEventFromBody } from './event-post.js';
+import { createEventFromBody, eventTimeAnswer } from './event-post.js';
+import type { EventTimeOut } from '../engine/posts.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -865,10 +866,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             assertNotMuted(actor);
             assertNotMuted(treasury);
             const limit = enterprisePostLimit(treasury, actor);
-            const post = createEventFromBody(b, treasury, actor, limit.beforeWrite);
+            const timeOut: EventTimeOut = {};
+            const post = createEventFromBody(b, treasury, actor, limit.beforeWrite, timeOut);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             limit.stored(post.id);
-            ctx.body = { success: true, post };
+            ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };

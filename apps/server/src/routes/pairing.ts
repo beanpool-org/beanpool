@@ -19,7 +19,7 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Initiated by unauthenticated desktop PWA.
      */
     router.post('/api/pair/init', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
+        if (!deps.rateLimit(ctx, 'pairing')) return;
 
         const { sessionId, desktopPubHex } = (ctx.request as any).body || {};
 
@@ -63,7 +63,7 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Submitted by authenticated mobile app with encrypted payload.
      */
     router.post('/api/pair/transfer', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
+        if (!deps.rateLimit(ctx, 'pairing')) return;
 
         const { sessionId, mobilePubHex, nonceHex, ciphertextHex } = (ctx.request as any).body || {};
 

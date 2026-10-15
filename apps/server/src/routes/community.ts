@@ -364,7 +364,7 @@ router.get('/api/local/community-info', async (ctx) => {
 const CLIENT_FUNNEL_EVENTS = ['protection_shown', 'protection_choice', 'guide_complete'] as const;
 
 router.post('/api/funnel-event', async (ctx) => {
-    if (!rateLimit(ctx)) return;
+    if (!rateLimit(ctx, 'funnel-event')) return;
     const { event, variant } = (ctx as any).requestBody || {};
 
     // Allowlisted rather than passed through. The counted events include the invite
@@ -2315,7 +2315,7 @@ router.post('/api/friends/remove', async (ctx) => {
 
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
-    if (!rateLimit(ctx)) return; // SRV-4: throttle callsign enumeration
+    if (!rateLimit(ctx, 'names')) return; // SRV-4: throttle callsign enumeration
     const callsign = ctx.params.callsign.trim(); // folded by the one name rule (engine names.ts), not lower-cased first
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
@@ -2336,11 +2336,12 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    // Throttle enumeration, same as recovery lookup. A key joining through the open door, signing its own name check,
-    // counts against the door's limiter instead (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the
-    // auth limiter's 15 a minute per address on names alone.
+    // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
+    // joining through the open door, signing its own name check, counts against the door's limiter instead
+    // (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the auth limiter's 15 a minute per address on
+    // names alone.
     const joining = joiningAtOpenDoor(ctx);
-    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx))) return;
+    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx, 'names'))) return;
     const raw = (ctx.params.callsign || '').trim();
     const exclude = (ctx.query.exclude as string | undefined) || undefined;
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);

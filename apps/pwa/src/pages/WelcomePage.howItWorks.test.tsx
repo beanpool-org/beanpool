@@ -4,14 +4,19 @@
  * none of which exist there, in a 350 px scroll box. Where `features.beans` is false it says what is on, in plain words,
  * with no box of its own; where Beans are on it is unchanged.
  *
- * The node is a stubbed fetch, entered through the open door as WelcomePage.area.test.tsx does.
+ * The node is a stubbed fetch, entered through the open door as WelcomePage.area.test.tsx does. The step's sentences go
+ * through t(): the worldwide community is where strangers land, in their own language (#1947 confirmation N-A).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { t } from '@beanpool/core';
 import { WelcomePage, HOW_IT_WORKS_WITHOUT_BEANS } from './WelcomePage';
 import { generateIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resetLanguageForTests, showLanguage } from '../lib/language';
+import ruWords from '../../words/ru.json';
+import frWords from '../../words/fr.json';
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -38,6 +43,7 @@ let identity: BeanPoolIdentity;
 beforeEach(async () => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetCapturedAuthReturn();
+    resetLanguageForTests();
     window.history.replaceState(null, '', '/app');
     identity = await generateIdentity('Alice');
     Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition: vi.fn() }, configurable: true });
@@ -47,6 +53,7 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     resetCapturedAuthReturn();
+    resetLanguageForTests();
     localStorage.clear();
 });
 
@@ -57,11 +64,11 @@ async function toHowItWorks(info: unknown) {
     window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
     stubNode(info);
     render(<WelcomePage onComplete={vi.fn()} />);
-    fireEvent.click(await screen.findByTitle('Green Bean'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-    await screen.findByText(/Your Safety Backup/);
-    fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-    return screen.findByRole('button', { name: "Let's Begin! 🚀" });
+    fireEvent.click(await screen.findByTitle(t('Green Bean')));
+    fireEvent.click(screen.getByRole('button', { name: t('Next →') }));
+    await screen.findByText(t('🔑 Your Safety Backup'));
+    fireEvent.click(screen.getByRole('button', { name: t('Next →') }));
+    return screen.findByRole('button', { name: t("Let's Begin! 🚀") });
 }
 
 /** The money system that is off where Beans are. */
@@ -100,5 +107,39 @@ describe('How it works where Beans are on', () => {
         expect(screen.getByText('🪙 The Mutual Credit Ledger')).toBeInTheDocument();
         expect(screen.getByText('Community Commons Pool')).toBeInTheDocument();
         expect(document.body.textContent).toMatch(/Trust Wallet/);
+    });
+});
+
+describe('How it works where Beans are off, in the member\'s language (#1947 confirmation N-A)', () => {
+    const copy = HOW_IT_WORKS_WITHOUT_BEANS;
+    /** The step's eleven sentences: the intro, four titles, four lines, the Local community line and the 12 words line. */
+    const ENGLISH: string[] = [copy.intro, ...copy.things.flatMap((thing) => [thing.title, thing.line]), copy.local, copy.words];
+
+    it('in Russian: all eleven sentences are the catalog\'s, and none is left in English', async () => {
+        const ru = ruWords as Record<string, unknown>;
+        expect(await showLanguage('ru')).toBe(true);
+        await toHowItWorks(GLOBAL);
+        expect(screen.queryByText('Here is what you can do here.')).toBeNull();
+        expect(ENGLISH).toHaveLength(11);
+        const step = document.body.textContent ?? '';
+        for (const sentence of ENGLISH) {
+            expect(ru[sentence], sentence).toEqual(expect.any(String));
+            expect(ru[sentence], sentence).not.toBe(sentence);
+            expect(step, sentence).toContain(ru[sentence]);
+            expect(step, sentence).not.toContain(sentence);
+        }
+        for (const word of MONEY) expect(step, String(word)).not.toMatch(word);
+    });
+
+    it('in French: each of the eleven is the catalog\'s ("Messages." is the same word in French)', async () => {
+        const fr = frWords as Record<string, unknown>;
+        expect(await showLanguage('fr')).toBe(true);
+        await toHowItWorks(GLOBAL);
+        expect(screen.queryByText('Here is what you can do here.')).toBeNull();
+        const step = document.body.textContent ?? '';
+        for (const sentence of ENGLISH) {
+            expect(fr[sentence], sentence).toEqual(expect.any(String));
+            expect(step, sentence).toContain(fr[sentence]);
+        }
     });
 });

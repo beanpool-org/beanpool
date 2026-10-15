@@ -12,7 +12,7 @@
  *   "near" on every screen: a community 12,000 km away is listed with its distance, never as "nearest you", and never
  *   counted as "more nearby" ({@link communitiesNear}).
  * - **One "none" sentence**, {@link FIND_COMMUNITY_WORDS}.noneNear, with Start a community beside it on both apps (a
- *   real control: the Start a community screen), and never "ask to be told" on the web, which has no place watches.
+ *   real control: the Start a community screen), and "Tell me when one starts here" (a place watch) on both.
  */
 
 /** "Near you", in km: see the header. */

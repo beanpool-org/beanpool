@@ -443,8 +443,8 @@ export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCoun
  * The find card's headline, from what the node said (the phone's findCommunityCardCopy, but for the web's card, which
  * lists the communities themselves right under it, each a link to its own page, so the sentence doesn't name one).
  * Which one is @beanpool/core's findCommunityState: "none" only once the directory has loaded, and "near" only within
- * 250 km. Beside `none` and `far` the card offers Start a community (findOffersStart); it never offers "ask to be told",
- * which the web can't do.
+ * 250 km. Beside `none` and `far` the card offers Start a community and "Tell me when one starts here" (findOffersStart;
+ * the watch is #1955's), as the phone's FindCommunityBody does; never before the list has loaded, never while near.
  */
 export function findBody(f: HomeFind): string {
     const state = findCommunityState(f);

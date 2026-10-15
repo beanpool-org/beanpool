@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "fagioli",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Luoghi da OpenStreetMap. Quello che scrivi qui viene inviato a loro.",
   "Choose {place}": "Scegli {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Questa comunità chiede una foto del profilo prima di pubblicare. Potrai aggiungerla più tardi dal tuo profilo.",
-  "A picture is optional here. You can add one later from your profile.": "Qui la foto è facoltativa. Potrai aggiungerla più tardi dal tuo profilo."
+  "A picture is optional here. You can add one later from your profile.": "Qui la foto è facoltativa. Potrai aggiungerla più tardi dal tuo profilo.",
+  "{n}st\u0004day of the month": "il {n}",
+  "{n}nd\u0004day of the month": "il {n}",
+  "{n}rd\u0004day of the month": "il {n}",
+  "{n}th\u0004day of the month": "il {n}",
+  "Every month on the first {weekday}": "Ogni mese il primo {weekday}",
+  "Every month on the second {weekday}": "Ogni mese il secondo {weekday}",
+  "Every month on the third {weekday}": "Ogni mese il terzo {weekday}",
+  "Every month on the fourth {weekday}": "Ogni mese il quarto {weekday}",
+  "Every month on the last {weekday}": "Ogni mese l'ultimo {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Ogni {n} mese, il primo {weekday}",
+    "other": "Ogni {n} mesi, il primo {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Ogni {n} mese, il secondo {weekday}",
+    "other": "Ogni {n} mesi, il secondo {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Ogni {n} mese, il terzo {weekday}",
+    "other": "Ogni {n} mesi, il terzo {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Ogni {n} mese, il quarto {weekday}",
+    "other": "Ogni {n} mesi, il quarto {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Ogni {n} mese, l'ultimo {weekday}",
+    "other": "Ogni {n} mesi, l'ultimo {weekday}"
+  },
+  "Monthly, first {weekday}": "Mensile, il primo {weekday}",
+  "Monthly, second {weekday}": "Mensile, il secondo {weekday}",
+  "Monthly, third {weekday}": "Mensile, il terzo {weekday}",
+  "Monthly, fourth {weekday}": "Mensile, il quarto {weekday}",
+  "Monthly, last {weekday}": "Mensile, l'ultimo {weekday}",
+  "Does not repeat": "Non si ripete",
+  "Every week on {weekday}": "Ogni settimana di {weekday}",
+  "Every 2 weeks on {weekday}": "Ogni 2 settimane di {weekday}",
+  "Every month on the {day}": "Ogni mese {day}",
+  "An event that repeats must end before its next date starts": "Un evento che si ripete deve finire prima dell'inizio della data successiva",
+  "(months without a {day} are skipped)": "(i mesi senza {day} vengono saltati)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Ogni {n} settimana di {weekday}",
+    "other": "Ogni {n} settimane di {weekday}"
+  },
+  "Every {weekday}": "Ogni {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Ogni {n} mese {day}",
+    "other": "Ogni {n} mesi {day}"
+  },
+  "Monthly on the {day}": "Mensile {day}",
+  "{repeats} · until {date}": "{repeats} · fino al {date}",
+  "The last date must be a date on or after the first one": "L'ultima data deve coincidere con la prima o essere successiva",
+  "The last date can be at most {n} years after the first one": "L'ultima data può essere al massimo {n} anni dopo la prima",
+  "{date} is cancelled. Next: {next}": "{date} è annullata. Prossima: {next}",
+  "{date} is cancelled.": "{date} è annullata.",
+  "{date} is back on": "{date} è stata ripristinata",
+  "Moved from the regular {weekday}": "Spostato dal consueto {weekday}",
+  "Moved from the regular date": "Spostato dalla data consueta",
+  "Choose how the event repeats from the list": "Scegli dall'elenco come si ripete l'evento",
+  "An event can repeat every 1 to 12 weeks or months": "Un evento può ripetersi ogni 1-12 settimane o mesi",
+  "The first date must be one of the repeating dates": "La prima data deve essere una delle date di ripetizione",
+  "The last date can be at most 5 years after the first one": "L'ultima data può essere al massimo 5 anni dopo la prima",
+  "Pick one of the dates this event repeats on": "Scegli una delle date in cui l'evento si ripete",
+  "This event does not repeat": "Questo evento non si ripete",
+  "Only the host can cancel or restore a date": "Solo chi organizza può annullare o ripristinare una data",
+  "This is the last date: change when the event ends, or cancel the event": "Questa è l'ultima data: cambia la fine dell'evento o annulla l'evento",
+  "At most 100 dates can be cancelled": "È possibile annullare al massimo 100 date",
+  "This event has been cancelled": "Questo evento è stato annullato",
+  "Pick a time zone from the list": "Scegli un fuso orario dall'elenco",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Visibile entro circa 1 km. Chiedi a {name} il punto esatto quando vi organizzate per incontrarvi.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Visibile a chiunque possa vedere l'evento. Inserisci l'indirizzo esatto nella nota qui sotto.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Sembra un indirizzo stradale. Chiunque possa vedere l'evento potrà leggerlo, quindi è più sicuro metterlo nella nota qui sotto.",
+  "An earlier message was removed when this chat was locked": "Un messaggio precedente è stato rimosso quando questa chat è stata bloccata",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} messaggio precedente rimosso quando questa chat è stata bloccata",
+    "other": "{n} messaggi precedenti rimossi quando questa chat è stata bloccata"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} messaggio rimosso da un coordinatore",
+    "other": "{n} messaggi rimossi da un coordinatore"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} messaggio è stato eliminato",
+    "other": "{n} messaggi sono stati eliminati"
+  }
 }

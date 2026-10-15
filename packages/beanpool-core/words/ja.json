@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "豆",
@@ -39,5 +39,80 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "場所は OpenStreetMap から取得しています。ここに入力した内容は OpenStreetMap に送信されます。",
   "Choose {place}": "{place}を選ぶ",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "このコミュニティでは、投稿する前にプロフィール画像が必要です。あとからプロフィールで追加できます。",
-  "A picture is optional here. You can add one later from your profile.": "ここでは画像は任意です。よければ、あとからプロフィールで追加できます。"
+  "A picture is optional here. You can add one later from your profile.": "ここでは画像は任意です。よければ、あとからプロフィールで追加できます。",
+  "{n}st\u0004day of the month": "{n}日",
+  "{n}nd\u0004day of the month": "{n}日",
+  "{n}rd\u0004day of the month": "{n}日",
+  "{n}th\u0004day of the month": "{n}日",
+  "Every month on the first {weekday}": "毎月第1{weekday}",
+  "Every month on the second {weekday}": "毎月第2{weekday}",
+  "Every month on the third {weekday}": "毎月第3{weekday}",
+  "Every month on the fourth {weekday}": "毎月第4{weekday}",
+  "Every month on the last {weekday}": "毎月最終{weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "other": "{n}か月ごとの第1{weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "other": "{n}か月ごとの第2{weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "other": "{n}か月ごとの第3{weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "other": "{n}か月ごとの第4{weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "other": "{n}か月ごとの最終{weekday}"
+  },
+  "Monthly, first {weekday}": "毎月第1{weekday}",
+  "Monthly, second {weekday}": "毎月第2{weekday}",
+  "Monthly, third {weekday}": "毎月第3{weekday}",
+  "Monthly, fourth {weekday}": "毎月第4{weekday}",
+  "Monthly, last {weekday}": "毎月最終{weekday}",
+  "Does not repeat": "繰り返さない",
+  "Every week on {weekday}": "毎週{weekday}",
+  "Every 2 weeks on {weekday}": "2週間ごとの{weekday}",
+  "Every month on the {day}": "毎月{day}",
+  "An event that repeats must end before its next date starts": "繰り返すイベントは、次回の日程が始まる前に終了する必要があります",
+  "(months without a {day} are skipped)": "（{day}のない月はスキップされます）",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "other": "{n}週間ごとの{weekday}"
+  },
+  "Every {weekday}": "毎週{weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "other": "{n}か月ごとの{day}"
+  },
+  "Monthly on the {day}": "毎月{day}",
+  "{repeats} · until {date}": "{repeats} · {date}まで",
+  "The last date must be a date on or after the first one": "終了日は開始日以降の日付にする必要があります",
+  "The last date can be at most {n} years after the first one": "終了日は開始日から最大{n}年後まで指定できます",
+  "{date} is cancelled. Next: {next}": "{date}は中止になりました。次回: {next}",
+  "{date} is cancelled.": "{date}は中止になりました。",
+  "{date} is back on": "{date}が再開されました",
+  "Moved from the regular {weekday}": "通常の{weekday}から変更",
+  "Moved from the regular date": "通常の開催日から変更",
+  "Choose how the event repeats from the list": "イベントの繰り返し方を一覧から選択してください",
+  "An event can repeat every 1 to 12 weeks or months": "イベントは1〜12週または1〜12か月ごとに繰り返せます",
+  "The first date must be one of the repeating dates": "最初の日程は繰り返し日程のいずれかである必要があります",
+  "The last date can be at most 5 years after the first one": "終了日は開始日から最大5年後まで指定できます",
+  "Pick one of the dates this event repeats on": "このイベントが繰り返される日程を1つ選んでください",
+  "This event does not repeat": "このイベントは繰り返しません",
+  "Only the host can cancel or restore a date": "日程の中止や再開ができるのは主催者のみです",
+  "This is the last date: change when the event ends, or cancel the event": "これが最終日程です。終了時期を変更するか、イベントを中止してください",
+  "At most 100 dates can be cancelled": "中止できる日程は最大100件までです",
+  "This event has been cancelled": "このイベントは中止されました",
+  "Pick a time zone from the list": "一覧からタイムゾーンを選択してください",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "約1kmの範囲で表示されます。待ち合わせの際は{name}に詳しい場所をお尋ねください。",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "イベントを閲覧できる全員に表示されます。詳しい住所は下のメモ欄に記載してください。",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "住所のように見えます。イベントを閲覧できる全員に表示されるため、下のメモ欄に記載するほうが安全です。",
+  "An earlier message was removed when this chat was locked": "このチャットがロックされたときに、以前のメッセージが削除されました",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "other": "このチャットがロックされたときに、以前のメッセージ{n}件が削除されました"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "other": "進行役によってメッセージ{n}件が削除されました"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "other": "{n}件のメッセージが削除されました"
+  }
 }

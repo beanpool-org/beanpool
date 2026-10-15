@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode, isPasswordRetired } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, passwordCredentialStamp, type AdminSessionBinding } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, isPhoneHandoffSession, FRESH_PROOF_WINDOW_MS, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, passwordCredentialStamp, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
@@ -72,6 +72,9 @@ export async function checkAdminAuth(ctx: any, opts: PasswordAuthOptions = {}): 
                 // A phone hand-off whose unlock is older than PHONE_STEP_UP_WINDOW_MS: owner-only changes wait for
                 // Manage again (requirePhoneStepUp).
                 ctx.state.phoneStepUpDue = phoneStepUpDue(sessionRes.session);
+                // What an owner's fresh proof reads (requireFreshProof): a phone hand-off, and when its unlock was.
+                ctx.state.phoneHandoff = isPhoneHandoffSession(sessionRes.session);
+                ctx.state.keySessionCreatedAt = sessionRes.session.createdAt;
             }
 
             // A moderator's session reaches the moderator routes and nothing else (MODERATOR_ROUTES, below).
@@ -657,9 +660,16 @@ export function requirePhoneStepUp(ctx: any): boolean {
  * wrong code also costs the global tarpit. `action` ends the error's
  * sentence "Enter a current code … ". Answers 401 or 429 and returns false on failure.
  */
-export async function requireCurrentSecondFactor(ctx: any, code: unknown, action = 'to turn 2FA off'): Promise<boolean> {
+export async function requireCurrentSecondFactor(ctx: any, code: unknown, action = 'to turn 2FA off',
+    opts: { refuseWhenOff?: boolean } = {}): Promise<boolean> {
+    if (!getLocalConfig().totpEnabled || !getLocalConfig().totpSecret) {
+        // Turning 2FA off with it already off is nothing to guard; an owner's fresh proof (requireFreshProof) is.
+        if (!opts.refuseWhenOff) return true;
+        ctx.status = 403;
+        ctx.body = { error: FRESH_PROOF_NEEDS_2FA_ERROR, code: FRESH_PROOF_NEEDS_2FA_CODE, totpSetupRequired: true };
+        return false;
+    }
     if (ctx.state?.secondFactorJustVerified) return true;
-    if (!getLocalConfig().totpEnabled || !getLocalConfig().totpSecret) return true;
     const clean = code === undefined || code === null ? '' : String(code).trim();
     if (!clean) {
         ctx.status = 401;
@@ -713,6 +723,64 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
         return false;
     }
     return true;
+}
+
+/**
+ * An owner's fresh proof, every time, for the rare actions that can lose the community's data or address, or lock an owner
+ * out (design case 18 §5 and amendment 1: replacing the recovery code, taking the address offline, releasing a name or
+ * claiming over a live one, retiring the password, break-glass mode and codes, enrolling an owner key, granting or taking
+ * owner or admin, making an automation token, the gateway settings, and removing, re-pointing or shortening off-box
+ * backups). Called after requireAdminRole(ctx, ['owner'], …). What it asks depends on the credential checkAdminAuth took:
+ *   automation token     never: 403 token_not_allowed;
+ *   break-glass code     never (it opens enrolment of a key, nothing else);
+ *   owner key session    the phone's Manage hand-off, its unlock younger than FRESH_PROOF_WINDOW_MS (403 step_up_required
+ *                        after); a computer's session ("Sign in with your phone") is told to do it from the phone
+ *                        (403 phone_required): it has no unlock of its own;
+ *   the admin password   a code the authenticator shows now, or one unused backup code, in `code` (or this request's own
+ *                        inline code); a 2FA session from earlier does not count. With the node's 2FA off it refuses
+ *                        (403): it FAILS CLOSED, where requireCurrentSecondFactor lets a request through.
+ * `action` ends the sentence "… to <action>". Answers and returns false on refusal.
+ */
+export const FRESH_PROOF_PHONE_REQUIRED_CODE = 'phone_required';
+export const FRESH_PROOF_PHONE_REQUIRED_ERROR = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
+export const FRESH_PROOF_STEP_UP_ERROR = 'Press Manage on your phone again, then make this change within 90 seconds.';
+export const FRESH_PROOF_NEEDS_2FA_CODE = 'fresh_proof_needs_2fa';
+export const FRESH_PROOF_NEEDS_2FA_ERROR = 'Turn on two-factor sign-in first: this change asks for a current code each time.';
+export const FRESH_PROOF_BREAK_GLASS_ERROR = 'A break-glass code enrols a key and nothing else: sign in with that key to make this change.';
+
+export async function requireFreshProof(ctx: any, code: unknown, action: string, now = Date.now()): Promise<boolean> {
+    const state = ctx.state || {};
+    if (state.automationTokenId) {
+        ctx.status = 403;
+        ctx.body = { error: TOKEN_OWNER_ONLY_ERROR, code: TOKEN_REFUSED_CODE };
+        return false;
+    }
+    if (state.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only an owner can make this change' };
+        return false;
+    }
+    if (state.isBreakGlassAuth) {
+        ctx.status = 403;
+        ctx.body = { error: FRESH_PROOF_BREAK_GLASS_ERROR };
+        return false;
+    }
+    if (state.isKeySession) {
+        if (!state.phoneHandoff) {
+            ctx.status = 403;
+            ctx.body = { error: FRESH_PROOF_PHONE_REQUIRED_ERROR, code: FRESH_PROOF_PHONE_REQUIRED_CODE, phoneRequired: true };
+            return false;
+        }
+        const createdAt = Number(state.keySessionCreatedAt);
+        if (!Number.isFinite(createdAt) || now - createdAt > FRESH_PROOF_WINDOW_MS || now < createdAt) {
+            ctx.status = 403;
+            ctx.body = { error: FRESH_PROOF_STEP_UP_ERROR, code: STEP_UP_REQUIRED_CODE };
+            return false;
+        }
+        return true;
+    }
+    // The password, by its session or sent with this request. No 2FA, no proof: fail closed.
+    return requireCurrentSecondFactor(ctx, code, `to ${action}`, { refuseWhenOff: true });
 }
 
 /**

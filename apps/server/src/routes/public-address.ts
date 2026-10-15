@@ -16,7 +16,7 @@ import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine
 import { dropAddressRequest, nameAskedFor } from '../services/public-address-agent.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { isAddressLabel } from '../address-request.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 export interface ProbeLogEntry {
@@ -119,6 +119,7 @@ function addressFields(ctx: any, answer: any): Record<string, unknown> {
 
 /** Claiming, releasing or renaming the community's address is an owner's (operators/setup/signing-in.md). */
 const ADDRESS_OWNER_ONLY = 'Only an owner of this node can change its public address';
+const TUNNEL_OWNER_ONLY = "Only an owner of this node can restart its tunnel or give it a new key";
 
 /** The states in which the registrar routes a name to (or keeps it for) the key that holds it. */
 const HELD_STATES = new Set(['live', 'pending', 'paused']);
@@ -268,6 +269,11 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
+        // Claiming over a different live name changes the community's address: the fresh proof (design case 18, B3, as the
+        // director narrowed it). A first claim, or the same name again, stays plain, so setting up has no hard gate.
+        const live = (getNodeConfig() as any).publicAddress;
+        if (live?.name && live.status === 'live' && foldName(live.name) !== foldName(name)
+            && !(await requireFreshProof(ctx, b.code, 'replace this community\'s live address'))) return;
         // Keyed as release-name keys them (case, trailing dot), so "name." waits for a release of "name" (#1583 review r4176138168).
         const inFlight = foldName(name);
         if (releasesInFlight.has(inFlight)) { ctx.status = 409; ctx.body = { error: `${inFlight}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
@@ -343,6 +349,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
+        // The name goes to anyone after the hold: the fresh proof (design case 18, B2).
+        if (!(await requireFreshProof(ctx, b.code, 'release a name'))) return;
         const name = String(b.name || '').toLowerCase().trim();
         if (!isAddressLabel(name)) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
         if (getNodeRole() !== 'primary') { ctx.status = 409; ctx.body = { error: 'Only the main server releases names.' }; return; }
@@ -493,8 +501,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     });
 
     // The tunnel runs inside this server (services/tunnel-connector.ts): this restarts that child process.
+    // Infrastructure is an owner's (the director's call on design case 18, B5).
     router.post('/api/local/admin/public-address/restart-tunnel', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], TUNNEL_OWNER_ONLY)) return;
         try {
             addProbeLog('1/1', `⚡ Restarting the tunnel inside this server...`, 'info');
             const tunnel = await restartTunnel();
@@ -525,6 +535,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     // the tunnel inside this server restarts on the new one. Only the main server runs the tunnel, so only it rotates.
     router.post('/api/local/admin/public-address/rotate', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        // An owner's (design case 18, B4): an admin-scope token could otherwise rotate it in a loop.
+        if (!requireAdminRole(ctx, ['owner'], TUNNEL_OWNER_ONLY)) return;
         const pa = (getNodeConfig() as any).publicAddress;
         if (getNodeRole() !== 'primary' || !pa?.name || pa.mode === 'direct' || pa.status !== 'live') {
             ctx.status = 409;
@@ -573,6 +585,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/public-address/offline', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
+        // Every member's app loses the address: the fresh proof (design case 18, B1).
+        const offlineBody = (ctx.request as any).body || (ctx as any).requestBody || {};
+        if (!(await requireFreshProof(ctx, offlineBody.code, 'take this community offline'))) return;
         try {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Releasing domain & deleting tunnel on Cloudflare registrar...`, 'info');

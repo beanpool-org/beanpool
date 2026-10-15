@@ -115,6 +115,14 @@ function joiningAtOpenDoor(ctx: any): string | null {
  * can lock the other admins out or wipe the node. Owner or admin: running the node from day to day.
  */
 const OWNER_ONLY: readonly AdminRole[] = ['owner'];
+/**
+ * A `mirror` peer link is an owner's to add, change or remove (design case 18, A10): a mirror's key is one a standby's
+ * restore trusts for the community's bundle. `peer` and `blocked` links stay an admin's.
+ */
+const MIRROR_OWNER_ONLY = 'Only an owner of this node can add, change or remove a mirror link';
+function isMirrorLink(address: unknown): boolean {
+    return typeof address === 'string' && getConnectors().some(c => c.address === address && c.trustLevel === 'mirror');
+}
 const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -510,6 +518,7 @@ router.post('/api/local/connectors', async (ctx) => {
 
     const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
     const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
+    if ((level === 'mirror' || isMirrorLink(address)) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
     //
@@ -757,6 +766,7 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
+    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     await disconnectFromAddress(address);
     ctx.body = { success: true };
@@ -775,6 +785,7 @@ router.post('/api/local/connectors/remove', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
+    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     await disconnectFromAddress(address);
     const removed = removeConnector(address);
@@ -782,33 +793,8 @@ router.post('/api/local/connectors/remove', async (ctx) => {
 });
 
 // ===================== RESET =====================
-
-router.post('/api/local/reset', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    const config = getLocalConfig();
-
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can reset it')) return;
-
-    saveLocalConfig({
-        isLocked: false,
-        callsign: null,
-        location: null,
-        adminHash: null,
-        salt: null,
-        joinedAt: null,
-        communityName: null,
-        contactEmail: null,
-        contactPhone: null,
-        // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
-        ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
-    });
-    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
-    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
-    if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
-
-    ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };
-});
+// No route wipes the node (design case 18, A1): POST /api/local/reset is gone, for every credential. Starting again is
+// the server's own: stop, move data/local-config.json aside (settings only) or remove ./data (the whole community).
 
 // ===================== COMMUNITY API (PUBLIC) =====================
 

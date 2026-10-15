@@ -23,7 +23,7 @@
  *      that is an archive of unknown contents, not a known shortfall.
  *   6. The removed opt-ins are inert: no query parameter can get a database-only or otherwise short-by-
  *      request archive out of this node any more.
- *   7. Pruning a snapshot, and deleting one, take its images with it.
+ *   7. Pruning a snapshot takes its images with it; no route deletes one (design case 18, A3: 404, and it stays).
  *   8. The storage-health orphan sweep never touches a snapshot's directory, and unlinking the live copy
  *      leaves the snapshot's bytes intact.
  *   9. A snapshot taken BEFORE this version — a separate database file nothing migrates, whose `post_photos`
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const {
-        createSnapshot, listSnapshots, snapshotImagesDir, updateAutoSnapshotConfig, SNAPSHOTS_DIR,
+        createSnapshot, listSnapshots, snapshotImagesDir, updateAutoSnapshotConfig, SNAPSHOTS_DIR, MIN_SNAPSHOTS_KEPT,
     } = await import('./services/snapshot-scheduler.js');
     const {
         createPlainBackup, createSealedBackup, openSealedFileTo, MISSING_MEMBER,
@@ -331,7 +331,7 @@ async function main(): Promise<void> {
     ]);
 
     // ── 1. The snapshot captures its own images ────────────────────────────────────────────────
-    const snap = createSnapshot();
+    const snap = createSnapshot('scheduled');
     const snapPath = path.join(SNAPSHOTS_DIR, snap.name);
     const snapImages = snapshotImagesDir(snapPath);
     assert(fs.existsSync(snapImages) && fs.statSync(snapImages).isDirectory(),
@@ -541,10 +541,14 @@ async function main(): Promise<void> {
         'with the object back, a live backup is complete again');
     assert(whole.images.missing.length === 0, 'and carries no missing keys at all');
 
-    // ── 7. Pruning and deleting take the images with the snapshot ──────────────────────────────
-    updateAutoSnapshotConfig({ keep: 1 });
-    await nextSecond();
-    const survivor = createSnapshot(); // prunes `snap`
+    // ── 7. Pruning takes the images with the snapshot; no route deletes one ────────────────────
+    // The fewest kept is MIN_SNAPSHOTS_KEPT (design case 18, A4), so that many newer snapshots push `snap` out.
+    updateAutoSnapshotConfig({ keep: MIN_SNAPSHOTS_KEPT });
+    let survivor = createSnapshot('scheduled');
+    for (let i = 0; i < MIN_SNAPSHOTS_KEPT; i++) {
+        await nextSecond();
+        survivor = createSnapshot('scheduled'); // the last of these prunes `snap`
+    }
     assert(!fs.existsSync(snapPath), 'pruning removes the old snapshot');
     assert(!fs.existsSync(snapImages), 'and its captured images go with it');
     const survivorImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, survivor.name));
@@ -554,13 +558,14 @@ async function main(): Promise<void> {
         method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: ADMIN_PW, name: survivor.name }),
     });
-    assert(deleted.status === 200, 'the delete route deletes a snapshot');
-    assert(!fs.existsSync(survivorImages), 'and takes its images too, rather than orphaning a directory');
+    // No route deletes a snapshot (design case 18, A3): the scheduler's pruning above is the only way one goes.
+    assert(deleted.status === 404, `the delete route is gone: 404 (${deleted.status})`);
+    assert(fs.existsSync(path.join(SNAPSHOTS_DIR, survivor.name)) && fs.existsSync(survivorImages), 'and the snapshot and its images stay');
 
     // ── 8. The orphan sweep cannot reach a snapshot ────────────────────────────────────────────
     updateAutoSnapshotConfig({ keep: 7 });
     await nextSecond();
-    const guarded = createSnapshot();
+    const guarded = createSnapshot('scheduled');
     const guardedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, guarded.name));
     const guardedKey = keptKey;
     const guardedFile = path.join(guardedImages, guardedKey);
@@ -595,7 +600,7 @@ async function main(): Promise<void> {
         undefined, undefined, [dataUrl(legacyPhoto)]);
     assert(!!legacyPost, 'setup: a post whose photo the live node put in the store');
     await nextSecond();
-    const legacy = createSnapshot();
+    const legacy = createSnapshot('scheduled');
     const legacyPath = path.join(SNAPSHOTS_DIR, legacy.name);
     makeSnapshotPreUpgrade(legacyPath, new Map([[keyOf(legacyPost!.id), dataUrl(legacyPhoto)]]));
     // A pre-upgrade node never wrote a captured-images directory either.
@@ -708,7 +713,7 @@ async function main(): Promise<void> {
         .run(restoreMsgId, crypto.randomBytes(24).toString('base64'), 'image/jpeg', restoreKey);
 
     await nextSecond();
-    const linked = createSnapshot();
+    const linked = createSnapshot('scheduled');
     const linkedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, linked.name));
     const snapshotCopy = path.join(linkedImages, restoreKey);
     const liveCopy = path.join(imagesDir(), restoreKey);

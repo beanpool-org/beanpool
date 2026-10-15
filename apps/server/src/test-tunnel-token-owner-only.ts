@@ -225,8 +225,12 @@ async function main() {
             `an admin's node-config change is saved and carries no token (${adminCfgSet.status})`);
         const ownerCfg = await call('POST', '/api/local/admin/node/config', {}, asOwner);
         assert(ownerCfg.status === 200 && !leaks(ownerCfg.text), `the save's answer holds no token for an owner either: the address has its own route (${ownerCfg.status})`);
+        // Infrastructure is an owner's (design case 18, B5, the director's call): an admin's restart is refused in words.
         const adminRestart = await call('POST', '/api/local/admin/public-address/restart-tunnel', {}, asAdmin);
-        assert(adminRestart.status === 200 && !leaks(adminRestart.text), `an admin can still restart the tunnel, with no token in the answer (${adminRestart.status})`);
+        assert(adminRestart.status === 403 && /owner/i.test(adminRestart.body?.error || '') && !leaks(adminRestart.text),
+            `an admin cannot restart the tunnel, and the refusal carries no token (${adminRestart.status})`);
+        const ownerRestart = await call('POST', '/api/local/admin/public-address/restart-tunnel', {}, asOwner);
+        assert(ownerRestart.status === 200, `an owner restarts the tunnel (${ownerRestart.status})`);
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN, 'and the restarted tunnel runs on the stored token');
 
         console.log('\n── 5. an admin cannot rename or release the address ──');

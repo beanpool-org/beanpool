@@ -30,6 +30,8 @@ import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, nodePubkeyHex } from '
 import { tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN } from './services/tunnel-connector.js';
 import { useFakeCloudflared } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
+import { updateLocalConfig } from './config/local-config.js';
+import { generateTotpSecret } from './totp.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -187,7 +189,8 @@ async function run() {
     const regPort = (mockRegistrar.address() as any).port;
     process.env.REGISTRAR_URL = `http://127.0.0.1:${regPort}`;
 
-    // 3. Setup Test Koa App with Public Address Routes
+    // 3. Setup Test Koa App with Public Address Routes. The node's 2FA is on: the password path has a second factor.
+    updateLocalConfig({ totpEnabled: true, totpSecret: generateTotpSecret() } as any);
     let allowAdmin = true;
     const fakeDeps: RouteDeps = {
         checkAdminAuth: async (ctx: any) => {
@@ -196,8 +199,11 @@ async function run() {
                 ctx.body = { error: 'Unauthorized' };
                 return false;
             }
-            // As the real checkAdminAuth does for the admin password: owner level (an admin is test-tunnel-token-owner-only's).
+            // As the real checkAdminAuth does for the admin password sent with a current code: owner level (an admin is
+            // test-tunnel-token-owner-only's), and the code just checked, which is the owner's fresh proof that taking the
+            // address offline asks (design case 18, B1; the node's 2FA is on, below).
             ctx.state.adminRole = 'owner';
+            ctx.state.secondFactorJustVerified = true;
             return true;
         },
     } as any;

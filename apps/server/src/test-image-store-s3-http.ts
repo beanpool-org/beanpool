@@ -468,7 +468,7 @@ async function main(): Promise<void> {
     // ── 8. a snapshot ──────────────────────────────────────────────────────────────────────────
     console.log('\n--- 8. A snapshot ---');
     {
-        const snap = createSnapshot();
+        const snap = createSnapshot('scheduled');
         const snapPath = path.join(SNAPSHOTS_DIR, snap.name);
         assert(fs.existsSync(snapPath) && !fs.existsSync(snapshotImagesDir(snapPath)),
             'an s3 node\'s snapshot is the database only — nothing captured beside it');

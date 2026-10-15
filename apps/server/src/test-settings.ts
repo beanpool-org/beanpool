@@ -121,10 +121,11 @@ async function main(): Promise<void> {
     const settingsSubRes = await fetch(`${BASE}/settings/people`);
     assert(settingsSubRes.status === 200, 'GET /settings/people SPA fallback returns 200');
 
+    // The legacy settings page is gone (design case 18, D9): every wipe or delete it had has a copy there.
     const legacyRes = await fetch(`${BASE}/settings-legacy`);
-    assert(legacyRes.status === 200, 'GET /settings-legacy returns 200');
-    const legacyHtml = await legacyRes.text();
-    assert(legacyHtml.includes('settings.js') || legacyHtml.includes('Settings'), 'GET /settings-legacy serves legacy settings page');
+    assert(legacyRes.status === 404, `GET /settings-legacy is gone: 404 (${legacyRes.status})`);
+    const legacyScript = await fetch(`${BASE}/settings.js`);
+    assert(legacyScript.status === 404, `GET /settings.js is gone: 404 (${legacyScript.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

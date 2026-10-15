@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "لوبیا",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "مکان‌ها از OpenStreetMap می‌آیند. آنچه اینجا می‌نویسید برای OpenStreetMap فرستاده می‌شود.",
   "Choose {place}": "انتخاب {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "این جامعه پیش از ارسال پست، عکس پروفایل می‌خواهد. بعداً می‌توانید آن را از پروفایل خود اضافه کنید.",
-  "A picture is optional here. You can add one later from your profile.": "اینجا عکس اختیاری است. اگر خواستید، بعداً می‌توانید از پروفایل خود یکی اضافه کنید."
+  "A picture is optional here. You can add one later from your profile.": "اینجا عکس اختیاری است. اگر خواستید، بعداً می‌توانید از پروفایل خود یکی اضافه کنید.",
+  "{n}st\u0004day of the month": "{n}ام",
+  "{n}nd\u0004day of the month": "{n}ام",
+  "{n}rd\u0004day of the month": "{n}ام",
+  "{n}th\u0004day of the month": "{n}ام",
+  "Every month on the first {weekday}": "هر ماه، اولین {weekday}",
+  "Every month on the second {weekday}": "هر ماه، دومین {weekday}",
+  "Every month on the third {weekday}": "هر ماه، سومین {weekday}",
+  "Every month on the fourth {weekday}": "هر ماه، چهارمین {weekday}",
+  "Every month on the last {weekday}": "هر ماه، آخرین {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "هر {n} ماه، اولین {weekday}",
+    "other": "هر {n} ماه، اولین {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "هر {n} ماه، دومین {weekday}",
+    "other": "هر {n} ماه، دومین {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "هر {n} ماه، سومین {weekday}",
+    "other": "هر {n} ماه، سومین {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "هر {n} ماه، چهارمین {weekday}",
+    "other": "هر {n} ماه، چهارمین {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "هر {n} ماه، آخرین {weekday}",
+    "other": "هر {n} ماه، آخرین {weekday}"
+  },
+  "Monthly, first {weekday}": "ماهانه، اولین {weekday}",
+  "Monthly, second {weekday}": "ماهانه، دومین {weekday}",
+  "Monthly, third {weekday}": "ماهانه، سومین {weekday}",
+  "Monthly, fourth {weekday}": "ماهانه، چهارمین {weekday}",
+  "Monthly, last {weekday}": "ماهانه، آخرین {weekday}",
+  "Does not repeat": "تکرار نمی‌شود",
+  "Every week on {weekday}": "هر هفته در {weekday}",
+  "Every 2 weeks on {weekday}": "هر 2 هفته در {weekday}",
+  "Every month on the {day}": "هر ماه در {day}",
+  "An event that repeats must end before its next date starts": "رویدادی که تکرار می‌شود باید قبل از شروع نوبت بعدی تمام شود",
+  "(months without a {day} are skipped)": "(ماه‌های بدون روز {day} رد می‌شوند)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "هر {n} هفته در {weekday}",
+    "other": "هر {n} هفته در {weekday}"
+  },
+  "Every {weekday}": "هر {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "هر {n} ماه در {day}",
+    "other": "هر {n} ماه در {day}"
+  },
+  "Monthly on the {day}": "ماهانه در {day}",
+  "{repeats} · until {date}": "{repeats} · تا {date}",
+  "The last date must be a date on or after the first one": "تاریخ پایان باید همزمان یا بعد از تاریخ شروع باشد",
+  "The last date can be at most {n} years after the first one": "تاریخ پایان حداکثر می‌تواند {n} سال بعد از تاریخ شروع باشد",
+  "{date} is cancelled. Next: {next}": "نوبت {date} لغو شد. نوبت بعد: {next}",
+  "{date} is cancelled.": "نوبت {date} لغو شد.",
+  "{date} is back on": "نوبت {date} دوباره برقرار شد",
+  "Moved from the regular {weekday}": "از {weekday} همیشگی منتقل شد",
+  "Moved from the regular date": "از تاریخ همیشگی منتقل شد",
+  "Choose how the event repeats from the list": "نحوه تکرار رویداد را از فهرست انتخاب کنید",
+  "An event can repeat every 1 to 12 weeks or months": "یک رویداد می‌تواند هر 1 تا 12 هفته یا ماه تکرار شود",
+  "The first date must be one of the repeating dates": "تاریخ اول باید یکی از تاریخ‌های تکرار باشد",
+  "The last date can be at most 5 years after the first one": "تاریخ پایان حداکثر می‌تواند 5 سال پس از تاریخ اول باشد",
+  "Pick one of the dates this event repeats on": "یکی از تاریخ‌های تکرار این رویداد را انتخاب کنید",
+  "This event does not repeat": "این رویداد تکرار نمی‌شود",
+  "Only the host can cancel or restore a date": "فقط میزبان می‌تواند یک تاریخ را لغو کند یا برگرداند",
+  "This is the last date: change when the event ends, or cancel the event": "این آخرین تاریخ است: زمان پایان رویداد را تغییر دهید یا رویداد را لغو کنید",
+  "At most 100 dates can be cancelled": "حداکثر 100 تاریخ می‌توانند لغو شوند",
+  "This event has been cancelled": "این رویداد لغو شده است",
+  "Pick a time zone from the list": "یک منطقه زمانی از فهرست انتخاب کنید",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "در محدودهٔ حدود ۱ کیلومتری نشان داده می‌شود. هنگام هماهنگی برای ملاقات، نقطه دقیق را از {name} بپرسید.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "به هر کسی که می‌تواند رویداد را ببیند نشان داده می‌شود. آدرس دقیق را در یادداشت زیر بگذارید.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "این شبیه آدرس خیابان است. هر کسی که بتواند رویداد را ببیند آن را خواهد خواند، بنابراین در یادداشت زیر امن‌تر است.",
+  "An earlier message was removed when this chat was locked": "یک پیام قبلی هنگام قفل شدن این گفت‌وگو حذف شد",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} پیام قبلی هنگام قفل شدن این گفت‌وگو حذف شد",
+    "other": "{n} پیام قبلی هنگام قفل شدن این گفت‌وگو حذف شد"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} پیام توسط مدیر حذف شد",
+    "other": "{n} پیام توسط مدیر حذف شد"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} پیام حذف شد",
+    "other": "{n} پیام حذف شد"
+  }
 }

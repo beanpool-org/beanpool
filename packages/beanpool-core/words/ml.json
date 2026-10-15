@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "പയർ",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "OpenStreetMap-ൽ നിന്നുള്ള സ്ഥലങ്ങൾ. ഇവിടെ ടൈപ്പ് ചെയ്യുന്നത് അവർക്ക് അയയ്ക്കും.",
   "Choose {place}": "{place} തിരഞ്ഞെടുക്കുക",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "നിങ്ങൾ പോസ്റ്റ് ചെയ്യുന്നതിന് മുമ്പ് ഈ കമ്മ്യൂണിറ്റി ഒരു പ്രൊഫൈൽ ചിത്രം ആവശ്യപ്പെടുന്നു. പിന്നീട് നിങ്ങളുടെ പ്രൊഫൈലിൽ നിന്ന് ചേർക്കാം.",
-  "A picture is optional here. You can add one later from your profile.": "ഇവിടെ ചിത്രം ചേർക്കുന്നത് നിർബന്ധമല്ല. താൽപ്പര്യമുണ്ടെങ്കിൽ പിന്നീട് നിങ്ങളുടെ പ്രൊഫൈലിൽ നിന്ന് ചേർക്കാം."
+  "A picture is optional here. You can add one later from your profile.": "ഇവിടെ ചിത്രം ചേർക്കുന്നത് നിർബന്ധമല്ല. താൽപ്പര്യമുണ്ടെങ്കിൽ പിന്നീട് നിങ്ങളുടെ പ്രൊഫൈലിൽ നിന്ന് ചേർക്കാം.",
+  "{n}st\u0004day of the month": "{n}-ാം തീയതി",
+  "{n}nd\u0004day of the month": "{n}-ാം തീയതി",
+  "{n}rd\u0004day of the month": "{n}-ാം തീയതി",
+  "{n}th\u0004day of the month": "{n}-ാം തീയതി",
+  "Every month on the first {weekday}": "എല്ലാ മാസവും ആദ്യത്തെ {weekday}",
+  "Every month on the second {weekday}": "എല്ലാ മാസവും രണ്ടാമത്തെ {weekday}",
+  "Every month on the third {weekday}": "എല്ലാ മാസവും മൂന്നാമത്തെ {weekday}",
+  "Every month on the fourth {weekday}": "എല്ലാ മാസവും നാലാമത്തെ {weekday}",
+  "Every month on the last {weekday}": "എല്ലാ മാസവും അവസാനത്തെ {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "എല്ലാ {n} മാസത്തിലും, ആദ്യത്തെ {weekday}",
+    "other": "എല്ലാ {n} മാസത്തിലും, ആദ്യത്തെ {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "എല്ലാ {n} മാസത്തിലും, രണ്ടാമത്തെ {weekday}",
+    "other": "എല്ലാ {n} മാസത്തിലും, രണ്ടാമത്തെ {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "എല്ലാ {n} മാസത്തിലും, മൂന്നാമത്തെ {weekday}",
+    "other": "എല്ലാ {n} മാസത്തിലും, മൂന്നാമത്തെ {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "എല്ലാ {n} മാസത്തിലും, നാലാമത്തെ {weekday}",
+    "other": "എല്ലാ {n} മാസത്തിലും, നാലാമത്തെ {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "എല്ലാ {n} മാസത്തിലും, അവസാനത്തെ {weekday}",
+    "other": "എല്ലാ {n} മാസത്തിലും, അവസാനത്തെ {weekday}"
+  },
+  "Monthly, first {weekday}": "മാസംതോറും, ആദ്യത്തെ {weekday}",
+  "Monthly, second {weekday}": "മാസംതോറും, രണ്ടാമത്തെ {weekday}",
+  "Monthly, third {weekday}": "മാസംതോറും, മൂന്നാമത്തെ {weekday}",
+  "Monthly, fourth {weekday}": "മാസംതോറും, നാലാമത്തെ {weekday}",
+  "Monthly, last {weekday}": "മാസംതോറും, അവസാനത്തെ {weekday}",
+  "Does not repeat": "ആവർത്തിക്കുന്നില്ല",
+  "Every week on {weekday}": "എല്ലാ ആഴ്ചയും {weekday}",
+  "Every 2 weeks on {weekday}": "2 ആഴ്ചയിലൊരിക്കൽ {weekday}",
+  "Every month on the {day}": "എല്ലാ മാസവും {day}",
+  "An event that repeats must end before its next date starts": "ആവർത്തിക്കുന്ന ഇവന്റ് അടുത്ത തീയതി ആരംഭിക്കുന്നതിന് മുമ്പ് അവസാനിക്കണം",
+  "(months without a {day} are skipped)": "({day} ഇല്ലാത്ത മാസങ്ങൾ ഒഴിവാക്കും)",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "എല്ലാ {n} ആഴ്ചയിലും {weekday}",
+    "other": "എല്ലാ {n} ആഴ്ചയിലും {weekday}"
+  },
+  "Every {weekday}": "എല്ലാ {weekday}യും",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "എല്ലാ {n} മാസത്തിലും {day}",
+    "other": "എല്ലാ {n} മാസത്തിലും {day}"
+  },
+  "Monthly on the {day}": "മാസംതോറും {day}",
+  "{repeats} · until {date}": "{repeats} · {date} വരെ",
+  "The last date must be a date on or after the first one": "അവസാന തീയതി ആദ്യത്തേതിന് തുല്യമോ അതിനു ശേഷമോ ആയിരിക്കണം",
+  "The last date can be at most {n} years after the first one": "അവസാന തീയതി ആദ്യ തീയതി കഴിഞ്ഞ് പരമാവധി {n} വർഷം വരെയാകാം",
+  "{date} is cancelled. Next: {next}": "{date} റദ്ദാക്കി. അടുത്തത്: {next}",
+  "{date} is cancelled.": "{date} റദ്ദാക്കി.",
+  "{date} is back on": "{date} വീണ്ടും പുനഃസ്ഥാപിച്ചു",
+  "Moved from the regular {weekday}": "പതിവ് {weekday}ൽ നിന്ന് മാറ്റി",
+  "Moved from the regular date": "പതിവ് തീയതിയിൽ നിന്ന് മാറ്റി",
+  "Choose how the event repeats from the list": "ഇവന്റ് എങ്ങനെ ആവർത്തിക്കണമെന്ന് ലിസ്റ്റിൽ നിന്ന് തിരഞ്ഞെടുക്കുക",
+  "An event can repeat every 1 to 12 weeks or months": "ഒരു ഇവന്റ് 1 മുതൽ 12 ആഴ്ചയിലോ മാസത്തിലോ ആവർത്തിക്കാം",
+  "The first date must be one of the repeating dates": "ആദ്യ തീയതി ആവർത്തിക്കുന്ന തീയതികളിൽ ഒന്നായിരിക്കണം",
+  "The last date can be at most 5 years after the first one": "അവസാന തീയതി ആദ്യത്തേതിൽ നിന്ന് പരമാവധി 5 വർഷം വരെയാകാം",
+  "Pick one of the dates this event repeats on": "ഈ ഇവന്റ് ആവർത്തിക്കുന്ന തീയതികളിൽ ഒന്ന് തിരഞ്ഞെടുക്കുക",
+  "This event does not repeat": "ഈ ഇവന്റ് ആവർത്തിക്കുന്നില്ല",
+  "Only the host can cancel or restore a date": "ഹോസ്റ്റിന് മാത്രമേ ഒരു തീയതി റദ്ദാക്കാനോ പുനഃസ്ഥാപിക്കാനോ കഴിയൂ",
+  "This is the last date: change when the event ends, or cancel the event": "ഇതാണ് അവസാന തീയതി: ഇവന്റ് എപ്പോൾ അവസാനിക്കുമെന്ന് മാറ്റുക, അല്ലെങ്കിൽ ഇവന്റ് റദ്ദാക്കുക",
+  "At most 100 dates can be cancelled": "പരമാവധി 100 തീയതികൾ റദ്ദാക്കാം",
+  "This event has been cancelled": "ഈ ഇവന്റ് റദ്ദാക്കി",
+  "Pick a time zone from the list": "ലിസ്റ്റിൽ നിന്ന് സമയമേഖല തിരഞ്ഞെടുക്കുക",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "ഏകദേശം 1 കി.മീ പരിധിയിൽ കാണിക്കും. കണ്ടുമുട്ടാൻ തീരുമാനിക്കുമ്പോൾ കൃത്യമായ സ്ഥലം {name}നോട് ചോദിക്കുക.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "ഇവന്റ് കാണാൻ കഴിയുന്ന എല്ലാവർക്കും കാണിക്കും. കൃത്യമായ വിലാസം താഴെയുള്ള കുറിപ്പിൽ നൽകുക.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "ഇത് തെരുവ് വിലാസം പോലെ തോന്നുന്നു. ഇവന്റ് കാണുന്ന ആർക്കും ഇത് വായിക്കാം, അതിനാൽ താഴെയുള്ള കുറിപ്പിൽ നൽകുന്നതാണ് കൂടുതൽ സുരക്ഷിതം.",
+  "An earlier message was removed when this chat was locked": "ഈ ചാറ്റ് ലോക്ക് ചെയ്തപ്പോൾ മുൻപത്തെ ഒരു സന്ദേശം നീക്കം ചെയ്തു",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "ഈ ചാറ്റ് ലോക്ക് ചെയ്തപ്പോൾ മുൻപത്തെ {n} സന്ദേശം നീക്കം ചെയ്തു",
+    "other": "ഈ ചാറ്റ് ലോക്ക് ചെയ്തപ്പോൾ മുൻപത്തെ {n} സന്ദേശങ്ങൾ നീക്കം ചെയ്തു"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "കൺവീനർ {n} സന്ദേശം നീക്കം ചെയ്തു",
+    "other": "കൺവീനർ {n} സന്ദേശങ്ങൾ നീക്കം ചെയ്തു"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} സന്ദേശം ഇല്ലാതാക്കി",
+    "other": "{n} സന്ദേശങ്ങൾ ഇല്ലാതാക്കി"
+  }
 }

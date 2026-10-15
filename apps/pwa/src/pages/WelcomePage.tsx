@@ -41,7 +41,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, currentLanguage, decryptPairingPayload, photoStepNote, t, word } from '@beanpool/core';
+import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, photoStepNote, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1381,7 +1381,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     }
 
     async function handleRecover() {
-        const words = recoveryWords.map(w => w.toLowerCase().trim());
+        const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         if (!validateMnemonic(words)) {
             setError(t('One or more words are not valid. Check your spelling.'));
             return;
@@ -2291,7 +2291,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
                                                 if (tokens.length === 0) return;
                                                 const updated = Array(12).fill('');
-                                                tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                 setRecoveryWords(updated);
                                             } catch {
                                                 setError(t('Unable to read clipboard. Please paste your recovery words directly into the inputs.'));
@@ -2333,7 +2333,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 if (tokens.length > 1) {
                                                     e.preventDefault();
                                                     const updated = Array(12).fill('');
-                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                     setRecoveryWords(updated);
                                                 }
                                             }}
@@ -2341,11 +2341,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                                 const tokens = e.target.value.trim().split(/\s+/).filter(Boolean);
                                                 if (tokens.length > 1) {
                                                     const updated = Array(12).fill('');
-                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = lowercaseRecoveryWords(w).trim(); });
                                                     setRecoveryWords(updated);
                                                 } else {
                                                     const updated = [...recoveryWords];
-                                                    updated[i] = e.target.value.toLowerCase().trim();
+                                                    updated[i] = lowercaseRecoveryWords(e.target.value).trim();
                                                     setRecoveryWords(updated);
                                                 }
                                             }}

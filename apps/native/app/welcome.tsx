@@ -16,7 +16,7 @@ import {
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
-import { photoStepNote, t } from '@beanpool/core';
+import { lowercaseRecoveryWords, photoStepNote, t } from '@beanpool/core';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
@@ -59,6 +59,7 @@ import {
     checkSsoRestore, finishSsoRestore, lookupRestorable, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
     vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
 } from '../utils/sso-recovery';
+import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -1097,7 +1098,7 @@ export default function WelcomeScreen() {
     // back to the node. If the node can't be reached the account still restores —
     // it comes up nameless and adopts its real callsign on the first online sync.
     async function handleRecover() {
-        const words = recoveryWords.map(w => w.toLowerCase().trim());
+        const words = recoveryWords.map(w => lowercaseRecoveryWords(w).trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
             setError('Please enter all 12 recovery words.');
@@ -1272,7 +1273,7 @@ export default function WelcomeScreen() {
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {
-                setError(e.message || `Recovery failed: ${String(e)}`);
+                setError(restoreRefusalText(e) || `Recovery failed: ${String(e)}`);
                 leaveReplace('ssoRecover');
             }
         } finally {

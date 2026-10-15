@@ -2,15 +2,28 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "maharagwe",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "sasa hivi",
+  "{n} day ago|{n} days ago": {
+    "one": "siku {n} iliyopita",
+    "other": "siku {n} zilizopita"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "saa {n} iliyopita",
+    "other": "saa {n} zilizopita"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "dakika {n} iliyopita",
+    "other": "dakika {n} zilizopita"
   },
   "Roughly where are you?": "Uko takriban wapi?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Tunahifadhi eneo lako hadi takriban 10 km, si mahali ulipo hasa. Wanachama wengine huona umbali ulio nao, na kura ya maoni unayounda huonyeshwa katika eneo lako.",

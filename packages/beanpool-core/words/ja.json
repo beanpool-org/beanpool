@@ -2,15 +2,25 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "豆",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "たった今",
+  "{n} day ago|{n} days ago": {
+    "other": "{n}日前"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n}時間前"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n}分前"
   },
   "Roughly where are you?": "だいたいどこにいますか？",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "地域は約10 kmの範囲までしか保存せず、正確な場所は保存しません。ほかのメンバーには、あなたまでの距離が表示されます。あなたが作った投票は、あなたの地域に表示されます。",

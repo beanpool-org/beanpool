@@ -178,8 +178,12 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
     // nothing, which reads as "your account is gone" rather than "try harder". That was the case for
     // a prefix and avatars, while callsigns were public; they are members' now on every community
     // (2026-10-01), and a prefix listed every member with a sign-in copy, face and join date to
-    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
-    // leading wildcard would not, and is not offered.
+    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' reads the whole index
+    // rather than a range of it (EXPLAIN: SCAN … USING INDEX; review of #1956, N5), which no route pays now; a leading
+    // wildcard is not offered.
+    //
+    // Never a visitor's row (a member of another community, or a key someone sent to): no restore here brings one back,
+    // and /api/recovery/collect's resolveCallsign leaves them out too, so the key the lookup lists is one it accepts.
     //
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
@@ -206,7 +210,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
             WHERE ${options.exact ? 'm.callsign_fold = ?' : "m.callsign_fold LIKE ? ESCAPE '\\'"}
-              AND m.status NOT IN ('migrated', 'pruned')
+              AND m.status NOT IN ('migrated', 'pruned') AND m.is_visitor = 0
         )
         WHERE sso_count > 0
         ORDER BY length(callsign), callsign
@@ -365,9 +369,17 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     // lines below: an enterprise or a project is keyed on its id. A reserved id is no one's key and no request names
     // one (the send and conversation routes refuse it): the admin inbox's own `system` sender gets its row, as before.
     if (!existing && !isMemberKeySpelling(publicKey) && !isSyntheticAccount(publicKey)) throw badKeyError();
+    // The name a peer or a sender gives a visitor is a member name here like any other, so it takes the one name rule
+    // (isCallsignAvailable) and a member's length (32, as updateProfile cuts a rename): one held by anyone else (a
+    // member, another visitor) is not written, and the row keeps or gets its "Visitor-" name (visitorPlaceholder).
+    // Written unchecked, it read as that member's to anything that resolves a name (review of #1956, N3).
+    // Only a string: a peer's null or number is no name (a null written as one read "null").
+    const given = typeof callsign === 'string' ? callsign.trim().slice(0, 32).trim() : '';
+    callsign = given && isCallsignAvailable(given, publicKey) ? given : undefined;
     if (existing) {
         let changed = false;
-        if (callsign && existing.callsign.startsWith('Visitor-')) {
+        // A visitor's own placeholder only: a member who named themselves "Visitor-…" is never renamed by a peer.
+        if (callsign && existing.is_visitor && existing.callsign.startsWith('Visitor-')) {
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
@@ -384,7 +396,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
         if (changed) bumpMembersVersion();
         return false;
     }
-    const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
+    const generatedCallsign = callsign || visitorPlaceholder(publicKey);
     // A visitor's row (is_visitor = 1, the engine's isVisitorKey): it receives what is sent to it and reads only what a
     // non-member reads. An existing row, above, is never made one: a member stays a member.
     db.transaction(() => {
@@ -395,6 +407,26 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
     return true;
+}
+
+/**
+ * A new visitor's name when it brings none that is free: "Visitor-" and the key's first 8 characters, else its first 12,
+ * 16 … up to the whole key, the first that is free by the one name rule (isCallsignAvailable), else the whole key and a
+ * number. Names are not reserved and a key's first 8 are public, so a member may hold "Visitor-<first 8>" of a key someone
+ * means to reach; written unchecked, that name made the key's row impossible to write, so nobody here could message the
+ * key or send it Beans, and every federation path naming it threw (deciding review of #1977, B1).
+ */
+function visitorPlaceholder(publicKey: string): string {
+    for (let n = 8; ; n += 4) {
+        const name = `Visitor-${publicKey.slice(0, n)}`;
+        if (isCallsignAvailable(name, publicKey)) return name;
+        if (n >= publicKey.length) break;
+    }
+    for (let i = 2; i < 1000; i++) {
+        const name = `Visitor-${publicKey}-${i}`;
+        if (isCallsignAvailable(name, publicKey)) return name;
+    }
+    return `Visitor-${publicKey}-${Date.now()}`;
 }
 
 export const NOT_A_MEMBER_ERROR = 'Only members of this community can do this.';

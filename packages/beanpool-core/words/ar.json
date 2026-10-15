@@ -2,15 +2,40 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "فاصوليا",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "الآن",
+  "{n} day ago|{n} days ago": {
+    "zero": "منذ {n} يوم",
+    "one": "منذ يوم",
+    "two": "منذ يومين",
+    "few": "منذ {n} أيام",
+    "many": "منذ {n} يومًا",
+    "other": "منذ {n} يوم"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "zero": "منذ {n} ساعة",
+    "one": "منذ ساعة",
+    "two": "منذ ساعتين",
+    "few": "منذ {n} ساعات",
+    "many": "منذ {n} ساعة",
+    "other": "منذ {n} ساعة"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "zero": "منذ {n} دقيقة",
+    "one": "منذ دقيقة",
+    "two": "منذ دقيقتين",
+    "few": "منذ {n} دقائق",
+    "many": "منذ {n} دقيقة",
+    "other": "منذ {n} دقيقة"
   },
   "Roughly where are you?": "أين أنت تقريبًا؟",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "نحتفظ بمنطقتك بدقة نحو 10 كم، وليس بموقعك الدقيق أبدًا. يرى الأعضاء الآخرون مدى بُعدك، ويظهر الاستطلاع الذي تنشئه في منطقتك.",

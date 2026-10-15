@@ -2,15 +2,28 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "لوبیا",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "همین حالا",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} روز پیش",
+    "other": "{n} روز پیش"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} ساعت پیش",
+    "other": "{n} ساعت پیش"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} دقیقه پیش",
+    "other": "{n} دقیقه پیش"
   },
   "Roughly where are you?": "تقریباً کجا هستید؟",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "ما منطقه شما را فقط تا حدود 10 کیلومتر نگه می‌داریم، نه مکان دقیقتان را. اعضای دیگر می‌بینند چقدر با شما فاصله دارند، و نظرسنجی‌ای که می‌سازید در منطقه شما نمایش داده می‌شود.",

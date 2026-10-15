@@ -2,15 +2,25 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "豆子",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "剛剛",
+  "{n} day ago|{n} days ago": {
+    "other": "{n} 天前"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n} 小時前"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n} 分鐘前"
   },
   "Roughly where are you?": "你大概在哪裡?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "我們只會記錄你所在的大致區域(約 10 公里範圍),絕不會記錄你的確切位置。其他成員只會看到你離他們多遠,你發起的投票則會顯示在你的區域。",

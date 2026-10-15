@@ -2,15 +2,25 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "콩",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "방금",
+  "{n} day ago|{n} days ago": {
+    "other": "{n}일 전"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n}시간 전"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n}분 전"
   },
   "Roughly where are you?": "대략 어디에 계세요?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "지역은 약 10 km 범위까지만 저장하고, 정확한 위치는 저장하지 않아요. 다른 멤버에게는 나와의 거리가 보이고, 내가 만든 투표는 내 지역에 표시돼요.",

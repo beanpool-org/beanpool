@@ -2,15 +2,25 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "đậu",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "vừa xong",
+  "{n} day ago|{n} days ago": {
+    "other": "{n} ngày trước"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n} giờ trước"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n} phút trước"
   },
   "Roughly where are you?": "Bạn đang ở khoảng đâu?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Chúng tôi chỉ giữ khu vực của bạn ở mức khoảng 10 km, không bao giờ lưu vị trí chính xác. Các thành viên khác thấy bạn ở cách bao xa, và cuộc bình chọn bạn tạo sẽ hiển thị tại khu vực của bạn.",

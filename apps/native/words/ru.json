@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
@@ -75,5 +75,6 @@
   "Your Photo": "Ваше фото",
   "Safety Backup": "Запасная копия",
   "How it Works": "Как это работает",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ваши 12 слов — главный ключ к вашему аккаунту на любых устройствах. Никто не может их сбросить: ни мы, ни это сообщество."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Ваши 12 слов — главный ключ к вашему аккаунту на любых устройствах. Никто не может их сбросить: ни мы, ни это сообщество.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Здесь два аккаунта с таким именем. Используйте свои 12 слов или обратитесь к администрации сообщества."
 }

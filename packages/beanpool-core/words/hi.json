@@ -2,15 +2,28 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "फलियाँ",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "अभी-अभी",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} दिन पहले",
+    "other": "{n} दिन पहले"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} घंटा पहले",
+    "other": "{n} घंटे पहले"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} मिनट पहले",
+    "other": "{n} मिनट पहले"
   },
   "Roughly where are you?": "आप लगभग कहाँ हैं?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "हम आपका क्षेत्र लगभग 10 किमी तक ही रखते हैं, आपकी सटीक जगह कभी नहीं। दूसरे सदस्य देखते हैं कि आप कितनी दूर हैं, और आपका बनाया पोल आपके क्षेत्र में दिखाया जाता है।",

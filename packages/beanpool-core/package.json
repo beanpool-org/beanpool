@@ -60,6 +60,11 @@
       "import": "./dist/words-check.js",
       "default": "./dist/words-check.js"
     },
+    "./words-dates/*": {
+      "types": "./dist/words-dates/*.d.ts",
+      "import": "./dist/words-dates/*.js",
+      "default": "./dist/words-dates/*.js"
+    },
     "./words/*.json": "./words/*.json"
   },
   "scripts": {

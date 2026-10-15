@@ -66,6 +66,7 @@ const LOOKUP = `${NODE}/api/recovery/lookup/`;
 const ANCHOR = 'beanpool_anchor_url';
 const WRONG_ACCOUNT = "The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.";
 const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
+const TWO_ACCOUNTS = "Two accounts here have this name. Use your 12 words, or ask your community's admin.";
 
 /** Google hands back a token whose `sub` is SUB; the node releases `fragments`. Records every recovery route asked. */
 function mockSignInAndNode(fragments: Array<Record<string, unknown>>) {
@@ -152,6 +153,33 @@ async function expectEmptyPhone() {
 }
 
 describe('a sign-in restore at the community: the key must be the account the community lists for the name', () => {
+    it('opens the session for the one listed account by its key, so a name another account holds in another case still opens', async () => {
+        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
+        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        await restore('marty').catch(() => undefined);
+        expect(routesAsked()[0]).toBe('/api/recovery/collect');
+        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty', candidatePublicKey: accountPub });
+    });
+
+    it('two accounts with the name and a sign-in copy each: a 409 from the community is a plain sentence, never its own English, and nothing is saved', async () => {
+        listed([{ publicKey: accountPub, callsign: 'Marty' }, { publicKey: 'ab'.repeat(32), callsign: 'MARTY' }]);
+        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        vi.mocked(signedPost).mockImplementationOnce(async () => ({
+            ok: false, status: 409, json: async () => ({ error: 'That callsign is ambiguous on this node.' }),
+        }) as unknown as Response);
+
+        await expect(restore('marty')).rejects.toThrow(TWO_ACCOUNTS);
+        expect(routesAsked()).toEqual(['/api/recovery/collect']);
+        await expectEmptyPhone();
+    });
+
+    it('with several accounts listed, opens by the name alone, as before (this screen has no list to pick from)', async () => {
+        listed([{ publicKey: accountPub, callsign: 'Marty' }, { publicKey: 'ab'.repeat(32), callsign: 'MARTY' }]);
+        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        await restore('marty').catch(() => undefined);
+        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty' });
+    });
+
     it('a copy that opens to another key than the listed account saves nothing, and says so', async () => {
         listed([{ publicKey: accountPub, callsign: 'Marty' }]);
         mockSignInAndNode(await singleBlob(OTHER_SEED));

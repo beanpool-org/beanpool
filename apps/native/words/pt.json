@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
@@ -75,5 +75,6 @@
   "Your Photo": "Sua foto",
   "Safety Backup": "Backup seguro",
   "How it Works": "Como funciona",
-  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Suas 12 palavras são a sua chave principal para acessar sua conta em qualquer aparelho. Ninguém pode redefini-las: nem nós, nem esta comunidade."
+  "Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.": "Suas 12 palavras são a sua chave principal para acessar sua conta em qualquer aparelho. Ninguém pode redefini-las: nem nós, nem esta comunidade.",
+  "Two accounts here have this name. Use your 12 words, or ask your community's admin.": "Há duas contas aqui com esse nome. Use suas 12 palavras ou fale com quem administra sua comunidade."
 }

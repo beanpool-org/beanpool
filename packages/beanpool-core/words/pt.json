@@ -1,16 +1,29 @@
 {
   "_meta": {
     "language": "pt",
-    "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "name": "Portuguese (Brazil-leaning)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "feijões",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "agora mesmo",
+  "{n} day ago|{n} days ago": {
+    "one": "há {n} dia",
+    "other": "há {n} dias"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "há {n} hora",
+    "other": "há {n} horas"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "há {n} minuto",
+    "other": "há {n} minutos"
   },
   "Roughly where are you?": "Mais ou menos onde você está?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Guardamos a sua área com uma margem de cerca de 10 km, nunca o seu ponto exato. Os outros membros veem a que distância você está, e uma enquete que você criar aparece na sua área.",

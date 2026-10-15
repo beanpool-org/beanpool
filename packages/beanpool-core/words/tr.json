@@ -2,15 +2,28 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "fasulye",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "az önce",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} gün önce",
+    "other": "{n} gün önce"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} saat önce",
+    "other": "{n} saat önce"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} dakika önce",
+    "other": "{n} dakika önce"
   },
   "Roughly where are you?": "Yaklaşık olarak neredesin?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Bölgeni yaklaşık 10 km'lik bir alan olarak tutarız, tam konumunu asla. Diğer üyeler senin ne kadar uzakta olduğunu görür; oluşturduğun anket de bölgende gösterilir.",

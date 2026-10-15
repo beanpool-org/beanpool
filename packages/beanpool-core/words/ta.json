@@ -2,15 +2,28 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "பயறு",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "இப்போதுதான்",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} நாளுக்கு முன்",
+    "other": "{n} நாட்களுக்கு முன்"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} மணி நேரத்துக்கு முன்",
+    "other": "{n} மணி நேரங்களுக்கு முன்"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} நிமிடத்துக்கு முன்",
+    "other": "{n} நிமிடங்களுக்கு முன்"
   },
   "Roughly where are you?": "நீங்கள் தோராயமாக எங்கே இருக்கிறீர்கள்?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "உங்கள் பகுதியை சுமார் 10 கி.மீ அளவில் மட்டுமே வைத்திருப்போம், உங்கள் சரியான இடத்தை ஒருபோதும் வைக்க மாட்டோம். மற்ற உறுப்பினர்கள் நீங்கள் எவ்வளவு தூரத்தில் இருக்கிறீர்கள் என்பதைப் பார்ப்பார்கள்; நீங்கள் உருவாக்கும் கருத்துக்கணிப்பு உங்கள் பகுதியில் காட்டப்படும்.",

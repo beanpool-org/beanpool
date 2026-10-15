@@ -2,15 +2,34 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "бобы",
       "BeanPool": "BeanPool"
     }
+  },
+  "just now": "только что",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} день назад",
+    "few": "{n} дня назад",
+    "many": "{n} дней назад",
+    "other": "{n} дня назад"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} час назад",
+    "few": "{n} часа назад",
+    "many": "{n} часов назад",
+    "other": "{n} часа назад"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} минуту назад",
+    "few": "{n} минуты назад",
+    "many": "{n} минут назад",
+    "other": "{n} минуты назад"
   },
   "Roughly where are you?": "Где вы примерно находитесь?",
   "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Мы храним ваш район с точностью около 10 км, но не ваше точное местоположение. Другие участники видят, как далеко вы находитесь, а созданный вами опрос показывается в вашем районе.",

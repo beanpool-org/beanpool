@@ -121,7 +121,7 @@ function element(tag, style, content) {
 function contact(value, href) {
     if (!href) return document.createTextNode(value);
     // 44px to tap, a box of its own: no margin pulls a neighbour's box over it. A long address breaks anywhere so it fits.
-    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; min-width:44px; overflow-wrap:anywhere;', value);
+    const a = element('a', 'color:var(--success-ink); text-decoration:none; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; min-width:44px; overflow-wrap:anywhere;', value);
     a.setAttribute('href', href);
     return a;
 }
@@ -133,10 +133,10 @@ function directoryPopup(row) {
     const facts = [];
     if (row.memberCount !== null) facts.push(`${row.memberCount} members`);
     if (row.radiusKm !== null) facts.push(`${row.radiusKm}km radius`);
-    box.appendChild(element('span', 'color:#94a3b8;font-size:0.85em;', facts.join(' · ')));
+    box.appendChild(element('span', 'color:var(--text-dim);font-size:0.85em;', facts.join(' · ')));
     if (row.email || row.phone) {
         box.appendChild(element('br'));
-        const line = element('span', 'font-size:0.85em; color:#cbd5e1; display:inline-block;');
+        const line = element('span', 'font-size:0.85em; color:var(--text-secondary); display:inline-block;');
         if (row.email) line.appendChild(contact(row.email, mailtoHref(row.email)));
         if (row.email && row.phone) line.appendChild(document.createTextNode(' · '));
         if (row.phone) line.appendChild(contact(row.phone, telHref(row.phone)));
@@ -144,7 +144,7 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        const visit = element('a', 'color:var(--success-ink); text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
         visit.setAttribute('href', row.url);
         visit.setAttribute('target', '_blank');
         visit.setAttribute('rel', 'noopener');
@@ -318,9 +318,9 @@ document.querySelectorAll('.nav-menu a').forEach(a => {
 window.addEventListener('scroll', () => {
     const nav = document.getElementById('navbar');
     if (window.scrollY > 50) {
-        nav.style.background = 'rgba(5, 10, 20, 0.95)';
+        nav.style.background = 'rgba(var(--rgb-nav), 0.95)';
     } else {
-        nav.style.background = 'rgba(5, 10, 20, 0.85)';
+        nav.style.background = 'rgba(var(--rgb-nav), 0.85)';
     }
 });
 

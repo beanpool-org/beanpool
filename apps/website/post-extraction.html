@@ -31,8 +31,8 @@
         .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
         .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
         .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
-        .pe-col.out h4 { color: #f87171; }
-        .pe-col.in h4 { color: #34d399; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--bp-ink-brand); }
         .pe-col ul { margin: 0; padding-left: 1.05rem; }
         .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
         .pe-col li:last-child { margin-bottom: 0; }
@@ -48,7 +48,7 @@
             margin-top: 0.85rem;
             padding: 0.8rem 1rem;
             border-radius: 10px;
-            background: rgba(255,255,255,0.03);
+            background: rgba(var(--rgb-overlay), 0.03);
             border: 1px solid var(--border);
             font-size: 0.92rem;
             color: var(--text-muted);
@@ -62,7 +62,7 @@
         .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
         .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
 
-        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(16,185,129,0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
         .pe-content .callout strong { color: var(--text-primary); }
 
         .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }

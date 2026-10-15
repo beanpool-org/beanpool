@@ -223,7 +223,7 @@ export function EscrowDisputesPanel({
                         </div>
                         <p className="text-xs text-nature-400 m-0 max-w-2xl mt-1 leading-relaxed">
                             Marketplace deals held in escrow over 7 days with seller or buyer unable to complete.
-                            Resolving a dispute is <strong className="text-nature-200">never a quiet admin button</strong>: every action carries the admin's identity (<code className="text-terra-400 bg-nature-950 px-1 py-0.5 rounded">auth_signer</code>), writes an immutable public record to both parties' transaction and activity feeds, posts to the chat, and preserves ledger conservation.
+                            Resolving a dispute is <strong className="text-nature-200">never a quiet admin button</strong>: every action carries the admin's identity (<code className="text-bp-ink-terra bg-nature-950 px-1 py-0.5 rounded">auth_signer</code>), writes an immutable public record to both parties' transaction and activity feeds, posts to the chat, and preserves ledger conservation.
                         </p>
                     </div>
 
@@ -502,7 +502,7 @@ export function EscrowDisputesPanel({
                                             Action: <strong className="text-white">{formatActionName(dispute.resolution || null)}</strong>
                                         </span>
                                         <span>
-                                            Resolved By: <code className="text-terra-300">{formatResolverName(dispute.resolvedBy)}</code>
+                                            Resolved By: <code className="text-bp-ink-terra">{formatResolverName(dispute.resolvedBy)}</code>
                                         </span>
                                         <span>
                                             Timestamp: <span className="text-white">{new Date(dispute.resolvedAt).toLocaleString()}</span>
@@ -654,7 +654,7 @@ export function EscrowDisputesPanel({
                                                 +{breakdown.commonsFee.toFixed(2)} BEAN
                                             </span>
                                         </div>
-                                        <div className="flex justify-between pt-1 border-t border-nature-800/60 font-bold text-terra-300">
+                                        <div className="flex justify-between pt-1 border-t border-nature-800/60 font-bold text-bp-ink-terra">
                                             <span>Total Conserved:</span>
                                             <span className="font-mono">
                                                 {selectedDispute.credits.toFixed(2)} BEAN

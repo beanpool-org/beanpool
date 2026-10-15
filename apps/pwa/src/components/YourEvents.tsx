@@ -38,6 +38,10 @@ export function myEventAsPost(row: MyEvent): MarketplacePost {
         eventStartAt: row.startAt,
         ...(row.endAt ? { eventEndAt: row.endAt } : {}),
         ...(row.placeName ? { eventPlaceName: row.placeName } : {}),
+        // The host's clock and zone, so this list reads as the event's card does (review of #1952, finding 10).
+        ...(row.startLocal && row.tz ? { eventStartLocal: row.startLocal, eventTz: row.tz } : {}),
+        ...(row.endLocal && row.tz ? { eventEndLocal: row.endLocal } : {}),
+        ...(row.online ? { eventOnline: true } : {}),
         ...(row.photo ? { photos: [row.photo] } : {}),
         eventState: 'scheduled',
         myRsvp: row.rsvp,

@@ -74,6 +74,7 @@ import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
+import { LanguageRow } from '../../components/LanguagePicker';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -1794,6 +1795,9 @@ export default function SettingsScreen() {
                             })}
                         </View>
                     </View>
+
+                    {/* Language: per device, live; each language in its own name (components/LanguagePicker.tsx). */}
+                    <LanguageRow styles={styles} />
 
                     {/* Background pattern: the doodle wallpaper, or a plain colour. Per device. */}
                     <View style={styles.menuBtn}>

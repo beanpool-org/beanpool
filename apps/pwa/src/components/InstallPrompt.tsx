@@ -165,7 +165,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                         onClick={handleNativeInstall}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: '#2563eb', color: ON_BRAND, border: 'none',
+                            background: 'var(--bp-info-fill)', color: ON_BRAND, border: 'none',
                             fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
                             fontFamily: 'inherit',
                             minWidth: '44px', minHeight: '44px',
@@ -181,7 +181,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                         aria-expanded={showSteps}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: showSteps ? '#333' : '#2563eb', color: ON_BRAND,
+                            background: showSteps ? 'var(--bp-neutral-hover)' : 'var(--bp-info-fill)', color: ON_BRAND,
                             border: 'none', fontSize: '0.85rem', fontWeight: 600,
                             // No nowrap: at 320 px with 130 % text the row squeezes the button, and 'Hide steps' ran out past its fill.
                             cursor: 'pointer', fontFamily: 'inherit',

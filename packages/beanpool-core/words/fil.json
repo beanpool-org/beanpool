@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-10-16",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "munggo",
@@ -42,5 +42,90 @@
   "Places from OpenStreetMap. What you type here is sent to them.": "Ang mga lugar ay mula sa OpenStreetMap. Ipinapadala sa OpenStreetMap ang isinusulat mo rito.",
   "Choose {place}": "Piliin ang {place}",
   "This community asks for a profile picture before you post. You can add one later from your profile.": "Humihingi ang komunidad na ito ng larawan sa profile bago ka mag-post. Puwede mo itong idagdag mamaya mula sa profile mo.",
-  "A picture is optional here. You can add one later from your profile.": "Opsyonal ang larawan dito. Kung gusto mo, puwede kang magdagdag nito mamaya mula sa profile mo."
+  "A picture is optional here. You can add one later from your profile.": "Opsyonal ang larawan dito. Kung gusto mo, puwede kang magdagdag nito mamaya mula sa profile mo.",
+  "{n}st\u0004day of the month": "{n}",
+  "{n}nd\u0004day of the month": "{n}",
+  "{n}rd\u0004day of the month": "{n}",
+  "{n}th\u0004day of the month": "{n}",
+  "Every month on the first {weekday}": "Kada buwan sa unang {weekday}",
+  "Every month on the second {weekday}": "Kada buwan sa ikalawang {weekday}",
+  "Every month on the third {weekday}": "Kada buwan sa ikatlong {weekday}",
+  "Every month on the fourth {weekday}": "Kada buwan sa ikaapat na {weekday}",
+  "Every month on the last {weekday}": "Kada buwan sa huling {weekday}",
+  "Monthly, first {weekday}|Every {n} months, first {weekday}": {
+    "one": "Kada {n} buwan, unang {weekday}",
+    "other": "Kada {n} buwan, unang {weekday}"
+  },
+  "Monthly, second {weekday}|Every {n} months, second {weekday}": {
+    "one": "Kada {n} buwan, ikalawang {weekday}",
+    "other": "Kada {n} buwan, ikalawang {weekday}"
+  },
+  "Monthly, third {weekday}|Every {n} months, third {weekday}": {
+    "one": "Kada {n} buwan, ikatlong {weekday}",
+    "other": "Kada {n} buwan, ikatlong {weekday}"
+  },
+  "Monthly, fourth {weekday}|Every {n} months, fourth {weekday}": {
+    "one": "Kada {n} buwan, ikaapat na {weekday}",
+    "other": "Kada {n} buwan, ikaapat na {weekday}"
+  },
+  "Monthly, last {weekday}|Every {n} months, last {weekday}": {
+    "one": "Kada {n} buwan, huling {weekday}",
+    "other": "Kada {n} buwan, huling {weekday}"
+  },
+  "Monthly, first {weekday}": "Buwan-buwan, unang {weekday}",
+  "Monthly, second {weekday}": "Buwan-buwan, ikalawang {weekday}",
+  "Monthly, third {weekday}": "Buwan-buwan, ikatlong {weekday}",
+  "Monthly, fourth {weekday}": "Buwan-buwan, ikaapat na {weekday}",
+  "Monthly, last {weekday}": "Buwan-buwan, huling {weekday}",
+  "Does not repeat": "Hindi umuulit",
+  "Every week on {weekday}": "Linggu-linggo tuwing {weekday}",
+  "Every 2 weeks on {weekday}": "Kada 2 linggo tuwing {weekday}",
+  "Every month on the {day}": "Kada buwan tuwing ika-{day}",
+  "An event that repeats must end before its next date starts": "Dapat matapos ang umuulit na event bago magsimula ang susunod na petsa nito",
+  "(months without a {day} are skipped)": "(nilalaktawan ang mga buwang walang ika-{day})",
+  "Every {weekday}|Every {n} weeks on {weekday}": {
+    "one": "Kada {n} linggo tuwing {weekday}",
+    "other": "Kada {n} linggo tuwing {weekday}"
+  },
+  "Every {weekday}": "Tuwing {weekday}",
+  "Monthly on the {day}|Every {n} months on the {day}": {
+    "one": "Kada {n} buwan tuwing ika-{day}",
+    "other": "Kada {n} buwan tuwing ika-{day}"
+  },
+  "Monthly on the {day}": "Buwan-buwan tuwing ika-{day}",
+  "{repeats} · until {date}": "{repeats} · hanggang {date}",
+  "The last date must be a date on or after the first one": "Dapat sa o pagkatapos ng unang petsa ang huling petsa",
+  "The last date can be at most {n} years after the first one": "Maaari lamang lumipas ang hanggang {n} taon sa pagitan ng una at huling petsa",
+  "{date} is cancelled. Next: {next}": "Kanselado ang {date}. Susunod: {next}",
+  "{date} is cancelled.": "Kanselado ang {date}.",
+  "{date} is back on": "Tuloy muli ang {date}",
+  "Moved from the regular {weekday}": "Inilipat mula sa regular na {weekday}",
+  "Moved from the regular date": "Inilipat mula sa regular na petsa",
+  "Choose how the event repeats from the list": "Piliin mula sa listahan kung paano uulit ang event",
+  "An event can repeat every 1 to 12 weeks or months": "Maaaring umulit ang isang event kada 1 hanggang 12 linggo o buwan",
+  "The first date must be one of the repeating dates": "Dapat isa sa mga umuulit na petsa ang unang petsa",
+  "The last date can be at most 5 years after the first one": "Maaari lamang lumipas ang hanggang 5 taon pagkatapos ng unang petsa",
+  "Pick one of the dates this event repeats on": "Pumili ng isa sa mga petsa kung kailan umuulit ang event na ito",
+  "This event does not repeat": "Hindi umuulit ang event na ito",
+  "Only the host can cancel or restore a date": "Ang host lamang ang maaaring magkansela o magbalik ng petsa",
+  "This is the last date: change when the event ends, or cancel the event": "Ito ang huling petsa: palitan kung kailan magtatapos ang event, o kanselahin ang event",
+  "At most 100 dates can be cancelled": "Hanggang 100 petsa lamang ang maaaring kanselahin",
+  "This event has been cancelled": "Kinansela ang event na ito",
+  "Pick a time zone from the list": "Pumili ng time zone mula sa listahan",
+  "Shown to about 1 km. Ask {name} for the spot when you arrange to meet.": "Ipinapakita sa loob ng humigit-kumulang 1 km. Itanong kay {name} ang eksaktong lugar kapag nag-usap kayo.",
+  "Shown to everyone who can see the event. Put the exact address in the note below.": "Makikita ng sinumang nakakakita sa event. Ilagay ang eksaktong address sa tala sa ibaba.",
+  "This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.": "Mukhang address ng kalye ito. Mababasa ito ng sinumang nakakakita sa event, kaya mas ligtas ito sa tala sa ibaba.",
+  "An earlier message was removed when this chat was locked": "May naunang mensahe na inalis noong na-lock ang chat na ito",
+  "{n} earlier message removed when this chat was locked|{n} earlier messages removed when this chat was locked": {
+    "one": "{n} naunang mensahe ang inalis noong na-lock ang chat na ito",
+    "other": "{n} naunang mensahe ang inalis noong na-lock ang chat na ito"
+  },
+  "{n} message removed by a convenor|{n} messages removed by a convenor": {
+    "one": "{n} mensahe ang inalis ng convenor",
+    "other": "{n} mensahe ang inalis ng convenor"
+  },
+  "{n} message was deleted|{n} messages were deleted": {
+    "one": "{n} mensahe ang binura",
+    "other": "{n} mensahe ang binura"
+  }
 }

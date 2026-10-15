@@ -128,7 +128,7 @@
         --logo-gradient-start: #92400e;   /* ink.warning */
         --logo-gradient-end: #c2410c;   /* action.fill */
         --btn-primary-end: #f59e0b;   /* gold.fill */
-        --rainbow-1: #92400e;   /* ink.warning */
+        --rainbow-1: #c2410c;   /* action.fill */
         --rainbow-2: #b91c1c;   /* ink.danger */
         --rainbow-3: #a3472e;   /* ink.terra */
         --rainbow-4: #1d4ed8;   /* info.hover */
@@ -143,7 +143,7 @@
         --footer-bg: rgba(251, 250, 248, 0.88);   /* ground */
 
         --rgb-overlay: 29, 35, 29;   /* gold.on */
-        --rgb-shadow: 100, 118, 100;   /* accent.fill */
+        --rgb-shadow: 192, 204, 192;   /* accent.fill.dark */
         --rgb-ground: 251, 250, 248;   /* ground */
         --rgb-nav: 251, 250, 248;   /* ground */
         --rgb-panel: 255, 255, 255;   /* ground */
@@ -151,9 +151,10 @@
         --rgb-modal: 255, 255, 255;   /* ground */
     }
     /* The light doodle (the web app's own tile, apps/pwa/public) under a 55 % oat wash (the third layer): bare,
-       its darkest stroke (#a7a797) leaves the site's words at 4.4:1 and its links at 2.9; washed it is #d5d5cc,
-       and as faint against its ground as the dark doodle is against its own. Not a var(): a var() here would void
-       the -webkit-image-set fallback on old Android WebViews, and the page would lose its ground.
+       its darkest stroke (#a7a797) leaves the site's words at 4.4:1 and its links at 2.9; washed it is #d5d5cc and
+       links read at 4.8:1. 55 % is as strong as the doodle can be: at 50 % the hero badge's brown words on its amber
+       tint fall to 4.44:1 (16 Oct 2026). Not a var(): a var() here would void the -webkit-image-set fallback on old
+       Android WebViews, and the page would lose its ground.
        `:root body` and `:root .leaflet-container` outrank the plain rules further down the file. */
     :root body {
         background-image:
@@ -171,6 +172,8 @@
     }
     /* The map's tiles are drawn as they come: the dusk filter below is for the dark page. */
     :root .leaflet-container .leaflet-tile-pane { filter: none; }
+    /* The map's figures are brown words in light: dark's amber glow behind them reads as blur. */
+    :root .map-stat-value { text-shadow: none; }
 }
 
 /* ======================== SCROLLBAR ======================== */

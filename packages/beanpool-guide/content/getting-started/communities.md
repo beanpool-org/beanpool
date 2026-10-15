@@ -16,7 +16,7 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
 
-Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool's key vault keeps one copy for all your communities.
 
 ## Joining the global community from your account
 
@@ -27,7 +27,7 @@ The global community needs no invite, and you join it with the account you alrea
 - Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
 - Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See "Joining BeanPool".
 
-Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your account has one way back** card, as for anyone who joins with 12 words (see "Joining BeanPool").
+Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: BeanPool's key vault keeps a locked copy of it for that sign-in, so if you lose your phone, it brings back this account, not a new one. If the key vault can't keep one just then, you still join, and you can link that sign-in later under **Account Protection**. See "Getting your account back". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your account has one way back** card, as for anyone who joins with 12 words (see "Joining BeanPool").
 
 If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community.
 

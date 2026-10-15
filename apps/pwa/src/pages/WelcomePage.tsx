@@ -38,7 +38,7 @@ import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload, photoStepNote, t } from '@beanpool/core';
+import { createPairingSession, decryptPairingPayload, nodeOrigin, photoStepNote, t } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -684,6 +684,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingDigits, setPairingDigits] = useState('');
     const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
 
+    /** The relay could not tie this page to its code: the page is open at another address than its community's. */
+    const PAIRING_WRONG_BROWSER = () => t('This page can\'t finish linking from here. Open your community\'s own web address on this computer and make a new code there.');
+
     async function handleConfirmPairingDigits(e: React.FormEvent) {
         e.preventDefault();
         if (!pairingSession) return;
@@ -695,6 +698,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             setPairingDigitsNote(t('Those are not the digits on the phone. Check them and try again.'));
         } else if (res?.result === 'burned') {
             setError(t('Too many wrong digits, so nothing was sent. Make a new code and try again.'));
+            setPairingStatus('expired');
+        } else if (res?.result === 'wrong-browser') {
+            setError(PAIRING_WRONG_BROWSER());
+            setPairingStatus('expired');
+        } else if (res?.result === 'expired') {
+            setError(t('That code has expired, so nothing was sent. Make a new code and try again.'));
             setPairingStatus('expired');
         } else {
             setPairingDigitsNote(t('That did not go through. Try again.'));
@@ -799,6 +808,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     setPairingStatus('expired');
                 }
             } catch (err: any) {
+                // 403 wrong-browser: the relay can't tie this page to its code (it never got the binding cookie), so no
+                // poll will ever bring the account. Say so now, not after two minutes of a QR that can't work.
+                if ((err as { status?: number } | null)?.status === 403) {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setError(PAIRING_WRONG_BROWSER());
+                    setPairingStatus('expired');
+                    return;
+                }
                 console.error('[Pairing] Error during poll:', err);
             }
         }, 1500);
@@ -2468,7 +2486,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <>
                                         <div role="img" aria-label="QR code to scan with BeanPool mobile app">
                                             <QRCodeSVGComponent
-                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(getNodeApiUrl() || window.location.origin)}`}
+                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(nodeOrigin(getNodeApiUrl() || window.location.origin) ?? '')}`}
                                                 size={210}
                                                 level="M"
                                                 marginSize={2}

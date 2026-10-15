@@ -344,13 +344,13 @@ async function main() {
         const lateRedeem = redeemPairing(b.pairingId, secret, Date.now() + PAIRING_TTL_MS + 1_000);
         assert(lateRedeem.kind === 'expired', 'an expired pairing tells the page so');
 
-        // Approved, but the handshake token's 60 s has passed before the browser came back.
+        // Approved, and the browser comes back at 61 s: past the 30 s to type the digits, and the token's 60 s.
         const b2 = await newPairing();
         assert((await approve(b2.pairingId, b2.shortCode, owner)).status === 200, 'approved');
         // The digits redeem the token the moment they are right, within 30 s, so the token's 60 s can't lapse first:
         // the browser that comes back at 61 s is past both.
         const stale = confirmPairing(b2.pairingId, b2.cookie.split('=')[1], shownDigits.get(b2.pairingId), Date.now() + 61_000);
-        assert(stale.kind === 'expired', 'a redemption after the 60 s sign-in token has lapsed gives no session');
+        assert(stale.kind === 'expired', 'the right digits typed at 61 s (past the 30 s to type them, and the 60 s token) give no session');
         assert(redeemPairing(b2.pairingId, b2.cookie.split('=')[1], Date.now() + 61_000).kind === 'expired', 'nor does a poll then');
 
         const b3 = await newPairing();

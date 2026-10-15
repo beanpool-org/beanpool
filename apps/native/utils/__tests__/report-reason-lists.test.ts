@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {
     CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords, reportedAlertBody, pickedChildSafety, REPORT_SENT_TEXT,
     REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT,
+    REPORT_CHILD_SAFETY_CLASSIFIED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT,
 } from '../reportReasons';
 
 const APP = path.join(__dirname, '..', '..');
@@ -117,6 +118,10 @@ describe('the phone\'s report lists', () => {
         expect(REPORT_CHILD_SAFETY_ALERTED_TEXT).toBe("Because you chose Child safety, the people who run this community's server are alerted even without your words.");
         expect(CHILD_IN_DANGER_TEXT).toBe('If a child is in danger right now, call your local emergency number first.');
         const both = `${REPORT_CHILD_SAFETY_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
+        // Picked another reason, and the words read as child safety (15 Oct words design, D3): never "Because you chose".
+        expect(REPORT_CHILD_SAFETY_CLASSIFIED_TEXT).toBe("Your words looked like a report about a child's safety, so it went as Child safety.");
+        expect(REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT).toBe("The people who run this community's server are alerted even without your words.");
+        const looked = `${REPORT_CHILD_SAFETY_CLASSIFIED_TEXT} ${REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
         // private / unread / words went, x Child safety or not, x words typed or not (none typed: nothing is left out).
         expect(reportedAlertBody(undefined, 'Child safety')).toBe(REPORT_SENT_TEXT);
         expect(reportedAlertBody(undefined, 'Child safety: he asked my son for photos')).toBe(REPORT_SENT_TEXT);
@@ -132,11 +137,16 @@ describe('the phone\'s report lists', () => {
         // But the server's rule over the full reason (@beanpool/core reportKind) reads words that say child safety under any
         // reason, so with the words left out the report went as "Child safety" (db.ts reportReasonFor) and the dialog says it
         // alerts (#1938 confirmation 10, finding 1, the director's ruling (i)); ordinary words under that reason do not.
-        expect(reportedAlertBody('unread', 'Other: Child safety')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${both}`);
-        expect(reportedAlertBody('private', 'Offensive content: he is grooming a child, sexual abuse of a minor')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT} ${both}`);
+        expect(reportedAlertBody('unread', 'Other: Child safety')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${looked}`);
+        expect(reportedAlertBody('private', 'Offensive content: he is grooming a child, sexual abuse of a minor')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT} ${looked}`);
+        // The server's own false positive (test-alerts-reports): it went as Child safety, and "looked like" is still true.
+        expect(reportedAlertBody('unread', 'Spam or scam: fake child safety gates for sale')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${looked}`);
+        for (const reason of ['Other: Child safety', 'Offensive content: he is grooming a child, sexual abuse of a minor', 'Spam or scam: fake child safety gates for sale']) {
+            expect(reportedAlertBody('private', reason)).not.toContain('Because you chose');
+        }
         expect(reportedAlertBody('unread', 'Offensive content: shouted at the market')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}`);
         expect(reportedAlertBody(undefined, 'Offensive content: he is grooming a child, sexual abuse of a minor')).toBe(REPORT_SENT_TEXT);
-        for (const said of [REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT]) {
+        for (const said of [REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT, CHILD_IN_DANGER_TEXT]) {
             expect(said).toMatch(/^[A-Z].*\.$/);
             expect(said).not.toMatch(/fail|try again|report again/i);
         }

@@ -1316,9 +1316,10 @@ export async function getConversations(myPubkey: string) {
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
-            // The "key changed" tag: an offer waiting for the member, from a sync or a first-sight pause (from the same one
-            // read as the preview; unreadable pins, no tag: the chat itself says why it can't send).
-            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && !!dmPinFor(previewPins, row.id)?.offered,
+            // The "key changed" tag: an offer waiting for the member, from a sync or a first-sight pause, or a rule-5 record
+            // whose banner asks for a check (15 Oct words design, D1) (from the same one read as the preview; unreadable
+            // pins, no tag: the chat itself says why it can't send).
+            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && (!!dmPinFor(previewPins, row.id)?.offered || isUnplacedSight(dmSightFor(previewPins, row.id))),
             lastMessage: displayMsg,
             lastMsgType: row.lastMsgType,
             lastSysType: row.lastSysType,
@@ -4862,7 +4863,7 @@ function fileOfDb(database: SQLite.SQLiteDatabase): string {
 }
 
 /**
- * The member's reset of one community's chat memory (Settings → Account → Chat memory, §3.4 amendment 6 §3), never the
+ * The member's reset of one community's chat memory (Settings → Chat memory, §3.4 amendment 6 §3), never the
  * phone's own: that community's DM pins are set aside and replaced by the reset's marker, and the next read seeds them
  * over the community file's own rows and the lines the update held there (kept), judging every DM before it trusts one
  * (§3.4 amendment 7). A chat whose history the node withheld may open with the new key: the confirmation says so.
@@ -5392,10 +5393,16 @@ export interface DmKeyChange {
     rekeyedAt?: string;
     /**
      * The person's name: the pinned key's member row, else the offered key's (the community's current name for the
-     * account after an honest re-key moves the row), else null ("this person"). Never the conversation id (#1873 review,
-     * finding 2).
+     * account after an honest re-key moves the row), else null (the banner's unknown-name sentences). Never the
+     * conversation id (#1873 review, finding 2). For a rule-5 record: the listed key's row, else the rows' other key's.
      */
     name?: string | null;
+    /**
+     * First sight found lines it couldn't place (rule 5 of the §3.4 amendment; heldLost too): no key is pinned, and
+     * `offeredPeer` is the one key the listing names, or null (15 Oct words design, D1). Continue pins it with no former
+     * key, so the lines that didn't open stay that way, and the banner says so.
+     */
+    unplaced?: true;
 }
 
 /** A member's callsign by key, as this phone holds the directory; null when it holds none. */
@@ -5414,11 +5421,34 @@ async function callsignOfKey(pubkey: string | null | undefined): Promise<string 
  */
 export async function getDmKeyChange(conversationId: string): Promise<DmKeyChange | null> {
     const ctx = await getDmKeyContext(conversationId, 'check');
-    if (!ctx?.keyChanged || !ctx.offered) return null;
+    if (!ctx) return unplacedKeyChange(conversationId);
+    if (!ctx.keyChanged || !ctx.offered) return null;
     const name = (await callsignOfKey(ctx.peerEdPubHex)) ?? (await callsignOfKey(ctx.offered.peer));
     const change: DmKeyChange = { offeredPeer: ctx.offered.peer, firstSight: !!ctx.offered.firstSight, name };
     if (ctx.offered.afterReset) change.afterReset = true;
     if (ctx.offered.nodeSays?.rekeyedAt) change.rekeyedAt = ctx.offered.nodeSays.rekeyedAt;
+    return change;
+}
+
+/**
+ * A rule-5 record's banner (15 Oct words design, D1), read after the 'check' judgement left no key pinned: the key its
+ * listing names (or null), named by that key's member row, else the rows' other key's. Reads only: nothing is written
+ * from here. Null for anything that isn't a DM with a rule-5 record.
+ */
+async function unplacedKeyChange(conversationId: string): Promise<DmKeyChange | null> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return null;
+    const database = await getDb();
+    const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    if (!conv || conv.type !== 'dm') return null;
+    const entry = dmSightFor(await dmPins.read(me, database), conversationId);
+    if (!isUnplacedSight(entry)) return null;
+    const listed = pinKeyOf(entry.listed);
+    const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]).catch(() => []);
+    const others = parts.map((p: any) => p.public_key).filter((pk: string) => pk && pk !== me);
+    const name = (await callsignOfKey(listed)) ?? (others.length === 1 ? await callsignOfKey(others[0]) : null);
+    const change: DmKeyChange = { offeredPeer: listed, firstSight: true, unplaced: true, name };
+    if (entry.heard?.rekeyedAt) change.rekeyedAt = entry.heard.rekeyedAt;
     return change;
 }
 
@@ -5429,8 +5459,9 @@ export async function getDmKeyChange(conversationId: string): Promise<DmKeyChang
  *
  * Refuses (false, nothing written) unless `expectedPeer` is still the key on offer when the tap's turn comes in the pins'
  * queue: a sync that offers a third key, or clears the offer, between the banner and the tap moves nothing. A rule-5
- * record (no key placed) has nothing to continue from. What the node says about a re-key never moves a pin here (pick 4);
- * only this call does. Throws DmPinStoreError when the pins can't be read or written.
+ * record continues the same way to the one key its listing names (15 Oct words design, D1), with nothing kept as former,
+ * and only while that key is still the one listed at the tap's turn. What the node says about a re-key never moves a pin
+ * here (pick 4); only this call does. Throws DmPinStoreError when the pins can't be read or written.
  *
  * Through the pins' one queue (#1873 review, finding 4): the sync, first sight and the refresh write there too, so no
  * writer's older copy can be written over the member's choice, and the in-memory copy every send reads is the one changed.

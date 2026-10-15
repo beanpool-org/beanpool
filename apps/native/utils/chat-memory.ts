@@ -1,5 +1,5 @@
 /**
- * Settings → Account → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3, slice 2's row): the member's reset of one
+ * Settings → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3, slice 2's row): the member's reset of one
  * community's DM pins, the only reset there is (the phone never resets on its own). The words and the look live here so
  * the card and its 320 dp test read the same ones; the reset itself is db.ts resetDmChatMemory. Since the reset takes the
  * DM guard's list too (§3.4 amendment 8 §3), the row's subtitle, the body and the confirmation are dm-guard-list.ts

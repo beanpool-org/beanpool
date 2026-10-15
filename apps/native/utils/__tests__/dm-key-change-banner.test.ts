@@ -111,11 +111,30 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
 
     it('several keys listed: no code, no tick, no Continue; only "Not now"', () => {
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: null, firstSight: false }, onContinue: vi.fn(), onNotNow: vi.fn() }));
-        expect(host.querySelector('[aria-label^="Key code "]')).toBeNull();
+        expect(host.querySelector('[aria-label^="Key code:"]')).toBeNull();
         expect(host.querySelector('[role="checkbox"]')).toBeNull();
         expect(button('Continue with the new key')).toBeNull();
         expect(button('Not now')).not.toBeNull();
-        expect(host.textContent).toContain('there is no one key to continue with');
+        expect(host.textContent).toContain("This community doesn't list a single key for Ben in this chat, so there is no key to continue with.");
+    });
+
+    it('rule 5 with one listed key (15 Oct words design, D1): the listed key\'s code, the tick, Continue only after it, and its own body', async () => {
+        const onContinue = vi.fn();
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, unplaced: true }, onContinue, onNotNow: vi.fn() }));
+        expect(host.querySelector('[aria-label^="Key code:"]')).not.toBeNull();
+        expect(host.textContent).toContain("This phone can't match this chat to one key. What you can read here may not be from Ben, and the messages it couldn't open stay that way.");
+        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
+        expect(host.querySelector('[role="checkbox"]')).not.toBeNull();
+        expect(button('Continue with the new key')).not.toBeNull();
+    });
+
+    it('rule 5 with no single key listed: no code, no tick, no Continue; only "Not now"', () => {
+        render(createElement(DmKeyChangedBanner, { peerName: null, change: { offeredPeer: null, firstSight: true, unplaced: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+        expect(host.querySelector('[aria-label^="Key code:"]')).toBeNull();
+        expect(host.querySelector('[role="checkbox"]')).toBeNull();
+        expect(button('Continue with the new key')).toBeNull();
+        expect(button('Not now')).not.toBeNull();
+        expect(host.textContent).toContain("This community doesn't list a single key for the other person in this chat, so there is no key to continue with.");
     });
 
     it('the node\'s re-key date is a line of words only when it gives one; the first-sight case opens with the amendment\'s sentence, true after a restore or an update', () => {
@@ -201,15 +220,45 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
 });
 
 describe('the banner\'s words', () => {
-    it('with no name for the key (the directory has none), say "this person": never the conversation id (#1873 review, finding 2)', () => {
-        for (const peerName of [null, undefined, '', '  ']) {
-            const copy = dmKeyChangeCopy({ peerName, code: '1111 2222 3333 4444 5555', firstSight: false });
-            expect(copy.title).toBe('The key behind "this person" changed.');
-            expect(copy.confirm).toBe('I checked with this person: the key code in their Settings matches this one.');
+    const CODE = '1111 2222 3333 4444 5555';
+    it('with no name for the key (the directory has none), a whole sentence for each: never the conversation id (#1873 review, finding 2), never an English "this person" pasted into a translated one (15 Oct words design, D4)', () => {
+        for (const peerName of [null, undefined, '', '  ', 'Loading...']) {
+            const plain = dmKeyChangeCopy({ peerName, code: CODE, firstSight: false });
+            expect(plain.title).toBe('The key behind this chat changed.');
+            expect(plain.body).toBe('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be');
+            expect(plain.confirm).toBe('I checked with them: the key code in their Settings matches this one.');
+            expect(dmKeyChangeCopy({ peerName, code: CODE, firstSight: true }).body).toBe(`${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for the other person. Anything you send now would go to the new key. Check with them first, in person or on a call: their key code should be`);
+            expect(dmKeyChangeCopy({ peerName, code: null, firstSight: false }).body).toBe("This community doesn't list a single key for the other person in this chat, so there is no key to continue with. Nothing will be sent here. Check with them in person or on a call.");
+            expect(dmKeyChangeCopy({ peerName, code: CODE, firstSight: true, unplaced: true }).body).toBe("This phone can't match this chat to one key. What you can read here may not be from the other person, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for them. Check with them first, in person or on a call: their key code should be");
+            for (const copy of [plain, dmKeyChangeCopy({ peerName, code: null, firstSight: true }), dmKeyChangeCopy({ peerName, code: CODE, firstSight: true, afterReset: true, unplaced: true })]) {
+                expect(JSON.stringify(copy)).not.toMatch(/this person|Loading/);
+            }
         }
     });
-    it('never name the node\'s "Loading..." placeholder', () => {
-        expect(dmKeyChangeCopy({ peerName: 'Loading...', code: '1111 2222 3333 4444 5555', firstSight: false }).title).toBe('The key behind "this person" changed.');
+    it('with a name, the same sentences say it', () => {
+        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: CODE, firstSight: false });
+        expect(ben.title).toBe('The key behind "Ben" changed.');
+        expect(ben.confirm).toBe('I checked with Ben: the key code in their Settings matches this one.');
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: true }).body).toBe("This community doesn't list a single key for Ben in this chat, so there is no key to continue with. Nothing will be sent here. Check with Ben in person or on a call.");
+    });
+    it('rule 5 with one listed key (D1 (b)): its own body, no lead, the code, the tick and Continue; what didn\'t open stays that way', () => {
+        for (const afterReset of [false, true]) {
+            const copy = dmKeyChangeCopy({ peerName: 'Ben', code: CODE, firstSight: true, afterReset, unplaced: true });
+            expect(copy.body).toBe("This phone can't match this chat to one key. What you can read here may not be from Ben, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for Ben. Check with Ben first, in person or on a call: their key code should be");
+            expect(copy.confirm).toBe('I checked with Ben: the key code in their Settings matches this one.');
+            expect(copy.continueLabel).toBe('Continue with the new key');
+        }
+    });
+    it('no single key (a pause of several, or rule 5 with none: D2 (c)): Not now only, and never "start a new chat", which opens this same chat', () => {
+        for (const unplaced of [false, true]) {
+            const copy = dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: true, unplaced });
+            expect(copy.body).toBe("This community doesn't list a single key for Ben in this chat, so there is no key to continue with. Nothing will be sent here. Check with Ben in person or on a call.");
+            expect([copy.confirm, copy.continueLabel]).toEqual([null, null]);
+            expect(copy.notNowLabel).toBe('Not now');
+        }
+        for (const peerName of ['Ben', null]) for (const code of [CODE, null]) for (const firstSight of [false, true]) for (const unplaced of [false, true]) {
+            expect(JSON.stringify(dmKeyChangeCopy({ peerName, code, firstSight, unplaced }))).not.toMatch(/new chat/i);
+        }
     });
 });
 
@@ -240,14 +289,16 @@ describe('the banner on the DM screen is keyed on the offered key', () => {
 // Slice 1's handover (d) and the #1873 review's findings 2 and 3, on the DM screen (a source pin: the screen itself
 // needs a device). Rule 5 is asked only after the key change, whose check judges first sight first.
 describe('the DM screen: the rule-5 line, the banner\'s name and its height', () => {
-    it('[id].tsx asks isDmUnplaced only when no key change is waiting, disables the box with DM_UNPLACED_LINE and offers no Continue for it', async () => {
+    it('[id].tsx shows rule 5 through the banner (getDmKeyChange\'s unplaced change, 15 Oct words design D1), disables the box with DM_UNPLACED_LINE, and sends nothing until Continue', async () => {
         const { readFileSync } = await import('node:fs');
         const { join } = await import('node:path');
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
-        expect(src).toMatch(/getDmKeyChange\(id as string\)\.then\(async \(change\) => \{\s*setKeyChange\(change\);\s*setUnplaced\(change \? false : await isDmUnplaced\(id as string\)\);/);
-        expect(src).toMatch(/disabled=\{keyChangePending \|\| unplaced\}/);
-        expect(src).toMatch(/notice=\{keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : lockNotice\}/);
-        expect(src).toMatch(/const canSendNow = \(\) => [^;]*!unplaced/);
+        expect(src).toMatch(/getDmKeyChange\(id as string\)\.then\(setKeyChange, \(\) => \{\}\);/);
+        expect(src).toMatch(/const keyChangePending = !!keyChange;\s*const unplaced = !!keyChange\?\.unplaced;/);
+        expect(src).not.toMatch(/isDmUnplaced/);
+        expect(src).toMatch(/disabled=\{keyChangePending\}/);
+        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice\}/);
+        expect(src).toMatch(/const canSendNow = \(\) => [^;]*!keyChangePending/);
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);
         // The banner's cap is worked out from the measured column, the deals strip and the box (finding 7), never a share

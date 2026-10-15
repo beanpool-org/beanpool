@@ -3889,7 +3889,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
             expect(refusedSendNotice(err, 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);
             await syncMessages(ana.publicKey);
         }
-        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
+        expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.");
         expect((await getMessages(dmB.id)).map((m: any) => m.text)).toEqual(Array(4).fill(DM_PINS_UNREAD_LINE));
         expect(DM_PINS_UNREAD_LINE).toBe("Can't be shown until this phone can read who this chat is with.");
         expect(h.store.get(PINS_B())).toBe(corrupt);
@@ -4244,8 +4244,8 @@ describe('the DM guard list: one bounded list per community file, never read as 
     const WINDOW = 2 * 1024 * 1024;
     const MiB = 1024 * 1024;
     const OLD_KEY = 'beanpool_dm_conversations_seen';
-    // The pins' twin since §3.4 amendment 8: where the way out is (the member's reset in Settings → Account → Chat memory).
-    const GUARD_UNREAD = "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.";
+    // The pins' twin since §3.4 amendment 8: where the way out is (the member's reset in Settings → Chat memory).
+    const GUARD_UNREAD = "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.";
     const seenKey = (file = FILE_A) => `beanpool_dm_conversations_seen:${ana.publicKey.toLowerCase()}:${file}`;
     const seenIn = (file = FILE_A): any => { const raw = h.store.get(seenKey(file)); if (raw == null) return null; try { return JSON.parse(raw); } catch { return 'unparseable'; } };
     const bytesOf = (k: string) => Buffer.byteLength(h.store.get(k) ?? '');

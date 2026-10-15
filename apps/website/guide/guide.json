@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 134,
-  "hash": "631ffccdce15d14b7dc6cc558aa995e1ad3e1674649ad39b950ce0548ffce370",
+  "version": 135,
+  "hash": "5f653cce08ec5ea670e7d799b21be3a10e62841a82e76f9ce7909dd52af53d6e",
   "sections": [
     {
       "id": "about",
@@ -4336,7 +4336,7 @@
         },
         {
           "type": "p",
-          "text": "Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as **couldn't be verified** until you decide."
+          "text": "Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, messages from the new key read **Sent from the new key. Shown after you continue.** until you decide."
         },
         {
           "type": "p",
@@ -4389,7 +4389,7 @@
         },
         {
           "type": "p",
-          "text": "A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat."
+          "text": "A paused chat may stay paused until you continue. There is no other way to keep talking in it: your community keeps one chat for the two of you, so starting a new chat with the same person opens this same chat."
         },
         {
           "type": "p",
@@ -4401,11 +4401,7 @@
         },
         {
           "type": "p",
-          "text": "Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers **Not now**."
-        },
-        {
-          "type": "p",
-          "text": "To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it."
+          "text": "Sometimes the community doesn't list a single key for the person in a chat between two people: it lists several, or none. There is then no key to continue with, so the banner says so and offers only **Not now**. Nothing is sent. Talk to the person in person or on a call. Your phone checks the chat again by itself when the community's list changes, and a new chat with the same person is this same chat."
         },
         {
           "type": "h2",
@@ -4413,19 +4409,51 @@
         },
         {
           "type": "p",
-          "text": "After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above."
+          "text": "After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above. After you reset the community's chat memory it starts with **This community's chat memory was reset, so this phone is checking this chat from the start.** instead."
         },
         {
           "type": "h2",
-          "text": "If the message box says your phone can't match the chat to one key"
+          "text": "Chat memory"
         },
         {
           "type": "p",
-          "text": "Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says **This phone can't match this chat to one key, so sending is off.** There is nothing to continue with."
+          "text": "Your phone keeps a small memory for each community: which key each of your chats is with, and which chats are private. It is kept on the phone, and the community's server can't move a chat to another key by itself: only you can, on the banner. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own."
         },
         {
           "type": "p",
-          "text": "Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as **couldn't be verified**. To keep talking, start a new chat with them, and talk to them in person or on a call first."
+          "text": "You can reset it for one community: open **Settings**, tap **Chat memory** under **Account & identity**, tap **Reset** next to the community, read the warning, and tap **Reset** again. The app points you here only when it says it couldn't read that memory and trying again didn't help."
+        },
+        {
+          "type": "p",
+          "text": "After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with **This community's chat memory was reset, so this phone is checking this chat from the start.** Check the code with the person as above."
+        },
+        {
+          "type": "p",
+          "text": "Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send."
+        },
+        {
+          "type": "p",
+          "text": "A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above)."
+        },
+        {
+          "type": "p",
+          "text": "This is on the phone app. The web app has no chat memory."
+        },
+        {
+          "type": "h2",
+          "text": "If the banner says your phone can't match the chat to one key"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Above the message box it says **This phone can't match this chat to one key, so sending is off.** and the banner shows the code of the key your community now lists for the person."
+        },
+        {
+          "type": "p",
+          "text": "Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that read **This message couldn't be verified, so it isn't shown.** Those stay that way, even after you continue."
+        },
+        {
+          "type": "p",
+          "text": "Check the code with the person as above, in person or on a call. If it matches, tick the box and tap **Continue with the new key**: from then on your messages go to that key. If it doesn't match, or you can't check, tap **Not now**. A new chat with the same person is this same chat, so there is nothing else to try. If the community lists no single key for them, the banner offers only **Not now**, and your phone checks the chat again by itself when the community's list changes."
         },
         {
           "type": "h2",
@@ -6468,7 +6496,7 @@
         },
         {
           "type": "p",
-          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added (the phone leaves your words out when it knows what you reported as a private chat, or can't read which chats here are private, and the **Reported** message says so), and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
+          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added (the phone leaves your words out when it knows what you reported as a private chat, or can't read which chats here are private, and the **Reported** message says so), and that it came from you. If the words you added look like a report about a child's safety, the report goes as **Child safety** even though the words stay out, and the message says that too. Don't count on it: choose **Child safety** yourself. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
         },
         {
           "type": "h2",

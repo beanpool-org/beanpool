@@ -25,9 +25,10 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, tourEnded, type TourRecord,
+    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
+import { eventHomeWhen } from './events';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
@@ -118,7 +119,11 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
 export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 
 export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
-export interface HomeEventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
+export interface HomeEventItem {
+    id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
+    /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */
+    startLocal?: string | null; tz?: string | null; online?: boolean | null;
+}
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }
 
 /**
@@ -1090,8 +1095,13 @@ export function eventDay(iso: string): string {
     return formatDate(d, 'weekday-day-month');
 }
 
+/**
+ * "Sat 3 Oct · Working bee, The hall". The day is the place's, with its clock and zone when they are not this phone's
+ * ("Sat 17 Oct, 20:50 Lagos time"); an online event reads in the phone's own time and says Online (§4).
+ */
 export function eventLine(e: HomeEventItem): string {
-    return `${eventDay(e.startsAt)} · ${e.title}${e.place ? `, ${e.place}` : ''}`;
+    const place = e.online ? t('Online') : e.place;
+    return `${eventHomeWhen(e)} · ${e.title}${place ? `, ${place}` : ''}`;
 }
 
 export const RSVP_WORDS: Record<'going' | 'interested', string> = { going: 'Going', interested: 'Interested' };

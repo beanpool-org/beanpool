@@ -944,7 +944,6 @@ router.post('/api/local/admin/replication-config/get', async (ctx) => {
 router.post('/api/local/admin/replication-config/save', async (ctx) => {
     if (!(await ownerOnly(ctx, COPY_FROM_OWNER_ONLY))) return;
     const { primaryUrl, primaryPassword, primaryToken, code } = (ctx as any).requestBody || {};
-    if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'change which server this standby copies from'))) return;
     if (primaryPassword) {
         ctx.status = 400;
         ctx.body = {
@@ -958,6 +957,8 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
         ctx.body = { error: 'primaryUrl is required' };
         return;
     }
+    // The proof last, after the checks of the request itself: a current code is spent when it is checked (#2002 NB1).
+    if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'change which server this standby copies from'))) return;
 
     const config = getLocalConfig();
     config.backupPrimaryUrl = primaryUrl.trim() || null;

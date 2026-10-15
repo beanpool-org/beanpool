@@ -14,8 +14,10 @@
  *     computer session 403 phone_required, a phone unlock 91 s old 403 step_up_required, each with nothing changed; a
  *     current code brings back the planted row and the old key, after taking a point of its own first (which holds the
  *     restored database), and leaves the notice.
- *  4. No room, no restore: a point that cannot be written (a full disk; a file where the folder should be) refuses the
- *     restore in words, and nothing is replaced: the live database, the node key, no point, no leftovers.
+ *  4. No room, no restore: a point that cannot be written (a full disk, as the filesystem reports it (ENOSPC) and as
+ *     the point's database copy does (better-sqlite3's SQLITE_FULL, from the VACUUM INTO); a file where the folder
+ *     should be) refuses the restore in words, and nothing is replaced: the live database, the node key, no point, no
+ *     leftovers.
  *  5. No route removes a point: every /api/local/admin/* route the node serves, with every credential (none, an admin's
  *     key session, an admin token, an owner's computer session, a stale and a fresh phone unlock, a password session,
  *     the password with a current code), and the point's name in every parameter and body field, leaves the folder
@@ -23,7 +25,8 @@
  *  6. Retention: snapshots/config keep:3 (with the owner's proof) and the hourly expiry leave a 1-day-old point and five
  *     within a week; a 31-day-old one goes, and an 8-day-old one past the newest five; past a week only the newest five stay.
  *  7. The code brake: wrong recovery codes from one source, each sent with the right password and an earlier 2FA session,
- *     are held by the source rule (429, reason 'source'), however often the password clears its own count.
+ *     are held by the source rule (429, reason 'source'), however often the password clears its own count. Its words
+ *     name the recovery codes, never the admin password the owner typed right.
  *  8. A plain archive naming a new owner, sent by the password with an earlier 2FA session, is refused 400 naming the
  *     command; no role moved, nothing extracted (#1984 confirmation 2, NON-BLOCKING 1: the last C6-shaped path).
  *
@@ -252,6 +255,10 @@ async function child(): Promise<void> {
         failNextRestorePointForTests('ENOSPC');
         const full = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
         result.full = { status: full.status, body: full.body, after: before(), points: points(), leftovers: leftovers() };
+        // A real full disk fails the point at its database copy, the VACUUM INTO, with better-sqlite3's SQLITE_FULL.
+        failNextRestorePointForTests('SQLITE_FULL');
+        const sqliteFull = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
+        result.sqliteFull = { status: sqliteFull.status, body: sqliteFull.body, after: before(), points: points(), leftovers: leftovers() };
         // A file where the restore points' folder should be: the filesystem itself refuses the point.
         fs.rmSync(pointsDir, { recursive: true, force: true });
         fs.writeFileSync(pointsDir, 'not a folder');
@@ -468,6 +475,12 @@ async function main(): Promise<void> {
             `4. a full disk: refused in words (${fl.full?.status} ${fl.full?.body?.error})`);
         assert(JSON.stringify(fl.full?.after) === JSON.stringify(fl.before) && fl.full?.points?.length === 0 && fl.full?.leftovers?.length === 0,
             `4. …the live database and the node key as they were, no point, no leftovers (${JSON.stringify(fl.full?.points)} ${JSON.stringify(fl.full?.leftovers)})`);
+        assert(fl.sqliteFull?.status === 507 && fl.sqliteFull.body?.restorePointFailed === true
+            && /could not keep a restore point first, because its disk is full\. Free some space/.test(fl.sqliteFull.body?.error || '')
+            && !/SQLITE_FULL|Check that the data folder can be written to/.test(fl.sqliteFull.body?.error || ''),
+            `4. a full disk as SQLite reports it (SQLITE_FULL, from the point's VACUUM INTO): 507, the same words (${fl.sqliteFull?.status} ${fl.sqliteFull?.body?.error})`);
+        assert(JSON.stringify(fl.sqliteFull?.after) === JSON.stringify(fl.before) && fl.sqliteFull?.points?.length === 0 && fl.sqliteFull?.leftovers?.length === 0,
+            `4. …nothing replaced, no point, and no cut-short copy left (${JSON.stringify(fl.sqliteFull?.points)} ${JSON.stringify(fl.sqliteFull?.leftovers)})`);
         assert(fl.blocked?.status >= 500 && fl.blocked.body?.restorePointFailed === true && /Nothing was restored: this server could not keep a restore point first/.test(fl.blocked.body?.error || ''),
             `4. a file where the folder should be: refused in words (${fl.blocked?.status} ${fl.blocked?.body?.error})`);
         assert(JSON.stringify(fl.blocked?.after) === JSON.stringify(fl.before) && fl.blocked?.leftovers?.length === 0 && fl.blocked?.stillAFile === true,
@@ -524,6 +537,8 @@ async function main(): Promise<void> {
         }
         assert(heldAt > 1 && held?.reason === 'source' && held?.passwordBackoff === true,
             `7. held by the source rule after ${heldAt - 1} wrong codes, each sent with the right password (429, reason ${held?.reason}; ${statuses.join(',')})`);
+        assert(/^Too many wrong recovery codes from your network\. Try again in \d+s/.test(held?.error || '') && !/password/i.test(held?.error || ''),
+            `7. …and says it is the recovery codes, not the password (${held?.error})`);
     }
 
     // ── 5. No route removes a point ──

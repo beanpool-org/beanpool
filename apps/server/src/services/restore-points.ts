@@ -25,6 +25,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
 import { bucketOf, getImageStore } from '../storage/image-store.js';
 import { captureSnapshotImages, snapshotImagesDir, writeDbSnapshot } from './snapshot-scheduler.js';
@@ -74,7 +75,9 @@ export class RestorePointError extends Error {
     code: string;
     constructor(cause: any) {
         const code = String(cause?.code || 'unknown');
-        const full = code === 'ENOSPC' || code === 'EDQUOT';
+        // A full disk shows up from the filesystem (ENOSPC, EDQUOT) or, in the point's largest write, the VACUUM INTO,
+        // from SQLite (better-sqlite3's SQLITE_FULL).
+        const full = code === 'ENOSPC' || code === 'EDQUOT' || code === 'SQLITE_FULL';
         super(
             'Nothing was restored: this server could not keep a restore point first'
             + (full ? ', because its disk is full. Free some space in the data folder and try again.'
@@ -131,7 +134,11 @@ function tarGzOf(files: Array<{ name: string; content: Buffer }>): Buffer {
     return zlib.gzipSync(Buffer.concat(blocks));
 }
 
-/** Tests make the next point's write fail as a full disk does. */
+/**
+ * Tests make the next point's database copy (the VACUUM INTO, its largest write) fail part way, as a full disk fails it:
+ * a cut-short file left in the work folder, and the error better-sqlite3 throws for an `SQLITE_*` code (a full disk is
+ * `SQLITE_FULL`, "database or disk is full"), or a filesystem error for any other.
+ */
 let failNextWriteForTests: string | null = null;
 export function failNextRestorePointForTests(code: string | null): void {
     failNextWriteForTests = code;
@@ -151,14 +158,17 @@ export function takeRestorePoint(why: RestorePointWhy, now = Date.now()): Restor
         fs.mkdirSync(root, { recursive: true, mode: 0o700 });
         fs.chmodSync(root, 0o700);
         while (fs.existsSync(path.join(root, name)) || fs.existsSync(work())) name = restorePointName(++at, why);
-        if (failNextWriteForTests) {
-            const code = failNextWriteForTests;
-            failNextWriteForTests = null;
-            throw Object.assign(new Error(`${code}: refused in tests`), { code });
-        }
         const dir = work();
         fs.mkdirSync(dir, { mode: 0o700 });
         const dbPath = path.join(dir, RESTORE_POINT_DB);
+        if (failNextWriteForTests) {
+            const code = failNextWriteForTests;
+            failNextWriteForTests = null;
+            fs.writeFileSync(dbPath, 'SQLite format 3\0 cut short');
+            throw code.startsWith('SQLITE_')
+                ? new Database.SqliteError(code === 'SQLITE_FULL' ? 'database or disk is full' : `${code}: refused in tests`, code)
+                : Object.assign(new Error(`${code}: refused in tests`), { code });
+        }
         writeDbSnapshot(dbPath);
         fs.chmodSync(dbPath, 0o600);
         // On a node that keeps photos in a bucket a restore never touches them (routes/backup.ts): nothing to keep here.

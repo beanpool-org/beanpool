@@ -377,15 +377,26 @@ export function settlePasswordAttempt(key: string, ok: boolean, reset = true, no
     for (const w of wake) w();
 }
 
-/** Answer a request the brake refused. */
-export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: number; reason: 'source' | 'node' }): void {
+/**
+ * Answer a request the brake refused. `guessed` names what was being guessed, so the words match it: an owner who
+ * typed the password right and a recovery code wrong must not read it as a password problem.
+ */
+export function refuseBraked(
+    ctx: Koa.Context | any,
+    refusal: { retryAfter: number; reason: 'source' | 'node' },
+    guessed: 'password' | 'recoveryCode' = 'password',
+): void {
     const wait = refusal.retryAfter;
     ctx.status = 429;
     if (typeof ctx.set === 'function') ctx.set('Retry-After', String(wait));
     ctx.body = {
-        error: refusal.reason === 'source'
-            ? `Too many wrong admin passwords from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`
-            : `This node is getting a lot of wrong admin passwords from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network, or sign in with your key.`,
+        error: guessed === 'recoveryCode'
+            ? (refusal.reason === 'source'
+                ? `Too many wrong recovery codes from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi).`
+                : `This node is getting a lot of wrong passwords and recovery codes from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network.`)
+            : refusal.reason === 'source'
+                ? `Too many wrong admin passwords from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`
+                : `This node is getting a lot of wrong admin passwords from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network, or sign in with your key.`,
         retryAfter: wait,
         // Which rule held it: this source's own count, or the node-wide one (design case 18 §9 S2 reads it).
         reason: refusal.reason,

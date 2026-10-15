@@ -1629,7 +1629,6 @@ router.post('/api/local/admin/restore', async (ctx) => {
 
         // Which kind of file is it? gzip magic → a plain backup, refused before a byte of it is read; otherwise it must
         // be a sealed one.
-        let tarPath: string;
         let sealedHeader: SealedEnvelopeHeader;
         if (isGzip(readFileStart(uploadPath, 2))) {
             return refuse(400, {
@@ -1750,7 +1749,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
         const admission = await acquirePasswordAttempt(brakeKey);
         if (!admission.admitted) {
             cleanupAll();
-            refuseBraked(ctx, admission);
+            refuseBraked(ctx, admission, 'recoveryCode');
             return;
         }
         let matches = false;
@@ -1774,9 +1773,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
             throw e;
         }
         fs.rmSync(uploadPath, { force: true });
-        tarPath = openedTarPath;
 
-        ctx.body = await restoreFromTar(tarPath, sealedHeader);
+        ctx.body = await restoreFromTar(openedTarPath, sealedHeader);
 
     } catch (e: any) {
         console.error('Restore failed:', e);

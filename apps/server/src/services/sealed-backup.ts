@@ -90,6 +90,7 @@ import { writeFileAtomic } from '../write-file-atomic.js';
 import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
 import { getNodeRole } from '../config/node-role.js';
+import { db } from '../db/db.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
@@ -759,6 +760,12 @@ export async function sealFileVerified(
     }
 }
 
+/**
+ * Said after every `beanpool` server command a restore's words name (design case 18 S2b, D4): the commands come with S3,
+ * and until then an owner learns that a way back exists and its name. S3 deletes this.
+ */
+export const SHELL_COMING_SUFFIX = ' (coming in the next update)';
+
 // ── Who may have signed it ─────────────────────────────────────────────────────────────────
 
 /**
@@ -788,6 +795,38 @@ export function restorePins(header: SealedEnvelopeHeader): string[] {
         }
     } catch { /* no connectors */ }
     return [...pins];
+}
+
+/**
+ * Has anyone but the owners joined this server's community (design case 18 S2b, D1)? A file no pin here vouches for
+ * restores from Settings only onto a server with nobody but its owners, which is what "install, claim, restore" looks
+ * like at the upload (one acting owner, who may have poked around). People, not data: an owner alone makes ledger rows
+ * and posts in a minute, and the restore point keeps them. Every status counts (a stolen session cannot make members
+ * leave, and a leaver's row stays), and so does a former owner, whose node_roles row is deleted. An error counts as
+ * lived-in.
+ *
+ * Its members half is genesis.ts notABrandNewInstall's, which answers another question (did this data dir ever finish
+ * a first start): every server that did holds libp2p_key, so that one says "not new" for all of them.
+ */
+export function livedInCommunity(): boolean {
+    try {
+        const row = db.prepare(`SELECT COUNT(*) AS n FROM members m
+            WHERE m.public_key NOT IN ('SYSTEM', 'genesis') AND COALESCE(m.is_treasury, 0) = 0
+              AND m.public_key NOT IN (SELECT member_pubkey FROM node_roles WHERE role = 'owner')`).get() as { n: number };
+        return row.n > 0;
+    } catch {
+        return true;
+    }
+}
+
+/** This server's own community id, from its genesis.json, or null when that cannot be read. */
+export function ownCommunityId(): string | null {
+    try {
+        const id = JSON.parse(fs.readFileSync(path.join(dataDir(), 'genesis.json'), 'utf-8'))?.communityId;
+        return typeof id === 'string' && id ? id : null;
+    } catch {
+        return null;
+    }
 }
 
 /** The Ed25519 public key a PeerId embeds, or null when it embeds none. */
@@ -830,7 +869,7 @@ export function signerCheck(header: SealedEnvelopeHeader): SignerCheck {
         body: {
             error: `This backup of your community was locked by another machine, ${header.nodePeerId}, not by this community's server. `
                 + "If this file was locked by this community's previous server, restore it on the server with "
-                + `\`beanpool restore --accept-signer ${header.nodePeerId}\`. Otherwise do not restore it: anyone who has seen one `
+                + `\`beanpool restore --accept-signer ${header.nodePeerId}\`${SHELL_COMING_SUFFIX}. Otherwise do not restore it: anyone who has seen one `
                 + 'of your backup files can make one like it. Nothing was changed.',
             command: `beanpool restore --accept-signer ${header.nodePeerId}`,
             signerNotPinned: true,

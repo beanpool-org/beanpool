@@ -49,7 +49,7 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle,
-    MISSING_MEMBER, readInBucketMember,
+    MISSING_MEMBER, readInBucketMember, livedInCommunity, ownCommunityId, SHELL_COMING_SUFFIX,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 import { checkRestoreDatabase, extractBackupArchive, RESTORE_ARCHIVE_LIMITS, type ArchiveLimits } from '../services/restore-checks.js';
@@ -569,7 +569,7 @@ function restorePointWords(point: RestorePointInfo): Record<string, unknown> {
     return {
         restorePoint: point,
         restorePointNote: `Restore point ${point.name} is kept until at least ${point.keptAtLeastUntil.slice(0, 10)}. `
-            + 'You can roll back to it from Backups & Restore, or with `beanpool restore-point` on the server.',
+            + `You can roll back to it from Backups & Restore, or on the server with \`beanpool restore-point\`${SHELL_COMING_SUFFIX}.`,
         restartNote: 'The server restarts now; sign in again.',
     };
 }
@@ -939,9 +939,12 @@ router.post('/api/local/admin/replication-config/get', async (ctx) => {
 // A standby copies with a replication token only. The main server's admin password is
 // refused: a standby that kept it held it in plain text, so anyone with the standby's disk,
 // or a backup of it, had the main server's admin password.
+// Which server it copies from is a fresh proof's (design case 18 S2b, D2): the copy source feeds the standby's database, and
+// its restore trusts what that database holds.
 router.post('/api/local/admin/replication-config/save', async (ctx) => {
     if (!(await ownerOnly(ctx, COPY_FROM_OWNER_ONLY))) return;
-    const { primaryUrl, primaryPassword, primaryToken } = (ctx as any).requestBody || {};
+    const { primaryUrl, primaryPassword, primaryToken, code } = (ctx as any).requestBody || {};
+    if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'change which server this standby copies from'))) return;
     if (primaryPassword) {
         ctx.status = 400;
         ctx.body = {
@@ -1572,6 +1575,9 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
 //     the owner's session alone was all it took. It restores on the server (`beanpool restore --unlocked`).
 //   - A file signed by a key this server does not pin is refused 409 (sealed-backup.ts signerCheck); nothing lets it
 //     through from here. On the server: `beanpool restore --accept-signer`.
+//   - A file no pin here vouches for (another community's) is refused 409 when people other than the owners have joined
+//     this server's community (S2b): the code or phone that opens it is the uploader's own. On a fresh server (install,
+//     claim, restore) it restores. On the server: `beanpool restore`.
 // The archive then goes through the hostile-archive checks (SRV-9a) before a byte is extracted, and a restore point of
 // this server is kept before anything is replaced (services/restore-points.ts).
 // A sealed backup that carries the take-over bundle also brings back the node key, community key, genesis,
@@ -1632,8 +1638,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
         let sealedHeader: SealedEnvelopeHeader;
         if (isGzip(readFileStart(uploadPath, 2))) {
             return refuse(400, {
-                error: 'Backups that are not locked no longer restore from Settings. Make a recovery code so every backup is '
-                    + 'locked. To bring back an old unlocked file, run `beanpool restore --unlocked FILE` on the server. '
+                error: 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is '
+                    + `locked. An old unlocked file restores on the server itself with \`beanpool restore --unlocked FILE\`${SHELL_COMING_SUFFIX}. `
                     + 'Nothing was changed.',
                 notLocked: true,
                 command: 'beanpool restore --unlocked FILE',
@@ -1651,6 +1657,29 @@ router.post('/api/local/admin/restore', async (ctx) => {
         // Restore-by-code checks the header signature wherever this server holds a pin (966 follow-up #2).
         const signer = signerCheck(sealedHeader);
         if (!signer.ok) return refuse(signer.status, { ...signer.body, backup });
+        // A file no pin here vouches for is the uploader's own work: its code and owner stanzas are whoever sealed it, so
+        // opening it proves nothing about this community (S2b, D1). It replaces a community only where nobody but the
+        // owners has joined; elsewhere the shell's. Before the phone branch, so both ways in are held.
+        if (!signer.pinned && livedInCommunity()) {
+            const thisCommunityId = ownCommunityId();
+            const command = 'beanpool restore FILE';
+            if (thisCommunityId === null || thisCommunityId === sealedHeader.communityId) {
+                // No pin because this server cannot read its own genesis, or (its own community's file) its node key.
+                return refuse(409, {
+                    error: 'This server cannot read its own community record or node key, so Settings cannot tell whose backup '
+                        + `this is. Fix the data folder, or restore on the server with \`${command}\`${SHELL_COMING_SUFFIX}. Nothing was changed.`,
+                    ownRecordUnreadable: true, livedIn: true, command,
+                    fileCommunityId: sealedHeader.communityId, thisCommunityId, backup,
+                });
+            }
+            return refuse(409, {
+                error: 'This backup is from a different community, and people have already joined the community on this server. '
+                    + "To bring the backup's community back, restore the file on a fresh server (install, claim, restore), or on "
+                    + `this server with \`${command}\`${SHELL_COMING_SUFFIX}. Nothing was changed.`,
+                otherCommunity: true, livedIn: true, command,
+                fileCommunityId: sealedHeader.communityId, thisCommunityId, backup,
+            });
+        }
 
         // Open with an owner's phone (§6.2 step 2): keep the file, start a session, answer with the QR. The
         // phone's unlock finishes the restore (services/owner-unlock.ts), through restoreFromTar like the code.
@@ -1749,7 +1778,9 @@ router.post('/api/local/admin/restore', async (ctx) => {
         const admission = await acquirePasswordAttempt(brakeKey);
         if (!admission.admitted) {
             cleanupAll();
-            refuseBraked(ctx, admission, 'recoveryCode');
+            refuseBraked(ctx, admission);
+            // The take-over's words (routes/takeover-envelope.ts): the code was wrong, not the password typed with it.
+            ctx.body = { ...(ctx.body as Record<string, unknown>), error: `Too many wrong recovery codes from your network. Try again in ${admission.retryAfter}s.` };
             return;
         }
         let matches = false;

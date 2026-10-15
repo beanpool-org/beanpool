@@ -115,6 +115,9 @@ const NOT_NEW_INSTALL_FILES = [
  * or sealed restore writes libp2p_key first, then community.key, then genesis.json (BUNDLED_FILES's order; a bundle with
  * no node key is refused), and a take-over keeps its journal while it runs, so one stopped half way is never taken for a
  * new install. A database that can't be read is no proof: the start stops.
+ *
+ * Its members count is also services/sealed-backup.ts livedInCommunity's (whether a restore may replace this community),
+ * which leaves out the owners too.
  */
 export function notABrandNewInstall(dataDir: string): string | null {
     for (const f of NOT_NEW_INSTALL_FILES) {

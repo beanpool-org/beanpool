@@ -85,7 +85,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
-import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, requireFreshProof, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
@@ -118,7 +118,8 @@ function joiningAtOpenDoor(ctx: any): string | null {
 const OWNER_ONLY: readonly AdminRole[] = ['owner'];
 /**
  * A `mirror` peer link is an owner's to add, change or remove (design case 18, A10): a mirror's key is one a standby's
- * restore trusts for the community's bundle. `peer` and `blocked` links stay an admin's.
+ * restore trusts for the community's bundle. `peer` and `blocked` links stay an admin's. Each change to one also asks
+ * the owner's fresh proof (S2b, D2): an owner's session alone could otherwise make its own key a standby's pin.
  */
 const MIRROR_OWNER_ONLY = 'Only an owner of this node can add, change or remove a mirror link';
 function isMirrorLink(address: unknown): boolean {
@@ -509,7 +510,7 @@ router.get('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
+    const { address, trustLevel, callsign, enabled, publicUrl, code } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -522,7 +523,10 @@ router.post('/api/local/connectors', async (ctx) => {
 
     const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
     const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
-    if ((level === 'mirror' || isMirrorLink(address)) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+    if (level === 'mirror' || isMirrorLink(address)) {
+        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'add or change a mirror link'))) return;
+    }
 
     // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
     //
@@ -760,7 +764,7 @@ router.post('/api/local/federation/links/ceiling', async (ctx) => {
 router.post('/api/local/connectors/disconnect', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address } = (ctx as any).requestBody || {};
+    const { address, code } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -770,7 +774,10 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
-    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+    if (isMirrorLink(address)) {
+        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'disconnect a mirror link'))) return;
+    }
 
     await disconnectFromAddress(address);
     ctx.body = { success: true };
@@ -779,7 +786,7 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
 router.post('/api/local/connectors/remove', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address } = (ctx as any).requestBody || {};
+    const { address, code } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -789,7 +796,10 @@ router.post('/api/local/connectors/remove', async (ctx) => {
         ctx.body = { error: 'Address is required' };
         return;
     }
-    if (isMirrorLink(address) && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+    if (isMirrorLink(address)) {
+        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'remove a mirror link'))) return;
+    }
 
     await disconnectFromAddress(address);
     const removed = removeConnector(address);

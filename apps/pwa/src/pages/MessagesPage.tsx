@@ -41,7 +41,7 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
-import { listPhotoUrl, removedRunText } from '@beanpool/core';
+import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -1196,6 +1196,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || 'Event chat';
         if (conv.type === 'group_thread') return conv.name || 'Group';
+        // An enterprise's thread is named after the enterprise (engine/enterprise-thread.ts), as the phone's header is: never
+        // after whichever member's key comes first, which made its header button read "Ben, enterprise page".
+        if ((conv.type as string) === 'enterprise_thread') return conv.name || t('Enterprise chat');
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
         const otherPubkey = conv.participants.find(p => p !== identity.publicKey) || '';
@@ -1495,7 +1498,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto' }}>
                         <button
                             onClick={() => {
                                 setActiveConv(null);
@@ -1504,21 +1507,56 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 setDraft('');
                                 loadConversations();
                             }}
-                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                            aria-label={t('Back to messages')}
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
                         >
                             ←
                         </button>
-                        {renderAvatar(activeConv.peerAvatar, getConversationTitle(activeConv), 32)}
-                        <div>
-                            <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                                {getConversationTitle(activeConv)}
-                            </div>
-                            {activeConv.type === 'group_thread' && (
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    {activeConv.participants.length} members
-                                </div>
-                            )}
-                        </div>
+                        {(() => {
+                            // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an
+                            // enterprise's thread its enterprise page (its id is the enterprise's key, as the phone's
+                            // treasury-detail). A group chat's id IS the group's id (lib/api.ts Conversation), compared
+                            // in lower case (lib/group-hold groupIdKey). A DM header stays as it was.
+                            const ownerTab = activeConv.type === 'group_thread' ? 'group'
+                                : (activeConv.type as string) === 'enterprise_thread' ? 'enterprise' : null;
+                            const ownerId = ownerTab === 'group' ? groupIdKey(activeConv.id) : activeConv.id;
+                            const title = getConversationTitle(activeConv);
+                            const body = (
+                                <>
+                                    {renderAvatar(activeConv.peerAvatar, title, 32)}
+                                    <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
+                                        <span style={{ fontWeight: 600, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {title}
+                                        </span>
+                                        {activeConv.type === 'group_thread' && (
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                {tn(activeConv.participants.length, '{n} member', '{n} members')}
+                                            </span>
+                                        )}
+                                    </span>
+                                </>
+                            );
+                            if (!ownerTab || !onNavigate) return <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>{body}</div>;
+                            return (
+                                <button
+                                    type="button"
+                                    data-testid="chat-owner-header"
+                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
+                                    onClick={() => onNavigate(ownerTab, ownerId)}
+                                    // The visible name first, so speech input matches it (review of #1979, X2).
+                                    aria-label={ownerTab === 'group'
+                                        ? t('{name}, group info', { name: title })
+                                        : t('{name}, enterprise page', { name: title })}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
+                                        minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',
+                                        color: 'inherit', font: 'inherit', cursor: 'pointer', borderRadius: '0.5rem',
+                                    }}
+                                >
+                                    {body}
+                                </button>
+                            );
+                        })()}
                     </div>
                     {activeConv.type === 'group_thread' && (
                         <button
@@ -1527,7 +1565,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             onClick={() => setChatSearch((q) => (q === null ? '' : null))}
                             aria-label={chatSearch === null ? 'Search this chat' : 'Close search'}
                             aria-expanded={chatSearch !== null}
-                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px' }}
+                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
                         >
                             {chatSearch === null ? '🔍' : '✕'}
                         </button>

@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "language": "ml",
+    "name": "Malayalam",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "ഇപ്പോൾ",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} ദിവസം മുമ്പ്",
+    "other": "{n} ദിവസം മുമ്പ്"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} മണിക്കൂർ മുമ്പ്",
+    "other": "{n} മണിക്കൂർ മുമ്പ്"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} മിനിറ്റ് മുമ്പ്",
+    "other": "{n} മിനിറ്റ് മുമ്പ്"
+  }
+}

@@ -1,10 +1,24 @@
 {
   "_meta": {
     "language": "es",
-    "name": "Spanish (neutral Latin American)",
-    "draftedBy": null,
+    "name": "Spanish",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "ahora mismo",
+  "{n} day ago|{n} days ago": {
+    "one": "hace {n} día",
+    "other": "hace {n} días"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "hace {n} hora",
+    "other": "hace {n} horas"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "hace {n} minuto",
+    "other": "hace {n} minutos"
   }
 }

@@ -9,7 +9,7 @@
     "apps/native/app/guide": 7,
     "apps/native/app/guide/section": 3,
     "apps/native/app/post": 158,
-    "apps/native/components": 913,
+    "apps/native/components": 912,
     "apps/native/components/chat": 14,
     "apps/native/components/home": 33,
     "apps/native/components/info-content": 282,
@@ -17,6 +17,6 @@
     "apps/native/utils": 3,
     "apps/pwa/src": 22,
     "apps/pwa/src/components": 865,
-    "apps/pwa/src/pages": 1209
+    "apps/pwa/src/pages": 1008
   }
 }

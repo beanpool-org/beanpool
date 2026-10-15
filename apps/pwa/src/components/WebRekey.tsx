@@ -135,7 +135,8 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
             <div data-testid="web-rekey-words">
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>You’re in</h3>
                 <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe.</p>
-                <ol style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', listStyle: 'none', padding: 0 }}>
+                {/* English in every language: the browser's page translation may not rewrite them (#1947 confirmation N-B). */}
+                <ol data-testid="web-rekey-word-list" translate="no" className="notranslate" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', listStyle: 'none', padding: 0 }}>
                     {(member.mnemonic ?? []).map((w, i) => (
                         <li key={i} style={{ padding: '0.3rem 0.5rem', borderRadius: '8px', border: '1px solid var(--border-primary, #333)', fontFamily: 'monospace' }}>{i + 1}. {w}</li>
                     ))}

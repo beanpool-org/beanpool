@@ -18,6 +18,7 @@ import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
+import { useLanguage } from './lib/useLanguage';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
@@ -87,6 +88,8 @@ interface NodeHealthState {
 }
 
 export function App() {
+    // Every screen reads the new words the moment the language changes (lib/language.ts): App re-renders, and so does all of it.
+    useLanguage();
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     /*

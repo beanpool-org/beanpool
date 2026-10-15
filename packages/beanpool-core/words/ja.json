@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "language": "ja",
+    "name": "Japanese",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "豆",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "just now": "たった今",
+  "{n} day ago|{n} days ago": {
+    "other": "{n}日前"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "other": "{n}時間前"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "other": "{n}分前"
+  },
+  "Roughly where are you?": "だいたいどこにいますか？",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "地域は約10 kmの範囲までしか保存せず、正確な場所は保存しません。ほかのメンバーには、あなたまでの距離が表示されます。あなたが作った投票は、あなたの地域に表示されます。",
+  "Use my location": "現在地を使う",
+  "Type a town or suburb": "町や地区の名前を入力",
+  "Skip for now": "いまはスキップ",
+  "You can change or clear this any time in Settings → Your area.": "設定 → あなたの地域 から、いつでも変更や消去ができます。",
+  "Your area": "あなたの地域",
+  "Not set": "未設定",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "世界のコミュニティでは、近くで提供されているものが表示されます。{km} km以内の近い順に{max}件までです。",
+  "About 10 km around {place}": "{place}の周辺約10 km",
+  "Find your town or suburb": "町や地区を探す",
+  "Town or suburb": "町や地区",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "町の検索はいま使えません。代わりに現在地を使うか、いまはスキップしてください。",
+  "No matches. Try the name of a town or suburb nearby.": "一致する場所がありません。近くの町や地区の名前を試してください。",
+  "Places from OpenStreetMap. What you type here is sent to them.": "場所は OpenStreetMap から取得しています。ここに入力した内容は OpenStreetMap に送信されます。",
+  "Choose {place}": "{place}を選ぶ",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "このコミュニティでは、投稿する前にプロフィール画像が必要です。あとからプロフィールで追加できます。",
+  "A picture is optional here. You can add one later from your profile.": "ここでは画像は任意です。よければ、あとからプロフィールで追加できます。"
+}

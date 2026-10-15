@@ -58,10 +58,10 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
                     <div className="flex items-center gap-2">
-                        <span className="text-xl">🏛️</span>
+                        <span className="text-xl" aria-hidden="true">🏛️</span>
                         <h2 id="commons-modal-title" className="font-bold text-nature-900 dark:text-white text-lg">Community Commons</h2>
                     </div>
-                    <button type="button" onClick={onClose} className="text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg" aria-label="Close information modal">✕</button>
+                    <button type="button" onClick={onClose} className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl transition-colors" aria-label="Close information modal">✕</button>
                 </div>
 
                 {/* Tabs */}
@@ -77,10 +77,10 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             role="tab"
                             aria-selected={activeTab === tab.id}
                             onClick={() => setActiveTab(tab.id)}
+                            className="min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl"
                             style={{
                                 flex: 1,
                                 padding: '8px 4px',
-                                borderRadius: 8,
                                 border: 'none',
                                 cursor: 'pointer',
                                 fontWeight: activeTab === tab.id ? 800 : 600,
@@ -102,7 +102,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16, lineHeight: 1.5 }}>
                                 The Community Commons is a self-sustaining fund that redistributes value back to the community through democratically-voted projects.
                                 <span style={{ display: 'block', marginTop: 10, color: '#10b981', fontWeight: 600 }}>
-                                    🌱 100% Community-Owned: All collected fees remain inside the pool for local grants and solvency—never taken for private profit.
+                                    <span aria-hidden="true">🌱 </span>100% Community-Owned: All collected fees remain inside the pool for local grants and solvency—never taken for private profit.
                                 </span>
                             </p>
 
@@ -132,7 +132,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                             borderRadius: 10,
                                             border: '1px solid rgba(255,255,255,0.05)',
                                         }}>
-                                            <span style={{ fontSize: 24 }}>{step.icon}</span>
+                                            <span style={{ fontSize: 24 }} aria-hidden="true">{step.icon}</span>
                                             <div>
                                                 <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>{step.label}</div>
                                                 <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{step.desc}</div>
@@ -157,13 +157,13 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                     As a zero-sum mutual credit network, pruning inactive accounts requires balancing the ledger:
                                 </p>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                                    <span style={{ fontSize: 18, marginTop: 1 }}>🛡️</span>
+                                    <span style={{ fontSize: 18, marginTop: 1 }} aria-hidden="true">🛡️</span>
                                     <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.4 }}>
                                         <strong style={{ color: '#fff' }}>Bad Debt Payouts:</strong> If an inactive account is pruned with a negative balance, the Commons Pool pays off their outstanding debt to maintain zero-sum equilibrium.
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <span style={{ fontSize: 18, marginTop: 1 }}>✅</span>
+                                    <span style={{ fontSize: 18, marginTop: 1 }} aria-hidden="true">✅</span>
                                     <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.4 }}>
                                         <strong style={{ color: '#fff' }}>Surplus Reclaims:</strong> If an inactive account is pruned with a positive balance, the community reclaims the surplus, transferring it into the Commons Pool to recycle the dormant value.
                                     </div>

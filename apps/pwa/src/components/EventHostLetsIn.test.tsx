@@ -61,6 +61,23 @@ describe('a member, where the host lets people in (320px, 130%)', () => {
         expect(screen.getByTestId('event-open-chat')).toBeInTheDocument();
         expect(screen.queryByTestId('event-let-in-line')).not.toBeInTheDocument();
     });
+    it('online: the join link waits like the note, and the hint says so, never "tap Going" or "not added"', () => {
+        const online = { ...ev, eventOnline: true, lat: undefined, lng: undefined, eventPlaceName: undefined };
+        const before = renderAt320(<EventDetail post={{ ...online, myRsvp: null, myLetIn: null }} identity={identity} onOpenChat={() => {}} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The link to join shows here once the host lets you in.');
+        expect(screen.queryByText(/once you tap Going/)).not.toBeInTheDocument();
+        before.unmount();
+        const waiting = renderAt320(<EventDetail post={{ ...online, myRsvp: 'going', myLetIn: false }} identity={identity} onOpenChat={() => {}} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The link to join shows here once the host lets you in.');
+        expect(screen.queryByText(/has not added a link/)).not.toBeInTheDocument();
+        waiting.unmount();
+        // Let in: the link, or, where the host really has not added one, that.
+        const letIn = renderAt320(<EventDetail post={{ ...online, myRsvp: 'going', myLetIn: true, eventLink: 'https://meet.example/abc' }} identity={identity} onOpenChat={() => {}} />);
+        expect(screen.getByTestId('event-join').getAttribute('href')).toBe('https://meet.example/abc');
+        letIn.unmount();
+        renderAt320(<EventDetail post={{ ...online, myRsvp: 'going', myLetIn: true }} identity={identity} onOpenChat={() => {}} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The host has not added a link to join yet.');
+    });
     it('where the host does not let people in, everything reads as before', () => {
         const { eventHostLetsIn: _f, ...plain } = ev;
         renderAt320(<EventDetail post={{ ...plain, myRsvp: null }} identity={identity} onOpenChat={() => {}} />);

@@ -154,22 +154,60 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
  * The date, the time and the CANCELLED / UPDATED badge on the first line, never cut off and never overlapping:
  * each is a whole piece, and at 320px with large text the next piece moves down a line instead of being
  * truncated, because the time is the one thing on the card nobody can do without.
+ *
+ * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
+ * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
  */
-function EventWhen({ post, className, testId }: { post: MarketplacePost; className: string; testId?: string }) {
+function EventWhen({ post, className, testId, hostLine = false }: { post: MarketplacePost; className: string; testId?: string; hostLine?: boolean }) {
     const parts = eventWhenParts(post);
+    const noteAt = parts?.note ? parts.note.indexOf(' · ') : -1;
     return (
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
-            <span data-testid={testId} aria-label={formatEventWhen(post)} className={`contents ${className}`}>
-                {parts && (
-                    <>
-                        <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
-                        <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
-                    </>
-                )}
+        <>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
+                <span data-testid={testId} aria-label={formatEventWhen(post)} className={`contents ${className}`}>
+                    {parts && (
+                        <>
+                            <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
+                            {/* Online, "your time" is a whole piece of its own: "4:50–6:50 your time" in the page's large text is wider
+                                than a 320px card. */}
+                            {parts.second.endsWith(YOUR_TIME) ? (
+                                <>
+                                    <span className={`whitespace-nowrap ${className}`}>{parts.second.slice(0, -YOUR_TIME.length)}</span>
+                                    <span className={`whitespace-nowrap ${className}`}>{YOUR_TIME.trim()}</span>
+                                </>
+                            ) : (
+                                <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
+                            )}
+                        </>
+                    )}
+                </span>
+                <StateBadge post={post} />
             </span>
-            <StateBadge post={post} />
-        </span>
+            {parts?.note && (
+                // aria-hidden: the line above already reads the whole of it out (formatEventWhen).
+                <span data-testid="event-when-note" aria-hidden="true" className="flex flex-wrap gap-x-1 min-w-0 w-full text-sm font-bold text-nature-700 dark:text-nature-300 leading-snug">
+                    {noteAt > 0 ? (
+                        <>
+                            <span className="whitespace-nowrap">{parts.note.slice(0, noteAt)} ·</span>
+                            <span className="whitespace-nowrap">{parts.note.slice(noteAt + 3)}</span>
+                        </>
+                    ) : parts.note}
+                </span>
+            )}
+            {hostLine && parts?.hostLine && (
+                <span data-testid="event-when-host" className="block w-full min-w-0 break-words text-sm font-semibold text-nature-600 dark:text-nature-400 leading-snug">
+                    {parts.hostLine}
+                </span>
+            )}
+        </>
     );
+}
+
+const YOUR_TIME = ' your time';
+
+/** A join link the page may open: the node takes http(s) only, and this is the second lock. */
+function joinHref(link: string | undefined): string | null {
+    return link && /^https?:\/\//i.test(link) ? link : null;
 }
 
 /**
@@ -207,9 +245,12 @@ interface EventCardProps {
 export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, visitor = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
-    const place = visitor
-        ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
-        : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
+    // An online event has no place and no distance: "Online" stands where they go (DESIGN-event-times §4).
+    const place = p.eventOnline
+        ? t('Online')
+        : visitor
+            ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
+            : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
@@ -230,7 +271,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
             </span>
             {place && (
                 <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                    <span aria-hidden="true">📍 </span>{place}
+                    <span aria-hidden="true">{p.eventOnline ? '🌐 ' : '📍 '}</span>{place}
                 </span>
             )}
             {countsLine(p) && (
@@ -364,12 +405,39 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 <img src={p.photos[0]} alt={p.title} className="w-full max-h-56 object-cover bg-nature-100 dark:bg-nature-900" />
             )}
             <div className="p-4 flex flex-col gap-3">
-                <h2 className="m-0 min-w-0">
-                    <EventWhen post={p} className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
+                <h2 className="m-0 min-w-0 flex flex-col gap-1">
+                    <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>
                 <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
 
-                {(p.eventPlaceName || p.lat != null) && (
+                {p.eventOnline && (
+                    <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">
+                        <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
+                            <span aria-hidden="true">🌐 </span>{t('Online')}
+                        </span>
+                        {joinHref(p.eventLink) ? (
+                            <a
+                                data-testid="event-join"
+                                href={joinHref(p.eventLink)!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                            >
+                                {t('Join')}
+                            </a>
+                        ) : !isHost && open ? (
+                            // Going already: the host has not added one (yet). Never "tap Going" to someone who did. Where the host
+                            // lets people in, the link waits for them like the note (eventPrivateOpenTo), and the hint says so.
+                            <p data-testid="event-join-hint" className="m-0 text-xs text-nature-500 dark:text-nature-400">
+                                {letInLine
+                                    ? t('The link to join shows here once the host lets you in.')
+                                    : p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
+                            </p>
+                        ) : null}
+                    </div>
+                )}
+
+                {!p.eventOnline && (p.eventPlaceName || p.lat != null) && (
                     <div className="flex flex-col items-start gap-1 min-w-0">
                         <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
                             <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}

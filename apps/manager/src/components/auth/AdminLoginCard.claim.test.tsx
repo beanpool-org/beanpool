@@ -102,7 +102,7 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(await screen.findByText('This community has no owner yet.')).toBeInTheDocument();
         expect(screen.getByTestId('claim-card')).toHaveTextContent('On the server, run:');
         expect(screen.getByTestId('claim-command')).toHaveTextContent('docker compose exec beanpool-node beanpool claim');
-        expect(screen.getByTestId('claim-card')).toHaveTextContent('Then on your phone, open BeanPool → Claim a community, or scan this.');
+        expect(screen.getByTestId('claim-card')).toHaveTextContent("Then on your phone, scan this, or open BeanPool → Find a community, type this server's address in the search box and tap Claim ‹name›.");
         // The form is not the page's first thing any more, and no phone sign-in is offered: no one can sign in yet.
         expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
         expect(screen.queryByRole('button', { name: /Sign in with your phone/i })).toBeNull();

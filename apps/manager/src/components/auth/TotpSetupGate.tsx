@@ -154,7 +154,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
                                 value={code}
                                 onChange={(e) => setCode(e.target.value)}
                                 placeholder="123456"
-                                className="w-full bg-nature-950 border border-terra-500/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-nature-500 font-mono tracking-widest text-center focus:outline-none focus:border-terra-400"
+                                className="w-full bg-nature-950 border border-terra-500/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-nature-500 font-mono tracking-widest text-center focus:outline-none focus:border-terra-500"
                             />
                         </div>
                         <button

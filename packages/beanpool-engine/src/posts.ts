@@ -133,6 +133,17 @@ export interface MarketplacePost {
     /** Where the host lets people in: whether the host has let this viewer in; null when they have no RSVP. */
     myLetIn?: boolean | null;
     eventState?: EventState;
+    /**
+     * The clock the host typed, "YYYY-MM-DDTHH:MM", in `eventTz` (a canonical IANA id); the node made the instants above from
+     * them (DESIGN-event-times §1-§2). Absent on an event from before them.
+     */
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    /** An online event: no pin. */
+    eventOnline?: boolean;
+    /** Where to join an online event. Host and `going` only, exactly like `eventPrivateNote`. */
+    eventLink?: string;
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
@@ -198,6 +209,11 @@ export interface PostFilter {
      * `type=event`, so an app built before events never receives one (docs/events-on-the-map.md §2.6).
      */
     excludeEvents?: boolean;
+    /**
+     * Online events only (DESIGN-event-times §9): events with no pin, which a read near a point never meets. Home's "Coming
+     * up" and a member's set on a node that syncs by area add them wherever the reader is (director amendment 2).
+     */
+    eventOnline?: boolean;
     /**
      * The viewer is a moderator (an owner, admin or moderator of this node): posts hidden by reports stay in,
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
@@ -651,6 +667,10 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             eventEndAt: row.event_end_at || undefined,
             eventPlaceName: row.event_place_name || undefined,
             eventState: (row.event_state || 'scheduled') as EventState,
+            eventStartLocal: row.event_start_local || undefined,
+            eventEndLocal: row.event_end_local || undefined,
+            eventTz: row.event_tz || undefined,
+            eventOnline: row.event_online === 1,
             // Only where it is on, so an event whose host doesn't let people in reads byte for byte as before.
             ...(row.event_host_lets_in === 1 ? { eventHostLetsIn: true } : {}),
         } : {}),
@@ -1070,6 +1090,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
+    eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
@@ -1312,6 +1333,12 @@ export function authorsBlockedBy(db: Db, member: string): string[] {
     }
 }
 
+/**
+ * The most online events a member's set holds (getNearbySet, DESIGN-event-times §9): they come first, soonest first, and
+ * the near listings give way to them, so the set stays within the node's `max`.
+ */
+export const NEARBY_SET_ONLINE_EVENTS = 50;
+
 /** What a member's set is worked out from (getNearbySet). */
 export interface NearbySetQuery {
     /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
@@ -1440,6 +1467,33 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
+
+    // Online events (DESIGN-event-times §9, director amendment 2): no pin, so near nobody, and an event is never put at its
+    // author's area (placelessListingArea). Without this an online event on a node that syncs by area reaches only its
+    // host. The soonest NEARBY_SET_ONLINE_EVENTS open ones are in every member's set, under the listing's own rules for
+    // this reader (open, not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever
+    // the member is. The author's half of the board rule is tested on the key, as rankNear's is.
+    let online: typeof ranked = [];
+    const onlineMax = Math.min(NEARBY_SET_ONLINE_EVENTS, Math.max(0, Math.floor(q.max)));
+    if (onlineMax > 0 && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
+        const pickOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
+            const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+                + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+            online = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where} ORDER BY p.event_start_at, p.id LIMIT ?`)
+                .all(...listingParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), onlineMax) as typeof online;
+            return [];
+        };
+        getPostsRankedBy(db, { ...base, eventOnline: true, near: { lat: 0, lng: 0 } }, pickOnline);
+    }
+    // The set never holds more than `max`: a phone keeps at most that many and drops a listing with no place first
+    // (apps/native/utils/posts-nearby.ts nearbyPrune), so a set past it would lose every online event on the phone. The
+    // online events go in first, and the near list gives way to them from its far end.
+    const onlineIds = new Set(online.map(r => r.id));
+    ranked = ranked.filter(r => !onlineIds.has(r.id)).slice(0, Math.max(0, Math.floor(q.max) - online.length));
+    ranked.push(...online);
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.
@@ -1611,6 +1665,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.eventOnline) { where += " AND p.type = 'event' AND p.event_online = 1"; }
     if (filter?.upcomingUntil) {
         // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
         where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"
@@ -1932,9 +1987,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // Where the host lets people in, Going alone opens nothing: the note waits for the host (mayReadEventPrivate).
             const letsIn = r.event_host_lets_in === 1;
             if (letsIn && !viewerIsVisitor) post.myLetIn = mine ? !!mine.let_in_at : null;
-            if (eventPrivateOpenTo(host, viewerIsVisitor ? undefined : mine, letsIn) && r.event_private_note) {
-                post.eventPrivateNote = r.event_private_note;
-            }
+            const privateOpen = eventPrivateOpenTo(host, viewerIsVisitor ? undefined : mine, letsIn);
+            if (privateOpen && r.event_private_note) post.eventPrivateNote = r.event_private_note;
+            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9): where the host lets people
+            // in, it too waits for them.
+            if (privateOpen && r.event_link) post.eventLink = r.event_link;
             if (host) {
                 post.eventRsvps = rsvps.map((v: any) => ({
                     memberPubkey: v.member_pubkey,
@@ -2061,6 +2118,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.
     eventHostLetsIn: 'keep',
+    // The clock, its zone (the label is read from it) and online: what the time means, not who or where exactly.
+    eventStartLocal: 'keep', eventEndLocal: 'keep', eventTz: 'keep', eventOnline: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
     authorPublicKey: () => HIDDEN_AUTHOR,
@@ -2077,7 +2136,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', myLetIn: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -2103,7 +2162,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 
 /**
  * The copy of a post that may go to every socket. `new_post` / `post_updated` broadcasts are not addressed
- * to the viewer the post was read for, so the viewer-only fields come off first: an event's note, RSVP list
+ * to the viewer the post was read for, so the viewer-only fields come off first: an event's note and join link, RSVP list
  * and the reader's own RSVP, and — for every type — `reachPeers`, which `getPosts` gives to the author alone.
  * These posts are read for the author (or the voter, for a poll vote), and the apps now keep what the feed
  * sends them (@beanpool/core `livePostChange`). So the reader's own poll vote (`userVotedOptionId`) comes off too: sent
@@ -2112,7 +2171,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
-    const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, myLetIn: _letIn, ...rest } = shared;
+    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLetIn: _letIn, ...rest } = shared;
     return rest;
 }
 

@@ -32,7 +32,8 @@ import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
-import { createEventFromBody } from './event-post.js';
+import { createEventFromBody, eventTimeAnswer } from './event-post.js';
+import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
@@ -379,7 +380,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
     if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
-        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined)) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
         return;
@@ -459,6 +460,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
         : undefined;
     const wantsEvents = type === 'event' || !!types?.includes('event');
     const excludeEvents = !id && !ids && !wantsEvents;
+    // `online=1`: online events only, wherever they are (DESIGN-event-times §9). They have no place, so a read within a
+    // radius never meets them; an app reading by radius asks for them beside it. Only with events asked for.
+    const eventOnline = wantsEvents && ctx.query.online === '1' ? true : undefined;
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
     // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
@@ -567,7 +571,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // no author's trust profile, photo or trade count per post.
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
-        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
         neighbourhood: neighbourhood || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
@@ -696,8 +700,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
         const underDailyPosts = () => assertMayPostToday(authorPublicKey);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
+        const timeOut: EventTimeOut = {};
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
@@ -722,7 +727,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Synchronize Daily Pulse marketplace gate (< 2 threshold)
         syncPulseMarketplaceGate();
 
-        ctx.body = { success: true, post };
+        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
@@ -817,13 +822,14 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
-        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor);
+        const timeOut: EventTimeOut = {};
+        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };
             return;
         }
-        ctx.body = { success: true, post };
+        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.

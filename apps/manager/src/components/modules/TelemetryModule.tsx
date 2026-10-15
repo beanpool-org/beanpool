@@ -324,7 +324,7 @@ export function TelemetryModule({
             </div>
 
             {/* DEDICATED PEAK ANALYTICS LINK BANNER */}
-            <div className="bg-gradient-to-r from-nature-900 via-terra-950/40 to-nature-900 border border-nature-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+            <div className="bg-gradient-to-r from-nature-900 via-terra-600/10 to-nature-900 border border-nature-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-terra-500/20 border border-terra-500/30 flex items-center justify-center text-xl shrink-0">
                         📈

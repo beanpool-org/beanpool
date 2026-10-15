@@ -191,7 +191,15 @@ export interface HomeMe {
 }
 
 export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
-export interface EventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
+/**
+ * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
+ * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
+ * absent on an event from before them.
+ */
+export interface EventItem {
+    id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
+    startLocal?: string; tz?: string; online?: true;
+}
 
 export interface HomeCards {
     needs?: { items: NeedsItem[] };
@@ -604,10 +612,15 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     const until = c.now + EVENT_DAYS * DAY_MS;
     // The soonest few in START order, in SQL (PostFilter.upcomingUntil): not the most recently updated, which an event
     // posted weeks ahead falls out of behind newer ones, and never every event on the node.
-    const items = postsFor(c, {
-        types: ['event'], status: 'active', upcomingUntil: iso(until), limit: EVENT_POOL,
-        near: near ? { ...near, radiusKm: EVENTS_RADIUS_KM } : undefined, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
-    })
+    const read = { types: ['event'], status: 'active', upcomingUntil: iso(until), limit: EVENT_POOL };
+    const nearby = postsFor(c, {
+        ...read, near: near ? { ...near, radiusKm: EVENTS_RADIUS_KM } : undefined, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
+    });
+    // Online events have no point, so a read within 50 km never meets them: they are in the card wherever the reader is
+    // (DESIGN-event-times §4, director amendment 2), read on their own, the soonest few.
+    const seen = new Set(nearby.map(p => p.id));
+    const online = near ? postsFor(c, { ...read, eventOnline: true }).filter(p => !seen.has(p.id)) : [];
+    const items = [...nearby, ...online]
         .filter(p => p.status === 'active' && p.eventState !== 'cancelled' && !!bounded(p.eventStartAt, ID_CHARS) && !!bounded(p.id, ID_CHARS)
             && Date.parse(p.eventStartAt!) <= until && Date.parse(p.eventEndAt || p.eventStartAt!) > c.now)
         .sort((a, b) => Date.parse(a.eventStartAt!) - Date.parse(b.eventStartAt!))
@@ -618,6 +631,8 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             place: c.member && p.eventPlaceName ? clip(p.eventPlaceName, NAME_CHARS) : null,
             rsvp: c.member ? p.myRsvp ?? null : null,
             ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
+            ...(p.eventStartLocal && p.eventTz ? { startLocal: bounded(p.eventStartLocal, ID_CHARS)!, tz: bounded(p.eventTz, ID_CHARS)! } : {}),
+            ...(p.eventOnline ? { online: true as const } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
 }

@@ -21,6 +21,9 @@
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-callsign-predicates.ts
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createTreasury, findRecoveryCandidates, initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -56,9 +59,10 @@ function seedMember(pk: string, callsign: string, status: string, hasSso = true)
     }
 }
 
+/** The lookups compare callsign_fold (db.ts migrateCallsignFold, #1956), answered from its own partial index. */
 function usesCallsignIndex(sql: string, param: string): boolean {
     const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(param) as { detail: string }[];
-    return plan.some(r => r.detail.includes('idx_members_callsign_unique'));
+    return plan.some(r => r.detail.includes('idx_members_callsign_fold'));
 }
 
 function main() {
@@ -119,16 +123,20 @@ function main() {
     // ── 2. The lookup can still use the partial index ──
     // The correctness assertions above pass on a mismatched predicate too — this is the one
     // that catches the public endpoint quietly degrading to a full scan.
+    // The copy below is the real one: the source of findRecoveryCandidates and isCallsignAvailable is read for it.
+    const membersSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'engine/members.ts'), 'utf8');
+    assert(membersSource.includes("'m.callsign_fold = ?'") && membersSource.includes("WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')"),
+        'the lookup and the name check compare callsign_fold with the status predicate below (engine/members.ts)');
     const LOOKUP_SQL = `
         SELECT public_key FROM members
-        WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned')`;
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')`;
     assert(
         usesCallsignIndex(LOOKUP_SQL, 'ripple'),
-        'that status predicate reaches members through idx_members_callsign_unique, not a table scan',
+        'that status predicate reaches members through idx_members_callsign_fold, not a table scan',
     );
     assert(
         !usesCallsignIndex(
-            `SELECT 1 FROM members WHERE lower(callsign) = ? AND status != 'migrated'`,
+            `SELECT 1 FROM members WHERE callsign_fold = ? AND status != 'migrated'`,
             'ripple',
         ),
         'the OLD predicate provably cannot use that index (which is why it cost a full scan)',

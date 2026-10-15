@@ -14,7 +14,7 @@ import {
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
 import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
-import { PHOTOS_BY_REFERENCE_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
+import { OLDEST_STANDBY_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
@@ -1300,19 +1300,20 @@ router.post('/api/local/admin/sync-copy', async (ctx) => {
     if (!authMode) return;
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
-    // A copy's listing photos go by reference (engine/sync.ts photoRowsByReference, REPLICA_FORMAT 8): a standby older than
-    // that says no format, and its import drops every photo row that carries no bytes, so it would land a copy without its
-    // photos. Refused instead, loudly on both servers: here in the log and the Replication Access panel, there as a pull
-    // that failed with this status, every time, in its report and its owners' notice, until it is updated.
+    // A standby whose importer is older than OLDEST_STANDBY_FORMAT (engine/sync.ts) drops a column this server sends: the
+    // listing photos that go by reference (8), an event's clock, zone, online flag and link (10). It would land the copy, or
+    // the delta (the same route, with ?since=), without them, and say nothing. Refused instead, loudly on both servers:
+    // here in the log and the Replication Access panel, there as a pull that failed with this status, every time, in its
+    // report and its owners' notice, until it is updated.
     const format = Number(ctx.request.header['x-replica-format']);
-    if (!Number.isInteger(format) || format < PHOTOS_BY_REFERENCE_FORMAT) {
-        const why = `this standby is older than its main server: a copy's listing photos travel by reference, which a standby `
-            + `reads from replica format ${PHOTOS_BY_REFERENCE_FORMAT}; update it, and its next pull takes a copy`;
+    if (!Number.isInteger(format) || format < OLDEST_STANDBY_FORMAT) {
+        const why = `this standby is older than its main server: it reads replica format ${format || 'none'}, and copies `
+            + `from this server need ${OLDEST_STANDBY_FORMAT}; update it, and its next pull takes a copy`;
         console.warn(`[Backup] A copy asked for by ${ip ?? 'a standby'} was refused: ${why}.`);
         recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: why });
         ctx.status = 426;
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: PHOTOS_BY_REFERENCE_FORMAT };
+        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: OLDEST_STANDBY_FORMAT };
         return;
     }
 

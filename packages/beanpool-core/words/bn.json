@@ -1,0 +1,46 @@
+{
+  "_meta": {
+    "language": "bn",
+    "name": "Bengali",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
+    "glossary": {
+      "Beans": "শিম",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "just now": "এইমাত্র",
+  "{n} day ago|{n} days ago": {
+    "one": "{n} দিন আগে",
+    "other": "{n} দিন আগে"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "{n} ঘণ্টা আগে",
+    "other": "{n} ঘণ্টা আগে"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "{n} মিনিট আগে",
+    "other": "{n} মিনিট আগে"
+  },
+  "Roughly where are you?": "আপনি মোটামুটি কোথায় আছেন?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "আমরা আপনার এলাকা মোটামুটি 10 কিমি পর্যন্তই রাখি, আপনার ঠিক জায়গা কখনও নয়। অন্য সদস্যরা দেখেন আপনি কতটা দূরে, আর আপনার তৈরি করা পোল আপনার এলাকায় দেখানো হয়।",
+  "Use my location": "আমার লোকেশন ব্যবহার করুন",
+  "Type a town or suburb": "একটি শহর বা এলাকার নাম লিখুন",
+  "Skip for now": "আপাতত বাদ দিন",
+  "You can change or clear this any time in Settings → Your area.": "আপনি যেকোনো সময় সেটিংস → আপনার এলাকা থেকে এটি বদলাতে বা মুছতে পারেন।",
+  "Your area": "আপনার এলাকা",
+  "Not set": "ঠিক করা নেই",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "বিশ্বব্যাপী কমিউনিটি আপনাকে দেখায় আপনার কাছে কী কী পাওয়া যাচ্ছে: {km} কিমির মধ্যে সবচেয়ে কাছের {max}টি তালিকা।",
+  "About 10 km around {place}": "{place}-এর চারপাশে প্রায় 10 কিমি",
+  "Find your town or suburb": "আপনার শহর বা এলাকা খুঁজুন",
+  "Town or suburb": "শহর বা এলাকা",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "শহর খোঁজার সুবিধা এখন কাজ করছে না। এর বদলে আপনার লোকেশন ব্যবহার করুন, অথবা আপাতত বাদ দিন।",
+  "No matches. Try the name of a town or suburb nearby.": "কিছু পাওয়া যায়নি। কাছের কোনো শহর বা এলাকার নাম লিখে দেখুন।",
+  "Places from OpenStreetMap. What you type here is sent to them.": "জায়গাগুলো OpenStreetMap থেকে নেওয়া। আপনি এখানে যা লেখেন তা তাদের কাছে পাঠানো হয়।",
+  "Choose {place}": "{place} বেছে নিন",
+  "This community asks for a profile picture before you post. You can add one later from your profile.": "পোস্ট করার আগে এই কমিউনিটি একটি প্রোফাইল ছবি চায়। আপনি পরে নিজের প্রোফাইল থেকে ছবিটি যোগ করতে পারবেন।",
+  "A picture is optional here. You can add one later from your profile.": "এখানে ছবি দেওয়া ঐচ্ছিক। আপনি পরে নিজের প্রোফাইল থেকে একটি ছবি যোগ করতে পারবেন।"
+}

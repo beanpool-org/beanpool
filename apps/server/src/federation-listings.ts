@@ -192,7 +192,9 @@ export function cacheRemoteListings(
             // a single transaction for the replace-not-merge semantics; a constraint violation in SQLite rolls
             // back the failing STATEMENT, not the transaction, so carrying on here is safe.
             try {
-                registerVisitor(l.authorPublicKey, safeVisitorCallsign(l.authorCallsign, l.authorPublicKey), originNode);
+                // The author's name is kept only while free here, else a free "Visitor-…" (engine/members.ts writeVisitorRow):
+                // a peer's name passed through blindly once threw UNIQUE and lost that peer's whole board.
+                registerVisitor(l.authorPublicKey, l.authorCallsign, originNode);
 
                 // The remote id is namespaced so two peers cannot collide on it, and so a remote listing can
                 // never overwrite a local one that happens to share a UUID.
@@ -261,31 +263,6 @@ export function reachablePeers(): Array<{ peerId: string; callsign: string | nul
         out.push({ peerId, callsign: connector.callsign ?? null });
     }
     return out;
-}
-
-/**
- * A remote author's callsign, but only if this node can actually store it.
- *
- * CALLSIGNS ARE UNIQUE PER NODE (#83, a unique index on `lower(callsign)`), and a remote author's name was
- * only ever unique on THEIR node. Two things collide in practice: a member of ours already called "Sam", and
- * two authors on two different peers who are each "Sam" at home. Passing the name through blindly threw
- * `UNIQUE constraint failed: idx_members_callsign_unique` — and since the round is one transaction, a single
- * unlucky name meant a peer's whole board never cached. Found by the test, not in production, which is the
- * only reason it is a footnote instead of an incident.
- *
- * Returning undefined makes `registerVisitor` generate `Visitor-<first 8 of the key>`, which is unique by
- * construction. A worse name is a much better outcome than a missing board — and the callsign shown here was
- * never authoritative anyway: it is a string a peer sent us.
- */
-function safeVisitorCallsign(raw: unknown, publicKey: string): string | undefined {
-    if (typeof raw !== 'string') return undefined;
-    const callsign = raw.trim();
-    if (!callsign) return undefined;
-    const holder = db.prepare(
-        `SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned')`
-    ).get(callsign) as any;
-    // Free, or already this same author's — anyone else's and we fall back.
-    return !holder || holder.public_key === publicKey ? callsign : undefined;
 }
 
 /**

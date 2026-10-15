@@ -38,7 +38,7 @@ interface Props {
 type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain';
 
 const box: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid var(--border-primary, #333)', background: 'var(--bg-secondary, transparent)', color: 'inherit', fontSize: '1rem', fontFamily: 'monospace', boxSizing: 'border-box' };
-const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
+const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
 const secondary: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit' };
 
 export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: Props) {
@@ -135,7 +135,8 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
             <div data-testid="web-rekey-words">
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>You’re in</h3>
                 <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>These are the 12 words of your NEW key. Your old words no longer work. Write them down and keep them safe.</p>
-                <ol style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', listStyle: 'none', padding: 0 }}>
+                {/* English in every language: the browser's page translation may not rewrite them (#1947 confirmation N-B). */}
+                <ol data-testid="web-rekey-word-list" translate="no" className="notranslate" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', listStyle: 'none', padding: 0 }}>
                     {(member.mnemonic ?? []).map((w, i) => (
                         <li key={i} style={{ padding: '0.3rem 0.5rem', borderRadius: '8px', border: '1px solid var(--border-primary, #333)', fontFamily: 'monospace' }}>{i + 1}. {w}</li>
                     ))}

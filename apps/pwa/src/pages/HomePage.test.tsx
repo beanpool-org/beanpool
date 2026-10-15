@@ -1190,6 +1190,10 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
+        // The landing keeps its first tip in an effect after the draw. Wait for it, as the first test does: on a busy CI
+        // runner the card was found before that effect ran, the click's dismiss was written first and the landing's
+        // record (dismissedAt null) then overwrote it (15 Oct).
+        await waitFor(() => expect(record()).toMatchObject({ current: LOCAL[0].id, dismissedAt: null }));
         fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(record().dismissedAt).toEqual(expect.any(String));
@@ -2329,6 +2333,10 @@ describe('Save this search to Home from the Market: the saved search\'s dialog o
         const node = nodeKeeping(withArea(), v2(['market', 'events']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} saveSearch={EGGS} onSaveSearchTaken={vi.fn()} />);
         const dialog = await screen.findByTestId('home-settings-dialog');
+        // Escape is heard by a listener the dialog adds in an effect, the one that moves focus into its heading
+        // (components/dialog-focus.ts). Wait for that focus: on a busy CI runner the dialog was found before the effect
+        // ran, the key went unheard and the dialog stayed (#1961, 15 Oct).
+        await waitFor(() => expect(within(dialog).getByRole('heading', { level: 2 })).toHaveFocus());
         fireEvent.keyDown(dialog, { key: 'Escape' });
         await pause(100);
         expect(screen.queryByTestId('home-settings-dialog')).toBeNull();

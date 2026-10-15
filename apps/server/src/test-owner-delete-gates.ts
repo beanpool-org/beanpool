@@ -432,6 +432,33 @@ async function main(): Promise<void> {
         if (storedDest()) offbox.updateOffboxSettings({ removeId: storedDest().id });
         removeConnector(mirrorAddr);
 
+        // ── 3-NB1. A request the route refuses on its own terms spends no code (#2002 confirmation review, NB1) ──
+        console.log('\n── 3-NB1. a mistyped request spends no code: the proof is checked last ──');
+        {
+            resetAdminAuthTarpit();
+            https.resetAdminRateLimit();
+            const linksBefore = JSON.stringify(getConnectors());
+            const code = tfa.code();
+            const badUrl = await call('POST', '/api/local/connectors', pwSession(), { address: mirrorAddr, trustLevel: 'mirror', publicUrl: 'not a url', code });
+            assert(badUrl.status === 400 && /publicUrl/.test(badUrl.json?.error || '') && JSON.stringify(getConnectors()) === linksBefore,
+                `3-NB1. a mirror link with a mistyped public URL → 400, connectors.json unchanged (${short(badUrl)})`);
+            const good = await call('POST', '/api/local/connectors', pwSession(), { address: mirrorAddr, trustLevel: 'mirror', code });
+            assert(good.status === 200 && mirrorThere(), `3-NB1. …and the same code still adds it: it was not spent (${short(good)})`);
+            removeConnector(mirrorAddr);
+
+            updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid' } as any);
+            const code2 = tfa.code();
+            const withPassword = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { primaryUrl: 'https://elsewhere.example.invalid', primaryPassword: 'pasted by mistake', code: code2 });
+            assert(withPassword.status === 400 && getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid',
+                `3-NB1. the copy source with the main server's password pasted → 400, unchanged (${short(withPassword)})`);
+            const noUrl = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { code: code2 });
+            assert(noUrl.status === 400 && getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid',
+                `3-NB1. the copy source with no primaryUrl → 400, unchanged (${short(noUrl)})`);
+            const saved = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { primaryUrl: 'https://elsewhere.example.invalid', code: code2 });
+            assert(saved.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://elsewhere.example.invalid',
+                `3-NB1. …and the same code still saves it: it was not spent (${short(saved)})`);
+        }
+
         // ── 3a. A standby: a session alone cannot make its own key a pin, so a file that key signed restores nothing ──
         console.log('\n── 3a. a standby: no mirror link from a session alone, so no file signed by an unpinned key ──');
         {

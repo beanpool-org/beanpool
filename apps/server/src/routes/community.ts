@@ -523,10 +523,8 @@ router.post('/api/local/connectors', async (ctx) => {
 
     const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
     const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
-    if (level === 'mirror' || isMirrorLink(address)) {
-        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
-        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'add or change a mirror link'))) return;
-    }
+    const touchesMirror = level === 'mirror' || isMirrorLink(address);
+    if (touchesMirror && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
 
     // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
     //
@@ -561,6 +559,10 @@ router.post('/api/local/connectors', async (ctx) => {
         }
         normalisedPublicUrl = `${parsed.protocol}//${parsed.host}`;
     }
+
+    // The proof last, after every check of the request itself: a current code is spent when it is checked, so a typo in
+    // the URL must not cost the owner their code and the wait for the next one (#2002 confirmation review, NB1).
+    if (touchesMirror && !(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'add or change a mirror link'))) return;
 
     const isEnabled = enabled !== undefined ? Boolean(enabled) : undefined;
     const connector = addConnector(address, level, callsign, normalisedPublicUrl, isEnabled);

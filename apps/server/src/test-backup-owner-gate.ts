@@ -8,7 +8,8 @@
  *     and clear (the standby's token still works), replication-config/save, a
  *     change to the snapshot settings, a copy through the admin-password path
  *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
- *     list, download). A moderator's session too. An owner's key session and the node password get each of them. No
+ *     list, download). A moderator's session too. An owner's key session and the node password get each of them (the copy
+ *     source asks a fresh proof, design case 18 S2b: a computer's session is sent to the phone, which saves it). No
  *     route deletes a snapshot (design case 18, A3): 404 to an owner, an admin and a moderator, the file still there. The
  *     fleet manager's backup downloads are gone (deleted 2026-10-02): nobody gets a database there, an owner neither.
  *  2. The replication token alone, on every /api/local/admin/* route the node serves: it gets what
@@ -144,7 +145,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig, setReplicationToken, verifyReplicationToken, hasReplicationToken } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { createSnapshot, writeDbSnapshot, getAutoSnapshotConfig } = await import('./services/snapshot-scheduler.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
@@ -329,7 +330,16 @@ async function main(): Promise<void> {
         const cfg = await call('POST', '/api/local/admin/snapshots/config', credsOf(), JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
         assert(cfg.status === 200, `1. a snapshot settings change: ${who} makes it (${cfg.status})`);
         const save = await call('POST', '/api/local/admin/replication-config/save', credsOf(), JSON.stringify({ primaryUrl: '' }));
-        assert(save.status === 200, `1. replication-config/save: ${who} saves it (${save.status})`);
+        if (who === 'the node password') {
+            assert(save.status === 200, `1. replication-config/save: ${who}, with a current code, saves it (${save.status})`);
+        } else {
+            // Which server a standby copies from asks a fresh proof (S2b): the computer's session is sent to the phone.
+            assert(save.status === 403 && save.json?.code === 'phone_required' && !getLocalConfig().backupPrimaryUrl,
+                `1. replication-config/save: ${who} from a computer is sent to the phone, nothing changed (${save.status})`);
+            const ex = consumeHandshakeToken(mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+            const fromPhone = await call('POST', '/api/local/admin/replication-config/save', { 'x-admin-session': ex.sessionId! }, JSON.stringify({ primaryUrl: '' }));
+            assert(fromPhone.status === 200, `1. replication-config/save: the owner's phone, Manage pressed just now, saves it (${fromPhone.status})`);
+        }
         const mode = await call('POST', '/api/local/admin/replication-token/mode', credsOf(), JSON.stringify({ tokenOnly: false }));
         assert(mode.status === 200, `1. replication-token/mode: ${who} sets it (${mode.status})`);
         const gen = await call('POST', '/api/local/admin/replication-token/generate', credsOf());

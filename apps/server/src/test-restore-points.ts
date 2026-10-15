@@ -105,6 +105,9 @@ function onlyLoopback(): void {
     }) as typeof fetch;
 }
 
+/** A real Ed25519 public key, hex: a backup is locked to every owner's key, and random bytes are a point about half the time. */
+const edPublicKeyHex = (): string => crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+
 /** A minimal ustar writer, gzipped. */
 function makeTarGz(entries: { name: string; content: Buffer }[]): Buffer {
     const blocks: Buffer[] = [];
@@ -201,7 +204,7 @@ async function child(): Promise<void> {
         await ensureGenesis();
         const key = await generateKeyPair('Ed25519');
         fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(key));
-        const mallory = crypto.randomBytes(32).toString('hex');
+        const mallory = edPublicKeyHex();
         seedGenesisMember(mallory, 'Mallory');
         const otherCode = await makeRecoveryCode();
         const work = process.env.TEST_WORK!;
@@ -245,7 +248,7 @@ async function child(): Promise<void> {
         const { hash, salt } = hashPassword(MAIN_PW);
         updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
         const tfa = turnOn2faForTests(MAIN_PW);
-        const owner = crypto.randomBytes(32).toString('hex');
+        const owner = edPublicKeyHex();
         seedGenesisMember(owner, 'Vera');
         const join = (callsign: string, treasury = false): string => {
             const pk = crypto.randomBytes(32).toString('hex');

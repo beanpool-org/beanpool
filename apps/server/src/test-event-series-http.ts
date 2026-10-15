@@ -28,7 +28,8 @@
  *     keeps the rule's 02:30, so the next Sunday is 02:30 again.
  * 13. "Only people I let in" (#1953) on a repeating online event: Going and not let in reads no note, no link and no chat,
  *     on this date and after the roll; a let-in carries to the next date (the series' note, link and chat, and Going again
- *     is in at once); the waiting count and "let everyone in" go by this date's Going, as the host's list does.
+ *     is in at once); the waiting count and "let everyone in" go by this date's Going, as the host's list does; "take back
+ *     everyone" reaches every let-in, any date (a let-in from last week not Going this date too), and they then read none.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-event-series-http.ts
  */
@@ -457,6 +458,27 @@ async function main(): Promise<void> {
         `a regular let in once taps Going again and is in at once (got ${JSON.stringify({ my: ann2?.myRsvp, letIn: ann2?.myLetIn })})`);
     assert(wes2?.myRsvp === 'going' && wes2?.myLetIn === false && wes2?.eventPrivateNote === undefined && eventWaitingCount(loadEventForThread(doorId)) === 1,
         `one never let in taps Going again and waits, counted now (got ${JSON.stringify({ my: wes2?.myRsvp, letIn: wes2?.myLetIn })}, ${eventWaitingCount(loadEventForThread(doorId))} waiting)`);
+    // A take-back reaches everyone let in, any date (the #1945 merge review's N2). After the next roll, Lu (let in for
+    // 9 June, not Going for 16 June) is on no list the host sees: "take back everyone" is the host's one way to reach them.
+    rollDueSeries(undefined, Date.parse(row(doorId).event_end_at) + 1000);
+    rsvpEvent(() => {}, doorId, inAnn.pubKeyHex, 'going');
+    const letInAt = (who: Id) => (db.prepare('SELECT let_in_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?')
+        .get(doorId, who.pubKeyHex) as { let_in_at: string | null } | undefined)?.let_in_at ?? null;
+    const heldBefore = (db.prepare('SELECT COUNT(*) AS n FROM event_rsvps WHERE post_id = ? AND let_in_at IS NOT NULL').get(doorId) as { n: number }).n;
+    const lu3 = await readEvent(doorId, lateLu);
+    const ann3 = await readEvent(doorId, inAnn);
+    assert(row(doorId).event_start_local === '2028-06-16T19:00' && heldBefore === 2 && lu3?.myRsvp === null && lu3?.myLastRsvp?.status === 'going'
+        && lu3?.eventPrivateNote === NOTE && lu3?.eventLink === LINK && await chatStatus(lateLu) === 200 && ann3?.myRsvp === 'going' && ann3?.myLetIn === true,
+        `rolled to 16 June: two let in, Lu (last week's, not Going this date) still reads the note, link and chat, Ann is Going and in (got ${row(doorId).event_start_local}, ${heldBefore} let in, Lu ${JSON.stringify({ my: lu3?.myRsvp, note: lu3?.eventPrivateNote ?? null })})`);
+    const takeBack = await letIn({ everyone: true, letIn: false });
+    assert(takeBack.status === 200 && takeBack.body?.changed === 2 && letInAt(lateLu) === null && letInAt(inAnn) === null,
+        `"take back everyone" reaches both: last week's let-in and this date's Going (got ${takeBack.status} changed ${takeBack.body?.changed}, Lu ${letInAt(lateLu)}, Ann ${letInAt(inAnn)})`);
+    for (const [name, who] of [['last week\'s let-in', lateLu], ['this date\'s Going', inAnn]] as const) {
+        const seen = await readEvent(doorId, who);
+        const chat = await chatStatus(who);
+        assert(seen?.eventPrivateNote === undefined && seen?.eventLink === undefined && chat === 403,
+            `then ${name} reads no note, no link, the chat refused (got ${JSON.stringify({ note: seen?.eventPrivateNote ?? null, link: seen?.eventLink ?? null, chat })})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

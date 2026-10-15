@@ -179,6 +179,8 @@ describe('editing an event (events round 2, decision 29)', () => {
             photos: ['https://node/api/marketplace/posts/ev/photos/0?v=1'], hostLetsIn: false,
             // An event from a node before clocks (DESIGN-event-times §2 Edit): in this device's time, no zone, in person.
             online: false, link: '', tz: null,
+            // A one-off (DESIGN-event-times §8): Does not repeat, no last date, no stored rule.
+            repeat: 'never', repeatUntil: '', repeatRule: null,
         });
         expect(localInputToIso(isoToLocalInput(ev.eventStartAt))).toBe(ev.eventStartAt);
     });

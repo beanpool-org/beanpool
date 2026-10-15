@@ -21,11 +21,12 @@ import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventRepeatCaption, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { EventNextDates } from './EventNextDates';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 
@@ -161,6 +162,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
 function EventWhen({ post, className, testId, hostLine = false }: { post: MarketplacePost; className: string; testId?: string; hostLine?: boolean }) {
     const parts = eventWhenParts(post);
     const noteAt = parts?.note ? parts.note.indexOf(' · ') : -1;
+    const repeats = eventRepeatCaption(post);
     return (
         <>
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
@@ -192,6 +194,12 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
                             <span className="whitespace-nowrap">{parts.note.slice(noteAt + 3)}</span>
                         </>
                     ) : parts.note}
+                </span>
+            )}
+            {/* A repeating event: still only its next date above, and the rule under it (DESIGN-event-times §4, §8). */}
+            {repeats && (
+                <span data-testid="event-repeat-caption" className="block w-full min-w-0 break-words text-sm font-bold text-violet-800 dark:text-violet-200 leading-snug">
+                    <span aria-hidden="true">↻ </span>{repeats}
                 </span>
             )}
             {hostLine && parts?.hostLine && (
@@ -333,13 +341,15 @@ interface EventDetailProps {
     /** Opens the event's chat — the host and everyone Going (docs/events-on-the-map.md §3). */
     onOpenChat?: (post: MarketplacePost) => void;
     /**
-     * Host only: open the create form filled from this event with the dates blank (§3, slice 5). This is the
-     * whole of repeats in v1 — there are no repeat rules (§5).
+     * Host only: open the create form filled from this event with the dates blank (§3, slice 5): a new event on
+     * another date. A repeating event's own dates are its rule's (DESIGN-event-times §8; "Change this date only").
      */
     onCopyToNewDate?: (post: MarketplacePost) => void;
+    /** Host only, a repeating event: "Change this date only" cancelled `date`; open the copy form with the moved-from line. */
+    onChangeThisDateOnly?: (post: MarketplacePost, date: string) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
@@ -409,6 +419,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>
                 <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
+                <EventNextDates
+                    post={p}
+                    isHost={isHost && open}
+                    onChanged={(next) => { rsvp.setLivePost(next); onChange?.(next); }}
+                    onChangeThisDateOnly={onChangeThisDateOnly}
+                />
 
                 {p.eventOnline && (
                     <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">

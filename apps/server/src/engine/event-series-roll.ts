@@ -71,6 +71,17 @@ export const SKIP_HOST_ONLY = 'Only the host can cancel or restore a date';
 export const SKIP_LAST_DATE = 'This is the last date: change when the event ends, or cancel the event';
 export const SKIPS_TOO_MANY = `At most ${EVENT_REPEAT_SKIPS_MAX} dates can be cancelled`;
 export const DATE_CANCELLED_PUSH_TITLE = 'Date cancelled';
+export const DATE_BACK_ON_PUSH_TITLE = 'Date back on';
+
+/**
+ * A stored rule as a list's ↻ caption needs it (Home's Coming up, Your events): the pattern's own keys, never the host's
+ * clock or each date's length, which only the event's own read carries.
+ */
+export function publicRepeatPattern(rule: EventRepeatRule | EventRepeatPattern): { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number } {
+    const { freq, interval } = rule;
+    const r = rule as { byDay?: string; byMonthDay?: number; pos?: number };
+    return { freq, interval, ...(r.byDay ? { byDay: r.byDay } : {}), ...(r.byMonthDay != null ? { byMonthDay: r.byMonthDay } : {}), ...(r.pos != null ? { pos: r.pos } : {}) };
+}
 
 /** The three series columns, as written. */
 export interface SeriesCells {
@@ -118,7 +129,8 @@ export function seriesOnCreate(rawRepeat: unknown, rawUntil: unknown, askedStart
 /**
  * An edit's series columns, or undefined when they stay as they are. `askedStart` / `askedEnd` are the clocks this edit
  * set (null when it set none: the rule keeps its own clock and length, which a gap-day's stored clock would not say);
- * `nextStartLocal` / `nextEndLocal` the date the event will have. Cancelled dates no longer on the rule are dropped.
+ * `nextStartLocal` / `nextEndLocal` the date the event will have. Cancelled dates no longer on the rule are dropped, and
+ * those before the new date once they have ended (keptSkips), and the new date itself.
  */
 export function seriesOnEdit(
     existing: MarketplacePost,
@@ -145,9 +157,11 @@ export function seriesOnEdit(
     const rule = ruleOf(pattern, time, minutes, firstDate);
     const until = untilSent ? cleanUntil(rawUntil, firstDate) : cleanUntil(existing.eventRepeatUntil ?? null, firstDate);
     const walk = { rule, anchorDate: firstDate, tz: next.tz, until };
-    // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back.
+    // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back. So is the
+    // date the edit puts the event on: Starts moved onto a cancelled date takes it back, so the row's own date never reads
+    // cancelled while its card, Your events and reminders say it is on (the confirmation 2 of #1993, B1).
     const final = lastSeriesDate(walk);
-    const skips = (existing.eventRepeatSkips ?? []).filter(d => d >= firstDate && d !== final && isSeriesDate(walk, d));
+    const skips = keptSkips(existing.eventRepeatSkips ?? [], firstDate, rule, next.tz, Date.now()).filter(d => d !== firstDate && d !== final && isSeriesDate(walk, d));
     return { repeat: repeatRuleCell(rule), until, skips: repeatSkipsCell(skips) };
 }
 
@@ -231,14 +245,29 @@ function broadcastSeries(broadcast: BroadcastFn | undefined, row: SeriesRow): vo
     }
 }
 
-/** Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips left. */
-function writeCurrentDate(row: SeriesRow, occ: ReturnType<typeof occurrenceOn> & object, skips: string[], nowIso: string): boolean {
+/**
+ * The cancelled dates a series keeps: those from `fromDate` on, and an earlier one until it has ended. A cancelled date the
+ * row has passed (its own cancelling, or the roll jumping it) can still be brought back until then, which moves the series
+ * back to it, so a later cancelled date between must still read cancelled (the confirmation of #1993, B1). The minute roll
+ * lets each go once it has ended.
+ */
+function keptSkips(skips: string[], fromDate: string, rule: EventRepeatRule, tz: string, nowMs: number): string[] {
+    return skips.filter(d => {
+        if (d >= fromDate) return true;
+        const occ = occurrenceOn(rule, d, tz);
+        return !!occ && Date.parse(occ.endAt) > nowMs;
+    });
+}
+
+/** Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips kept. */
+function writeCurrentDate(row: SeriesRow, rule: EventRepeatRule, occ: ReturnType<typeof occurrenceOn> & object, skips: string[], nowIso: string): boolean {
+    const kept = keptSkips(skips, occ.date, rule, row.event_tz!, Date.parse(nowIso));
     return db.prepare(`
         UPDATE posts
            SET event_start_at = ?, event_end_at = ?, event_start_local = ?, event_end_local = ?,
                event_state = 'scheduled', event_repeat_skips = ?, updated_at = ?
          WHERE id = ? AND event_start_at = ?`)
-        .run(occ.startAt, occ.endAt, occ.startLocal, occ.endLocal, repeatSkipsCell(skips.filter(d => d >= occ.date)), nowIso, row.id, row.event_start_at)
+        .run(occ.startAt, occ.endAt, occ.startLocal, occ.endLocal, repeatSkipsCell(kept), nowIso, row.id, row.event_start_at)
         .changes > 0;
 }
 
@@ -271,7 +300,7 @@ export function rollDueSeries(broadcast?: BroadcastFn, nowMs = Date.now()): numb
             const currentDate = row.event_start_local!.slice(0, 10);
             const next = nextOccurrence({ rule, anchorDate: currentDate, tz: row.event_tz!, skips, until: row.event_repeat_until }, nowIso);
             const changed = next
-                ? writeCurrentDate(row, next, skips, nowIso)
+                ? writeCurrentDate(row, rule, next, skips, nowIso)
                 // No date left: it ends as a one-off does, its last date its `until`, out of the roll for good.
                 : db.prepare(`UPDATE posts SET event_repeat_until = ?, updated_at = ? WHERE id = ? AND event_start_at = ?`)
                     .run(currentDate, nowIso, row.id, row.event_start_at).changes > 0;
@@ -291,8 +320,9 @@ export function rollDueSeries(broadcast?: BroadcastFn, nowMs = Date.now()): numb
 /**
  * "Cancel this date" and its undo (§8): `POST /api/events/:id/skip { date }` and `DELETE` the same, the host only. A
  * cancelled current date rolls the series on at once, and Going for it are told "Fri 16 Oct is cancelled. Next: Fri 23
- * Oct". Restoring a date the roll had passed for its cancelling moves the series back to it. The final date can't be
- * cancelled (SKIP_LAST_DATE): the host moves the end, or cancels the event, which has its own way.
+ * Oct". Restoring a date the roll had passed for its cancelling, while it hasn't ended, moves the series back to it, and
+ * Going for it are told "Fri 16 Oct is back on" (the deciding review of #1993, N2): their RSVPs kept that date. The final
+ * date can't be cancelled (SKIP_LAST_DATE): the host moves the end, or cancels the event, which has its own way.
  */
 export function setSeriesDateSkipped(
     broadcast: BroadcastFn | undefined,
@@ -320,33 +350,42 @@ export function setSeriesDateSkipped(
     // be restored up to the end (the deciding review of #1945, finding 7). Moving the end is an edit of `until`.
     if (skipped && day === lastSeriesDate(walk)) throw new Error(SKIP_LAST_DATE);
 
-    const skips = readRepeatSkips(row.event_repeat_skips).filter(d => d >= currentDate || d === day);
+    // Every cancelled date that can still be brought back is kept, an earlier one too (keptSkips): `day` itself hasn't ended.
+    const skips = keptSkips(readRepeatSkips(row.event_repeat_skips), currentDate, rule, tz, nowMs);
+    // A date the series has passed is one it passed for its cancelling, which can come back. One an edit moved it past was
+    // never cancelled: it can be neither cancelled nor "brought back", which moved the series back to it with no notice
+    // and left Going on the later date (the confirmation 2 of #1993, NB1).
+    if (day < currentDate && !skips.includes(day)) throw new Error(REPEAT_ERRORS.skipDate);
     const nextSkips = skipped ? [...new Set([...skips, day])].sort() : skips.filter(d => d !== day);
     if (nextSkips.length > EVENT_REPEAT_SKIPS_MAX) throw new Error(SKIPS_TOO_MANY);
 
-    let notify: { going: string[]; body: string } | null = null;
+    let notify: { going: string[]; title: string; body: string } | null = null;
+    const name = (row.title || 'An event').trim() || 'An event';
     db.transaction(() => {
         if (skipped && day === currentDate) {
             const next = nextOccurrence({ ...walk, skips: nextSkips }, nowIso);
             if (!next) throw new Error(SKIP_LAST_DATE);
             const going = eventGoingPubkeys(postId);
-            writeCurrentDate(row, next, nextSkips, nowIso);
-            notify = { going, body: `${(row.title || 'An event').trim() || 'An event'}: ${localDateWords(day)} is cancelled. Next: ${localDateWords(next.date)}.` };
+            writeCurrentDate(row, rule, next, nextSkips, nowIso);
+            notify = { going, title: DATE_CANCELLED_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is cancelled. Next: ${localDateWords(next.date)}.` };
         } else if (!skipped && day < currentDate) {
-            // A date the roll passed because it was cancelled, restored: it is the next date again.
-            writeCurrentDate(row, occ, nextSkips, nowIso);
+            // A date the roll passed because it was cancelled, restored: it is the next date again, and those whose RSVP is
+            // for it (stamped with it, so Going again now) hear it is on, as they heard it was off.
+            if (writeCurrentDate(row, rule, occ, nextSkips, nowIso)) {
+                notify = { going: eventGoingPubkeys(postId), title: DATE_BACK_ON_PUSH_TITLE, body: `${name}: ${localDateWords(day)} is back on.` };
+            }
         } else {
             db.prepare(`UPDATE posts SET event_repeat_skips = ?, updated_at = ? WHERE id = ?`).run(repeatSkipsCell(nextSkips), nowIso, postId);
         }
     })();
     bumpPostsVersion();
     broadcastSeries(broadcast, row);
-    const sent = notify as { going: string[]; body: string } | null;
+    const sent = notify as { going: string[]; title: string; body: string } | null;
     if (push && sent && sent.going.length > 0) {
         try {
-            push(sent.going, actorPubkey, DATE_CANCELLED_PUSH_TITLE, sent.body, { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
+            push(sent.going, actorPubkey, sent.title, sent.body, { screen: 'post', postId }, EVENT_PUSH_CATEGORY, 'event.update');
         } catch (e) {
-            console.warn('[Events] date-cancelled notice not sent:', e);
+            console.warn('[Events] date notice not sent:', e);
         }
     }
     const post = getPosts(db, { id: postId, viewerPubkey: actorPubkey, includeAllScopes: true })[0]!;

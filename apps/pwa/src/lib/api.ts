@@ -5,7 +5,7 @@
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -1125,6 +1125,17 @@ export interface MarketplacePost {
     eventOnline?: boolean;
     /** Where to join an online event. Sent only to the host and to members marked Going, like the note. */
     eventLink?: string;
+    /**
+     * A repeating event (DESIGN-event-times §8): its rule (the pattern plus the host's clock and each date's length), its
+     * last date ("YYYY-MM-DD"; absent = until cancelled) and its cancelled dates. The times above are its NEXT date.
+     */
+    eventRepeat?: RepeatPattern & { time?: string; minutes?: number };
+    eventRepeatUntil?: string;
+    eventRepeatSkips?: string[];
+    /** Read by id: the series' next dates, the current one first, cancelled ones marked. */
+    eventNextDates?: EventNextDate[];
+    /** The viewer's RSVP for one of the series' earlier dates ("You went on 16 Oct"). */
+    myLastRsvp?: { status: EventRsvpStatus; occurrenceAt: string };
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
@@ -1235,6 +1246,9 @@ export async function createMarketplacePost(post: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    /** How it repeats (the pattern only; the node adds the clock and length) and its last date; null = a one-off. */
+    eventRepeat?: RepeatPattern | null;
+    eventRepeatUntil?: string | null;
 }): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
     return request('POST', '/api/marketplace/posts', post);
 }
@@ -1540,9 +1554,23 @@ export async function updateMarketplacePost(
         eventTz?: string;
         eventOnline?: boolean;
         eventLink?: string;
+        eventRepeat?: RepeatPattern | null;
+        eventRepeatUntil?: string | null;
     },
 ): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
     return request('POST', '/api/marketplace/posts/update', { id, authorPublicKey, ...updates });
+}
+
+/** One of a repeating event's next dates, as the node sends them on a by-id read. */
+/** One of a series' next dates. `endAt` from a node with confirmation 2 of #1993: a cancelled date the event has passed is listed until then. */
+export interface EventNextDate { date: string; startLocal: string; startAt: string; endAt?: string; cancelled: boolean }
+
+/**
+ * "Cancel this date" of a repeating event (`cancelled` true), or "Bring it back" (false): the host only, signed
+ * (DESIGN-event-times §8). Cancelling the current date moves the event to its next date at once; the answer is the event.
+ */
+export async function setEventDateCancelled(postId: string, date: string, cancelled: boolean): Promise<{ success: boolean; post: MarketplacePost; skips: string[] }> {
+    return request(cancelled ? 'POST' : 'DELETE', `/api/events/${encodeURIComponent(postId)}/skip`, { date });
 }
 
 // ===================== EVENT TIME ZONES (DESIGN-event-times §2) =====================
@@ -2270,6 +2298,8 @@ export async function treasuryPostEvent(treasury: string, body: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    eventRepeat?: RepeatPattern | null;
+    eventRepeatUntil?: string | null;
     audienceScope?: 'public' | 'group';
     targetGroupId?: string;
 }): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {

@@ -681,6 +681,8 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         };
 
         afterEach(() => { vi.unstubAllGlobals(); });
+        // The address matches only: the form's Repeats select has options of its own (DESIGN-event-times §8).
+        const addressMatches = (panel: HTMLElement) => Array.from(panel.querySelectorAll<HTMLElement>('[role=listbox][aria-label="Address matches"] [role=option]'));
 
         it('picking a match places the pin there, fills an empty Place name, and Approximate still rounds it', async () => {
             const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
@@ -690,7 +692,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             expect((globalThis.fetch as any).mock.calls.map((c: unknown[]) => c[0])).toContain(
                 'https://nominatim.openstreetmap.org/search?format=json&q=bindarrabi%20hall&limit=5');
 
-            const options = within(panel).getAllByRole('option');
+            const options = addressMatches(panel);
             expect(options).toHaveLength(2);
             expect(options[1]).toHaveTextContent('12 Main Street');
             await act(async () => { fireEvent.click(options[0]); });
@@ -714,7 +716,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const panel = await openEventForm(async () => ({ ok: true, json: async () => nominatim }));
             fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The old bowls club' } });
             await search(panel, '12 main street');
-            await act(async () => { fireEvent.click(within(panel).getAllByRole('option')[1]); });
+            await act(async () => { fireEvent.click(addressMatches(panel)[1]); });
             expect((within(panel).getByLabelText('Place name') as HTMLInputElement).value).toBe('The old bowls club');
             expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
         });
@@ -723,7 +725,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const panel = await openEventForm(async () => { throw new TypeError('Failed to fetch'); });
             await search(panel, 'bindarrabi hall');
             expect(within(panel).getByText(/Address search isn.t working right now/)).toBeInTheDocument();
-            expect(within(panel).queryAllByRole('option')).toHaveLength(0);
+            expect(addressMatches(panel)).toHaveLength(0);
 
             await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
             const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
@@ -881,6 +883,39 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         const classes = view.getByTestId('map-new-post-panel').className.split(/\s+/);
         expect(classes).toContain('max-h-[60vh]');
         expect(classes).toContain('supports-[height:100dvh]:max-h-[min(60vh,calc(100dvh_-_var(--bottom-nav-offset)_-_4.5rem))]');
+    });
+
+    // The confirmation of #1993, NB1: a rule the form can't make (every 3 months) is named in a plain line and kept; a title
+    // edit saves only the title, and the red ask comes only once the date moves.
+    it('a series the form cannot make reads as kept, not as an error, and a title edit keeps it', async () => {
+        const quarterly = {
+            ...hosted, id: 'ev-q', eventStartLocal: '2030-09-28T09:00', eventEndLocal: '2030-09-28T12:00', eventTz: 'Australia/Sydney',
+            eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 28, time: '09:00', minutes: 180 },
+        };
+        setup(quarterly);
+        const view = await openEdit(quarterly);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        expect(within(panel).getByTestId('event-repeat-kept')).toHaveTextContent('Every 3 months on the 28th — kept unless you choose another');
+        expect(within(panel).queryByTestId('event-repeat-problem')).toBeNull();
+        expect(within(panel).getByTestId('event-repeat-until')).toBeTruthy();
+        fireEvent.change(within(panel).getByLabelText(/What's happening/i), { target: { value: 'Working bee and lunch' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-q', 'user-alice-pubkey', { title: 'Working bee and lunch' });
+    });
+
+    it('a series the form cannot make asks for a choice, in red, once its date moves', async () => {
+        const quarterly = {
+            ...hosted, id: 'ev-q', eventStartLocal: '2030-09-28T09:00', eventEndLocal: '2030-09-28T12:00', eventTz: 'Australia/Sydney',
+            eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 28, time: '09:00', minutes: 180 },
+        };
+        setup(quarterly);
+        const view = await openEdit(quarterly);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        fireEvent.change(within(panel).getByLabelText(/^Starts/i), { target: { value: '2030-10-05T09:00' } });
+        expect(within(panel).queryByTestId('event-repeat-kept')).toBeNull();
+        expect(within(panel).getByTestId('event-repeat-problem')).toHaveTextContent('Choose how the event repeats from the list');
     });
 
     it('a title edit saves only the title, with the host\'s own key — silent, so no UPDATED warning', async () => {

@@ -52,7 +52,8 @@ import { EVENT_ACCENT } from './EventCard';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
-import { looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult } from '@beanpool/core';
+import { deviceLocalClock, looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
+import { EventRepeatFields } from './EventRepeatFields';
 import { onlineEventsOn } from '../utils/node-profile';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
@@ -103,6 +104,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [title, setTitle] = useState('');
     const [start, setStart] = useState<Date | null>(null);
     const [end, setEnd] = useState<Date | null>(null);
+    // How it repeats, a choice computed from the first date, and its last date ('' = until cancelled; DESIGN-event-times §8).
+    const [repeat, setRepeat] = useState<RepeatChoiceKey>('never');
+    const [repeatUntil, setRepeatUntil] = useState('');
     const [placeName, setPlaceName] = useState('');
     const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
     const [approximate, setApproximate] = useState(false);
@@ -234,6 +238,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setOnline(false); setLink(''); setZone(NO_ZONE); setZonePicker({ open: false, query: '', error: null });
         zoneTicket.current++;
         setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
+        setRepeat('never'); setRepeatUntil('');
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -250,6 +255,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
+        // A copy is a one-off until its host says otherwise.
+        setRepeat('never'); setRepeatUntil('');
         setApproximate(false); exactPin.current = null;
         setAudienceGroupId(prefill.groupId);
         const copied: HostOption | null = prefill.enterprisePubkey
@@ -283,6 +290,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setDescription(v.description);
         setStart(v.start);
         setEnd(v.end);
+        setRepeat(v.repeat ?? 'never');
+        setRepeatUntil(v.repeatUntil ?? '');
         setPlaceName(v.placeName);
         setNote(v.privateNote);
         setHostLetsIn(v.hostLetsIn);
@@ -459,7 +468,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const editValues = (): EventEditValues => ({
         title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
         online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
-        hostLetsIn,
+        hostLetsIn, repeat, repeatUntil,
     });
     const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
 
@@ -488,7 +497,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onSaved?.(saved);
             onClose();
         } catch (err: any) {
-            Alert.alert('Event not saved', err?.message || 'The node did not accept the change.');
+            // A repeating event's refusals are the node's own sentences, in the member's language (DESIGN-event-times §8).
+            Alert.alert('Event not saved', repeatRefusalText(err?.message) || 'The node did not accept the change.');
         } finally {
             setSubmitting(false);
         }
@@ -519,7 +529,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
             online, link, tz, tzOffsetMinutes,
-            hostLetsIn,
+            hostLetsIn, repeat, repeatUntil,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -540,7 +550,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            Alert.alert('Event not created', err?.message || 'The node did not accept the event.');
+            Alert.alert('Event not created', repeatRefusalText(err?.message) || 'The node did not accept the event.');
         } finally {
             setSubmitting(false);
         }
@@ -712,6 +722,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 })()}
                             </View>
                         )}
+
+                        <EventRepeatFields start={start} end={end} repeat={repeat} until={repeatUntil} onRepeatChange={setRepeat} onUntilChange={setRepeatUntil}
+                            kept={editOf?.values.start ? { firstDate: deviceLocalClock(editOf.values.start).slice(0, 10), rule: editOf.values.repeatRule ?? null } : null} />
 
                         {onlineOffered && (
                             <View style={styles.field}>

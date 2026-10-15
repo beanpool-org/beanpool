@@ -281,6 +281,23 @@ export function upcoming(walk: SeriesWalk, n: number, afterIso: string): (EventO
 }
 
 /**
+ * The series' cancelled dates before the anchor that have not ended at `afterIso`, in order, the latest `n`: a date the
+ * series passed for its cancelling (or the roll jumped) that the host can still bring back, which moves the series back to
+ * it (apps/server setSeriesDateSkipped). "Next dates" lists them first, marked, so Bring it back is there on every read and
+ * device, not only on the screen that cancelled it (the confirmation 2 of #1993, NB2). Gone once each has ended.
+ */
+export function restorableBefore(walk: SeriesWalk, n: number, afterIso: string): (EventOccurrence & { skipped: true })[] {
+    const after = Date.parse(afterIso);
+    const out: (EventOccurrence & { skipped: true })[] = [];
+    for (const date of [...new Set(walk.skips ?? [])].sort()) {
+        if (date >= walk.anchorDate || !isSeriesDate(walk, date)) continue;
+        const occ = occurrenceOn(walk.rule, date, walk.tz);
+        if (occ && Date.parse(occ.endAt) > after) out.push({ ...occ, skipped: true });
+    }
+    return n > 0 ? out.slice(-n) : [];
+}
+
+/**
  * Whether `date` is one of the series' dates: on the pattern, in phase with the anchor (before it or after), not past
  * `until`. A date before the anchor counts, so a host can un-cancel a date the roll has already moved past.
  */

@@ -22,17 +22,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
+import { t, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { EventNextDates } from './EventNextDates';
 import { ReportReasonBox } from './ReportReasonBox';
 import { reportedAlertBody } from '../utils/reportReasons';
 import {
-    formatEventWhenFor, eventWhen, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventRepeatCaption, withMovedFromLine, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
@@ -271,7 +272,19 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
                 {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
                 {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
+                {!!eventRepeatCaption(p) && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {eventRepeatCaption(p)}</Text>}
                 <Text style={styles.title}>{p.title}</Text>
+                {!!view && (
+                    <EventNextDates
+                        post={view}
+                        isHost={isHost && !closed}
+                        onChanged={(next) => setView(next)}
+                        onChangeThisDateOnly={(next) => {
+                            const copy = buildEventCopy(next, identity?.publicKey);
+                            setCopyDraft({ ...copy, description: withMovedFromLine(seriesMovedFromLine(next.eventRepeat), copy.description) });
+                        }}
+                    />
+                )}
                 {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
                 <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
@@ -493,6 +506,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         when: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         whenCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
         timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 6 },
+        repeats: { fontSize: 14, fontWeight: '700', color: colors.accent.primary, marginBottom: 6 },
         joinLink: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 12 },
         title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },

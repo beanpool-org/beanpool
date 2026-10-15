@@ -9,6 +9,7 @@ import {
     readRepeatRule,
     readRepeatSkips,
     REPEAT_ERRORS,
+    restorableBefore,
     upcoming,
     type EventRepeatRule,
 } from '../event-series.js';
@@ -78,6 +79,20 @@ describe('nextOccurrence — DESIGN-event-times §8, §10 slice 4', () => {
         expect(nextOccurrence(allGone, '2026-10-16T12:00:00.000Z')).toBeNull();
         const marked = upcoming(walk, 3, '2026-10-01T00:00:00.000Z');
         expect(marked.map(d => [d.date, d.skipped])).toEqual([['2026-10-16', false], ['2026-10-23', true], ['2026-10-30', false]]);
+    });
+
+    it('a cancelled date the series has passed is listed until it ends, then not (confirmation 2 of #1993, NB2)', () => {
+        // Current date 23 Oct; 16 Oct was cancelled (20:50–22:50 Sydney, 09:50–11:50Z), 9 Oct long ended, 30 Oct is later, 17 Oct
+        // is a Saturday (no date of the series).
+        const walk = { rule: weeklyFri, anchorDate: '2026-10-23', tz: SYD, skips: ['2026-10-30', '2026-10-09', '2026-10-17', '2026-10-16'] };
+        const before = restorableBefore(walk, 6, '2026-10-16T11:49:00.000Z');
+        expect(before.map(d => [d.date, d.skipped, d.endAt])).toEqual([['2026-10-16', true, '2026-10-16T11:50:00.000Z']]);
+        expect(restorableBefore(walk, 6, '2026-10-16T11:50:00.000Z')).toEqual([]);
+        // Off-phase for every 2 weeks from 23 Oct: 16 Oct is no date of that series, so it is not listed either.
+        expect(restorableBefore({ ...walk, rule: { ...weeklyFri, interval: 2 } }, 6, '2026-10-16T00:00:00.000Z')).toEqual([]);
+        // At most n, the latest (nearest the current date) kept.
+        const many = { ...walk, anchorDate: '2026-11-13', skips: ['2026-10-16', '2026-10-23', '2026-10-30', '2026-11-06'] };
+        expect(restorableBefore(many, 2, '2026-10-01T00:00:00.000Z').map(d => d.date)).toEqual(['2026-10-30', '2026-11-06']);
     });
 
     it('a node that was off for weeks lands on the first date that has not ended, not on a stale one', () => {

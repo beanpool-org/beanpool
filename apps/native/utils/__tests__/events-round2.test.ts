@@ -64,6 +64,8 @@ describe('the edit form and what Save sends (A2, decision 29)', () => {
             photo: 'https://node/api/marketplace/posts/ev-1/photos/0?v=1', hostLetsIn: false,
             // A node from before event times: no zone, so the pickers hold the device's clock, as before.
             online: false, link: '', tz: null, tzOffsetMinutes: null,
+            // A one-off (DESIGN-event-times §8): Does not repeat, no last date, no stored rule.
+            repeat: 'never', repeatUntil: '', repeatRule: null,
         });
         // The cached row (snake_case, photos as JSON) fills it the same way, less the note it never holds.
         const cached = eventEditValues({

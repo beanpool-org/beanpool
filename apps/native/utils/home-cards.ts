@@ -25,7 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord,
+    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { eventHomeWhen } from './events';
@@ -123,6 +123,8 @@ export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */
     startLocal?: string | null; tz?: string | null; online?: boolean | null;
+    /** A repeating event's pattern and last date (DESIGN-event-times §8), for the ↻ caption; absent on a one-off. */
+    repeat?: RepeatPattern | null; repeatUntil?: string | null;
 }
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }
 
@@ -1101,7 +1103,9 @@ export function eventDay(iso: string): string {
  */
 export function eventLine(e: HomeEventItem): string {
     const place = e.online ? t('Online') : e.place;
-    return `${eventHomeWhen(e)} · ${e.title}${place ? `, ${place}` : ''}`;
+    // A repeating event's rule rides after its next date: "Fri 16 Oct · ↻ Every Friday · Working bee, The hall".
+    const repeats = repeatCaption(e.repeat ?? null, e.repeatUntil ?? null);
+    return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${e.title}${place ? `, ${place}` : ''}`;
 }
 
 export const RSVP_WORDS: Record<'going' | 'interested', string> = { going: 'Going', interested: 'Interested' };

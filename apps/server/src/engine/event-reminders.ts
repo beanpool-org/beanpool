@@ -43,12 +43,12 @@
  * An edit that moves the date moves its marks with it (moveOccurrence), so a time change sends nothing twice.
  */
 
-import { postPhotoUrl } from '@beanpool/engine';
+import { postPhotoUrl, readRepeatRule } from '@beanpool/engine';
 import { eventPlaceTimeText, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 import { postInSightSql } from './post-sight.js';
-import { RSVP_IS_CURRENT } from './event-series-roll.js';
+import { RSVP_IS_CURRENT, publicRepeatPattern } from './event-series-roll.js';
 
 /** The five offsets the picker offers, in minutes before the start. Nothing else is storable. */
 export const EVENT_REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
@@ -204,13 +204,19 @@ export interface MyEvent {
     endLocal?: string;
     tz?: string;
     online?: true;
+    /**
+     * A repeating event's pattern and its last date, for the ↻ caption on the card (the deciding review of #1993, N5), as
+     * Home's line has them: the pattern only, never the host's clock or each date's length. Absent on a one-off.
+     */
+    repeat?: ReturnType<typeof publicRepeatPattern>;
+    repeatUntil?: string;
 }
 
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
         SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
-               p.event_start_local, p.event_end_local, p.event_tz, p.event_online,
+               p.event_start_local, p.event_end_local, p.event_tz, p.event_online, p.event_repeat, p.event_repeat_until,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -233,7 +239,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
          ORDER BY p.event_start_at ASC
     `).all(memberPubkey, nowIso, memberPubkey) as any[];
 
-    return rows.map(r => ({
+    return rows.map(r => {
+        const rule = readRepeatRule(r.event_repeat);
+        return {
         postId: r.id,
         title: r.title,
         startAt: r.event_start_at,
@@ -247,7 +255,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
         ...(r.event_start_local && r.event_tz ? { startLocal: r.event_start_local, tz: r.event_tz } : {}),
         ...(r.event_end_local && r.event_tz ? { endLocal: r.event_end_local } : {}),
         ...(r.event_online === 1 ? { online: true as const } : {}),
-    }));
+        ...(rule ? { repeat: publicRepeatPattern(rule), ...(r.event_repeat_until ? { repeatUntil: r.event_repeat_until as string } : {}) } : {}),
+        };
+    });
 }
 
 // ===================== DELIVERY =====================

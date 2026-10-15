@@ -42,6 +42,8 @@ export function myEventAsPost(row: MyEvent): MarketplacePost {
         ...(row.startLocal && row.tz ? { eventStartLocal: row.startLocal, eventTz: row.tz } : {}),
         ...(row.endLocal && row.tz ? { eventEndLocal: row.endLocal } : {}),
         ...(row.online ? { eventOnline: true } : {}),
+        // How it repeats, so a host's own series reads as one here too (the deciding review of #1993, N5).
+        ...(row.repeat ? { eventRepeat: row.repeat, ...(row.repeatUntil ? { eventRepeatUntil: row.repeatUntil } : {}) } : {}),
         ...(row.photo ? { photos: [row.photo] } : {}),
         eventState: 'scheduled',
         myRsvp: row.rsvp,

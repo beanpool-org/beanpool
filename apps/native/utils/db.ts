@@ -354,6 +354,8 @@ async function _doInitDB() {
             event_end_local TEXT,
             event_tz TEXT,
             event_online INTEGER,
+            event_repeat TEXT,
+            event_repeat_until TEXT,
             carried_callsign TEXT,
             carried_avatar TEXT
         );
@@ -683,6 +685,9 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_local TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_tz TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_online INTEGER;`); } catch (e) {}
+        // A repeating event's pattern and last date (DESIGN-event-times §8), for the cached card's ↻ caption.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -2031,8 +2036,8 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
@@ -2114,11 +2119,11 @@ export async function persistEventView(post: any, memberPubkey: string) {
     if (!post || post.type !== 'event' || !post.id) return;
     try {
         const database = await waitForInit();
-        const [, , , state, going, interested, startLocal, endLocal, tz, online] = eventCacheColumns(post);
+        const [, , , state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil] = eventCacheColumns(post);
         await database.runAsync(
-            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
+            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, event_repeat = ?, event_repeat_until = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
             [post.eventStartAt ?? post.event_start_at ?? null, post.eventEndAt ?? post.event_end_at ?? null,
-             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online,
+             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil,
              post.status ?? null, post.updatedAt ?? post.updated_at ?? null, post.id]
         );
         if (post.myRsvp === 'going' || post.myRsvp === 'interested') {
@@ -2290,6 +2295,43 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
         throw new Error(message);
     }
     return await res.json();
+}
+
+/**
+ * "Cancel this date" of a repeating event (`cancelled` true, POST), or "Bring it back" (false, DELETE): the host only,
+ * signed (DESIGN-event-times §8). Cancelling the current date moves the event to its next date at once; the answer is the
+ * event as the host reads it by id, with its next dates. A refusal throws the node's own sentence.
+ */
+export async function setEventDateCancelled(postId: string, date: string, cancelled: boolean): Promise<{ success: boolean; post: any; skips: string[] }> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are currently offline.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const method = cancelled ? 'POST' : 'DELETE';
+    const path = `/api/events/${encodeURIComponent(postId)}/skip`;
+    const bodyString = JSON.stringify({ date });
+    const headers = await buildSignedHeaders(method, `${anchorUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...headers },
+        body: bodyString,
+    });
+    if (res.status === 404) {
+        const txt = await res.text().catch(() => '');
+        let message = '';
+        try { message = JSON.parse(txt)?.error || ''; } catch { /* not the node's JSON */ }
+        if (!message) throw new RouteMissingError(path);
+        throw new Error(message);
+    }
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let message = 'Could not change that date';
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        throw new Error(message);
+    }
+    const out = await res.json();
+    if (out?.post) await persistEventView(out.post, identity.publicKey).catch(() => {});
+    return out;
 }
 
 /**
@@ -3357,7 +3399,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
         [
             p.id ?? null,
             p.type ?? null,

@@ -15,7 +15,7 @@ import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/Members
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { YourEvents } from '../components/YourEvents';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { DealsPreviewDialog } from '../components/ShowcasePreviews';
@@ -1048,6 +1048,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
                         onOpenChat={(p) => onNavigate?.('messages', p.id)}
                         onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
+                        onChangeThisDateOnly={(p) => onNavigate?.('map-copy-event', movedCopyContext(p.id))}
                         onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
                         onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}

@@ -780,6 +780,17 @@ async function main(): Promise<void> {
         assert(items[0]?.id === cafe.id && items.length === 3 && starts.every((t: number, i: number) => i === 0 || starts[i - 1] <= t),
             `D: with 101+ upcoming, the soonest first, the repair cafe posted 20 days earlier included (${items.map((i: any) => i.title.slice(13, 50)).join(' | ')})`);
 
+        // D2 (event times slice 5): a repeating event's line carries its pattern and last date for the ↻ caption, never the
+        // host's clock or each date's length; a one-off carries neither.
+        db.prepare('UPDATE posts SET event_repeat = ?, event_repeat_until = ? WHERE id = ?')
+            .run('{"freq":"weekly","interval":1,"byDay":"FR","time":"18:00","minutes":120}', '2027-12-17', cafe.id);
+        const rep = await get('/api/home?cards=events', alice);
+        const repItems = rep.body?.cards?.events?.items ?? [];
+        const series = repItems.find((i: any) => i.id === cafe.id);
+        assert(JSON.stringify(series?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && series?.repeatUntil === '2027-12-17'
+            && repItems.filter((i: any) => i.id !== cafe.id).every((i: any) => i.repeat === undefined && i.repeatUntil === undefined),
+            `D2: the series' line says how it repeats, the one-offs nothing (${JSON.stringify(series)})`);
+
         // E: whether the first Offer is done is in `me`, whether or not the steps card is shown.
         const erin = member('HomeErin', { joinedAt: new Date(Date.now() - 40 * DAY).toISOString() });
         setPref(erin, 'home.layout', { v: 1, order: [], hidden: ['steps'], dismissed: {}, updatedAt: new Date().toISOString() });

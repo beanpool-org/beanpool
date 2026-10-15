@@ -79,7 +79,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
     const viewerIsMember = isMember !== false && identity !== null;
     const myKey = identity?.publicKey ?? '';
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
-    const sample = useMemo(() => (preview ? sampleLedger() : null), [preview]);
+    // Built each render (it is small), so its words follow a change of language.
+    const sample = preview ? sampleLedger() : null;
     // App learns guest status after mount, so a member-style refresh can still be in flight when this
     // flips to false; its failure must not put an error in front of the guest.
     const viewerIsMemberRef = useRef(viewerIsMember);

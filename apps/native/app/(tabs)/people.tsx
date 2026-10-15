@@ -39,7 +39,7 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
-import { lookUpMembers, nearPath, searchPath } from '../../utils/members-lookup';
+import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
 
@@ -686,10 +686,16 @@ export default function PeopleScreen() {
     // Listen for blocklist changes to auto-refresh member list
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => {
+            // On demand the list is the node's answer: a block takes the person out of it here, never asks the node
+            // again (each search and "near you" counts against the member's day where anyone can join).
+            if (membersOnDemand) {
+                getBlockedUsers().then(blocked => setMembers(prev => prev.filter(m => !blocked.includes(m.public_key)))).catch(() => {});
+                return;
+            }
             loadMembers(searchQuery, sortOption);
         });
         return () => sub.remove();
-    }, [searchQuery, sortOption]);
+    }, [searchQuery, sortOption, membersOnDemand]);
 
     // Debounced Search Effect
     useEffect(() => {
@@ -739,7 +745,8 @@ export default function PeopleScreen() {
             if (membersOnDemand) {
                 if (await loadMembersOnDemand(query)) return;
                 // One letter asked the node nothing: the cards held, but not "Connect" to a phone that is online.
-                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : 'held');
+                const spent = lookUpSpentKind();
+                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : spent === 'near' ? 'spentNear' : spent === 'search' ? 'spent' : 'held');
             } else {
                 setListNote(null);
             }

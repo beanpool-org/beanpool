@@ -99,7 +99,7 @@ export const repaired = (env, name, what) => ({
 // row says it every time. Hostnames and counts only.
 export const outsideRegistrar = (env, name, what) => ({
     category: 'names', priority: PRIORITY.high, tag: TAG.warning, name, title: `Claim refused: ${name}`, once: `outside-registrar:${name}`,
-    body: `Claim refused: ${host(env, name)} already has ${what} the registrar did not make. Nothing was changed. If it is ours, reserve the name (blocked).`,
+    body: `Claim refused: ${host(env, name)} already has ${what} the registrar did not make. Nothing was changed. If it is ours, add a name_policy row (blocked) by migration.`,
 });
 
 // A4 and A7: conditions the sweep evaluates every tick. `detail` is said while it is active, `clear` once it ends.

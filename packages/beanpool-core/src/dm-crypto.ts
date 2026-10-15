@@ -426,14 +426,21 @@ function decodeReadable(ciphertext: string): string | null {
  * the node's own notices are passed over; every other line gets a view, by id. An encrypted line is opened bound to its
  * named sender and id, and its "after" is checked against the lines shown before it. The key is derived once per
  * conversation id. `keys` null (the other person isn't known yet): no encrypted line opens.
+ *
+ * `formerPeers`: keys this phone sealed the thread to before the one in `keys` (the member continued past a key change).
+ * A line that doesn't open under `keys` is tried under each: one of mine as sealed to it, and one the row names as the
+ * current peer's or as that former key's, as that key's own (a re-key moves the old lines' author to the new key). Never a
+ * line the row names as anyone else's. The key is derived once per key and conversation id.
  */
-export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | null, conversationId: string): Map<string, DmLineView> {
+export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | null, conversationId: string, formerPeers: readonly string[] = []): Map<string, DmLineView> {
     const views = new Map<string, DmLineView>();
     let myPubHex = '';
     if (keys) {
         try { myPubHex = dmPublicKeyOf(keys.myEdPrivHex); } catch { myPubHex = ''; }
     }
     const cache: KeyCache = new Map();
+    const formerCaches = new Map<string, KeyCache>();
+    const former = keys ? formerPeers.filter((k) => !!k && k !== keys.peerEdPubHex) : [];
     const position = new Map<string, number>();
     lines.forEach((l, i) => { if (!position.has(l.id)) position.set(l.id, i); });
 
@@ -462,6 +469,17 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
                 opened = openWith({ ciphertext: l.ciphertext, nonce: l.nonce as string }, keys,
                     { conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }, [3, 2], myPubHex, cache);
             } catch { opened = null; }
+            for (const peer of opened ? [] : former) {
+                const mine = l.authorPubkey === myPubHex;
+                if (!mine && l.authorPubkey !== keys.peerEdPubHex && l.authorPubkey !== peer) continue;
+                let c = formerCaches.get(peer);
+                if (!c) formerCaches.set(peer, c = new Map());
+                try {
+                    opened = openWith({ ciphertext: l.ciphertext, nonce: l.nonce as string }, { myEdPrivHex: keys.myEdPrivHex, peerEdPubHex: peer },
+                        { conversationId, senderPubHex: mine ? myPubHex : peer, messageId: l.id, part: 'body', metadata: l.metadata }, [3, 2], myPubHex, c);
+                    break;
+                } catch { opened = null; }
+            }
         }
         if (!opened) {
             views.set(l.id, { text: null, format: null, after: null, mark: 'not-verified' });

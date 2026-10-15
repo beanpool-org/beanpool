@@ -154,7 +154,7 @@ export type UnlockResult = 'ok' | 'no-device-lock' | 'failed';
  * the app too late to be one given for this request (LocalAuth.timeDoorPrompt: a pass the phone held while the app was
  * away). What it opens is outside the app (a browser, another computer, a server), where App Lock covers nothing.
  */
-export async function requireDeviceUnlock(communityName: string): Promise<UnlockResult> {
+export async function requireDeviceUnlock(communityName: string, promptMessage?: string): Promise<UnlockResult> {
     let level: LocalAuthentication.SecurityLevel;
     try {
         level = await LocalAuthentication.getEnrolledLevelAsync();
@@ -165,7 +165,7 @@ export async function requireDeviceUnlock(communityName: string): Promise<Unlock
     try {
         const passCounts = timeDoorPrompt();
         const res = await phoneLockPrompt({
-            promptMessage: `Confirm it's you to manage ${communityName}`,
+            promptMessage: promptMessage ?? `Confirm it's you to manage ${communityName}`,
             cancelLabel: 'Cancel',
             disableDeviceFallback: false,
         });

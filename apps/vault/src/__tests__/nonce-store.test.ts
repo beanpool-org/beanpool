@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NonceStore, SIGNATURE_FRESHNESS_MS } from '../api/auth.js';
+import { NONCE_STORE_MAX, NonceStore, SIGNATURE_FRESHNESS_MS } from '../api/auth.js';
 
 /**
  * The vault's nonce store: forgetting spent nonces costs O(log n) a request, not a walk of every nonce held (load model
@@ -35,6 +35,17 @@ const spent = (s: NonceStore, nonce: string, now: number): boolean => {
 };
 
 describe('the vault\'s nonce store', () => {
+    it('is full at its cap with nonces still in their window, and not once they have passed (case 16 NOTE)', () => {
+        const store = new NonceStore();
+        const now = 1_000_000_000_000;
+        for (let i = 0; i < 5; i++) expect(store.consume(`n${i}`, now, now)).toBe(true);
+        expect(store.full(now, 5)).toBe(true);
+        expect(store.full(now, 6)).toBe(false);
+        expect(store.full(now + SIGNATURE_FRESHNESS_MS + 2, 5)).toBe(false);
+        expect(store.size).toBe(0);
+        expect(NONCE_STORE_MAX).toBe(100_000);
+    });
+
     it('does O(N) work for N spends while holding 60,000 fresh nonces, and forgets none of them', () => {
         const store = new NonceStore();
         const map = new CountingMap();

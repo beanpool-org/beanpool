@@ -17,7 +17,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, signedRequest, signedGet } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
     reminderOffsetLabel,
@@ -68,6 +68,10 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
+import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
+import { ChatMemoryCard } from '../../components/ChatMemoryCard';
+import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
+import { communityName } from '../../utils/community-name';
 import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
@@ -297,7 +301,7 @@ export default function SettingsScreen() {
         // ─── Archetype Card ───
     }));
 
-    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection'>('menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection' | 'chatMemory'>('menu');
 
     // --- Protection state ---
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
@@ -1699,6 +1703,17 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    {/* The member's reset of one community's chat memory (DM pins, design §3.4 amendment 6 §3): the way out the
+                        "couldn't read who this community's chats are with" sentence names. */}
+                    <Pressable style={styles.menuBtn} onPress={() => setMode('chatMemory')} accessibilityRole="button">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>{t(CHAT_MEMORY_COPY.row)}</Text>
+                            <Text style={styles.menuSub}>{t(CHAT_MEMORY_COPY.rowSub)}</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
 
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse')} accessibilityRole="button" accessibilityLabel="The Pulse community feed">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗞️</Text></View>
@@ -2054,6 +2069,11 @@ export default function SettingsScreen() {
                         This is how you get back into your account if you lose your phone.
                     </Text>
 
+                    {/* The code a chat partner checks when their phone says the key behind your name changed. Worked out
+                        from this phone's key alone, so it never waits behind the sign-in answer below (#1873 review, finding 9):
+                        an in-person check works with a slow network or none. */}
+                    <MyKeyCodeCard publicKey={identity?.publicKey} />
+
                     {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
                         12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
@@ -2406,6 +2426,19 @@ export default function SettingsScreen() {
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
                         <Text style={styles.backBtnText}>← Back</Text>
+                    </Pressable>
+                </View>
+            )}
+
+            {mode === 'chatMemory' && (
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>{t(CHAT_MEMORY_COPY.title)}</Text>
+                    <ChatMemoryCard
+                        communities={savedNodes.map((n) => ({ url: n.url, name: communityName({ url: n.url, alias: n.alias }) }))}
+                        onReset={resetDmChatMemory}
+                    />
+                    <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
+                        <Text style={styles.backBtnText}>{t('← Back')}</Text>
                     </Pressable>
                 </View>
             )}

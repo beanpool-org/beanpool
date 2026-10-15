@@ -219,16 +219,29 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
  * cache.ts `everyCopy`). Removing the list can throw, and a caller decides what that means (Replace: ReplaceNotSaved). A
  * cached copy that can't be removed is logged.
  */
-export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage): Promise<void> {
-    await removeEveryCommunityCopy(communities);
+export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage, opts: LeaveOptions = {}): Promise<void> {
+    await removeEveryCommunityCopy(communities, opts.keepDmMemoryOf);
     await storage.removeItem(SAVED_NODES_STORE_KEY);
 }
 
-/** Every community copy on this phone goes, listed or not (community-cache.ts `everyCopy`); one that can't is logged. */
-async function removeEveryCommunityCopy(communities: readonly string[]): Promise<void> {
+/**
+ * `keepDmMemoryOf`: Sign Out's leaving key, while it is still on the phone. The DM pins kept for it (dm-peer-pins.ts, kept
+ * when the account leaves, pick 2) first take what this phone held in each community file never seeded since the update
+ * (§3.4 amendment 6 §5), so signing in again doesn't meet those DMs as first sight. Replace and the purge leave it out.
+ */
+interface LeaveOptions { keepDmMemoryOf?: string | null }
+
+/**
+ * Every community copy on this phone goes, listed or not (community-cache.ts `everyCopy`); one that can't is logged.
+ * `keepDmMemoryOf`: {@link LeaveOptions}; a seed that throws is logged and never holds up the leave.
+ */
+async function removeEveryCommunityCopy(communities: readonly string[], keepDmMemoryOf?: string | null): Promise<void> {
     try {
         const { removeCommunityCaches } = await import('./community-cache');
-        await removeCommunityCaches(communities, { everyCopy: true });
+        const beforeRemoving = keepDmMemoryOf
+            ? async (copies: string[]) => { const { seedDmPinsBeforeLeaving } = await import('./db'); await seedDmPinsBeforeLeaving(keepDmMemoryOf, copies); }
+            : undefined;
+        await removeCommunityCaches(communities, { everyCopy: true, beforeRemoving });
     } catch (e) {
         console.warn('[Account] The cached community copies could not all be removed', e);
     }
@@ -239,9 +252,9 @@ async function removeEveryCommunityCopy(communities: readonly string[]): Promise
  * then its communities and their cached copies go. `account` is the leaving account, whose key is still on the phone;
  * with none, only the communities go. The caller then wipes the key and the rest of the account's app storage.
  */
-export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
+export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage, opts: LeaveOptions = {}): Promise<void> {
     await stopPushAlerts(account, storage);
-    await forgetCommunities(await communitiesOnThisPhone(storage), storage);
+    await forgetCommunities(await communitiesOnThisPhone(storage), storage, opts);
 }
 
 /**
@@ -269,14 +282,25 @@ export async function namesCopiesBeforeSignOut(
  * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
  * app storage go (identity.ts `wipeIdentity`).
  */
-export async function signOutOfThisPhone(account: LeavingAccount | null, opts: { namesCopiesSaved?: boolean } = {}): Promise<void> {
+export async function signOutOfThisPhone(account: LeavingAccount | null, opts: { namesCopiesSaved?: boolean; purge?: boolean } = {}): Promise<void> {
     // The names list's pins go with the wipe: their locked copies are saved on the node first (best effort; Settings asks
     // before this and passes `namesCopiesSaved`, so the copies aren't saved twice).
     if (!opts.namesCopiesSaved) await namesCopiesBeforeSignOut(account);
-    const { clearDB } = await import('./db');
+    const db = await import('./db');
+    // Sign Out keeps the account's DM pins (pick 2): the open community's are seeded before its tables go, and every other
+    // file's before it is deleted (§3.4 amendment 6 §5). Never a reason Sign Out stops. The purge (`purge`) skips it.
+    const keepDmMemoryOf = !opts.purge ? account?.publicKey ?? null : null;
+    if (keepDmMemoryOf) {
+        try {
+            await db.seedDmPinsHere(keepDmMemoryOf);
+        } catch (e) {
+            console.warn('[Account] The open community\'s DM memory could not be kept', e);
+        }
+    }
+    const { clearDB } = db;
     // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
     await clearDB({ identityLeaves: true });
-    await releaseAccountFromPhone(account);
+    await releaseAccountFromPhone(account, AsyncStorage, { keepDmMemoryOf });
     await wipeIdentity();
     // No community and no account on the phone now: the update screen's block, if one was up, comes down
     // (utils/community-switch.ts).

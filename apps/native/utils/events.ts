@@ -896,8 +896,11 @@ export function eventPinCard(post: any): EventPinCard {
     // reader's, it carries the place's zone, so it is never read as the reader's own.
     const parts = eventWhen(post);
     const zone = parts?.note ? parts.note.slice(0, parts.note.indexOf(' · ')) : null;
+    // A repeating event's ↻ caption follows the time (DESIGN-event-times §8): last, so a line that runs out of room at 320 dp
+    // and 1.3× text cuts the caption, never the time.
+    const repeats = eventRepeatCaption(post);
     return {
-        when: `${formatEventWhenFor(post)}${zone ? ` · ${zone}` : ''}`,
+        when: `${formatEventWhenFor(post)}${zone ? ` · ${zone}` : ''}${repeats ? ` · ↻ ${repeats}` : ''}`,
         badge: eventBadge(post),
         title: post?.title || 'Event',
         place: place || null,

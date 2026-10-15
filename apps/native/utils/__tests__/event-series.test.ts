@@ -4,7 +4,7 @@
  * as the web app (both read @beanpool/core event-repeat).
  */
 import { describe, expect, it } from 'vitest';
-import { buildEventDraft, buildEventEditPatch, eventCacheColumns, eventEditValues, eventRepeatCaption, eventRepeatOf, withMovedFromLine } from '../events';
+import { buildEventDraft, buildEventEditPatch, eventCacheColumns, eventEditValues, eventPinCard, eventRepeatCaption, eventRepeatOf, withMovedFromLine } from '../events';
 import { eventLine } from '../home-cards';
 
 const NOW = new Date(2026, 9, 1, 9, 0);
@@ -78,6 +78,12 @@ describe('the cache, the caption and Home', () => {
         const line = eventLine({ id: 'e', title: 'Friday dinner', startsAt: '2026-10-16T09:50:00.000Z', endsAt: null, place: 'The hall', rsvp: null,
             startLocal: '2026-10-16T20:50', tz: 'Australia/Sydney', repeat: { freq: 'weekly', interval: 1, byDay: 'FR' } });
         expect(line).toContain(' · ↻ Every Friday · Friday dinner, The hall');
+    });
+    it('the map popup (map.tsx is protected): the caption after the time on its one line; a one-off has none', () => {
+        const ev = { type: 'event', title: 'Friday dinner', eventStartAt: '2026-10-16T09:50:00.000Z', eventEndAt: '2026-10-16T11:50:00.000Z',
+            event_repeat: '{"freq":"weekly","interval":1,"byDay":"FR"}' };
+        expect(eventPinCard(ev).when.endsWith(' · ↻ Every Friday')).toBe(true);
+        expect(eventPinCard({ ...ev, event_repeat: null }).when).not.toContain('↻');
     });
     it('Change this date only: the moved-from line on top of the copy', () => {
         expect(withMovedFromLine('Moved from the regular Friday', 'Bring a plate')).toBe('Moved from the regular Friday\n\nBring a plate');

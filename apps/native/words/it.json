@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Nessun account di nome {name} può essere ripristinato qui con un accesso. Controlla di aver scritto il tuo nome completo, oppure usa le tue 12 parole.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "L'account ripristinato non è {name}, quindi su questo telefono non è stato salvato nulla. Riprova, oppure usa le tue 12 parole.",
   "Vault Copy Not Removed": "Copia della cassaforte non rimossa",
-  "Convenor: {name}": "Coordina: {name}"
+  "Convenor: {name}": "Coordina: {name}",
+  "Some invitations were not sent": "Alcuni inviti non sono stati inviati",
+  "{sent} sent. Not sent: {names}. {reason}": "Inviati: {sent}. Non inviati a: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Inviati: {sent}. Non inviati a: {names}. Riprova quando hai segnale."
 }

@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "名为 {name} 的账户在这里无法通过登录恢复。请检查是否输入了完整的名称，或使用你的 12 个助记词。",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "恢复的账户不是 {name}，所以这部手机上没有保存任何内容。请再试一次，或使用你的 12 个助记词。",
   "Vault Copy Not Removed": "保险库副本未移除",
-  "Convenor: {name}": "协调人：{name}"
+  "Convenor: {name}": "协调人：{name}",
+  "Some invitations were not sent": "部分邀请未能发送",
+  "{sent} sent. Not sent: {names}. {reason}": "已发送：{sent}。未发送给：{names}。{reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "已发送：{sent}。未发送给：{names}。有信号后请再试一次。"
 }

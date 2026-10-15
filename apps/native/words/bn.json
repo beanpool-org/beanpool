@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} নামের কোনো অ্যাকাউন্ট এখানে সাইন-ইন দিয়ে ফিরিয়ে আনা যাবে না। আপনি পুরো নাম লিখেছেন কি না দেখে নিন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "যে অ্যাকাউন্টটি ফিরে এসেছে সেটি {name} নয়, তাই এই ফোনে কিছুই সংরক্ষণ করা হয়নি। আবার চেষ্টা করুন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
   "Vault Copy Not Removed": "ভল্টের কপি সরানো হয়নি",
-  "Convenor: {name}": "সমন্বয়কারী: {name}"
+  "Convenor: {name}": "সমন্বয়কারী: {name}",
+  "Some invitations were not sent": "কিছু আমন্ত্রণ পাঠানো যায়নি",
+  "{sent} sent. Not sent: {names}. {reason}": "পাঠানো আমন্ত্রণ: {sent}। এঁদের পাঠানো যায়নি: {names}। {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "পাঠানো আমন্ত্রণ: {sent}। এঁদের পাঠানো যায়নি: {names}। সিগন্যাল পেলে আবার চেষ্টা করুন।"
 }

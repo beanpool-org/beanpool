@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Аккаунт с именем {name} здесь нельзя восстановить через вход. Проверьте, что вы ввели имя полностью, или используйте свои 12 слов.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Восстановленный аккаунт — не {name}, поэтому на этом телефоне ничего не сохранено. Попробуйте ещё раз или используйте свои 12 слов.",
   "Vault Copy Not Removed": "Копия в хранилище не удалена",
-  "Convenor: {name}": "Координирует: {name}"
+  "Convenor: {name}": "Координирует: {name}",
+  "Some invitations were not sent": "Некоторые приглашения не отправлены",
+  "{sent} sent. Not sent: {names}. {reason}": "Отправлено: {sent}. Не отправлено: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Отправлено: {sent}. Не отправлено: {names}. Попробуйте ещё раз, когда появится связь."
 }

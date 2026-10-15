@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} என்ற பெயரில் உள்ள எந்தக் கணக்கையும் இங்கே உள்நுழைவு மூலம் மீட்டெடுக்க முடியாது. உங்கள் முழுப் பெயரையும் தட்டச்சு செய்தீர்களா என்று சரிபாருங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "மீட்டெடுக்கப்பட்ட கணக்கு {name} அல்ல, அதனால் இந்தப் போனில் எதுவும் சேமிக்கப்படவில்லை. மீண்டும் முயலுங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்.",
   "Vault Copy Not Removed": "வால்ட் நகல் நீக்கப்படவில்லை",
-  "Convenor: {name}": "ஒருங்கிணைப்பாளர்: {name}"
+  "Convenor: {name}": "ஒருங்கிணைப்பாளர்: {name}",
+  "Some invitations were not sent": "சில அழைப்புகள் அனுப்பப்படவில்லை",
+  "{sent} sent. Not sent: {names}. {reason}": "அனுப்பப்பட்டவை: {sent}. இவர்களுக்கு அனுப்பப்படவில்லை: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "அனுப்பப்பட்டவை: {sent}. இவர்களுக்கு அனுப்பப்படவில்லை: {names}. சிக்னல் கிடைக்கும்போது மீண்டும் முயலுங்கள்."
 }

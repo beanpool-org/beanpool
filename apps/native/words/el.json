@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Δεν υπάρχει λογαριασμός με όνομα {name} που να μπορεί να επαναφερθεί εδώ μέσω σύνδεσης. Έλεγξε ότι έγραψες ολόκληρο το όνομά σου ή χρησιμοποίησε τις 12 λέξεις σου.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Ο λογαριασμός που επαναφέρθηκε δεν έχει το όνομα {name}, οπότε δεν αποθηκεύτηκε τίποτα σε αυτό το τηλέφωνο. Δοκίμασε ξανά ή χρησιμοποίησε τις 12 λέξεις σου.",
   "Vault Copy Not Removed": "Δεν αφαιρέθηκε το αντίγραφο στο θησαυροφυλάκιο",
-  "Convenor: {name}": "Συντονισμός: {name}"
+  "Convenor: {name}": "Συντονισμός: {name}",
+  "Some invitations were not sent": "Ορισμένες προσκλήσεις δεν στάλθηκαν",
+  "{sent} sent. Not sent: {names}. {reason}": "Στάλθηκαν: {sent}. Δεν στάλθηκαν σε: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Στάλθηκαν: {sent}. Δεν στάλθηκαν σε: {names}. Δοκίμασε ξανά όταν έχεις σήμα."
 }

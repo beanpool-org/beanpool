@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Жоден обліковий запис з іменем {name} не можна відновити тут через вхід. Перевірте, чи ім’я введено повністю, або скористайтеся своїми 12 словами.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Відновлений обліковий запис не має імені {name}, тому на цьому телефоні нічого не збережено. Спробуйте ще раз або скористайтеся своїми 12 словами.",
   "Vault Copy Not Removed": "Копію в сховищі не видалено",
-  "Convenor: {name}": "Координує: {name}"
+  "Convenor: {name}": "Координує: {name}",
+  "Some invitations were not sent": "Деякі запрошення не надіслано",
+  "{sent} sent. Not sent: {names}. {reason}": "Надіслано: {sent}. Не надіслано: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Надіслано: {sent}. Не надіслано: {names}. Спробуйте ще раз, коли з’явиться зв’язок."
 }

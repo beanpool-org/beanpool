@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} という名前のアカウントは、ここではサインインで復元できません。名前をすべて入力したか確認するか、12個の単語を使ってください。",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "復元されたアカウントが {name} ではないため、この端末には何も保存されていません。もう一度お試しいただくか、12個の単語を使ってください。",
   "Vault Copy Not Removed": "金庫のコピーを削除できませんでした",
-  "Convenor: {name}": "まとめ役：{name}"
+  "Convenor: {name}": "まとめ役：{name}",
+  "Some invitations were not sent": "一部の招待を送信できませんでした",
+  "{sent} sent. Not sent: {names}. {reason}": "送信済み：{sent}。送信できなかった相手：{names}。{reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "送信済み：{sent}。送信できなかった相手：{names}。電波のあるところで、もう一度お試しください。"
 }

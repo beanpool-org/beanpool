@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "名為 {name} 的帳號在這裡無法透過登入還原。請檢查是否輸入了完整的名稱，或使用你的 12 個助記詞。",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "還原的帳號不是 {name}，所以這支手機上沒有儲存任何內容。請再試一次，或使用你的 12 個助記詞。",
   "Vault Copy Not Removed": "保險庫副本未移除",
-  "Convenor: {name}": "協調人：{name}"
+  "Convenor: {name}": "協調人：{name}",
+  "Some invitations were not sent": "部分邀請未能傳送",
+  "{sent} sent. Not sent: {names}. {reason}": "已傳送：{sent}。未傳送給：{names}。{reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "已傳送：{sent}。未傳送給：{names}。有訊號時請再試一次。"
 }

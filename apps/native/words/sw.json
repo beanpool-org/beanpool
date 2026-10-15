@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Hakuna akaunti iitwayo {name} hapa inayoweza kurejeshwa kwa kuingia. Hakikisha umeandika jina lako lote, au tumia maneno yako 12.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Akaunti iliyorejeshwa si {name}, kwa hiyo hakuna kilichohifadhiwa kwenye simu hii. Jaribu tena, au tumia maneno yako 12.",
   "Vault Copy Not Removed": "Nakala ya hifadhi salama haijaondolewa",
-  "Convenor: {name}": "Mratibu: {name}"
+  "Convenor: {name}": "Mratibu: {name}",
+  "Some invitations were not sent": "Baadhi ya mialiko haikutumwa",
+  "{sent} sent. Not sent: {names}. {reason}": "Mialiko iliyotumwa: {sent}. Haikutumwa kwa: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Mialiko iliyotumwa: {sent}. Haikutumwa kwa: {names}. Jaribu tena ukipata mtandao."
 }

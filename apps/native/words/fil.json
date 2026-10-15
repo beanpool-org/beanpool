@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Walang account na nagngangalang {name} dito na maibabalik gamit ang sign-in. Tiyaking nai-type mo ang buong pangalan mo, o gamitin ang 12 salita mo.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Hindi kay {name} ang account na bumalik, kaya walang nai-save sa teleponong ito. Subukan ulit, o gamitin ang 12 salita mo.",
   "Vault Copy Not Removed": "Hindi natanggal ang kopya sa vault",
-  "Convenor: {name}": "Tagapag-ugnay: {name}"
+  "Convenor: {name}": "Tagapag-ugnay: {name}",
+  "Some invitations were not sent": "Hindi naipadala ang ilang imbitasyon",
+  "{sent} sent. Not sent: {names}. {reason}": "Naipadala: {sent}. Hindi naipadala sa: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Naipadala: {sent}. Hindi naipadala sa: {names}. Subukan ulit kapag may signal ka."
 }

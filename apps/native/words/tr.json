@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Burada {name} adlı hiçbir hesap, oturum açılarak geri yüklenemez. Adının tamamını yazıp yazmadığını kontrol et ya da 12 sözcüğünü kullan.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Geri yüklenen hesap {name} değil, bu yüzden bu telefona hiçbir şey kaydedilmedi. Tekrar dene ya da 12 sözcüğünü kullan.",
   "Vault Copy Not Removed": "Kasadaki kopya kaldırılamadı",
-  "Convenor: {name}": "Koordinatör: {name}"
+  "Convenor: {name}": "Koordinatör: {name}",
+  "Some invitations were not sent": "Bazı davetler gönderilemedi",
+  "{sent} sent. Not sent: {names}. {reason}": "Gönderilen: {sent}. Gönderilemeyen kişiler: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Gönderilen: {sent}. Gönderilemeyen kişiler: {names}. Sinyalin olduğunda tekrar dene."
 }

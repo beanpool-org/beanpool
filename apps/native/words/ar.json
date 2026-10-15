@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "لا يمكن استعادة أي حساب باسم {name} هنا عن طريق تسجيل الدخول. تأكد من أنك كتبت اسمك كاملًا، أو استخدم كلماتك الـ 12.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "الحساب الذي تمت استعادته ليس {name}، لذلك لم يُحفظ أي شيء على هذا الهاتف. حاول مرة أخرى، أو استخدم كلماتك الـ 12.",
   "Vault Copy Not Removed": "لم تتم إزالة نسخة الخزنة",
-  "Convenor: {name}": "التنسيق: {name}"
+  "Convenor: {name}": "التنسيق: {name}",
+  "Some invitations were not sent": "لم يتم إرسال بعض الدعوات",
+  "{sent} sent. Not sent: {names}. {reason}": "الدعوات المُرسلة: {sent}. لم تُرسل الدعوة إلى: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "الدعوات المُرسلة: {sent}. لم تُرسل الدعوة إلى: {names}. حاول مرة أخرى عندما تتوفر إشارة الشبكة."
 }

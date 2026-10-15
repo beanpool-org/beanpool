@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "یہاں {name} نام کا کوئی اکاؤنٹ سائن ان کے ذریعے بحال نہیں ہو سکتا۔ دیکھ لیں کہ پورا نام لکھا گیا ہے، یا اپنے 12 الفاظ استعمال کریں۔",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "بحال ہونے والا اکاؤنٹ {name} نہیں ہے، اس لیے اس فون پر کچھ محفوظ نہیں ہوا۔ دوبارہ کوشش کریں، یا اپنے 12 الفاظ استعمال کریں۔",
   "Vault Copy Not Removed": "والٹ کی کاپی نہیں ہٹائی گئی",
-  "Convenor: {name}": "کنوینر: {name}"
+  "Convenor: {name}": "کنوینر: {name}",
+  "Some invitations were not sent": "کچھ دعوتیں نہیں بھیجی جا سکیں",
+  "{sent} sent. Not sent: {names}. {reason}": "بھیجی گئی دعوتیں: {sent}۔ ان لوگوں کو نہیں بھیجا جا سکا: {names}۔ {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "بھیجی گئی دعوتیں: {sent}۔ ان لوگوں کو نہیں بھیجا جا سکا: {names}۔ سگنل ملنے پر دوبارہ کوشش کریں۔"
 }

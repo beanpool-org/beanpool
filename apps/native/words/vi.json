@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "Không có tài khoản nào tên {name} ở đây có thể khôi phục bằng cách đăng nhập. Hãy kiểm tra bạn đã nhập đủ tên chưa, hoặc dùng 12 từ của bạn.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "Tài khoản vừa khôi phục không phải {name}, nên chưa lưu gì trên điện thoại này. Hãy thử lại, hoặc dùng 12 từ của bạn.",
   "Vault Copy Not Removed": "Chưa xóa được bản sao trong kho",
-  "Convenor: {name}": "Điều phối viên: {name}"
+  "Convenor: {name}": "Điều phối viên: {name}",
+  "Some invitations were not sent": "Một số lời mời chưa được gửi",
+  "{sent} sent. Not sent: {names}. {reason}": "Đã gửi: {sent}. Chưa gửi được cho: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "Đã gửi: {sent}. Chưa gửi được cho: {names}. Hãy thử lại khi có sóng."
 }

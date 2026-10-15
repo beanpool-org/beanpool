@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "هیچ حسابی به نام {name} در اینجا با ورود قابل بازیابی نیست. بررسی کنید که نام کامل‌تان را نوشته باشید، یا از 12 کلمه‌تان استفاده کنید.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "حسابی که بازیابی شد {name} نیست، پس چیزی روی این گوشی ذخیره نشد. دوباره تلاش کنید، یا از 12 کلمه‌تان استفاده کنید.",
   "Vault Copy Not Removed": "نسخه صندوق امن حذف نشد",
-  "Convenor: {name}": "هماهنگ‌کننده: {name}"
+  "Convenor: {name}": "هماهنگ‌کننده: {name}",
+  "Some invitations were not sent": "برخی دعوت‌نامه‌ها ارسال نشد",
+  "{sent} sent. Not sent: {names}. {reason}": "دعوت‌نامه‌های ارسال‌شده: {sent}. برای این افراد ارسال نشد: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "دعوت‌نامه‌های ارسال‌شده: {sent}. برای این افراد ارسال نشد: {names}. وقتی آنتن داشتید دوباره تلاش کنید."
 }

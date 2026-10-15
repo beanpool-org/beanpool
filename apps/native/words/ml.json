@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} എന്ന പേരുള്ള ഒരു അക്കൗണ്ടും ഇവിടെ സൈൻ-ഇൻ വഴി വീണ്ടെടുക്കാനാകില്ല. നിങ്ങളുടെ മുഴുവൻ പേരും ടൈപ്പ് ചെയ്തോ എന്ന് പരിശോധിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "വീണ്ടെടുത്ത അക്കൗണ്ട് {name} അല്ല, അതുകൊണ്ട് ഈ ഫോണിൽ ഒന്നും സംരക്ഷിച്ചിട്ടില്ല. വീണ്ടും ശ്രമിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
   "Vault Copy Not Removed": "വോൾട്ട് പകർപ്പ് നീക്കം ചെയ്തില്ല",
-  "Convenor: {name}": "കൺവീനർ: {name}"
+  "Convenor: {name}": "കൺവീനർ: {name}",
+  "Some invitations were not sent": "ചില ക്ഷണങ്ങൾ അയയ്ക്കാനായില്ല",
+  "{sent} sent. Not sent: {names}. {reason}": "അയച്ച ക്ഷണങ്ങൾ: {sent}. ഇവർക്ക് അയയ്ക്കാനായില്ല: {names}. {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "അയച്ച ക്ഷണങ്ങൾ: {sent}. ഇവർക്ക് അയയ്ക്കാനായില്ല: {names}. സിഗ്നൽ ലഭിക്കുമ്പോൾ വീണ്ടും ശ്രമിക്കുക."
 }

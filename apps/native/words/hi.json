@@ -81,5 +81,8 @@
   "No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.": "{name} नाम का कोई भी खाता यहाँ साइन-इन से वापस नहीं पाया जा सकता। जाँच लें कि आपने अपना पूरा नाम लिखा है, या अपने 12 शब्द इस्तेमाल करें।",
   "The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.": "जो खाता वापस आया, वह {name} नहीं है, इसलिए इस फ़ोन पर कुछ भी सहेजा नहीं गया। फिर कोशिश करें, या अपने 12 शब्द इस्तेमाल करें।",
   "Vault Copy Not Removed": "वॉल्ट की कॉपी हटाई नहीं गई",
-  "Convenor: {name}": "संयोजक: {name}"
+  "Convenor: {name}": "संयोजक: {name}",
+  "Some invitations were not sent": "कुछ आमंत्रण नहीं भेजे जा सके",
+  "{sent} sent. Not sent: {names}. {reason}": "भेजे गए आमंत्रण: {sent}। इन्हें नहीं भेजा जा सका: {names}। {reason}",
+  "{sent} sent. Not sent: {names}. Try again when you have signal.": "भेजे गए आमंत्रण: {sent}। इन्हें नहीं भेजा जा सका: {names}। सिग्नल आने पर फिर कोशिश करें।"
 }

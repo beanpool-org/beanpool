@@ -10,11 +10,14 @@
 //                     { id, type, name, proxied }. Ask for every record on one page (?per_page=5000): an answer whose
 //                     result_info says there is more (total_pages > 1, or count < total_count) is refused (exit 2).
 //   alloc.json        `wrangler d1 execute beanpool-registrar --remote --json --command
-//                     "SELECT name, status, dns_record_id FROM name_allocations"` (or a plain array of those rows).
+//                     "SELECT name, status, pause_reason, dns_record_id FROM name_allocations"` (or a plain array of
+//                     those rows).
 //   policy.json       the same for "SELECT pattern, tier FROM name_policy".
 //
-// Exit 1 and one line per label when any is missing; 0 otherwise. A record at a label a row holds is not advised to be
-// blocked: that is a community's name whose row lags (its owner's heal adopts the record), so the line says to repair it. Records the registrar can't touch are skipped: other
+// Exit 1 and one line per label when any is missing; 0 otherwise. A record at a label whose row a key can still heal or
+// take back (keyCanHeal) is not advised to be blocked: that is a community's name whose row lags (its owner's heal adopts
+// the record), so the line says to repair it. At a row no key can heal (abandoned, freed at once, held from every key)
+// the label is free, and the line gives the row's status and the block. Records the registrar can't touch are skipped: other
 // types than A/AAAA/CNAME (ensure() only finds those), the apex, deeper names (a.b.beanpool.org), and labels no claim
 // can name (NAME_RE: _dmarc and the like). Proxied or not makes no difference: ensure() PATCHes either.
 
@@ -42,6 +45,18 @@ export function partialZone(data) {
     return null;
 }
 
+// Can a key still heal this row's name, or take it back? src/index.js isOwnRow, whoever the key (a test holds the two
+// together): not once the row is abandoned, freed at once (the admin's "free now", a gated claim withdrawn or rejected)
+// or held from every key by the admin's release. Null when the export doesn't say (no status, or a released row
+// without pause_reason).
+export function keyCanHeal(row) {
+    if (!row?.status) return null;
+    if (row.status === 'abandoned') return false;
+    if (row.status !== 'released') return true;
+    if (row.pause_reason === undefined) return null;
+    return !['admin', 'withdrawn', 'admin-held-all'].includes(row.pause_reason);
+}
+
 // What is wrong: [] when every host record the registrar did not make is at a blocked label.
 export function zoneProblems({ records, allocations, policy, base = 'beanpool.org' }) {
     const made = new Set(allocations.map((a) => a.dns_record_id).filter(Boolean));
@@ -57,12 +72,23 @@ export function zoneProblems({ records, allocations, policy, base = 'beanpool.or
         if (!NAME_RE.test(label)) continue;          // the apex, a deeper name, or a label no claim can name
         if (made.has(r.id)) continue;                // the registrar's own record for a claimed name
         if (tier.get(label) === 'blocked') continue;
+        const what = `${fqdn} (${r.type}${r.proxied ? ', proxied' : ''})`;
         const row = held.get(label);
-        if (row) {
-            problems.push(`${fqdn} (${r.type}${r.proxied ? ', proxied' : ''}) is not the record its row records, but ${label} has a row (${row.status || 'status not given'}): a community's name — repair, don't block (its owner's heal adopts the record; look in /admin)`);
+        const heals = row ? keyCanHeal(row) : false;
+        if (heals) {
+            problems.push(`${what} is not the record its row records, but ${label} has a row (${row.status}): a community's name — repair, don't block (its owner's heal adopts the record; look in /admin)`);
             continue;
         }
-        problems.push(`${fqdn} (${r.type}${r.proxied ? ', proxied' : ''}) is not the registrar's, and ${label} is ${tier.has(label) ? tier.get(label) : 'not in name_policy (auto)'}: add ('${label}','blocked')`);
+        const block = `add ('${label}','blocked')`;
+        if (heals === null) {
+            problems.push(`${what} is not the record its row records, and ${label}'s row is ${row.status || 'of a status not given'}${row.status ? ' without pause_reason' : ''}: look in /admin — repair it if a key can still heal it, else ${block} (export pause_reason too)`);
+            continue;
+        }
+        if (row) {
+            problems.push(`${what} is not the registrar's, and ${label}'s row is ${row.status}${row.pause_reason ? ` (${row.pause_reason})` : ''}: no key can heal it and a new claim there is refused, so if the record is ours, ${block}`);
+            continue;
+        }
+        problems.push(`${what} is not the registrar's, and ${label} is ${tier.has(label) ? tier.get(label) : 'not in name_policy (auto)'}: ${block}`);
     }
     return problems;
 }

@@ -90,3 +90,40 @@ test('zone check CLI: exit 2 when the zone file is one page of several, or holds
         assert.equal(main(['--zone', short, '--allocations', alloc, '--policy', policy]), 2);
     } finally { console.error = err; console.log = log; }
 });
+
+// NB-3 of the #1985 review: "repair, don't block" only where a key can still heal the name or take it back (the
+// Worker's isOwnRow). At a row no key can heal — abandoned, freed at once, or held from every key — the label is free,
+// a new claim there is refused, and a record of ours wants its block like any other.
+const hand = [{ id: 'hand-1', type: 'A', name: 'oldbox.beanpool.org', proxied: true }];
+const lineFor = (status, pause_reason) => {
+    const [p, ...rest] = zoneProblems({ records: hand, allocations: [{ name: 'oldbox', status, pause_reason, dns_record_id: 'r-gone' }], policy: [] });
+    assert.deepEqual(rest, []);
+    return p;
+};
+
+test('zone check: a record at a label whose row no key can heal says the row\'s status and "add (\'label\',\'blocked\')"', () => {
+    for (const [status, reason] of [['abandoned', null], ['released', 'admin'], ['released', 'withdrawn'], ['released', 'admin-held-all']]) {
+        const p = lineFor(status, reason);
+        assert.match(p, new RegExp(`oldbox's row is ${status}${reason ? ` \\(${reason}\\)` : ''}`), p);
+        assert.match(p, /add \('oldbox','blocked'\)/, p);
+        assert.doesNotMatch(p, /repair/, p);
+    }
+});
+
+test('zone check: a record at a label a key still holds or can take back says "repair, don\'t block"', () => {
+    for (const [status, reason] of [['live', null], ['pending', null], ['paused', 'impostor'], ['paused', 'admin'], ['blocked', null], ['released', null]]) {
+        const p = lineFor(status, reason);
+        assert.match(p, /repair, don't block/, `${status}/${reason}: ${p}`);
+        assert.doesNotMatch(p, /add \('oldbox','blocked'\)/, p);
+    }
+});
+
+test('zone check: its rule for "a key can heal this row" is the Worker\'s isOwnRow, for every status', async () => {
+    const { keyCanHeal } = await import('../scripts/check-zone-reserved.mjs');
+    const { isOwnRow } = await import('../src/index.js');
+    for (const status of ['live', 'pending', 'paused', 'blocked', 'released', 'abandoned', 'revoked'])
+        for (const pause_reason of [null, 'admin', 'withdrawn', 'admin-held-all', 'impostor', 'incident', 'awaiting-approval']) {
+            const row = { name: 'oldbox', status, pause_reason, node_pubkey: 'k' };
+            assert.equal(keyCanHeal(row), isOwnRow(row, 'k'), `${status}/${pause_reason}`);
+        }
+});

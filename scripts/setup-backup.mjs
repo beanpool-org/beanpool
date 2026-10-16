@@ -6,8 +6,10 @@
  * It enrolls a fresh node as a one-directional, read-only backup of an existing
  * primary: it pulls the primary's public community identity (genesis.json and its PeerId,
  * never a key), wipes any stale local state
- * so the backup rebuilds cleanly under a brand-new PeerId, and writes the env +
- * connector config the backup needs to start pulling.
+ * so the backup rebuilds cleanly under a brand-new PeerId, and writes the env the
+ * backup needs to start pulling. Which server it trusts is pinned from its own shell
+ * once it runs (`beanpool pair` with a pairing code from the primary's Replication
+ * Access): nothing here writes that.
  *
  * State only ever flows primary → backup. The primary imports from nobody.
  *
@@ -290,19 +292,8 @@ async function main() {
         }
     }
 
-    // 6. Write connectors.json — a single PASSIVE mirror pointing at the primary.
-    //    enabled:false → the backup never dials; the connector exists only so the
-    //    import signature gate recognizes the primary's signing key.
-    const connectors = [{
-        address: `/p2p/${primaryPeerId}`,
-        trustLevel: 'mirror',
-        enabled: false,
-        callsign: 'primary',
-        publicUrl: primaryUrl || primary,
-        addedAt: Date.now(),
-    }];
-    fs.writeFileSync(path.join(dataDir, 'connectors.json'), JSON.stringify(connectors, null, 2));
-    console.log('  • wrote connectors.json (passive mirror → primary)');
+    // 6. No link for the primary: a standby's main server is pinned from its own shell (data/standby-main.json,
+    //    `beanpool pair`), never from a file this script writes (apps/server/src/services/standby-main.ts).
 
     // 7. Write/update the sibling .env (one level up from the data dir, where the
     //    node's root .env lives).
@@ -320,8 +311,10 @@ async function main() {
     console.log('✅ Backup enrolled. NEXT STEPS:\n');
     console.log('  1. RESTART this node so it boots as a backup:');
     console.log('       docker compose up -d   (or your process manager)');
-    console.log('  2. It will generate a fresh PeerId, rebuild state.db, and begin');
-    console.log('       pulling the primary every 60s over HTTPS.');
+    console.log('  2. Pair it: on the primary make a pairing code under Replication Access, then here:');
+    console.log('       docker compose exec beanpool-node beanpool pair');
+    console.log(`       (it should name the primary's key ending …${primaryPeerId.slice(-8)}).`);
+    console.log('     It then rebuilds state.db and pulls the primary every 60s over HTTPS.');
     console.log('  3. Watch the primary\'s Settings → 🗄️ Backup tab for live health,');
     console.log('       or this node\'s logs for "[Backup] ⬇️ Pulled snapshot".');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');

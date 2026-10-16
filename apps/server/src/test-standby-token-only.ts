@@ -45,6 +45,7 @@ import vm from 'node:vm';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import Database from 'better-sqlite3';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 const ADMIN_PW = 'Standby-Main-Pw-7731!xq';
 process.env.ADMIN_PASSWORD = ADMIN_PW;
@@ -177,7 +178,7 @@ async function main() {
     const node = await startP2P(0, 0);
     const nodeId = node.peerId.toString();
     const mirrorAddr = `/ip4/127.0.0.1/tcp/4063/p2p/${nodeId}`;
-    addConnector(mirrorAddr, 'mirror', 'self-test-primary');
+    pinMainServerForTests(mirrorAddr);
 
     // The main server's backup routes over real HTTP, parsed the way https-server.ts does.
     // checkAdminAuth as https-server.ts hands it over, its options included (replicationAuth's legacyCopy). While
@@ -690,7 +691,7 @@ async function main() {
         const leaked = printed.filter(l => l.includes(ADMIN_PW));
         assert(leaked.length === 0, `logs never contain the password${leaked.length ? ' — ' + leaked.length + ' line(s)' : ''}`);
     } finally {
-        removeConnector(mirrorAddr);
+        unpinMainServerForTests();
         server.close();
         await node.stop();
     }

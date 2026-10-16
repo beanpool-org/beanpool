@@ -178,8 +178,7 @@ export function settlementCapacity(
  * remote peer id. Resolving here keeps every caller from re-deriving it, and puts the fail-closed cases in
  * one place:
  *   • the peer is not a configured connector at all → refuse
- *   • it is configured, but not at trust level `peer` (a `mirror` is a backup replica, not a trading
- *     partner) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
+ *   • it is configured, but not at trust level `peer` (only a trading partner trades) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
  */
 export function settlementCapacityForPeer(peerId: string, amount = 0, excludeKey?: string): SettlementCapacity {
     const connector = getConnectorByPeerId(peerId);

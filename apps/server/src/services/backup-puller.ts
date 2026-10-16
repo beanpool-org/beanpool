@@ -11,8 +11,8 @@
  *     snapshot from the primary over authenticated HTTPS
  *     (`GET /api/local/admin/sync-snapshot`, X-Admin-Password header) and imports
  *     it locally via the existing `importRemoteState` path. That import enforces
- *     (1) payload Ed25519 signature, (2) the signer maps to a trusted `mirror`
- *     connector (the primary), and (3) the zero-sum conservation guard — which on
+ *     (1) payload Ed25519 signature, (2) the signer is the main server this
+ *     standby is pinned to (data/standby-main.json), and (3) the zero-sum conservation guard — which on
  *     a backup runs UNCONDITIONALLY (A2-8), not only under ENFORCE_LEDGER_AUTH —
  *     so a forged/tampered or value-creating snapshot is rejected. A replayed
  *     older snapshot is rejected by the `generatedAt` freshness check below (A2-17).
@@ -36,9 +36,9 @@
  *                                 warns every start while it can't.
  *   BACKUP_PULL_INTERVAL_MS       optional — default 60000 (60s)
  *
- * The backup must ALSO have the primary configured as a single passive `mirror`
- * connector (enabled:false, address containing /p2p/<primaryPeerId>) so the
- * import signature gate recognizes the primary's signing key without dialing it.
+ * The backup must ALSO be paired with the primary from its own shell (`beanpool pair`, a pairing
+ * code made under Replication Access there): data/standby-main.json holds the primary's PeerId,
+ * which the import signature gate checks every page against (services/standby-main.ts).
  *
  * For self-signed-CA LAN primaries, point NODE_EXTRA_CA_CERTS at the primary's
  * CA pem (Node honors it for fetch); public Let's Encrypt nodes need nothing.
@@ -436,7 +436,7 @@ class CopyRequests {
     async open(since: string | null): Promise<CopyPageRead> {
         const res = await this.request('POST', `${COPY_PATH}${since ? `?since=${encodeURIComponent(since)}` : ''}`);
         if (res.status !== 200) throw new NoCopy(res.status);
-        // A snapshot must come from a primary; warn (but still import — the mirror-trust gate is the real authority) if
+        // A snapshot must come from a primary; warn (but still import — the pin gate is the real authority) if
         // we're chained off a backup.
         const remoteRole = res.headers.get('X-Node-Role');
         if (remoteRole && remoteRole !== 'primary') {
@@ -986,8 +986,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         }
         // Stopped once everything had come (a take-over confirmed): nothing of it imported.
         stopIfStopped(pullStopped);
-        // The import path enforces: each page's valid signature → signer maps to a trusted `mirror` connector (the
-        // primary) → the pages are one copy, every page in order → conservation guard (runs on a backup unconditionally,
+        // The import path enforces: each page's valid signature → signer is the pinned main server
+        // (data/standby-main.json) → the pages are one copy, every page in order → conservation guard (runs on a backup unconditionally,
         // A2-8). A forged/tampered page is rejected there. It applies a delta or a whole copy identically, LWW per row; only
         // the recovery seal's clean-up needs to know which this was.
         const result = await importRemoteState(pages, { full: !isDelta, seed });
@@ -1160,7 +1160,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             };
         }
         // Conservation/trust rejections are security-relevant — surface loudly.
-        if (/conservation|untrusted|mirror|signature/i.test(msg)) {
+        if (/conservation|untrusted|signature|not paired|main server \(pinned/i.test(msg)) {
             logger.security('P2P', `[Backup] ❌ ${isDelta ? 'Delta' : 'Snapshot'} REJECTED by import guard: ${msg}`);
         } else {
             const longer = photosFailed
@@ -1835,7 +1835,7 @@ export async function migrateStandbyPassword(): Promise<StandbyCredentialState> 
 
 /**
  * Fetch the main server's take-over envelope with the replication token, if it has a new one (services/
- * standby-envelopes.ts checks it against the mirror pin and keeps the last five). Never throws.
+ * standby-envelopes.ts checks it against the pin and keeps the last five). Never throws.
  */
 export async function pullTakeoverEnvelopeNow(): ReturnType<typeof pullTakeoverEnvelope> {
     const { token, primaryUrl } = readCredentials();

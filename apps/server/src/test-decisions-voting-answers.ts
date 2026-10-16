@@ -47,6 +47,7 @@ import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.j
 import { setCommonsBalance } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { RouteDeps } from './routes/types.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -647,7 +648,7 @@ async function run() {
         // Lose the member row, as a fresh replica would not have it, then restore from the snapshot.
         db.prepare('DELETE FROM members WHERE public_key = ?').run(restored);
         db.prepare('DELETE FROM accounts WHERE public_key = ?').run(restored);
-        addConnector(`/ip4/127.0.0.1/tcp/4039/p2p/${nodeId}`, 'mirror', 'voting-answers-self');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4039/p2p/${nodeId}`);
         setNodeRole('backup');
         await importRemoteState(snapshot);
         const back = db.prepare('SELECT joined_at, last_active_at FROM members WHERE public_key = ?').get(restored) as any;

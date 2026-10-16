@@ -43,6 +43,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { addBlocks } from './engine/member-blocks.js';
 import { dmPublicKeyOf, makeKeySuccession, walkKeySuccession } from '@beanpool/core';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const OPEN = process.env.ENFORCE_READ_AUTH === 'false';
 
@@ -251,7 +252,7 @@ async function main(): Promise<void> {
         // A copy is signed by the main server's node key and taken from a connector the standby knows (test-dm-standby-order).
         const p2p = await startP2P(0, 0);
         const nodeId = p2p.peerId.toString();
-        addConnector(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`);
         const whole = await se.exportSyncState(nodeId);
         emptyCopiedTables(db);
         assert((db.prepare('SELECT COUNT(*) AS n FROM invalidated_keys').get() as { n: number }).n === 0, 'the fixture: the copied tables are empty before the copy');

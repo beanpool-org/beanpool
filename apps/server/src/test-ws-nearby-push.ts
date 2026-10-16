@@ -55,6 +55,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto, haversineKm, getNearbySet } from '@beanpool/engine';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -413,11 +414,11 @@ async function main(): Promise<void> {
         se.broadcast({ type: 'post_updated', id: post2 });
         await until(S.ana, 'post_updated');
         assert(!heard('post_updated', post2).noel, 'before the copy, Noel (no area on this standby) hears nothing of a listing');
-        addConnector(trusted, 'mirror', 'nearby-self-test');
+        pinMainServerForTests(trusted);
         setNodeRole('backup');
         await importRemoteState(payload);
         setNodeRole('primary');
-        removeConnector(trusted);
+        unpinMainServerForTests();
         const stored = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(noel.pk) as { area_lat: number | null; area_lng: number | null };
         assert(stored.area_lat === NEAR.lat && stored.area_lng === NEAR.lng, `the import wrote Noel's area (${stored.area_lat}, ${stored.area_lng})`);
         clear();

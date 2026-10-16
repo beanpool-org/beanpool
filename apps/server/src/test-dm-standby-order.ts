@@ -36,6 +36,7 @@ import {
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`);
 
     const cat = member('Cat');
     const dan = member('Dan');

@@ -45,6 +45,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -129,7 +130,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4047/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4047/p2p/${nodeId}`);
 
     // A stand-in for the per-IP auth limiter https-server passes. Section 7 shows chat lines no longer reach it.
     let chatBudget = Number.POSITIVE_INFINITY;

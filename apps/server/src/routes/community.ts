@@ -512,7 +512,7 @@ router.get('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address, oldAddress, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
+    const { address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -572,7 +572,7 @@ router.post('/api/local/connectors', async (ctx) => {
     }
 
     const isEnabled = enabled !== undefined ? Boolean(enabled) : undefined;
-    const connector = addConnector(address, level, callsign, normalisedPublicUrl, isEnabled, oldAddress);
+    const connector = addConnector(address, level, callsign, normalisedPublicUrl, isEnabled);
     ctx.body = { success: true, connector };
 });
 

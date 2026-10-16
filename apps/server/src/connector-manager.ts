@@ -618,47 +618,13 @@ export async function disconnectFromAddress(address: string): Promise<void> {
     logger.info('P2P', `[Connectors] Disconnected from ${address}`);
 }
 
-export function editConnectorAddress(oldAddress: string, newAddress: string): ConnectorConfig | null {
-    const existing = connectors.find(c => c.address === oldAddress);
-    if (!existing) return null;
-    existing.address = newAddress;
-    delete existing.pinnedPeerId;
-    statuses.delete(oldAddress);
-    retryState.delete(oldAddress);
-    saveConnectors();
-    logger.info('P2P', `[Connectors] Edited connector address: ${oldAddress} → ${newAddress} (cleared pinned peer ID)`);
-    return existing;
-}
-
 export function addConnector(
     address: string,
     trustLevel: TrustLevel,
     callsign?: string,
     publicUrl?: string,
-    enabled?: boolean,
-    oldAddress?: string
+    enabled?: boolean
 ): ConnectorConfig {
-    if (oldAddress && oldAddress !== address) {
-        const existingOld = connectors.find(c => c.address === oldAddress);
-        if (existingOld) {
-            existingOld.address = address;
-            existingOld.trustLevel = trustLevel;
-            if (callsign !== undefined) existingOld.callsign = callsign;
-            if (publicUrl !== undefined) {
-                existingOld.publicUrl = publicUrl;
-            } else if (typeof existingOld.publicUrl === 'string' && existingOld.publicUrl.startsWith('https:///')) {
-                existingOld.publicUrl = derivePublicUrl(address);
-            }
-            if (enabled !== undefined) existingOld.enabled = enabled;
-            // Editing the connector's address clears the record, so the admin can deliberately link to a new node
-            delete existingOld.pinnedPeerId;
-            statuses.delete(oldAddress);
-            retryState.delete(oldAddress);
-            saveConnectors();
-            logger.info('P2P', `[Connectors] Edited connector address: ${oldAddress} → ${address} (cleared pinned peer ID)`);
-            return existingOld;
-        }
-    }
 
     // NOTE THE ORDER: derivation happens only on the INSERT path, below. Deriving up here — as this function
     // used to — meant `publicUrl` was never undefined by the time the update branch tested it, so any update

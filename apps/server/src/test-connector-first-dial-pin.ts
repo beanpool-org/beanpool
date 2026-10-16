@@ -69,6 +69,17 @@ async function postConnector(body: Record<string, unknown>): Promise<{ status: n
     return { status: res.status, json };
 }
 
+async function removeConnectorOverHttp(address: string): Promise<{ status: number; json: any }> {
+    const res = await fetch(`${BASE}/api/local/connectors/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: PW, ...(tfa ? { totpCode: tfa.code() } : {}), address }),
+    });
+    let json: any = null;
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, json };
+}
+
 async function dialOverHttp(address: string): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}/api/local/connectors/connect`, {
         method: 'POST',
@@ -189,32 +200,35 @@ async function main() {
     assert(afterDial2?.pinnedPeerId === peerIdX,
         `3f. node X is STILL the recorded pinnedPeerId`);
 
-    // ── 4. Edit connector's address and dial: Y is recorded and linked ──
+    // ── 4. Remove and add again (changing address is remove + add): fresh record links Y ──
+    const removeRes = await removeConnectorOverHttp(hostPortAddr);
+    assert(removeRes.status === 200 && removeRes.json?.success === true,
+        `4a. removed old connector ${hostPortAddr}`);
+
     const newHostPortAddr = `localhost:${portX}`;
-    const editRes = await postConnector({
+    const addAgainRes = await postConnector({
         address: newHostPortAddr,
-        oldAddress: hostPortAddr,
         trustLevel: 'peer',
         callsign: 'NodeY',
     });
-    assert(editRes.status === 200 && editRes.json?.success === true,
-        `4a. edited connector address from ${hostPortAddr} to ${newHostPortAddr}`);
+    assert(addAgainRes.status === 200 && addAgainRes.json?.success === true,
+        `4b. added new connector ${newHostPortAddr} with fresh record`);
 
-    const afterEdit = cm.getConnectorByAddress(newHostPortAddr);
-    assert(afterEdit?.pinnedPeerId === undefined,
-        `4b. editing connector address cleared pinnedPeerId (got ${afterEdit?.pinnedPeerId})`);
+    const afterAddAgain = cm.getConnectorByAddress(newHostPortAddr);
+    assert(afterAddAgain?.pinnedPeerId === undefined,
+        `4c. fresh record starts with pinnedPeerId undefined (got ${afterAddAgain?.pinnedPeerId})`);
 
     const dialYAfterEdit = await dialOverHttp(newHostPortAddr);
     assert(dialYAfterEdit.status === 200 && dialYAfterEdit.json?.success === true,
-        `4c. dial to node Y after address edit succeeded`);
+        `4d. dial to node Y after address change succeeded`);
 
     const afterDial3 = cm.getConnectorByAddress(newHostPortAddr);
     assert(afterDial3?.pinnedPeerId === peerIdY,
-        `4d. node Y is now recorded in pinnedPeerId (got ${afterDial3?.pinnedPeerId})`);
+        `4e. node Y is now recorded in pinnedPeerId (got ${afterDial3?.pinnedPeerId})`);
     assert(cm.isPeerTrusted(peerIdY).trusted === true,
-        `4e. node Y is now linked and trusted`);
+        `4f. node Y is now linked and trusted`);
     assert(cm.isPeerTrusted(peerIdX).trusted === false,
-        `4f. node X is no longer linked or trusted`);
+        `4g. node X is no longer linked or trusted`);
 
     // ── 5. Connector with full /p2p/ address remains unchanged ──
     const fullP2pAddr = `/ip4/127.0.0.1/tcp/${portX}/p2p/${peerIdY}`;

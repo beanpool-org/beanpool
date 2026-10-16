@@ -5,8 +5,8 @@
  *
  * - **Nothing here talks to the node.** No fetch, no write: the sample is bundled, and every action that would move
  *   Beans, vote or pledge is a marker action that opens the sheet. The explainers stay live (CommonsInfoModal).
- * - **The Ledger is the real screen.** LedgerPage draws itself from `sampleLedger()` in preview, as the phone's Ledger
- *   does from components/showcase/sample-screens.ts; the Commons and My Deals previews are drawn here.
+ * - **The Ledger and My Deals are the real screens.** LedgerPage draws itself from `sampleLedger()` and MyDealsModal
+ *   from `sampleDeals()` in preview, as the phone does; the Commons preview is drawn here.
  * - **Obviously a sample.** The Example chip and dashed cards; nobody is named ("a neighbour").
  * - **Levels are merit badges**, never shown as locked; currency is Beans.
  */
@@ -19,7 +19,7 @@ import {
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
 import { EnterpriseCard } from './EnterpriseCard';
-import type { BalanceInfo, DecisionWithTally, EnterpriseLedgerResponse, MyPoolVoting, Treasury } from '../lib/api';
+import type { BalanceInfo, DecisionWithTally, EnterpriseLedgerResponse, MarketplacePost, MarketplaceTransaction, MyPoolVoting, Treasury } from '../lib/api';
 
 const S = SAMPLE_COMMUNITY;
 
@@ -221,73 +221,92 @@ export function CommonsPreview({ enterprises = true, onOpenEnterprise, ...ways }
     );
 }
 
+/** "An example member" in My Deals: the key the modal compares deals against. Never a real account's key. */
+export const SAMPLE_DEALS_ME = Object.freeze({ publicKey: 'sample-member-example' });
+const SAMPLE_NEIGHBOUR = 'sample-member-neighbour';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface SampleDealsResult {
+    identity: { publicKey: string };
+    posts: MarketplacePost[];
+    transactions: MarketplaceTransaction[];
+}
+
 /**
- * Where one sample deal stands, by its state as a node records it and the member's side, as the phone's My Deals reads
- * the same three (Action Required, Held in Trust, the sold + 30): `requested` holds nothing yet, and the member's Approve
- * is what holds the Beans; `pending` holds them until the job is done; `completed` and sold earned them, the Ledger's +30
- * row. Each state has its own branch, so a deal in a new state is never drawn as done.
+ * My Deals fed Example Valley, in the shapes MyDealsModal reads from `posts` and `transactions`
+ * (as the phone's MyDealsSheet already does: sampleDeals()):
+ * - waiting on you (`requested`): the member's Need, a neighbour offered to do it, and Approve & Commit is the member's
+ *   (In Progress: "Action Required");
+ * - held (`pending`): the member asked a neighbour's offer, and the Beans are held until the job is done ("Held in trust");
+ * - done (`completed`): the member SOLD it, so History reads "+30" (or "+ 30"), as the Ledger's "Mending a jacket +30" row does.
  */
-function DealLine({ deal: d, ...ways }: { deal: SampleDeal } & LocalCommunityWays) {
-    const line = 'mb-2 text-sm text-nature-600 dark:text-nature-300';
-    switch (d.state) {
-        case 'requested':
-            return (
-                <div className="mt-3" data-testid="sample-deal-line">
-                    <p className={line}>{t('A neighbour offered to do this. Approve to hold the Beans safely.')}</p>
-                    <LocalCommunityAction feature="escrow" label={t('Approve and hold in trust')} className="w-full" {...ways} />
-                </div>
-            );
-        case 'pending':
-            return (
-                <div className="mt-3" data-testid="sample-deal-line">
-                    <p className={line}>{t('Held in trust until the job is done.')}</p>
-                    <LocalCommunityAction feature="escrow" label={t('Approve and release')} className="w-full" {...ways} />
-                </div>
-            );
-        case 'completed':
-            return (
-                <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" data-testid="sample-deal-line">
-                    {d.side === 'sold' ? t('Done: you earned {beans}.', { beans: beans(d.amount) }) : t('Done: the Beans were released.')}
-                </p>
-            );
-    }
+export function sampleDeals(now: number = Date.now()): SampleDealsResult {
+    const me = SAMPLE_DEALS_ME.publicKey;
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    const posts: MarketplacePost[] = S.deals.filter(d => d.state !== 'completed').map(d => d.state === 'requested'
+        ? {
+            id: `${d.id}-post`,
+            title: d.what,
+            type: 'need',
+            status: 'active',
+            authorPublicKey: me,
+            authorCallsign: S.member,
+            acceptedBy: undefined,
+            credits: d.amount,
+            photos: [],
+            createdAt: at(d.daysAgo),
+            category: 'services',
+            description: '',
+            priceType: 'fixed',
+            active: true,
+            repeatable: false,
+        }
+        : {
+            id: `${d.id}-post`,
+            title: d.what,
+            type: 'offer',
+            status: 'pending',
+            authorPublicKey: SAMPLE_NEIGHBOUR,
+            authorCallsign: d.who,
+            acceptedBy: me,
+            credits: d.amount,
+            photos: [],
+            createdAt: at(d.daysAgo),
+            category: 'services',
+            description: '',
+            priceType: 'fixed',
+            active: true,
+            repeatable: false,
+        });
+    const transactions: MarketplaceTransaction[] = S.deals.map(d => {
+        const bought = d.side === 'bought';
+        return {
+            id: d.id,
+            postId: `${d.id}-post`,
+            postTitle: d.what,
+            status: d.state,
+            buyerPublicKey: bought ? me : SAMPLE_NEIGHBOUR,
+            buyerCallsign: bought ? S.member : d.who,
+            sellerPublicKey: bought ? SAMPLE_NEIGHBOUR : me,
+            sellerCallsign: bought ? d.who : S.member,
+            credits: d.amount,
+            createdAt: at(d.daysAgo),
+            ratedByBuyer: false,
+            ratedBySeller: false,
+        };
+    });
+    return { identity: SAMPLE_DEALS_ME, posts, transactions };
 }
 
-export function DealsPreview(ways: LocalCommunityWays) {
-    return (
-        <div data-testid="deals-preview">
-            <LocalCommunityStrip feature="escrow" {...ways} />
-            <SampleHeader />
-            <ul className="flex flex-col gap-3">
-                {S.deals.map((d) => (
-                    <li key={d.id} className={CARD} data-testid={`sample-deal-${d.id}`}>
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="font-bold text-nature-900 dark:text-nature-50">{d.what}</p>
-                                <p className="text-xs text-nature-500 dark:text-nature-400">with {d.who} · {ago(d.daysAgo)}</p>
-                            </div>
-                            <span className="shrink-0 font-bold tabular-nums text-nature-800 dark:text-nature-100">{d.state === 'completed' && d.side === 'sold' ? beans(d.amount) : `${d.amount} Beans`}</span>
-                        </div>
-                        <DealLine deal={d} {...ways} />
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
-}
+/** My Deals' chip in preview, one per sample state: a state added to SampleDeal fails tsc here until it has its own. */
+const SAMPLE_DEAL_CHIP: Record<SampleDeal['state'], { label: () => string; tone: string }> = {
+    requested: { label: () => t('Action Required'), tone: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' },
+    pending: { label: () => t('Held in trust'), tone: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' },
+    completed: { label: () => t('Completed'), tone: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' },
+};
 
-/** My Deals in preview, as a dialog over the Market. */
-export function DealsPreviewDialog({ onClose, ...ways }: { onClose: () => void } & LocalCommunityWays) {
-    return (
-        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
-            <div role="dialog" aria-modal="true" aria-label="My Deals" onClick={(e) => e.stopPropagation()}
-                className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white dark:bg-nature-900 p-4 shadow-xl">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                    <h2 className="text-lg font-extrabold text-nature-900 dark:text-nature-50">🤝 My Deals</h2>
-                    <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800 dark:hover:text-nature-200">✕</button>
-                </div>
-                <DealsPreview {...ways} />
-            </div>
-        </div>
-    );
+/** The chip for a sample deal's status, or null for any other: a deal is never drawn as a state it is not in. */
+export function sampleDealChip(status: string): { label: string; tone: string } | null {
+    const chip = Object.prototype.hasOwnProperty.call(SAMPLE_DEAL_CHIP, status) ? SAMPLE_DEAL_CHIP[status as SampleDeal['state']] : null;
+    return chip ? { label: chip.label(), tone: chip.tone } : null;
 }

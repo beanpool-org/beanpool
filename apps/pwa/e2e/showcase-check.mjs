@@ -212,7 +212,7 @@ async function markersNeverLocked(page, where) {
 /** Every control the showcase draws (previews, markers, the sheet, the Start screen, My Deals' preview) is 44 x 44 px or more. */
 async function targetsAtLeast44(page, where) {
     const small = await page.evaluate(() => {
-        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"]';
+        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"], [role="dialog"][aria-labelledby="my-deals-title"]';
         return Array.from(document.querySelectorAll('button, a[href], [role="button"], input, select, textarea'))
             .filter((el) => el instanceof Element && (el.matches(ours) || el.closest(ours)) && el.getClientRects().length > 0)
             .map((el) => ({ el, r: el.getBoundingClientRect() }))
@@ -352,14 +352,24 @@ async function globalMember(browser, root, dark) {
         await tab(page, 'Market');
         await page.getByRole('button', { name: /My Deals/ }).first().click();
         await page.getByTestId('deals-preview').waitFor({ timeout: 10_000 });
-        check(await page.getByRole('button', { name: 'Close My Deals' }).count() === 0 && await page.getByRole('dialog').count() === 1, 'My Deals: the preview alone, never the live My Deals');
+        check(await page.getByTestId('local-community-strip').isVisible() && await page.getByTestId('sample-header').isVisible(), 'My Deals: strip + EXAMPLE present');
+        check(await page.getByTestId('sample-deal-sample-deal-shelves').isVisible() && await page.getByTestId('sample-deal-sample-deal-bike').isVisible(), 'My Deals: In Progress sample deals present');
         await noSideScroll(page, 'My Deals preview');
         await targetsAtLeast44(page, 'My Deals preview');
         await shot(page, `deals-${scheme}`);
-        await page.getByTestId('deals-preview').getByTestId('local-community-action').first().click();
+        await page.getByTestId('sample-deal-sample-deal-shelves').getByTestId('local-community-action').click();
         await page.getByTestId('local-community-sheet').waitFor();
         await closeSheet(page);
-        await page.getByRole('dialog', { name: 'My Deals' }).getByRole('button', { name: 'Close' }).click();
+        await page.getByTestId('sample-deal-sample-deal-bike').getByTestId('local-community-action').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page);
+        await page.getByRole('button', { name: /History/ }).click();
+        await page.getByTestId('sample-deal-sample-deal-mending').waitFor({ timeout: 5_000 });
+        check(await page.getByTestId('sample-deal-sample-deal-mending').isVisible(), 'My Deals: History sample deal present');
+        await page.getByTestId('sample-deal-sample-deal-mending').getByTestId('local-community-action').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page);
+        await page.getByRole('button', { name: /Close My Deals/ }).first().click();
         await wait(1_000);
         readsNothingOwn(net, tMarket, node.origin, 'the Market tab\'s load and My Deals');
         const tListing = Date.now();

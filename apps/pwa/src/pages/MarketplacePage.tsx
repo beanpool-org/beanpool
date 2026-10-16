@@ -18,7 +18,6 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
-import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
@@ -3401,16 +3400,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
-            {showDealsModal && dealsMode === 'preview' && (
-                <DealsPreviewDialog onClose={() => setShowDealsModal(false)} onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined} onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined} />
-            )}
             <MyDealsModal
-                visible={showDealsModal && dealsMode !== 'preview'}
+                visible={showDealsModal}
+                preview={dealsMode === 'preview'}
                 identity={identity}
                 onClose={() => setShowDealsModal(false)}
                 posts={posts}
                 transactions={myTransactions}
                 initialTab={dealsInitialTab}
+                onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
+                onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
                 onNavigateToPost={async (postId, txId) => {
                     const found = posts.find(p => p.id === postId);
                     if (found) {

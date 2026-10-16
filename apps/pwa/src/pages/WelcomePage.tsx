@@ -705,9 +705,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingDigits, setPairingDigits] = useState('');
     const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
 
-    /** The relay could not tie this page to its code: the page is open at another address than its community's. */
     /** The code lives 120 s; with nothing from a phone 20 s after it went up, the page says why that may be. */
     const PAIRING_HINT_AFTER_LEFT = 100;
+    /** The relay could not tie this page to its code: the page is open at another address than its community's. */
     const PAIRING_WRONG_BROWSER = () => t('This page can\'t finish linking from here. Open your community\'s own web address on this computer and make a new code there.');
 
     async function handleConfirmPairingDigits(e: React.FormEvent) {

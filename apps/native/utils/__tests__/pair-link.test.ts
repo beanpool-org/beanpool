@@ -18,7 +18,7 @@ vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter
 vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
 
 import { isPairLink, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
-import { afterJoinRedirect, parsePairingQr, plainHttpsOrigin, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
+import { afterJoinRedirect, parsePairingQr, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
 import { redirectSystemPath } from '../../app/+native-intent';
 
 const SESSION = 'a1'.repeat(16);
@@ -142,7 +142,7 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         const body = readCode();
         expect(body).toContain('readPairingCode(data, source)');
         expect(body).toContain('transferTarget(parsed.nodeUrl, anchor, saved)');
-        expect(body).toContain('setScannedData({ ...parsed, target })');
+        expect(body).toContain('setScannedData({ ...parsed, target, source })');
         expect(src).not.toContain('parsePairingQr(');
     });
 
@@ -165,9 +165,32 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         expect(slice(confirm, 'await fetch(urls.transfer', '});')).toContain("confirm: 'digits'");
     });
 
-    it("a link never replaces the sheet while an account is on its way or its digits are shown", () => {
+    it("a link never replaces an open sheet (as a camera scan can't): not while it asks, sends, shows the digits, or at all (review N2)", () => {
         const effect = slice(pair(), 'useEffect(() => {\n        if (linkCode === undefined', '}, [linkCode]);');
-        expect(effect).toContain('isTransferringRef.current || confirmCodeRef.current || lockBusyRef.current) return;');
+        expect(effect).toContain("if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');");
+        // The camera's own guard, for comparison: an open sheet stops it too.
+        expect(pair()).toContain('if (isScanningLocked.current || isTransferring || scannedData) return;');
+    });
+
+    it('the link is cleared from the route once read (or dropped), so the same link opened again is read again (review N3)', () => {
+        const effect = slice(pair(), 'useEffect(() => {\n        if (linkCode === undefined', '}, [linkCode]);');
+        const read = effect.indexOf("void readCode(linkCode, 'link');");
+        const cleared = effect.indexOf('router.setParams({ qr: undefined });');
+        expect(read).toBeGreaterThan(-1);
+        // After the read starts, and on its own line: whether the link was read or dropped, it is cleared.
+        expect(cleared).toBeGreaterThan(read);
+        expect(effect.slice(read, cleared)).toMatch(/^void readCode\(linkCode, 'link'\);\s*$/);
+        expect(effect).toMatch(/if \(linkCode === undefined\) return;/);
+    });
+
+    it('a sheet opened from a link says so, once, in its own words (review N1)', () => {
+        const src = pair();
+        expect(readCode()).toContain('setScannedData({ ...parsed, target, source })');
+        const line = slice(src, "{scannedData?.source === 'link' && (", '</Text>');
+        expect(line).toContain("t('This opened from a link. Go on only if you just pointed your camera at a code on your own screen.')");
+        // On the sheet that asks, before anything can be confirmed; not on the digits.
+        expect(src.indexOf("{scannedData?.source === 'link' && (")).toBeGreaterThan(src.indexOf("t('Send your whole account to another device?')"));
+        expect(src.indexOf("{scannedData?.source === 'link' && (")).toBeLessThan(src.indexOf('onPress={handleConfirmLink}'));
     });
 
     it('the sheet shows whether or not BeanPool may use the camera: a link needs none', () => {
@@ -189,14 +212,16 @@ describe('a refused server: join it on this phone first, through its own door, t
         expect(refusalJoin(target)).toEqual({ kind: 'global', href: { pathname: '/join-global', params: { then: 'pair-device' } } });
     });
 
-    it("any other community's code: the invite join with that server filled in, back to the pairing screen after", () => {
-        for (const node of ['https://castlemaine.example', 'https://lan.example:8443', 'https://[2001:db8::1]']) {
-            const join = refusalJoin(transferTarget(node, OWN, []));
-            const host = node.slice('https://'.length);
-            expect(join, node).toEqual({ kind: 'other', host, href: { pathname: '/(tabs)/people', params: { view: 'invites', server: node, then: 'pair-device' } } });
+    it("any other community's code: no join button at all (review B1: a join would make the sender's server one the next scan sends to)", () => {
+        for (const node of ['https://castlemaine.example', 'https://castlemaine.example/', 'https://evil-relay.example', 'https://lan.example:8443', 'https://[2001:db8::1]', 'https://global.beanpool.org.evil.example', 'https://beanpool.org']) {
+            const target = transferTarget(node, OWN, []);
+            expect(target.kind, node).toBe('foreign');
+            expect(refusalJoin(target), node).toBeNull();
         }
-        // A trailing slash in the QR: the same server, filled in without it.
-        expect(refusalJoin(transferTarget('https://castlemaine.example/', OWN, []))?.href.params).toMatchObject({ server: 'https://castlemaine.example' });
+        // Nor without a community of its own on the phone.
+        expect(refusalJoin(transferTarget('https://castlemaine.example', null, []))).toBeNull();
+        // Global's code with no community on the phone: still the global door.
+        expect(refusalJoin(transferTarget('https://global.beanpool.org/', null, []))?.kind).toBe('global');
     });
 
     it('no join button for a server this phone uses, for no server, or for a host the strict grammar did not read', () => {
@@ -222,26 +247,33 @@ describe('a refused server: join it on this phone first, through its own door, t
         }
     });
 
-    it("People fills the server only from a plain https origin", () => {
-        expect(plainHttpsOrigin('https://castlemaine.example')).toBe('https://castlemaine.example');
-        expect(plainHttpsOrigin('https://castlemaine.example/')).toBe('https://castlemaine.example');
-        for (const bad of ['http://castlemaine.example', 'https://a@b.example', 'javascript:alert(1)', 'https://x.example/p', undefined, ['https://x.example']]) {
-            expect(plainHttpsOrigin(bad), String(bad)).toBeNull();
-        }
-    });
-
-    it('the screens are wired: the button under the refusal, People and the global door come back to pair', () => {
+    it('the screens are wired: the global button under the refusal, the global door comes back to pair; People reads no server', () => {
         const src = pair();
         expect(src).toContain('const join = refusalJoin(scannedData?.target);');
         expect(src).toContain('onPress={() => joinFromRefusal(join)}');
         expect(slice(src, 'function joinFromRefusal(', '\n    }\n')).toMatch(/handleDismissSheet\(\);\s*router\.push\(join\.href as any\);/);
-        expect(src).toContain("t('🌍 Join the global community')");
-        expect(src).toContain("t('Join {host}', { host: join.host })");
-        const people = code(fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/people.tsx'), 'utf-8'));
-        expect(people).toContain('const server = plainHttpsOrigin(params.server);');
-        expect(people).toContain("redirect: afterJoinRedirect(params.then, HOME_REDIRECT)");
+        expect(src).toContain("const label = t('🌍 Join the global community');");
+        expect(src).not.toContain('Join {host}');
         const global = code(fs.readFileSync(path.resolve(__dirname, '../../app/join-global.tsx'), 'utf-8'));
         expect(global).toContain('redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name');
+        // People's invite join is as before: no server filled in from a route, no way back to the pairing screen.
+        const people = code(fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/people.tsx'), 'utf-8'));
+        expect(people).not.toContain('pair-device-target');
+        expect(people).not.toContain('params.server');
+        expect(people).not.toContain('params.then');
+        expect(people).toContain("const params = useLocalSearchParams<{ view?: string }>();");
+    });
+
+    it('the refusal words: the way through at the phone\'s own server; "join" only for global; never "join {host}" or the 12 words', () => {
+        const refusal = slice(pair(), 'function targetRefusal(', '\n    }\n');
+        expect(refusal).toContain('const global = refusalJoin(target) !== null;');
+        // With a community of its own on the phone.
+        expect(refusal).toContain("? t('This code is from {host}, a server your phone doesn\\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })");
+        expect(refusal).toContain(": t('This code is from {host}, a server your phone doesn\\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.', { host: target.scannedHost, own: target.appHost });");
+        // Without one.
+        expect(refusal).toContain("? t('This code is from {host}, a server your phone doesn\\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })");
+        expect(refusal).toContain(": t('This code is from {host}, a server your phone doesn\\'t use. Nothing was sent.', { host: target.scannedHost });");
+        for (const never of ['join {host}', 'Join {host}', '12 words', 'restore']) expect(refusal, never).not.toContain(never);
     });
 });
 

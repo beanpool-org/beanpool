@@ -36,7 +36,6 @@ import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
-import { afterJoinRedirect, plainHttpsOrigin } from '../../utils/pair-device-target';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
@@ -161,9 +160,7 @@ export default function PeopleScreen() {
         },
     }));
 
-    // `server` + `then`: from the pairing screen's "Join <host>" (utils/pair-device-target.ts refusalJoin): the invite
-    // join below with that server filled in, and back to the pairing screen after.
-    const params = useLocalSearchParams<{ view?: string; server?: string; then?: string }>();
+    const params = useLocalSearchParams<{ view?: string }>();
     const [view, setView] = useState<SubView>(initialPeopleView(params.view));
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -193,10 +190,6 @@ export default function PeopleScreen() {
     
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
-    useEffect(() => {
-        const server = plainHttpsOrigin(params.server);
-        if (server) setRedeemNodeUrl(server);
-    }, [params.server]);
     const [redeeming, setRedeeming] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState('');
     const [tierName, setTierName] = useState('');
@@ -638,7 +631,7 @@ export default function PeopleScreen() {
             // community (design §3.6). With a vault, a linked sign-in already covers this community.
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
-                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: afterJoinRedirect(params.then, HOME_REDIRECT) } }) },
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).
                 ...(nudge.protect
                     ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]

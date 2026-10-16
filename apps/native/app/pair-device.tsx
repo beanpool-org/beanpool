@@ -44,6 +44,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface ParsedPairingData extends PairingQr {
     /** Where the account may go: only a server this phone already uses (utils/pair-device-target.ts). Set at scan. */
     target?: TransferTarget;
+    /** 'link': opened from outside the app, not scanned here; the sheet says so (the deciding review of #2025, N1). */
+    source: 'camera' | 'link';
 }
 
 export default function PairDeviceScreen() {
@@ -68,11 +70,13 @@ export default function PairDeviceScreen() {
     const confirmCodeRef = useRef(confirmCode);
     confirmCodeRef.current = confirmCode;
 
-    // A link opened from outside the app: read like a scan. Not while an account is on its way or its digits are shown,
-    // so a second link can't replace the sheet the member is acting on.
+    // A link opened from outside the app: read like a scan. Not while any sheet is open (a camera scan can't replace one
+    // either): a second link never swaps the session under the member's thumb; they close the sheet first. Then the
+    // link is cleared from the route, so the same link opened again (after Cancel, or "scan again") is read again.
     useEffect(() => {
-        if (linkCode === undefined || isTransferringRef.current || confirmCodeRef.current || lockBusyRef.current) return;
-        void readCode(linkCode, 'link');
+        if (linkCode === undefined) return;
+        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');
+        router.setParams({ qr: undefined });
     }, [linkCode]);
 
     useEffect(() => {
@@ -340,7 +344,7 @@ export default function PairDeviceScreen() {
         const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
         const target = transferTarget(parsed.nodeUrl, anchor, saved);
         setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
-        setScannedData({ ...parsed, target });
+        setScannedData({ ...parsed, target, source });
     }
 
     /** After the refusal's OK: a moment first, so the same code still in view isn't read again at once. */
@@ -352,14 +356,22 @@ export default function PairDeviceScreen() {
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
         if (target.kind === 'no-node') return t('Connect to your community first.');
-        // Both ways through, named: the other device at this phone's own community, or this phone joining the code's
-        // community first (refusalJoin, the button below). Either way the code is scanned again; this one is not reused.
-        return target.appHost
-            ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })
-            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.', { host: target.scannedHost });
+        // The way through: the other device at this phone's own community. For global's code only, also this phone
+        // joining global first (refusalJoin, the button below). Never "join {host}" for any other server: that join would
+        // make the next scan of the same code send the account to it (the deciding review of #2025, B1). Never the
+        // 12 words either: typed on whatever device showed the code, they would reach the same server.
+        const global = refusalJoin(target) !== null;
+        if (target.appHost) {
+            return global
+                ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })
+                : t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.', { host: target.scannedHost, own: target.appHost });
+        }
+        return global
+            ? t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })
+            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent.', { host: target.scannedHost });
     }
 
-    /** "Join …" under a refusal: the sheet closes (nothing was sent, nothing is kept), then that community's own door. */
+    /** "Join the global community" under a refusal: the sheet closes (nothing was sent, nothing is kept), then its door. */
     function joinFromRefusal(join: NonNullable<ReturnType<typeof refusalJoin>>) {
         handleDismissSheet();
         router.push(join.href as any);
@@ -522,6 +534,11 @@ export default function PairDeviceScreen() {
                             <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
                                 {t('Only scan a code on a screen in front of you that you just opened yourself. Never one someone sent you or put on a sign.')}
                             </Text>
+                            {scannedData?.source === 'link' && (
+                                <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
+                                    {t('This opened from a link. Go on only if you just pointed your camera at a code on your own screen.')}
+                                </Text>
+                            )}
     
                             <View style={styles.infoBox}>
                                 <View style={styles.infoRow}>
@@ -552,9 +569,10 @@ export default function PairDeviceScreen() {
                             )}
     
                             {(() => {
+                                // Only for global's code (refusalJoin): never a button to join the server a code names.
                                 const join = refusalJoin(scannedData?.target);
                                 if (!join) return null;
-                                const label = join.kind === 'global' ? t('🌍 Join the global community') : t('Join {host}', { host: join.host });
+                                const label = t('🌍 Join the global community');
                                 return (
                                     <Pressable style={styles.confirmBtn} onPress={() => joinFromRefusal(join)} accessibilityRole="button" accessibilityLabel={label}>
                                         <Text style={styles.confirmBtnText}>{label}</Text>

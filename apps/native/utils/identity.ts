@@ -67,10 +67,6 @@ async function readKeyItem(): Promise<string | null> {
     return keyItemJob(readKeyItemNow);
 }
 
-async function writeKeyItem(payload: string): Promise<void> {
-    await keyItemJob(() => SecureStore.setItemAsync(KEY_ID, payload, KEY_ITEM_OPTIONS));
-}
-
 async function deleteKeyItem(): Promise<void> {
     await keyItemJob(async () => {
         await SecureStore.deleteItemAsync(KEY_ID);
@@ -100,6 +96,15 @@ function publicKeyIn(item: string): string | null {
     } catch {
         return null;
     }
+}
+
+/**
+ * One spelling of a public key, to compare two: hex reads the same in either case, and a stray space is not another account.
+ * The public key is the account (both apps derive it from the 12 words the same way); the private key is never compared,
+ * since the web keeps it as PKCS8 and the phone as the raw seed.
+ */
+function sameAccountKey(a: string, b: string): boolean {
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 /** Writes `value` under `key`, this-device-only, and reads it back: true only if the same string comes back. */
@@ -189,13 +194,22 @@ export interface BeanPoolIdentity {
     mnemonic?: string[];  // 12-word recovery phrase (optional for legacy identities)
 }
 
-async function migrateLegacyIdentity(): Promise<void> {
+/** Where a build before SecureStore kept the key: AsyncStorage in the app, a map in tests. */
+export interface LegacyIdentityStorage {
+    getItem(key: string): Promise<string | null>;
+    removeItem(key: string): Promise<void>;
+}
+
+/** A key a build before SecureStore left in AsyncStorage, moved into the key item. Run by every {@link loadIdentity}. */
+export async function migrateLegacyIdentity(storage?: LegacyIdentityStorage): Promise<void> {
     if (isWeb) return;
     try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const AsyncStorage: LegacyIdentityStorage = storage ?? require('@react-native-async-storage/async-storage').default;
         const legacyIdentity = await AsyncStorage.getItem('beanpool:identity');
         if (legacyIdentity) {
-            await writeKeyItem(legacyIdentity);
+            // Through the same guard as every other write: never over an account the phone holds, readable or not. A copy
+            // that is refused (or doesn't parse) stays where it is, and the next read tries again.
+            await saveIdentity(JSON.parse(legacyIdentity));
             await AsyncStorage.removeItem('beanpool:identity');
             console.log('Successfully migrated legacy identity to SecureStore');
         }
@@ -396,14 +410,31 @@ export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdent
  * a new key never goes over it. The member restarts and tries again, or restores with their 12 words.
  */
 export class StoredKeyUnreadableError extends Error {
-    constructor() {
-        super('The account stored on this phone could not be read, so it was not replaced.');
+    constructor(message = 'The account stored on this phone could not be read, so it was not replaced.') {
+        super(message);
         this.name = 'StoredKeyUnreadableError';
     }
 }
 
+/**
+ * The phone holds a readable account, and not the one being written: nothing was written. The likeliest way here is a
+ * passing fault that ended between Welcome's read (no account, so a new one is made) and the write. The account that is
+ * there may be the member's only copy, so only a replace the member confirmed goes over it (restore-account.ts). A kind
+ * of {@link StoredKeyUnreadableError}, so every screen that catches that one says the same thing: a restart reads the
+ * account that is there.
+ */
+export class StoredKeyDiffersError extends StoredKeyUnreadableError {
+    constructor() {
+        super('This phone holds a different BeanPool account, so it was not replaced.');
+        this.name = 'StoredKeyDiffersError';
+    }
+}
+
 export interface SaveOptions {
-    /** The member is restoring an account they hold (their 12 words or their sign-in): it may replace an unreadable item. */
+    /**
+     * The member is restoring an account they hold (their 12 words or their sign-in), and restore-account.ts has asked
+     * them before replacing a different one: it may go over an unreadable item or another account.
+     */
     replaceUnreadable?: boolean;
 }
 
@@ -412,9 +443,10 @@ export interface SaveOptions {
  * what the phone keeps per account (blocklist.ts) follows it without a restart.
  *
  * Before the write it reads the item (KEY-04): one that is there but holds no readable public key, or a read that throws
- * (expo-secure-store throws for anything but "not found"), refuses with {@link StoredKeyUnreadableError} unless
- * `replaceUnreadable` says the member asked for this account back. A readable item is written over as before: the same
- * key is this account's own update, and a different one has been through the confirm-replace screen.
+ * (expo-secure-store throws for anything but "not found"), refuses with {@link StoredKeyUnreadableError}, and one that
+ * holds another account's public key refuses with {@link StoredKeyDiffersError}, unless `replaceUnreadable` says the
+ * member asked for this account back. The same public key ({@link sameAccountKey}) is this account's own update (a new
+ * name, its words added, the join or re-key saving the key it already holds) and is written as before.
  */
 async function saveIdentity(identity: BeanPoolIdentity, { replaceUnreadable = false }: SaveOptions = {}): Promise<void> {
     const payload = JSON.stringify(identity);
@@ -425,7 +457,11 @@ async function saveIdentity(identity: BeanPoolIdentity, { replaceUnreadable = fa
         await keyItemJob(async () => {
             if (!replaceUnreadable) {
                 const stored = await readKeyItemNow().catch(() => { throw new StoredKeyUnreadableError(); });
-                if (stored && !publicKeyIn(stored)) throw new StoredKeyUnreadableError();
+                if (stored) {
+                    const storedKey = publicKeyIn(stored);
+                    if (!storedKey) throw new StoredKeyUnreadableError();
+                    if (!sameAccountKey(storedKey, identity.publicKey)) throw new StoredKeyDiffersError();
+                }
             }
             await SecureStore.setItemAsync(KEY_ID, payload, KEY_ITEM_OPTIONS);
         });

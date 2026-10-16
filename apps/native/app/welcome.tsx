@@ -1527,7 +1527,10 @@ export default function WelcomeScreen() {
             await afterDoorAnswer(answer, key, identity, 'join');
         } catch (err) {
             setDoorSignIn(null);
-            setError((err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
+            // The phone's account read as none a moment ago and is there now, or can't be read: never replaced (identity.ts).
+            setError(err instanceof StoredKeyUnreadableError
+                ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
+                : (err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
             setGlobalPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
@@ -1584,7 +1587,9 @@ export default function WelcomeScreen() {
             const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run);
             await afterDoorAnswer(answer, key, identity, 'join', 'words');
         } catch (err) {
-            setError((err as Error | null)?.message || 'Your join could not be completed. Please try again.');
+            setError(err instanceof StoredKeyUnreadableError
+                ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
+                : (err as Error | null)?.message || 'Your join could not be completed. Please try again.');
             setGlobalPhase('name');
         } finally {
             joinSendingRef.current = false;

@@ -57,8 +57,8 @@ export default function ProjectsScreen() {
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
-    const sections = commonsSections(reader.effective);
-    const showsDecide = sections.includes('decide') || decisionsPreview;
+    const sections = commonsSections(reader.effective, { decisionsPreview });
+    const showsDecide = sections.includes('decide');
     const heading = commonsHeading(reader.effective);
     const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
@@ -70,8 +70,11 @@ export default function ProjectsScreen() {
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
-    const effectivePicked = pickedSection ?? (decisionsPreview ? 'groups' : 'decide');
-    const activeSection = !showsDecide && effectivePicked === 'decide' ? 'groups' : effectivePicked;
+    const activeSection = commonsSectionFor(
+        pickedSection ?? (decisionsPreview ? 'groups' : undefined),
+        reader.effective,
+        { decisionsPreview },
+    );
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
     // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
     // clear the param so a later visit keeps its place.
@@ -610,16 +613,14 @@ export default function ProjectsScreen() {
                         {enterprisesPreview && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
 
                         {/* Commons Pool + My Governance Credits */}
-                        {(showsBeans || decisionsPreview) && (
+                        {showsBeans && (
                         <View style={styles.statCardRow}>
-                            {showsBeans && (
                             <View style={styles.statCard}>
                                 <Text style={styles.statCardLabel} numberOfLines={2}>Commons Pool</Text>
                                 <View style={styles.statCardValueRow}>
                                     <CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)} style={styles.statCardAmount} />
                                 </View>
                             </View>
-                            )}
                             <View style={styles.statCard} testID="voice-credits-card">
                                 {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
                                     What the credits are for goes in the hint, which wraps freely. */}
@@ -635,7 +636,7 @@ export default function ProjectsScreen() {
                         )}
 
                         {/* Section Switcher: Decide vs Groups, where this node shows both; none for Groups alone */}
-                        {(sections.length > 1 || decisionsPreview) && (
+                        {sections.length > 1 && (
                         <View style={styles.sectionTabsRow}>
                             {showsDecide && (
                             <Pressable

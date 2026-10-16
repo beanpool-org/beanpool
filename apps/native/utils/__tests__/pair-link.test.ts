@@ -18,7 +18,7 @@ vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter
 vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
 
 import { isPairLink, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
-import { parsePairingQr, readPairingCode, transferTarget } from '../pair-device-target';
+import { afterJoinRedirect, parsePairingQr, plainHttpsOrigin, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
 import { redirectSystemPath } from '../../app/+native-intent';
 
 const SESSION = 'a1'.repeat(16);
@@ -179,5 +179,68 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         const skip = layout.indexOf('if (isPairLink(currentUrl)) return;');
         expect(skip).toBeGreaterThan(-1);
         expect(skip).toBeLessThan(layout.indexOf('const inviteToken = extractInviteToken(currentUrl);'));
+    });
+});
+
+describe('a refused server: join it on this phone first, through its own door, then scan again', () => {
+    it("the global community's code: its own door (join-global), back to the pairing screen after", () => {
+        const target = transferTarget('https://global.beanpool.org', 'https://beanpool.depincloud.net', []);
+        expect(target.kind).toBe('foreign');
+        expect(refusalJoin(target)).toEqual({ kind: 'global', href: { pathname: '/join-global', params: { then: 'pair-device' } } });
+    });
+
+    it("any other community's code: the invite join with that server filled in, back to the pairing screen after", () => {
+        for (const node of ['https://castlemaine.example', 'https://lan.example:8443', 'https://[2001:db8::1]']) {
+            const join = refusalJoin(transferTarget(node, OWN, []));
+            const host = node.slice('https://'.length);
+            expect(join, node).toEqual({ kind: 'other', host, href: { pathname: '/(tabs)/people', params: { view: 'invites', server: node, then: 'pair-device' } } });
+        }
+        // A trailing slash in the QR: the same server, filled in without it.
+        expect(refusalJoin(transferTarget('https://castlemaine.example/', OWN, []))?.href.params).toMatchObject({ server: 'https://castlemaine.example' });
+    });
+
+    it('no join button for a server this phone uses, for no server, or for a host the strict grammar did not read', () => {
+        expect(refusalJoin(transferTarget(OWN, OWN, []))).toBeNull();
+        expect(refusalJoin(transferTarget('', null, []))).toBeNull();
+        expect(refusalJoin(undefined)).toBeNull();
+        // transferTarget only names a host it read in the canonical spelling; any other leaves it empty: no button.
+        for (const bad of ['https://Global.Beanpool.org', 'https://mullum.example\\@evil.test', 'https://evil@mullum.example', 'http://castlemaine.example', 'https://castlemaine.example/path']) {
+            expect(refusalJoin(transferTarget(bad, OWN, [])), bad).toBeNull();
+        }
+        // And a hand-made target with such a host is refused by the same grammar.
+        for (const scannedHost of ['evil.test/x', 'a@b.example', 'UPPER.example', 'x.example:443x', 'x.example/']) {
+            expect(refusalJoin({ kind: 'foreign', scannedHost, appHost: null }), scannedHost).toBeNull();
+        }
+        // A code the grammar refuses never reaches the sheet at all: the unreadable words, no sheet, no button.
+        expect(readPairingCode(`beanpool://pair?session=${SESSION}&pub=${PUB}&node=${encodeURIComponent('https://evil@global.beanpool.org')}`, 'link')).toEqual({ kind: 'unreadable' });
+    });
+
+    it('after the join: the pairing screen only for the fixed name, every other value keeps the screen it had', () => {
+        expect(afterJoinRedirect('pair-device', '/(tabs)')).toBe('/pair-device');
+        for (const other of [undefined, '', '/pair-device', 'https://evil.test', '/(tabs)/settings', ['pair-device']]) {
+            expect(afterJoinRedirect(other, '/(tabs)'), String(other)).toBe('/(tabs)');
+        }
+    });
+
+    it("People fills the server only from a plain https origin", () => {
+        expect(plainHttpsOrigin('https://castlemaine.example')).toBe('https://castlemaine.example');
+        expect(plainHttpsOrigin('https://castlemaine.example/')).toBe('https://castlemaine.example');
+        for (const bad of ['http://castlemaine.example', 'https://a@b.example', 'javascript:alert(1)', 'https://x.example/p', undefined, ['https://x.example']]) {
+            expect(plainHttpsOrigin(bad), String(bad)).toBeNull();
+        }
+    });
+
+    it('the screens are wired: the button under the refusal, People and the global door come back to pair', () => {
+        const src = pair();
+        expect(src).toContain('const join = refusalJoin(scannedData?.target);');
+        expect(src).toContain('onPress={() => joinFromRefusal(join)}');
+        expect(slice(src, 'function joinFromRefusal(', '\n    }\n')).toMatch(/handleDismissSheet\(\);\s*router\.push\(join\.href as any\);/);
+        expect(src).toContain("t('🌍 Join the global community')");
+        expect(src).toContain("t('Join {host}', { host: join.host })");
+        const people = code(fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/people.tsx'), 'utf-8'));
+        expect(people).toContain('const server = plainHttpsOrigin(params.server);');
+        expect(people).toContain("redirect: afterJoinRedirect(params.then, HOME_REDIRECT)");
+        const global = code(fs.readFileSync(path.resolve(__dirname, '../../app/join-global.tsx'), 'utf-8'));
+        expect(global).toContain('redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name');
     });
 });

@@ -36,7 +36,7 @@ import { palette } from '../constants/colors';
 import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
-import { pairingRequestUrls, readPairingCode, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -352,9 +352,17 @@ export default function PairDeviceScreen() {
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
         if (target.kind === 'no-node') return t('Connect to your community first.');
+        // Both ways through, named: the other device at this phone's own community, or this phone joining the code's
+        // community first (refusalJoin, the button below). Either way the code is scanned again; this one is not reused.
         return target.appHost
-            ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.', { host: target.scannedHost, own: target.appHost })
-            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. To use your account there, restore it with your 12 words.', { host: target.scannedHost });
+            ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })
+            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.', { host: target.scannedHost });
+    }
+
+    /** "Join …" under a refusal: the sheet closes (nothing was sent, nothing is kept), then that community's own door. */
+    function joinFromRefusal(join: NonNullable<ReturnType<typeof refusalJoin>>) {
+        handleDismissSheet();
+        router.push(join.href as any);
     }
 
     async function handleConfirmLink() {
@@ -543,6 +551,17 @@ export default function PairDeviceScreen() {
                                 </Text>
                             )}
     
+                            {(() => {
+                                const join = refusalJoin(scannedData?.target);
+                                if (!join) return null;
+                                const label = join.kind === 'global' ? t('🌍 Join the global community') : t('Join {host}', { host: join.host });
+                                return (
+                                    <Pressable style={styles.confirmBtn} onPress={() => joinFromRefusal(join)} accessibilityRole="button" accessibilityLabel={label}>
+                                        <Text style={styles.confirmBtnText}>{label}</Text>
+                                    </Pressable>
+                                );
+                            })()}
+
                             {scannedData?.target?.kind === 'ok' && (
                             <Pressable
                                 style={[styles.confirmBtn, isTransferring && { opacity: 0.7 }]}

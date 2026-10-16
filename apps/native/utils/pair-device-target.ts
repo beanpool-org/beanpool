@@ -23,6 +23,7 @@
  * words still work anywhere. The screen relies on this: it keeps no cleartext check of its own.
  */
 import { plainOriginOf } from './node-url';
+import { GLOBAL_NODE_URL } from './global-node-url';
 
 export interface PairingQr {
     sessionId: string;
@@ -125,4 +126,38 @@ export function pairingRequestUrls(target: Extract<TransferTarget, { kind: 'ok' 
         transfer: `${target.nodeUrl}/api/pair/transfer`,
         cancel: `${target.nodeUrl}/api/pair/cancel`,
     };
+}
+
+/**
+ * The other way through a refusal (Marty, 16 Oct: "why can't he add global as a second node to his phone?"): join the
+ * QR's community on this phone first, through that community's own door, then scan again. The rule above is unchanged:
+ * the QR never adds a server, and the refused QR is not reused; the member scans a new one once they belong there.
+ *  - The global community: its own door (app/join-global.tsx), with its sign-in and checks.
+ *  - Any other community: the invite join a member already has (People → Join Another Community), with the server
+ *    filled in; the member types or pastes that community's invite there. Without one, that community's own door.
+ * Only for a host the strict grammar read (a plain https origin in its canonical spelling); nothing for anything else.
+ */
+export type RefusalJoin =
+    | { kind: 'global'; href: { pathname: '/join-global'; params: { then: typeof PAIR_AGAIN } } }
+    | { kind: 'other'; host: string; href: { pathname: '/(tabs)/people'; params: { view: 'invites'; server: string; then: typeof PAIR_AGAIN } } };
+
+/** Where a join started from the pairing screen's refusal comes back to: a fixed name, never a route read from a link. */
+export const PAIR_AGAIN = 'pair-device';
+
+export function refusalJoin(target: TransferTarget | undefined): RefusalJoin | null {
+    if (!target || target.kind !== 'foreign' || !target.scannedHost) return null;
+    const origin = `https://${target.scannedHost}`;
+    if (!CANONICAL_HTTPS_ORIGIN.test(origin) || origin.endsWith('/')) return null;
+    if (origin === GLOBAL_NODE_URL) return { kind: 'global', href: { pathname: '/join-global', params: { then: PAIR_AGAIN } } };
+    return { kind: 'other', host: target.scannedHost, href: { pathname: '/(tabs)/people', params: { view: 'invites', server: origin, then: PAIR_AGAIN } } };
+}
+
+/** The screen after a join: back to the pairing screen when the join started from its refusal, else `otherwise`. */
+export function afterJoinRedirect(then: unknown, otherwise: string): string {
+    return then === PAIR_AGAIN ? '/pair-device' : otherwise;
+}
+
+/** A server field filled from a route's `server` (People's invite join): only a plain https origin, else nothing. */
+export function plainHttpsOrigin(raw: unknown): string | null {
+    return typeof raw === 'string' && CANONICAL_HTTPS_ORIGIN.test(raw) ? raw.replace(/\/$/, '') : null;
 }

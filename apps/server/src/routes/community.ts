@@ -136,10 +136,9 @@ export function createCommunityRoutes(deps: RouteDeps): Router {
 
 router.get('/api/local/status', async (ctx) => {
     const config = getLocalConfig();
-    
-    // Allow cross-origin requests so other nodes' settings UI can fetch status
-    ctx.set('Access-Control-Allow-Origin', '*');
-    
+    // No wildcard Access-Control-Allow-Origin (public-routes audit SEC-PUB-04): its one reader, the legacy settings page's
+    // sister-node map, is gone, and with it any web page could read this from a visitor's browser. An origin the operator
+    // lists in corsAllowedOrigins still gets it through the gateway's CORS layer, as every other route does.
     ctx.body = {
         // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
         // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
@@ -2345,14 +2344,16 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
     // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
     // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
-    // web-restore.ts) and whether a sign-in can bring it back. On the global node the key alone opens nothing
-    // (engine/avatar-keys.ts); a local community's faces are not keyed yet.
+    // web-restore.ts) and whether a sign-in can bring it back. On every node the key alone opens no face
+    // (engine/avatar-keys.ts, SEC-PUB-02).
     ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
 // validates the fun-name suggestions before they're offered. Case-insensitive,
-// per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
+// per-node. The caller's own current name is never taken for a rename: the key is the request's verified signer, never a
+// query parameter. `?exclude=<key>` answered "available" exactly when that key held that name, which told a stranger the
+// name behind any key (public-routes audit NEW-2); it is ignored, and an older app that still sends it signs the check.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
     // joining through the open door, signing its own name check, counts against the door's limiter instead
@@ -2361,8 +2362,9 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     const joining = joiningAtOpenDoor(ctx);
     if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx, 'names'))) return;
     const raw = (ctx.params.callsign || '').trim();
-    const exclude = (ctx.query.exclude as string | undefined) || undefined;
-    const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
+    const signer = ctx.state?.actor;
+    const own = typeof signer === 'string' && /^[0-9a-f]{64}$/i.test(signer) ? signer.toLowerCase() : undefined;
+    const available = raw.length >= 2 && isCallsignAvailable(raw, own);
     ctx.status = 200;
     ctx.body = { callsign: raw, available, tooShort: raw.length < 2 };
 });

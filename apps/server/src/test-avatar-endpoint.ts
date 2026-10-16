@@ -23,6 +23,8 @@ import { initStateEngine, createPost, createTreasury, updateProfile } from './st
 import { avatarRefOf, avatarUrlOf, avatarVersionOf } from '@beanpool/core';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { createAvatarRoutes } from './routes/avatar.js';
+// Each avatar request is the URL a member is handed: with its key (faces are keyed on every node).
+import { withAvatarKey } from './avatar-test-url.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { getAvatarService, AvatarService, AvatarCache, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
@@ -226,7 +228,7 @@ async function main() {
     // it is replaced by one that pins the route, the size AND the presence of a version.
     // Section 7 proves the version actually tracks the content.
     const photoAvatarUrlV1 = photoMember?.avatarUrl as string | undefined;
-    assert(!!photoAvatarUrlV1 && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}$/.test(photoAvatarUrlV1),
+    assert(!!photoAvatarUrlV1 && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$/.test(photoAvatarUrlV1),
         `Member with photo avatar gets a VERSIONED URL /api/avatar/${pkPhoto}?size=thumb&v=<hash> (got: ${photoAvatarUrlV1})`);
     assert(bundledMember && bundledMember.avatarUrl === 'bundled://leaf',
         `Member with bundled avatar preserves bundled:// reference: ${bundledMember?.avatarUrl}`);
@@ -261,7 +263,7 @@ async function main() {
 
     // Same change of contract as the members list above — and this one is emitted from
     // @beanpool/engine's posts.ts, so it also proves the shared helper reaches that package.
-    assert(photoPost && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}$/.test(photoPost.authorAvatarUrl),
+    assert(photoPost && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$/.test(photoPost.authorAvatarUrl),
         `Author with photo avatar gets a VERSIONED URL (got: ${photoPost?.authorAvatarUrl})`);
     assert(photoPost && photoPost.authorAvatarUrl === photoAvatarUrlV1,
         'The marketplace feed and the members list agree on the same versioned URL for the same avatar');
@@ -286,7 +288,7 @@ async function main() {
     console.log('\n--- Section 3: GET /api/avatar/:pubkey ---');
 
     // 3.1 Full size
-    const fullRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=full`);
+    const fullRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=full`));
     assert(fullRes.status === 200, 'GET /api/avatar/:pubkey?size=full returns 200');
     assert(Buffer.isBuffer(fullRes.body), 'Body is binary Buffer');
     assert(fullRes.body.length === sampleJpegBuffer.length, `Full size matches stored bytes (${fullRes.body.length}B)`);
@@ -300,13 +302,13 @@ async function main() {
     assert(!!fullEtag && fullEtag.startsWith('"'), `Full avatar returns strong ETag: ${fullEtag}`);
 
     // Full size 304
-    const full304 = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=full`, {
+    const full304 = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=full`), {
         headers: { 'if-none-match': fullEtag },
     });
     assert(full304.status === 304, 'Conditional GET full avatar with matching ETag returns 304');
 
     // 3.2 Thumb size (reserved parameter, serves full bytes without sharp)
-    const thumbRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`);
+    const thumbRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`));
     assert(thumbRes.status === 200, 'GET /api/avatar/:pubkey?size=thumb returns 200');
     assert(Buffer.isBuffer(thumbRes.body), 'Thumb body is binary Buffer');
     assert(thumbRes.type === 'image/jpeg', 'Thumb Content-Type is image/jpeg');
@@ -316,7 +318,7 @@ async function main() {
     assert(thumbEtag === fullEtag, `Thumb ETag (${thumbEtag}) matches full ETag (${fullEtag})`);
 
     // Thumb size 304
-    const thumb304 = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`, {
+    const thumb304 = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`), {
         headers: { 'if-none-match': thumbEtag },
     });
     assert(thumb304.status === 304, 'Conditional GET thumb avatar with matching ETag returns 304');
@@ -329,13 +331,13 @@ async function main() {
     const l1StatsBefore = avatarService.cache.getStats();
     assert(l1StatsBefore.count > 0, `L1 memory cache contains ${l1StatsBefore.count} entries`);
 
-    const l1HitRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`);
+    const l1HitRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`));
     assert(l1HitRes.status === 200 && l1HitRes.body.equals(thumbRes.body), 'L1 cache hit returns exact bytes');
 
     avatarService.cache.clear();
     assert(avatarService.cache.getStats().count === 0, 'L1 memory cache clear() empties cache');
 
-    const afterClearRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`);
+    const afterClearRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`));
     assert(afterClearRes.status === 200, 'Request after clear() re-fetches from DB and succeeds with 200');
     assert(avatarService.cache.getStats().count === 1, 'Cache re-populated after retrieval');
 
@@ -345,11 +347,11 @@ async function main() {
     console.log('\n--- Section 5: Error Handling & Edge Cases ---');
 
     // Unknown member
-    const unknownRes = await dispatchRoute(avatarRouter, 'GET', '/api/avatar/nonexistent_pubkey');
+    const unknownRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey('/api/avatar/nonexistent_pubkey'));
     assert(unknownRes.status === 404, 'Unknown pubkey returns 404');
 
     // Member with no avatar
-    const noAvatarRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkNone}`);
+    const noAvatarRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkNone}`));
     assert(noAvatarRes.status === 404, 'Member with no avatar returns 404');
 
     // Stored XSS regression. `POST /api/profile/update` does not validate the avatar format,
@@ -364,7 +366,7 @@ async function main() {
     for (const hostile of hostileTypes) {
         setMemberPhoto(db, pkPhoto, hostile);
         avatarService.cache.clear();
-        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        const res = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}`));
         const label = hostile.slice(5, hostile.indexOf(';'));
         assert(res.status === 400, `Hostile avatar MIME ${label} is refused, not served`);
         assert(!String(res.headers['content-type'] || '').includes(label), `${label} is never echoed as Content-Type`);
@@ -373,7 +375,7 @@ async function main() {
     // A bundled id must not be able to walk out of the avatars directory.
     setMemberPhoto(db, pkPhoto, 'bundled://../../../../etc/passwd');
     avatarService.cache.clear();
-    const traversalRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+    const traversalRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}`));
     assert(traversalRes.status === 404, 'Bundled avatar path traversal is refused');
 
     // Batch 8: the test node's Community Eggs enterprise stored a NON-base64 SVG data URL (from
@@ -392,7 +394,7 @@ async function main() {
     for (const [value, label] of notImages) {
         setMemberPhoto(db, pkPhoto, value);
         avatarService.cache.clear();
-        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        const res = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}`));
         assert(res.status === 404, `${label} answers 404 so clients show the placeholder (got ${res.status})`);
         assert(!Buffer.isBuffer(res.body), `${label} serves no image bytes`);
     }
@@ -407,7 +409,7 @@ async function main() {
     for (const [value, type, label] of stillServed) {
         setMemberPhoto(db, pkPhoto, value);
         avatarService.cache.clear();
-        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        const res = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}`));
         assert(res.status === 200 && res.headers['content-type'] === type, `${label} is still served as ${type} (got ${res.status} ${res.headers['content-type']})`);
     }
 
@@ -444,13 +446,13 @@ async function main() {
     setMemberPhoto(db, pkPhoto, newBase64);
     avatarService.delete(pkPhoto);
 
-    const updatedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`);
+    const updatedRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`));
     assert(updatedRes.status === 200, 'Updated avatar returns 200');
     assert(!updatedRes.body.equals(thumbRes.body), 'Updated thumbnail bytes differ from old thumbnail');
     assert(updatedRes.headers['etag'] !== thumbEtag, 'Updated avatar produces a NEW ETag');
 
     // Old ETag now returns 200, not 304
-    const staleEtagRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`, {
+    const staleEtagRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}?size=thumb`), {
         headers: { 'if-none-match': thumbEtag },
     });
     assert(staleEtagRes.status === 200, 'Stale ETag does NOT return 304; receives updated bytes');
@@ -606,7 +608,7 @@ async function main() {
     const verUrl2 = await emittedMemberAvatar();
     assert(!!verUrl2 && verUrl2 !== verUrl1,
         `A CHANGED avatar produces a different emitted URL (${verUrl1} -> ${verUrl2})`);
-    assert(/\?size=thumb&v=[0-9a-f]{8}$/.test(verUrl2!),
+    assert(/\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$/.test(verUrl2!),
         'The changed URL still has the expected shape');
 
     // Put the original bytes back: the version is a content hash, so it must come back too.
@@ -627,7 +629,7 @@ async function main() {
     // of the photo the member holds now, so a list never serves a stale one. (It replaces a memo of versions per request,
     // which this suite held to the same rule: a cold memo gave the warm one's version.)
     const heldRef = (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pkVer) as { avatar_ref: string }).avatar_ref;
-    assert(heldRef === avatarVersionOf(firstPhoto.trim()) && getMemberPhoto(db, pkVer) === firstPhoto && verUrl1!.endsWith(`&v=${heldRef}`),
+    assert(heldRef === avatarVersionOf(firstPhoto.trim()) && getMemberPhoto(db, pkVer) === firstPhoto && verUrl1!.includes(`&v=${heldRef}&k=`),
         'The version in the row is the content hash of the photo held now, and the URL carries it');
 
     // --- 7.2 The route serves with the version parameter present.
@@ -637,11 +639,11 @@ async function main() {
         `GET ${versionedPath} (with &v=) returns 200`);
     assert(versionedRes.headers['content-type'] === 'image/jpeg',
         'The versioned request serves image bytes, not an error body');
-    const unversionedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb`);
+    const unversionedRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkVer}?size=thumb`));
     assert(unversionedRes.status === 200 &&
            Buffer.compare(unversionedRes.body as Buffer, versionedRes.body as Buffer) === 0,
         'A request WITHOUT &v= serves the same current bytes — older builds are not broken');
-    const wrongVersionRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb&v=deadbeef`);
+    const wrongVersionRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkVer}?size=thumb&v=deadbeef`));
     assert(wrongVersionRes.status === 200,
         'A stale or wrong &v= still serves the CURRENT photo rather than 404ing');
 
@@ -665,7 +667,7 @@ async function main() {
             `updateProfile with a ${label} /api/avatar/ URL STILL SAVES the bio (not a 400 — installed builds send this on every Save)`);
     }
     // And the photo is still actually servable afterwards, which is the whole point.
-    const survivedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb`);
+    const survivedRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkVer}?size=thumb`));
     assert(survivedRes.status === 200, 'The photo is still served after four round-tripped saves');
 
     // --- 7.4 Such a string, given as an avatar anyway, reads as "no avatar".

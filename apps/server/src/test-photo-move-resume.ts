@@ -219,16 +219,13 @@ async function main(): Promise<void> {
         assert(inlineServed?.status === 200 && (inlineServed.headers.get('content-type') ?? '').startsWith('image/')
             && !!inlineBytes && inlineBytes.equals(Buffer.from(NEW.split(',')[1], 'base64')),
             `and /api/avatar serves Ann's inline photo at it meanwhile, not a 404 (${inlineServed?.status} ${inlineServed?.headers.get('content-type')})`);
-        // On a node whose faces are keyed (a private preview, guestListingsOnly), the URL carries the key for its stand-in
-        // reference, which the preview's gate and the route take; a wrong key is still refused.
-        process.env.PRIVATE_PREVIEW = '1';
+        // Faces are keyed on every node (public-routes audit SEC-PUB-02; before it, in a private preview or with
+        // guestListingsOnly): the URL carries the key for its stand-in reference, which the route takes; a wrong key is refused.
         const keyedOn = installAvatarKeysAtBoot();
         const keyedUrl = urlIn(await request(ann, 'GET', '/api/members'), ann);
         const keyedServed = typeof keyedUrl === 'string' ? await fetch(`${base}${keyedUrl}`) : null;
         const wrongKey = typeof keyedUrl === 'string' ? await fetch(`${base}${keyedUrl.replace(/&k=([^&]+)/, (_m, k: string) => `&k=${k[0] === 'A' ? 'B' : 'A'}${k.slice(1)}`)}`) : null;
-        delete process.env.PRIVATE_PREVIEW;
-        const keyedOff = installAvatarKeysAtBoot();
-        assert(keyedOn && !keyedOff && typeof keyedUrl === 'string' && keyedUrl.includes('&k=') && keyedServed?.status === 200 && (wrongKey?.status === 403 || wrongKey?.status === 404),
+        assert(keyedOn && typeof keyedUrl === 'string' && keyedUrl.includes('&k=') && keyedServed?.status === 200 && (wrongKey?.status === 403 || wrongKey?.status === 404),
             `with faces keyed, Ann's in-window URL carries a key the route takes (${keyedServed?.status}), and a wrong key is refused (${wrongKey?.status})`);
 
         // ── 2. While the cause lasts, the timer retries, each wait twice the last ──

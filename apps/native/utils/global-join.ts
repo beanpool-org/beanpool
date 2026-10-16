@@ -396,15 +396,15 @@ export async function checkNameAtDoor(
     const timer = setTimeout(() => { timedOut = true; stop.abort(); }, options.timeoutMs ?? JOIN_TIMEOUT_MS);
     const stopped = new Promise<typeof STOPPED>((resolve) => stop.signal.addEventListener('abort', () => resolve(STOPPED)));
     try {
-        // A key the phone already has is left out: its own name there reads as free. Signed by the joining key, so the
-        // door's limiter counts it (20 a minute per key), not the 15 a minute every unsigned check from one network shares.
-        const exclude = key.createdHere ? undefined : key.identity.publicKey;
-        const availability = await Promise.race([checkCallsignAvailable(name, exclude, url, { signal: stop.signal, signer: key.identity }), stopped]);
+        // Signed by the joining key: a key the phone already has finds its own name there free (the node reads the key from
+        // the signature), and the door's limiter counts it (20 a minute per key), not the 15 a minute every unsigned check
+        // from one network shares.
+        const availability = await Promise.race([checkCallsignAvailable(name, url, { signal: stop.signal, signer: key.identity }), stopped]);
         if (availability === STOPPED) return timedOut ? { kind: 'timed_out' } : { kind: 'cancelled' };
         if (availability !== 'taken') return { kind: 'free' };
         // No longer than the join keeps: a suggestion is sent exactly as it was checked and shown.
         const suggestions = await Promise.race([
-            suggestCallsigns(name, undefined, 3, url, MAX_JOIN_NAME, { signal: stop.signal, signer: key.identity }),
+            suggestCallsigns(name, 3, url, MAX_JOIN_NAME, { signal: stop.signal, signer: key.identity }),
             stopped,
         ]);
         if (suggestions === STOPPED) {

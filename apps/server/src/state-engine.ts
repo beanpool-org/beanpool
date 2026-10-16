@@ -7482,14 +7482,19 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
  * the next phone that asks.
  */
 export const PUBLIC_HEALTH_TTL_MS = 30_000;
-let publicHealthCache: { at: number; counts: HealthCounts; reportCount: number; watchdog: WatchdogStatus } | null = null;
+let publicHealthCache: { at: number; counts: HealthCounts; watchdog: WatchdogStatus } | null = null;
 
-/** What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed. */
-export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags'> {
+/**
+ * What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed, and
+ * without the pending reports' count (public-routes audit SEC-PUB-03): someone who just harassed a member could watch it
+ * go up and guess they were reported. Owners and admins read it from their own routes (getCommunityHealth, alerts-summary).
+ */
+export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags' | 'reportCount'> {
     if (!publicHealthCache || now < publicHealthCache.at || now - publicHealthCache.at >= PUBLIC_HEALTH_TTL_MS) {
-        publicHealthCache = { at: now, counts: countHealth(getThresholds()), reportCount: getReportCount(), watchdog: readWatchdogStatus() };
+        publicHealthCache = { at: now, counts: countHealth(getThresholds()), watchdog: readWatchdogStatus() };
     }
-    return healthBody(publicHealthCache.counts, publicHealthCache.reportCount, publicHealthCache.watchdog);
+    const { reportCount: _adminsOnly, ...health } = healthBody(publicHealthCache.counts, 0, publicHealthCache.watchdog);
+    return health;
 }
 
 export function getCommunityHealth(): CommunityHealth {
@@ -8779,7 +8784,12 @@ export function getDirectoryInfo(): any {
     };
 
     if (config.publishLocation) {
-        info.serviceRadius = config.serviceRadius;
+        // The centre to two decimals (~1 km), as /api/node/config gives it to anyone but an owner or admin: this is served
+        // unsigned at /api/directory/info and pushed to the directory, and the pin may be the operator's home. An area
+        // needs no closer place to warn a neighbour before they start a second community there.
+        const r = config.serviceRadius;
+        const km = (n: number) => (typeof n === 'number' ? Math.round(n * 100) / 100 : n);
+        info.serviceRadius = r && typeof r === 'object' ? { lat: km(r.lat), lng: km(r.lng), radiusKm: r.radiusKm } : r;
     } else {
         info.serviceRadius = null;
     }

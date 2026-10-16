@@ -53,6 +53,8 @@ function holdScroll() {
  */
 function releaseScroll() {
     setTimeout(() => {
+        // The page may be gone by now (a test's document torn down, a tab closed): nothing to put back.
+        if (typeof window === 'undefined') return;
         if (!openModals.length && !traversalPending) window.history.scrollRestoration = 'auto';
     }, 0);
 }

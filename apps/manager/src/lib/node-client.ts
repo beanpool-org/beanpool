@@ -2962,19 +2962,26 @@ export async function fetchRekeyStatusApi(
     return res.json();
 }
 
+/**
+ * Make a re-key code. An owner's or admin's asks an owner's fresh proof (server rekeyProof): `code` carries it in the
+ * body; a refusal that asks for it throws FreshProofRequiredError.
+ */
 export async function issueRekeyCodeApi(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<IssueRekeyCodeResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify(proofField(code)),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -3020,7 +3027,9 @@ export async function declineRekeyProposalApi(
 /**
  * Binds the member's new phone by the number on it (#1783 review B2): the node binds the live, undeclined phone that shows
  * those two digits. A number no waiting phone shows is a wrong try, and the third stops the code (RekeyBindError's code
- * `code_stopped`).
+ * `code_stopped`). An owner's or admin's asks an owner's fresh proof (server rekeyProof): the body's `code` is the re-key
+ * code, so `proof` travels as the X-Fresh-Proof header; a refusal that asks for it throws FreshProofRequiredError (the
+ * node checks it before the number, so no try is counted).
  */
 export async function bindRekeyByMatchApi(
     nodeUrl: string,
@@ -3028,38 +3037,42 @@ export async function bindRekeyByMatchApi(
     code: string,
     match: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    proof?: string
 ): Promise<CompleteRekeyResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(proof) },
         body: JSON.stringify({ code, match }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined);
     }
     return res.json();
 }
 
-/** "Paste a key instead": binds a pasted key, for a phone that can't ask on the code. */
+/** "Paste a key instead": binds a pasted key, for a phone that can't ask on the code. The fresh proof as bindRekeyByMatchApi. */
 export async function completeRekeyApi(
     nodeUrl: string,
     pubkey: string,
     code: string,
     newPubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    proof?: string
 ): Promise<CompleteRekeyResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(proof) },
         body: JSON.stringify({ code, newPubkey }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();

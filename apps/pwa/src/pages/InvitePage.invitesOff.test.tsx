@@ -246,6 +246,17 @@ describe('the Invites page in preview mode shows the real screen with sample dat
         expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
         fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
 
+        // Copy button on the pending card is a marker action
+        const writeText = vi.fn();
+        Object.assign(navigator, { clipboard: { writeText } });
+        const copyBtns = screen.getAllByRole('button', { name: /Copy/ });
+        const cardCopy = copyBtns.find(b => b.getAttribute('data-testid') === 'local-community-action');
+        expect(cardCopy).toBeDefined();
+        fireEvent.click(cardCopy!);
+        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        expect(writeText).not.toHaveBeenCalled();
+
         // Tapping the phone/QR icon opens the QR card
         const qrToggle = screen.getByRole('button', { name: 'Show QR code' });
         fireEvent.click(qrToggle);
@@ -253,10 +264,23 @@ describe('the Invites page in preview mode shows the real screen with sample dat
             expect.objectContaining({ value: 'EXAMPLE-1234' }),
         );
 
+        // QR card copy button is also a marker action and does not copy
+        const qrCopyBtns = screen.getAllByRole('button', { name: /Copy/ }).filter(b => b.getAttribute('data-testid') === 'local-community-action');
+        expect(qrCopyBtns.length).toBeGreaterThanOrEqual(2);
+        fireEvent.click(qrCopyBtns[qrCopyBtns.length - 1]);
+        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        expect(writeText).not.toHaveBeenCalled();
+
         // Community Tree tab shows sample members
         fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
         expect(await screen.findByText(/an example member/)).toBeInTheDocument();
         expect(screen.getAllByText(/a neighbour/).length).toBeGreaterThanOrEqual(2);
+
+        // No network calls made for member's own invites/tree/generate
+        expect(getMyInvites).not.toHaveBeenCalled();
+        expect(getInviteTree).not.toHaveBeenCalled();
+        expect(generateInvite).not.toHaveBeenCalled();
     });
 });
 

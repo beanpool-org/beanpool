@@ -449,18 +449,22 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 <QRCodeSVGComponent value={isPreview ? newCode : `${window.location.origin}/?invite=${newCode}`} size={200} />
                             </div>
                             <div className="flex gap-3 justify-center">
-                                <button 
-                                    onClick={() => isPreview && newCode ? handleCopy(newCode) : (newCode && handleCopyProxy(newCode))} 
-                                    className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
-                                        copied 
-                                            ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400' 
-                                            : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
-                                    }`}
-                                    aria-label="Copy invite link"
-                                    title="Copy invite link"
-                                >
-                                    {copied ? '✓ Copied!' : '📋 Copy'}
-                                </button>
+                                {isPreview ? (
+                                    <LocalCommunityAction feature="invites" label={t('📋 Copy')} className="py-3 px-6 text-[14px]" {...waysForward} />
+                                ) : (
+                                    <button 
+                                        onClick={() => newCode && handleCopyProxy(newCode)} 
+                                        className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                                            copied 
+                                                ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400' 
+                                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                                        }`}
+                                        aria-label="Copy invite link"
+                                        title="Copy invite link"
+                                    >
+                                        {copied ? '✓ Copied!' : '📋 Copy'}
+                                    </button>
+                                )}
                                 {isPreview ? (
                                     <LocalCommunityAction feature="invites" label={t('Share')} className="py-3 px-6 text-[14px]" {...waysForward} />
                                 ) : (
@@ -509,28 +513,31 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             >
                                                 📱
                                             </button>
-                                            <button 
-                                                onClick={() => isPreview ? handleCopy(inv.code) : handleCopyProxy(inv.code)} 
-                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                aria-label="Copy invite link"
-                                                title="Copy invite link"
-                                            >
-                                                📋
-                                            </button>
                                             {!isPreview && (
-                                                <button 
-                                                    onClick={() => handleShare(inv.code)} 
-                                                    className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
-                                                    aria-label="Share invite link"
-                                                    title="Share invite link"
-                                                >
-                                                    📤
-                                                </button>
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleCopyProxy(inv.code)} 
+                                                        className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                        aria-label="Copy invite link"
+                                                        title="Copy invite link"
+                                                    >
+                                                        📋
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleShare(inv.code)} 
+                                                        className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
+                                                        aria-label="Share invite link"
+                                                        title="Share invite link"
+                                                    >
+                                                        📤
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
                                     {isPreview && (
-                                        <div className="mt-3">
+                                        <div className="mt-3 flex flex-col gap-2">
+                                            <LocalCommunityAction feature="invites" label={t('📋 Copy')} aria-label={t('Copy invite link')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
                                             <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
                                         </div>
                                     )}

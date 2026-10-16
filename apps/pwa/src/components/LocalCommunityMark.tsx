@@ -176,11 +176,12 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
 export const DEAL_ACTION_LABEL = LOCAL_COMMUNITY_LINES.dealAction.replace(LOCAL_COMMUNITY_EMOJI, '').trim();
 
 /** A button that would move Beans or cast a vote: its place and words kept, dashed, with the pill; opens the sheet. */
-export function LocalCommunityAction({ feature, label, className = '', ...ways }: { feature: ShowcaseFeature; label: string; className?: string } & LocalCommunityWays) {
+export function LocalCommunityAction({ feature, label, className = '', 'aria-label': ariaLabel, ...ways }: { feature: ShowcaseFeature; label: string; className?: string; 'aria-label'?: string } & LocalCommunityWays) {
     return (
         <WithSheet feature={feature} ways={ways}>
             {(open) => (
                 <button type="button" onClick={(e) => { e.stopPropagation(); open(); }} data-testid="local-community-action"
+                    aria-label={ariaLabel}
                     className={`${TONE} inline-flex flex-wrap items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-bold ${className}`}>
                     <span>{label}</span><LocalCommunityPill />
                 </button>

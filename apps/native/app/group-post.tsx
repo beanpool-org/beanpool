@@ -14,8 +14,10 @@ import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { hapticSuccess, hapticWarning } from '../utils/haptics';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { beansOn } from '../utils/node-profile';
+import { beansOn, showcaseMode } from '../utils/node-profile';
 import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
+import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
 
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
@@ -37,6 +39,8 @@ export default function GroupPostScreen() {
     // On a community with Beans off (the worldwide one) a post has no price: no field, and it goes up at 0 Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Where Beans are a preview (the worldwide one's showcase), the note is followed by the marker's price line, as on a listing.
+    const beansPreview = showcaseMode('beans', nodeProfile?.features) === 'preview';
     const [description, setDescription] = useState('');
     const [repeatable, setRepeatable] = useState(false);
     const [cashAlsoNeeded, setCashAlsoNeeded] = useState(false);
@@ -361,6 +365,7 @@ export default function GroupPostScreen() {
                     ) : (
                     <View style={styles.field}>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                        {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} />}
                     </View>
                     )}
 

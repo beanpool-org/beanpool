@@ -83,7 +83,7 @@ import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { reportKind, type ReportKind } from './report-kind.js';
-import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
+import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
 import { agentCallsTodayAll } from '../agent/limits.js';
@@ -139,6 +139,7 @@ export type AlertKey =
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
+    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings'
     | 'sec.log'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy';
@@ -179,6 +180,14 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     /** An AI assistant connected to /mcp or disconnected (admin MCP design §8): told as a role change is. */
     'sec.agent': { title: 'an AI assistant connected or disconnected', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** Owner-delete S5 (design case 18 §7): a restore or roll-back, and refused uploads of another community's backup. */
+    'sec.restore': { title: 'restored from a backup', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** A change to where backups go or who copies this server: one line each, folded hourly past the actor's bound. */
+    'sec.backups': { title: 'a backup setting changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    /** Members removed by an admin, branches pruned by an owner: a day's count. */
+    'sec.members': { title: 'members removed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    /** The community's name, callsign or contacts changed by an admin. */
+    'sec.settings': { title: "the community's details changed", priority: 2, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
@@ -198,7 +207,9 @@ const ROWS: Record<AlertKey, Row> = {
 const REPORT_KEYS: ReadonlySet<AlertKey> = new Set<AlertKey>(['reports.new', 'reports.child', 'reports.child-more']);
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
-const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent']);
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>([
+    'sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent', 'sec.restore', 'sec.backups', 'sec.members', 'sec.settings',
+]);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
 const SECURITY_QUIET_MS = 60 * 60_000;
@@ -293,6 +304,8 @@ interface BookState {
     reports: ReportWindow | null;
     /** Child-safety reports (noteNewReport): those told at once in the last hour, each reporter's hour, the open summary. */
     child: ChildReports;
+    /** The day's counts of SecurityNote.perDay lines, by key and words: the UTC day and how many. */
+    dayCounts: Record<string, { day: string; n: number }>;
 }
 
 interface ChildReports {
@@ -314,7 +327,7 @@ const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, f
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
     diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {}, reports: null,
-    child: { told: [], reporters: {}, summary: null },
+    child: { told: [], reporters: {}, summary: null }, dayCounts: {},
 });
 
 let clockOffsetMs = 0;
@@ -439,7 +452,9 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     { ok: true } | { ok: false; error: string } {
     if (process.env.ALERTS_WEBHOOK_URL?.trim()) return { ok: false, error: 'The alert channel is set in .env (ALERTS_WEBHOOK_URL): change it there' };
     const file = settingsFile();
+    const old = readAlertChannel();
     if (input.remove === true) {
+        if (old) tellOldChannel(old, 'removed');
         try {
             fs.unlinkSync(file);
         } catch (e) {
@@ -458,12 +473,29 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     const before = readAlertChannel();
     const token = typeof input.token === 'string' && input.token ? input.token
         : input.token === undefined && before?.source === 'settings' && before.url === url ? before.token : null;
+    if (old && (old.url !== url || old.token !== token)) tellOldChannel(old, 'changed');
     writeFileAtomic(file, JSON.stringify({ url, format: input.format === 'json' ? 'json' : 'ntfy', token }, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
     const s = readState();
     s.channel = emptyChannel();
     writeState();
     return { ok: true };
+}
+
+/**
+ * The last message to a channel an owner changed or took away (design case 18 §7, C11): sent to the OLD channel, so
+ * whoever watched it learns it no longer hears from this server. Straight to it, outside the book and its queue, under
+ * the hard ceiling; never retried.
+ */
+function tellOldChannel(old: AlertChannel, how: 'changed' | 'removed'): void {
+    const s = readState();
+    const t = now();
+    if (sentThisHour(s, t) >= ALERT_HOURLY_CEILING) return;
+    s.sentAt.push(t);
+    const community = communityName();
+    const text = how === 'removed' ? OWNER_ALERT_WORDS.channelRemoved(community) : OWNER_ALERT_WORDS.channelChanged(community);
+    void sendToChannel(old, { subject: `${community}: the alert channel was ${how}`, priority: 4, click: settingsLink(), events: [], text })
+        .catch(() => undefined);
 }
 
 /** Two letters of a country under which names are registered a level down (example.co.uk, example.com.au). */
@@ -707,11 +739,12 @@ const DISK_LEVEL: Partial<Record<AlertKey, number>> = { 'disk.80': 80, 'disk.90'
  * the disk as one condition (a level under a higher one that is active is counted as told, never named).
  */
 function pushOwners(s: BookState, events: readonly AlertEvent[], t: number,
-    quiet: ReadonlySet<AlertEvent> = new Set(), also: ReadonlyMap<AlertEvent, string[]> = new Map()): void {
+    quiet: ReadonlySet<AlertEvent> = new Set(), also: ReadonlyMap<AlertEvent, string[]> = new Map(),
+    each: ReadonlySet<AlertEvent> = new Set()): void {
     if (getNodeRole() !== 'primary') return;
     const due = events.filter((e) => {
         if (quiet.has(e)) return false;
-        const every = ROWS[e.key].pushEveryMs;
+        const every = each.has(e) ? EACH : ROWS[e.key].pushEveryMs;
         const last = s.pushedAt[e.key];
         return every !== 0 && e.kind !== 'cleared' && (every === EACH || last === undefined || t - last >= every);
     });
@@ -757,9 +790,12 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     const told: AlertEvent[] = [];
     const quiet = new Set<AlertEvent>();
     const also = new Map<AlertEvent, string[]>();
-    const tell = (e: AlertEvent) => {
+    const each = new Set<AlertEvent>();
+    const tell = (e: AlertEvent, oneShot = false) => {
         told.push(e);
-        const security = SECURITY_ONE_SHOTS.has(e.key);
+        // A one-shot on a condition's row (sec.name: the address taken offline by an owner) is a security event too.
+        const security = SECURITY_ONE_SHOTS.has(e.key) || (oneShot && e.key.startsWith('sec.'));
+        if (security) each.add(e);
         keepIn(s.history, e, MAX_HISTORY, security || REPORT_KEYS.has(e.key));
         if (security) {
             const standby = getNodeRole() === 'backup';
@@ -773,7 +809,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
         const priority = c.priority ?? ROWS[c.key].priority;
         if (c.active && c.oneShot) {
             const e: AlertEvent = { key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}) };
-            tell(e);
+            tell(e, true);
             if (c.push === false) quiet.add(e);
             if (c.alsoPush?.length) also.set(e, c.alsoPush);
         } else if (c.active && !r) {
@@ -806,7 +842,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             }
         }
     }
-    pushOwners(s, told, t, quiet, also);
+    pushOwners(s, told, t, quiet, also, each);
     writeState();
     await flushAlerts();
     return told;
@@ -870,6 +906,7 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
         return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
     }
     if (!happened(note)) return Promise.resolve([]);
+    if (note.perDay) note = { ...note, detail: dayCountWords(note.key, note.perDay) };
     if (note.state === undefined) return raiseBounded(note);
     if (note.state === 'seen') {
         readState().seenAt[note.key] = now();
@@ -878,6 +915,18 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
 }
 
 const HOUR_MS = 60 * 60_000;
+
+/** One more of a counted line today (UTC), in its words: `one` for the first, else `many` with the count. */
+function dayCountWords(key: AlertKey, words: { one: string; many: string }): string {
+    const s = readState();
+    const day = new Date(now()).toISOString().slice(0, 10);
+    s.dayCounts ??= {};
+    const id = `${key}:${words.one}`;
+    const c = s.dayCounts[id]?.day === day ? s.dayCounts[id] : (s.dayCounts[id] = { day, n: 0 });
+    c.n++;
+    for (const [k, v] of Object.entries(s.dayCounts)) if (v.day !== day) delete s.dayCounts[k];
+    return c.n === 1 ? words.one : words.many.replace('{n}', String(c.n));
+}
 
 function actorId(actor: string): string {
     return crypto.createHash('sha256').update(`beanpool-alerts-actor:${actor}`).digest('hex').slice(0, 24);

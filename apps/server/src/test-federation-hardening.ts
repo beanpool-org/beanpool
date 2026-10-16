@@ -300,7 +300,7 @@ async function main(): Promise<void> {
     cm.addConnector(ADDR_C, 'peer', 'Peer C', HOME_C);
     cm.setConnectorCreditCap(ADDR_C, 100);
     const yara = keyOf();
-    const yaraFirst = await relay(C, yara);
+    const yaraFirst = await relay(C, yara, { senderNodeUrl: HOME_C });   // as C's node sends it (main took the payload's)
     assert(yaraFirst?.success === true && homeOf(yara) === HOME_C, `setup: Yara, a member of C, writes; her home is C's first URL (got ${homeOf(yara)})`);
     cm.addConnector(ADDR_C, 'peer', 'Peer C', HOME_C_NAMED);   // the operator's correction, as the connector route makes it
     const yaraLinesBefore = linesBy(yara);

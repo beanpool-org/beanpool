@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Hindi mabasa nang ligtas ang code na ito, kaya walang ipinadala: gumawa ng bagong code sa kabilang device at i-scan iyon.",
   "OK": "OK",
   "Connect to your community first.": "Kumonekta muna sa iyong komunidad.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo: ginagamit nito ang {own}. Walang ipinadala. I-scan ang code na ipinapakita ng {own} sa kabilang device, o i-restore ang account mo roon gamit ang iyong 12 salita.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo. Walang ipinadala. Para gamitin ang account mo roon, i-restore ito gamit ang iyong 12 salita.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo: ginagamit nito ang {own}. Walang ipinadala. Buksan ang BeanPool sa {own} sa kabilang device at i-scan doon ang code, o sumali muna sa pandaigdigang komunidad sa teleponong ito, saka mag-scan ulit.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo: ginagamit nito ang {own}. Walang ipinadala. Buksan ang BeanPool sa {own} sa kabilang device at i-scan doon ang code.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo. Walang ipinadala. Sumali muna sa pandaigdigang komunidad sa teleponong ito, saka mag-scan ulit.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo. Walang ipinadala.",
   "Confirm it is you to send your account to another device.": "Kumpirmahing ikaw ito para maipadala ang account mo sa ibang device.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Walang screen lock ang telepono mo, kaya hindi ipapadala ng BeanPool ang account mo. Magtakda ng PIN, pattern, o password sa Mga Setting ng telepono mo sa ilalim ng Security, saka subukan muli.",
   "The phone's unlock did not pass, so nothing was sent.": "Hindi pumasa ang pag-unlock sa telepono, kaya walang ipinadala.",
@@ -285,5 +287,9 @@
   "The people who run this community's server are alerted even without your words.": "Aalertuhan ang mga nagpapatakbo ng server ng komunidad na ito kahit wala ang mga salita mo.",
   "If a child is in danger right now, call your local emergency number first.": "Kung nasa panganib ang isang bata ngayon, tawagan muna ang iyong lokal na numero ng emergency.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Itinigil ang pag-restore na ito, mula sa teleponong may account mo o ng mas bagong pag-restore sa ibang device, kaya walang naibalik. Kung hindi ikaw iyon, gamitin ang iyong 12 salita.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Naituloy na ang pag-restore na iyon: nasa kabilang telepono na ang account mo. Kung hindi ikaw iyon, ibang tao ang may hawak ng account mo: tiyaking sa iyo lang ang ginamit na sign-in account at humingi ng tulong sa mga admin."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Naituloy na ang pag-restore na iyon: nasa kabilang telepono na ang account mo. Kung hindi ikaw iyon, ibang tao ang may hawak ng account mo: tiyaking sa iyo lang ang ginamit na sign-in account at humingi ng tulong sa mga admin.",
+  "Link a device": "Mag-link ng device",
+  "🌍 Join the global community": "🌍 Sumali sa pandaigdigang komunidad",
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Nabuksan ito mula sa isang link. Magpatuloy lang kung kakatutok mo lang ng camera mo sa isang code sa sarili mong screen.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Kinokopya ang sarili mong account sa isang browser, para magamit mo roon ang BeanPool bilang ikaw"
 }

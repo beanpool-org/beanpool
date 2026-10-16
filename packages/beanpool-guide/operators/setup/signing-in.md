@@ -60,7 +60,7 @@ Good to know:
 - The two digits last **30 seconds**. Three wrong tries on the computer, or too late, and nobody is signed in: get a new code.
 - A phone with an older app shows no digits. It signs the computer in straight after the unlock, as before. Update the app to get the digits.
 - Each approval is written to the server's log, with who approved it and which browser signed in. So is a code used up by wrong digits.
-- Your key stays on the phone. This is not **Use your account on another device** (older apps: **Link Another Device**), which copies your own account to a browser to use BeanPool there as you.
+- Your key stays on the phone. This is not **Link a device** (older apps: **Use your account on another device**), which copies your own account to a browser to use BeanPool there as you.
 
 ## Whose sign-in it is
 

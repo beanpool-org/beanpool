@@ -23,6 +23,7 @@
  * words still work anywhere. The screen relies on this: it keeps no cleartext check of its own.
  */
 import { plainOriginOf } from './node-url';
+import { GLOBAL_NODE_URL } from './global-node-url';
 
 export interface PairingQr {
     sessionId: string;
@@ -71,6 +72,23 @@ export function isUnreadablePairingQr(raw: unknown): boolean {
     return typeof raw === 'string' && raw.trim().toLowerCase().startsWith('beanpool://pair') && parsePairingQr(raw) === null;
 }
 
+/**
+ * What one code means to the pairing screen, read the same way however it arrived: the camera on the screen, or a
+ * `beanpool://pair` link the phone's camera app (or any other) opened (utils/pair-link.ts, app/+native-intent.ts).
+ *  - 'pairing': the strict grammar read it; the screen still asks transferTarget where it may go, and sends nothing
+ *    before the member's tap, the phone's unlock and the two digits.
+ *  - 'unreadable': refused, said so, nothing sent. Any link is, when the grammar refuses it: a link was opened on
+ *    purpose, so it is never silently dropped.
+ *  - 'ignore': some other QR in the camera's view.
+ */
+export type PairingRead = { kind: 'pairing'; qr: PairingQr } | { kind: 'unreadable' } | { kind: 'ignore' };
+
+export function readPairingCode(raw: unknown, source: 'camera' | 'link'): PairingRead {
+    const qr = parsePairingQr(raw);
+    if (qr) return { kind: 'pairing', qr };
+    return source === 'link' || isUnreadablePairingQr(raw) ? { kind: 'unreadable' } : { kind: 'ignore' };
+}
+
 export type TransferTarget =
     /** `nodeUrl`: the phone's own saved address for that server, in its canonical origin. Where the account goes. */
     | { kind: 'ok'; nodeUrl: string }
@@ -108,4 +126,31 @@ export function pairingRequestUrls(target: Extract<TransferTarget, { kind: 'ok' 
         transfer: `${target.nodeUrl}/api/pair/transfer`,
         cancel: `${target.nodeUrl}/api/pair/cancel`,
     };
+}
+
+/**
+ * The other way through a refusal (Marty, 16 Oct: "why can't he add global as a second node to his phone?"): join the
+ * global community on this phone first, through its own door (app/join-global.tsx, with its sign-in and checks), then
+ * scan again. That door joins GLOBAL_NODE_URL, never the QR's text, and its relay is ours, so the digits still guard it.
+ *
+ * Only global: no button for any other server (the deciding review of #2025, B1). A join there would make the sender's
+ * server one this phone uses, and the next scan of the same code would send the key and the 12 words to it, sealed to
+ * the sender's own key: the digits protect nothing on a dishonest relay. The refusal, at the moment the app said no,
+ * must not hand the member that server's address and a loop back to the scan. The rule above is unchanged: the QR
+ * never adds a server, and the refused QR is not reused.
+ */
+export type RefusalJoin = { kind: 'global'; href: { pathname: '/join-global'; params: { then: typeof PAIR_AGAIN } } };
+
+/** Where a join started from the pairing screen's refusal comes back to: a fixed name, never a route read from a link. */
+export const PAIR_AGAIN = 'pair-device';
+
+export function refusalJoin(target: TransferTarget | undefined): RefusalJoin | null {
+    if (!target || target.kind !== 'foreign' || !target.scannedHost) return null;
+    if (`https://${target.scannedHost}` !== GLOBAL_NODE_URL) return null;
+    return { kind: 'global', href: { pathname: '/join-global', params: { then: PAIR_AGAIN } } };
+}
+
+/** The screen after a join: back to the pairing screen when the join started from its refusal, else `otherwise`. */
+export function afterJoinRedirect(then: unknown, otherwise: string): string {
+    return then === PAIR_AGAIN ? '/pair-device' : otherwise;
 }

@@ -1399,6 +1399,7 @@ export function ApplianceSection({
                             key={activeNode.id}
                             activeNode={activeNode}
                             onRefreshDiag={onRefreshDiag}
+                            viewer={rolesViewer}
                         />
                     </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="App addresses" resetKey={activeNode.id}>

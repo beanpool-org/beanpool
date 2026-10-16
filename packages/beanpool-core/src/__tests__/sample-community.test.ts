@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId } from '../sample-community.js';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, earnedCreditFromValue, memberLevel, tierIndexForCredit } from '../protocol.js';
 import {
     LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SHOWCASE_FEATURES, featureMode, featureModeFor,
 } from '../features.js';
@@ -35,6 +36,25 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
         expect(s.enterprises).toHaveLength(1);
         expect(s.enterprises[0]).toMatchObject({ name: 'Example Valley Bakery', keepers: 3, season: 120 });
         expect(s.decisions[0]).toMatchObject({ fromPool: 40, closesInDays: 3, votesFor: 12, votesAgainst: 2 });
+    });
+
+    it('its Levels card adds up with the tiers the screens use: 200 trust is level 2 of 4, earned from the value traded', () => {
+        const s = SAMPLE_COMMUNITY;
+        expect([s.trust, s.valueTraded, s.partners, s.rating, s.reviews]).toEqual([200, 582, 5, 4.8, 5]);
+        // The trust backs the floor, and the tiers read it as level 2 of 4 (what memberLevel gives a screen).
+        expect(s.trust).toBe(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - s.floor);
+        expect(TIER_LEVELS).toHaveLength(s.levels);
+        expect(tierIndexForCredit(s.trust)).toBe(s.level - 1);
+        expect(memberLevel({ floor: s.floor, tierCredit: s.trust })).toEqual({ index: s.level - 1, credit: s.trust });
+        expect(s.trust).toBeLessThan(TIER_LEVELS[s.level].minCredit);
+        // All of it earned by trading: the curve gives exactly the trust for the value traded, and one Bean less falls short.
+        expect(earnedCreditFromValue(s.valueTraded)).toBe(s.trust);
+        expect(earnedCreditFromValue(s.valueTraded - 1)).toBeLessThan(s.trust);
+        // Value with any one partner counts up to the cap, so that much value needs at least this many partners.
+        expect(s.partners).toBeGreaterThanOrEqual(Math.ceil(s.valueTraded / PER_COUNTERPARTY_VOLUME_CAP));
+        expect(s.rating).toBeGreaterThan(0);
+        expect(s.rating).toBeLessThanOrEqual(5);
+        expect(Number.isInteger(s.reviews) && s.reviews > 0).toBe(true);
     });
 
     it('every id is a sample id, and every sample id is unique', () => {

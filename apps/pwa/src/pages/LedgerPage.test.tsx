@@ -107,6 +107,27 @@ describe('LedgerPage at 320px with 1.3x text', () => {
         }
         expect(screen.getByText('PARTNERS')).not.toHaveClass('tracking-wider');
     });
+
+    // PR #2020 fix round 2: side by side, the Wallet's Overdraft Floor and Commons Pool pushed Commons Pool past the right
+    // edge (343 px in a 320 px window). Each tile now asks 9rem, so the pair stacks on a small phone with large text, and
+    // can shrink below its words' width; a long number wraps rather than spilling out. Same tiles in preview.
+    for (const preview of [false, true]) {
+        it(`lets the Wallet's Overdraft Floor and Commons Pool tiles stack rather than run off the edge${preview ? ' (preview)' : ''}`, async () => {
+            render(<LedgerPage identity={identity} isMember={true} preview={preview} />);
+            fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+
+            const row = screen.getByTestId('ledger-wallet-tiles');
+            expect(row).toHaveClass('flex', 'flex-wrap');
+            expect(row.children).toHaveLength(2);
+            expect(row.children[0]).toHaveTextContent('Overdraft Floor');
+            expect(row.children[1]).toHaveTextContent('Commons Pool');
+            for (const tile of Array.from(row.children)) {
+                expect(tile).toHaveClass('flex-1', 'basis-[9rem]', 'min-w-0', 'p-4', 'sm:p-5');
+                expect(tile).not.toHaveClass('p-5');
+                expect(tile.children[1]).toHaveClass('flex-wrap', '[overflow-wrap:anywhere]');
+            }
+        });
+    }
 });
 
 // #1838: levels are merit badges. They gate nothing, so a level not reached yet is something to grow into: no lock, no
@@ -320,5 +341,99 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 50)); });
         expect(getMembers).not.toHaveBeenCalled();
         expect(getMemberCards).not.toHaveBeenCalled();
+    });
+});
+
+describe('the Ledger in preview (a node that previews Beans): Example Valley, and nothing asked of the node', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        info.value = { profile: 'global', features: { beans: false, showcase: true } };
+        vi.mocked(getBalance).mockResolvedValue({ balance: 4321, earnedCredit: 9, floor: -50, commonsBalance: 7, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getTransactions).mockResolvedValue([{ id: 'own-tx', from: 'someone', to: 'viewer-pubkey', amount: 77, memo: 'My own line', timestamp: '2026-10-15T00:00:00.000Z' }]);
+    });
+    afterEach(() => { info.value = { profile: 'local', features: {} }; });
+
+    it("reads no balance, transactions or members, polls nothing and takes up no socket nudge; the reader's own name never shows", async () => {
+        render(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(getBalance).not.toHaveBeenCalled();
+        expect(getTransactions).not.toHaveBeenCalled();
+        expect(getMembers).not.toHaveBeenCalled();
+        expect(getMemberCards).not.toHaveBeenCalled();
+        expect(onSyncActivity).not.toHaveBeenCalled();
+        expect(screen.queryByText('Visitor')).toBeNull();
+        expect(screen.queryByText(/Failed to load/)).toBeNull();
+    });
+
+    it("turns live (BeanID's flip): the sample goes at once, and the member's own balance and rows are read and shown", async () => {
+        const { rerender } = render(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        rerender(<LedgerPage identity={identity} isMember={true} />);
+        // Before the member's own land: never Example Valley's 85 Beans or name as theirs.
+        expect(screen.getByTestId('ledger-balance')).not.toHaveTextContent('85.0');
+        expect(screen.queryByText('an example member')).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        expect(getBalance).toHaveBeenCalledWith('viewer-pubkey');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.getByText('My own line')).toBeInTheDocument();
+        expect(screen.queryByText('A loaf of bread')).toBeNull();
+        expect(screen.queryByTestId('local-community-strip')).toBeNull();
+    });
+
+    it("turns to preview while the member's own are on screen: Example Valley's at once, never the member's own under the marker", async () => {
+        const { rerender } = render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        rerender(<LedgerPage identity={identity} isMember={true} preview />);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(screen.queryByText('My own line')).toBeNull();
+        expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
+    });
+});
+
+// PR #2020 fix round 1: the Wallet's Community Circulation box. Its figure is core's monthlyCirculation (the ledger's own
+// brackets), its colours are the chip roles (no raw hex, so it reads as a card in dark), and at or under the 200 Beans
+// fee-free line it says so in words instead of "−0.000 /mo" and "≈ 0.00% /mo".
+describe('the Wallet\'s Community Circulation box', () => {
+    const walletWith = async (balance: number) => {
+        vi.mocked(getBalance).mockResolvedValue({ balance, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${balance.toFixed(1)}B`));
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        return screen.getByTestId('ledger-circulation');
+    };
+
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    for (const balance of [85, 200]) {
+        it(`at ${balance} Beans says in words that nothing goes to the Commons, with no amount or rate`, async () => {
+            const box = await walletWith(balance);
+            expect(box).toHaveTextContent('Nothing goes to the Commons while you hold 200 Beans or less.');
+            expect(within(box).queryByTestId('ledger-circulation-amount')).toBeNull();
+            expect(box.textContent).not.toMatch(/0\.00|%/);
+        });
+    }
+
+    it('over 200 Beans shows the month\'s amount to 2 decimals and the share of the balance', async () => {
+        // 750: 300 at 1 % + 250 at 1.5 % = 6.75 a month, 0.90 % of the balance.
+        const box = await walletWith(750);
+        expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−6.75');
+        expect(box).toHaveTextContent('about 0.90% of your balance');
+        expect(box.textContent).not.toMatch(/Nothing goes/);
+    });
+
+    it('is drawn from the colour library: ok chip roles, warn above 1000, no inline colour', async () => {
+        const box = await walletWith(750);
+        expect(box).toHaveClass('bg-bp-chip-ok-tint', 'text-bp-chip-ok-ink');
+        expect([box, ...Array.from(box.querySelectorAll<HTMLElement>('*'))].map(el => el.getAttribute('style')).filter(Boolean)).toEqual([]);
+    });
+
+    it('turns to the warn roles above 1000 Beans', async () => {
+        const box = await walletWith(1500);
+        expect(box).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
+        expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−20.50');
     });
 });

@@ -10,7 +10,10 @@ import { SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
 
-/** The Ledger's balance answer for "an example member": 85 Beans, a floor of −200 (level 2 of 4), spend-freeze off. */
+/**
+ * The Ledger's balance answer for "an example member": 85 Beans, a floor of −200, level 2 of 4 with 200 trust, spend-freeze
+ * off. The trust, value traded, partners and rating are the sample's own (one source with the web's Ledger).
+ */
 export function sampleBalance() {
     const c = SAMPLE_COMMUNITY;
     const tier = TIER_LEVELS[Math.max(0, Math.min(TIER_LEVELS.length - 1, c.level - 1))];
@@ -25,13 +28,13 @@ export function sampleBalance() {
         knownFrozen: false,
         knownGrant: 0,
         tier: { name: tier.name, emoji: tier.emoji },
-        tierCredit: tier.minCredit,
-        earnedCredit: tier.minCredit,
-        qualifiedValue: c.transactions.reduce((sum, t) => sum + (t.kind === 'fee' ? 0 : Math.abs(t.amount)), 0),
-        avgRating: 0,
-        reviewCount: 0,
+        tierCredit: c.trust,
+        earnedCredit: c.trust,
+        qualifiedValue: c.valueTraded,
+        avgRating: c.rating,
+        reviewCount: c.reviews,
         commons: c.pool,
-        trustStats: { uniquePartners: new Set(c.transactions.filter(t => t.kind !== 'fee').map(t => t.who)).size },
+        trustStats: { uniquePartners: c.partners },
     };
 }
 

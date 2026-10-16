@@ -79,6 +79,18 @@ export interface SampleCommunity {
     liveOffers: number;
     level: number;
     levels: number;
+    /**
+     * The trust behind the level, as a Levels card shows it ("Level 2 of 4 · 200 trust"): the credit that backs the floor
+     * (CREDIT_BASE_FLOOR − floor), all of it earned by trading here, so it sits in level 2's band of TIER_LEVELS.
+     */
+    trust: number;
+    /** The value traded that earned it (earnedCreditFromValue(valueTraded) === trust): "What builds your trust". */
+    valueTraded: number;
+    /** Different people traded with: at least the value traded over the per-partner cap. */
+    partners: number;
+    /** The average of the reviews left after trades, out of 5, and how many there are. */
+    rating: number;
+    reviews: number;
     /** "About 40 Beans an hour", the rough guide a Pricing Guide would give. */
     beansPerHour: number;
     /** The latest rows only, not the whole history: they don't sum to the balance, so a screen shows them as recent. */
@@ -99,7 +111,7 @@ function deepFreeze<T>(value: T): T {
     return value;
 }
 
-/** Example Valley, frozen (design §2: balance 85, room to spend 285 down to −200, level 2 of 4, six rows, two deals). */
+/** Example Valley, frozen (design §2: balance 85, room to spend 285 down to −200, level 2 of 4 with 200 trust, six rows, two deals). */
 export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
     id: 'sample-community-example-valley',
     name: 'Example Valley',
@@ -110,6 +122,11 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
     liveOffers: 1,
     level: 2,
     levels: 4,
+    trust: 200,
+    valueTraded: 582,
+    partners: 5,
+    rating: 4.8,
+    reviews: 5,
     beansPerHour: 40,
     transactions: [
         { id: 'sample-tx-bread', what: 'A loaf of bread', who: 'a neighbour', amount: 12, kind: 'trade', daysAgo: 1 },

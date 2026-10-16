@@ -16,6 +16,7 @@ export function setCommonsBalance(value: number): void {
 }
 
 import { isEscrowAccount, isSyntheticAccount } from './protocol.js';
+import { balanceAfterCirculation } from './circulation.js';
 
 export const TRANSACTION_FEE_RATE = 0.015;
 
@@ -293,33 +294,11 @@ export class LedgerManager {
     }
 
     /**
-     * Internal helper to calculate progressive decay based on brackets
+     * Internal helper to calculate progressive decay based on brackets (CIRCULATION_BRACKETS, circulation.ts: the one
+     * copy the Wallets read too)
      */
     private _calculateProgressiveDecay(balance: number, monthsPassed: number): number {
-        if (balance <= 0) return balance;
-
-        const brackets = [
-            { maxInBracket: 200, rate: 0.000 }, // 0 - 200 (Tax-free Green Zone)
-            { maxInBracket: 300, rate: 0.010 }, // 200 - 500
-            { maxInBracket: 500, rate: 0.015 }, // 500 - 1000
-            { maxInBracket: 1000, rate: 0.020 }, // 1000 - 2000
-            { maxInBracket: Infinity, rate: 0.025 } // 2000+
-        ];
-
-        let remainingBalance = balance;
-        let newBalance = 0;
-
-        for (const bracket of brackets) {
-            if (remainingBalance <= 0) break;
-
-            const amountInBracket = Math.min(remainingBalance, bracket.maxInBracket);
-            const decayedAmount = amountInBracket * Math.pow(1 - bracket.rate, monthsPassed);
-            
-            newBalance += decayedAmount;
-            remainingBalance -= amountInBracket;
-        }
-
-        return newBalance;
+        return balanceAfterCirculation(balance, monthsPassed);
     }
 
     /**

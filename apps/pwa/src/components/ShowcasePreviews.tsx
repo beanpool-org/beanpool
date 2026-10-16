@@ -5,14 +5,17 @@
  *
  * - **Nothing here talks to the node.** No fetch, no write: the sample is bundled, and every action that would move
  *   Beans, vote or pledge is a marker action that opens the sheet. The explainers stay live (CommonsInfoModal).
+ * - **The Ledger is the real screen.** LedgerPage draws itself from `sampleLedger()` in preview, as the phone's Ledger
+ *   does from components/showcase/sample-screens.ts; the Commons and My Deals previews are drawn here.
  * - **Obviously a sample.** The Example chip and dashed cards; nobody is named ("a neighbour").
  * - **Levels are merit badges**, never shown as locked; currency is Beans.
  */
 
 import { useState } from 'react';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, type SampleTransaction } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, t, tn } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
+import type { BalanceInfo } from '../lib/api';
 
 const S = SAMPLE_COMMUNITY;
 
@@ -25,7 +28,7 @@ function beans(n: number): string {
 }
 
 function ago(days: number): string {
-    return days === 1 ? 'yesterday' : `${days} days ago`;
+    return days === 1 ? t('yesterday') : tn(days, '{n} day ago', '{n} days ago');
 }
 
 function ExampleChip() {
@@ -37,7 +40,7 @@ function ExampleChip() {
 }
 
 /** "Example Valley · an example member", with the Example chip. */
-function SampleHeader() {
+export function SampleHeader() {
     return (
         <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="sample-header">
             <ExampleChip />
@@ -46,53 +49,54 @@ function SampleHeader() {
     );
 }
 
-function TxRow({ t }: { t: SampleTransaction }) {
-    return (
-        <li className="flex items-center justify-between gap-3 py-2.5">
-            <div className="min-w-0">
-                <p className="truncate font-semibold text-nature-900 dark:text-nature-50">{t.what}</p>
-                <p className="text-xs text-nature-500 dark:text-nature-400">{t.amount >= 0 ? 'from' : 'to'} {t.who} · {ago(t.daysAgo)}</p>
-            </div>
-            <span className={`shrink-0 font-bold tabular-nums ${t.amount >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-nature-700 dark:text-nature-200'}`}>{beans(t.amount)}</span>
-        </li>
-    );
+/** One row of the Ledger's Wallet as LedgerPage draws it: in or out, its note, the small line under it, the Beans. */
+export interface LedgerRowView {
+    id: string;
+    sent: boolean;
+    note: string;
+    when: string;
+    amount: number;
 }
 
-export function LedgerPreview(ways: LocalCommunityWays) {
-    const [commonsInfo, setCommonsInfo] = useState(false);
-    return (
-        <div className="mx-auto max-w-2xl p-4" data-testid="ledger-preview">
-            <LocalCommunityStrip feature="beans" {...ways} />
-            <SampleHeader />
-            <section className={`${CARD} mb-4`}>
-                <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Balance</p>
-                <p className="text-3xl font-black text-nature-900 dark:text-nature-50" data-testid="sample-balance">{S.balance} Beans</p>
-                <p className="mt-1 text-sm text-nature-600 dark:text-nature-300">
-                    Room to spend: <strong>{S.roomToSpend} Beans</strong>, down to {beans(S.floor).replace('+', '')}. One live Offer keeps the credit line open.
-                </p>
-                <p className="mt-1 text-sm text-nature-600 dark:text-nature-300">A rough guide here: about {S.beansPerHour} Beans an hour of help.</p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <LocalCommunityAction feature="beans" label="Send Beans" className="w-full" {...ways} />
-                    <LocalCommunityAction feature="beans" label="Export" className="w-full" {...ways} />
-                </div>
-            </section>
-            <section className={`${CARD} mb-4`}>
-                <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Level</p>
-                <p className="font-bold text-nature-900 dark:text-nature-50">Level {S.level} of {S.levels}</p>
-                <p className="text-sm text-nature-600 dark:text-nature-300">Levels are badges for trading with many neighbours. They open nothing and close nothing.</p>
-            </section>
-            <section className={`${CARD} mb-4`}>
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                    <h3 className="font-bold text-nature-900 dark:text-nature-50">Transactions</h3>
-                    <button type="button" onClick={() => setCommonsInfo(true)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons and the circulation fee work">ⓘ The Commons</button>
-                </div>
-                <ul className="divide-y divide-nature-200 dark:divide-nature-800" data-testid="sample-transactions">
-                    {S.transactions.map((t) => <TxRow key={t.id} t={t} />)}
-                </ul>
-            </section>
-            <CommonsInfoModal isOpen={commonsInfo} onClose={() => setCommonsInfo(false)} commonsBalance={S.pool} />
-        </div>
-    );
+/**
+ * Example Valley's "example member" in the shapes LedgerPage reads, so the Ledger in preview is the member's own screen
+ * fed the sample (design §1 row 3): the balance answer (85 Beans, floor −200, one live Offer, level 2 of 4 with the
+ * sample's own trust, value traded, partners and rating, the figures the phone's Ledger reads too) and the recent rows,
+ * newest first, each with who it was with and when.
+ */
+export function sampleLedger(): { member: string; balance: BalanceInfo; rows: LedgerRowView[] } {
+    const c = SAMPLE_COMMUNITY;
+    const tier = TIER_LEVELS[Math.max(0, Math.min(TIER_LEVELS.length - 1, c.level - 1))];
+    return {
+        member: c.member,
+        balance: {
+            balance: c.balance,
+            floor: c.floor,
+            usableFloor: c.floor,
+            liveOffers: c.liveOffers,
+            activated: true,
+            frozen: false,
+            knownGrant: 0,
+            tier: { name: tier.name, emoji: tier.emoji },
+            tierCredit: c.trust,
+            earnedCredit: c.trust,
+            qualifiedValue: c.valueTraded,
+            avgRating: c.rating,
+            reviewCount: c.reviews,
+            commonsBalance: c.pool,
+            callsign: c.member,
+            trustStats: { tradeCount: c.transactions.filter(x => x.kind === 'trade' || x.kind === 'deal').length, uniquePartners: c.partners, ageDays: 0 },
+        },
+        rows: c.transactions.map(x => ({
+            id: x.id,
+            sent: x.amount < 0,
+            note: x.what,
+            when: x.amount < 0
+                ? t('to {who} · {when}', { who: x.who, when: ago(x.daysAgo) })
+                : t('from {who} · {when}', { who: x.who, when: ago(x.daysAgo) }),
+            amount: Math.abs(x.amount),
+        })),
+    };
 }
 
 /**

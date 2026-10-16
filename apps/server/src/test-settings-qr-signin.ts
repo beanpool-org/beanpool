@@ -233,6 +233,20 @@ async function main() {
         const got2 = await typeDigits(b2);
         assert(got2.body.status === 'signed-in' && got2.body.role === 'admin', 'and the browser gets an admin session');
 
+        // AUTH-06 (2026-10-16): a pairing redeemed by a browser that already holds a session ends that session, as a
+        // password sign-in does. (Confirm and the page's poll answer through the same code.)
+        assert((await sessionInfo(got2.sessionId!)).authenticated === true, 'the admin session works before the browser pairs again');
+        const b2b = await newPairing();
+        assert((await approve(b2b.pairingId, b2b.shortCode, admin)).status === 200, 'the admin approves a second pairing for the same browser');
+        const again = await call('POST', `/api/local/admin/auth/pairing/${b2b.pairingId}/confirm`, {
+            body: { code: shownDigits.get(b2b.pairingId) },
+            headers: { ...via(b2b.ip), Cookie: `${b2b.cookie}; admin_session=${got2.sessionId}` },
+        });
+        const againId = (again.cookies.find(c => c.startsWith('admin_session=')) || '').split(';')[0].slice('admin_session='.length) || null;
+        assert(again.body.status === 'signed-in' && !!againId && againId !== got2.sessionId && (await sessionInfo(againId!)).authenticated === true,
+            'the browser is signed in with a new session');
+        assert((await sessionInfo(got2.sessionId!)).authenticated === false, 'pairing: the session the browser held is ended');
+
         // A moderator too: the browser gets a moderator session, which reaches reports and nothing else.
         const b3 = await newPairing();
         const modOk = await approve(b3.pairingId, b3.shortCode, moderator);

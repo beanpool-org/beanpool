@@ -18,7 +18,27 @@ export function inConversationTab(conv: Pick<Conversation, 'type' | 'postId'>, t
     return true;
 }
 
-/** The Groups chip's count: every unread line in the group-like chats, as the phone's Groups switch shows it. */
-export function groupsUnreadCount(convs: ReadonlyArray<Pick<Conversation, 'type' | 'unreadCount'>>): number {
-    return convs.reduce((sum, c) => sum + (isGroupLikeChat(c) ? Math.max(0, c.unreadCount || 0) : 0), 0);
+/** A chat's mute as the node's conversation list gives it (engine/chat-mutes.ts ChatMute); null when not muted. */
+export interface ConversationMute {
+    mutedUntil: string | null;
+    always: boolean;
+}
+
+/** Muted now: for good, or until a time still ahead (the phone's utils/your-groups.ts isMuted). */
+export function isMutedNow(mute: ConversationMute | null | undefined, now: Date = new Date()): boolean {
+    if (!mute) return false;
+    if (mute.always || mute.mutedUntil === null) return true;
+    const until = new Date(mute.mutedUntil).getTime();
+    return !isNaN(until) && until > now.getTime();
+}
+
+/**
+ * The Groups chip's count, the phone's Groups switch total (decision 12, WhatsApp's rule): every unread line in the
+ * group-like chats, except in a chat muted (on the phone: the web has no mute of its own yet).
+ */
+export function groupsUnreadCount(
+    convs: ReadonlyArray<Pick<Conversation, 'type' | 'unreadCount'> & { mute?: ConversationMute | null }>,
+    now: Date = new Date(),
+): number {
+    return convs.reduce((sum, c) => sum + (isGroupLikeChat(c) && !isMutedNow(c.mute, now) ? Math.max(0, c.unreadCount || 0) : 0), 0);
 }

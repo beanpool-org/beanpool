@@ -85,6 +85,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { issue2faSessionToken, requireAdminRole, requireFreshProof, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor } from '@beanpool/core';
@@ -328,8 +329,19 @@ router.post('/api/local/update-identity', async (ctx) => {
     if (communityName !== undefined) updates.communityName = cleanLabel(communityName, 60) ?? null;
     if (contactEmail !== undefined) updates.contactEmail = (contactEmail || '').slice(0, 100) || null;
     if (contactPhone !== undefined) updates.contactPhone = (contactPhone || '').slice(0, 30) || null;
-    const nameBefore = getLocalConfig().communityName;
+    const before = getLocalConfig();
+    const nameBefore = before.communityName;
     updateLocalConfig(updates);
+    // An admin's change of what the community is called or how it is reached is told to the owners (design case 18 §7),
+    // in the server's words: never the old or new name, callsign or contact.
+    if ((ctx.state as any)?.adminRole === 'admin') {
+        const actor = String((ctx.state as any).actor ?? 'admin');
+        const tell = (detail: string) => noteSecurityEvent({ key: 'sec.settings', detail, actor, actorRole: 'admin' });
+        if (updates.communityName !== undefined && updates.communityName !== before.communityName) tell(OWNER_ALERT_WORDS.communityRenamed);
+        if (updates.callsign !== undefined && updates.callsign !== (before.callsign ?? '')) tell(OWNER_ALERT_WORDS.callsignChanged);
+        if ((updates.contactEmail !== undefined && updates.contactEmail !== (before.contactEmail ?? null))
+            || (updates.contactPhone !== undefined && updates.contactPhone !== (before.contactPhone ?? null))) tell(OWNER_ALERT_WORDS.contactsChanged);
+    }
     // A community named (or renamed) after its server started is listed at once, not at the next timed push.
     if (updates.communityName !== undefined && updates.communityName !== nameBefore) communityNameSaved();
     ctx.body = { success: true };

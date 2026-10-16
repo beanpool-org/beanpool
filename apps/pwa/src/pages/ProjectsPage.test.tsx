@@ -5,7 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions, createEnterprise, getAllMembers } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions, createEnterprise, getAllMembers, getCommonsBalance, getGroups } from '../lib/api';
 import * as apiModule from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
@@ -605,6 +605,9 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
 });
 
 describe('ProjectsPage where the node has no formal Decisions (the global node)', () => {
+    // The node's info is read once per page load and every caller shares it (lib/visitor-lobby-gate): the page and the
+    // own-data guard (lib/features readsOwn) both ask, so each test's info stands for the whole page load.
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never); });
     const globalInfo = {
         memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
         features: { beans: false, openJoin: true, guestListingsOnly: true, decisions: false },
@@ -613,7 +616,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
     const kindChips = () => within(screen.getByTestId('group-filter-chips')).getAllByRole('button').map(b => b.textContent);
 
     it('shows no Decide tab, and a page asked to open on Decide opens on Groups with no way to propose', async () => {
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
+        vi.mocked(communityInfoOnce).mockResolvedValue(globalInfo);
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         // Groups alone is no choice (audit item 5): the switcher goes with Decide.
         await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
@@ -625,7 +628,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     it('where the node says it has them, or says nothing, Decide is there as before', async () => {
         const withVotes = { ...globalInfo, features: { ...globalInfo.features, decisions: true } };
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(withVotes);
+        vi.mocked(communityInfoOnce).mockResolvedValue(withVotes);
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
@@ -635,7 +638,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     it('a node that shows previews with Decisions on and enterprises off: the real Decide tab, the sample enterprise, no sample Decision', async () => {
         const info = { ...globalInfo, features: { ...globalInfo.features, decisions: true, enterprises: false, showcase: true } };
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-decision')).toBeNull();
@@ -648,7 +651,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
         const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-enterprise')).toBeNull();
@@ -660,7 +663,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     it('the global node as it ships (previews, enterprises and Decisions off): no switcher, no Projects or Enterprises chip, Groups real', async () => {
         const info = { ...globalInfo, features: { ...globalInfo.features, enterprises: false, showcase: true } };
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
         expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
@@ -671,7 +674,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
     });
 
     it('a local node: both tabs and all five kind chips, as before', async () => {
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce({ ...globalInfo, profile: 'local' as never, features: {} });
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...globalInfo, profile: 'local' as never, features: {} });
         render(<ProjectsPage identity={backerIdentity} />);
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
@@ -684,7 +687,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
     // switched off on this node."
     it('Beans off and no enterprises: no "No enterprises found" and no "+ Propose a Project"', async () => {
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
+        vi.mocked(communityInfoOnce).mockResolvedValue(globalInfo);
         render(<ProjectsPage identity={backerIdentity} />);
         await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
@@ -694,14 +697,14 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     it('Beans on and no enterprises: the empty state still offers "+ Propose a Project"', async () => {
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce({ ...globalInfo, profile: 'local' as never, features: { ...globalInfo.features, beans: true } });
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...globalInfo, profile: 'local' as never, features: { ...globalInfo.features, beans: true } });
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByText('No enterprises found')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '+ Propose a Project' })).toBeInTheDocument();
     });
 
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
-        vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
+        vi.mocked(communityInfoOnce).mockRejectedValue(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
         expect(sectionTabs()).toHaveLength(2);
@@ -754,7 +757,10 @@ describe('Commons on global with previews AND members on demand (where #1853 mee
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
         expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        // Enterprises and Decisions are Example Valley's here: the node's own lists are never asked (lib/features
+        // readsOwn), so none of them is drawn under the sample.
+        await waitFor(() => expect(getGroups).toHaveBeenCalled());
+        expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
         for (const name of ['Pledge', 'Pause', 'Vote']) {
             fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
             const sheet = await screen.findByTestId('local-community-sheet');
@@ -767,5 +773,40 @@ describe('Commons on global with previews AND members on demand (where #1853 mee
         expect(calls.length).toBeGreaterThan(0);
         expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
         expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);
+    });
+});
+
+describe('the Commons reads nothing of the reader\'s where its features are in preview (global previews audit, P3)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const globalInfo = {
+        ...localInfo, profile: 'global' as const,
+        features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
+    };
+    // The member's balance, the Decisions with their voice credits, the pool the Decide tab spends, the treasuries.
+    const own = () => ({ getBalance, getDecisions, getCommonsBalance, getTreasuries });
+    beforeEach(() => { vi.clearAllMocks(); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
+
+    it('global (previews): Example Valley, and none of the four is asked', async () => {
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('commons-preview')).toBeInTheDocument();
+        await waitFor(() => expect(getGroups).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        for (const [name, read] of Object.entries(own())) expect(vi.mocked(read), name).not.toHaveBeenCalled();
+    });
+
+    it('local (live): each is asked, as before', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => { for (const [name, read] of Object.entries(own())) expect(vi.mocked(read), name).toHaveBeenCalled(); });
+        expect(getBalance).toHaveBeenCalledWith(backerIdentity.publicKey);
+        expect(screen.queryByTestId('commons-preview')).toBeNull();
+    });
+
+    it('a node that shows previews with Decisions on and enterprises off: the Decisions and the pool are asked, the treasuries not', async () => {
+        vi.mocked(communityInfoOnce).mockImplementation(async () => ({ ...globalInfo, features: { ...globalInfo.features, beans: true, decisions: true } }) as never);
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => { expect(getDecisions).toHaveBeenCalled(); expect(getCommonsBalance).toHaveBeenCalled(); expect(getBalance).toHaveBeenCalled(); });
+        expect(getTreasuries).not.toHaveBeenCalled();
     });
 });

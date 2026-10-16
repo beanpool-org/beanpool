@@ -50,7 +50,7 @@ import { gatewayAllowlistRefusal } from '../config/gateway.js';
 import { clientIp } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
-import { noteSecurityEvent } from '../services/security-signal.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -1702,9 +1702,24 @@ router.post('/api/local/admin/members/:pubkey/burst/remove', async (ctx) => {
     const selection = checkBurstSelection(anchor, (ctx as any).requestBody || {});
     if (!selection.ok) return answerBurstRefusal(ctx, selection);
     const result = removeBurst((pubkey) => adminPruneUser(pubkey, actor), anchor, selection.keys, role);
+    // An admin's burst removal is counted with the other removals (#2033 N2): the accounts removed, never which.
+    if (role === 'admin' && result.removed > 0) {
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, perDayAdds: result.removed, actor, actorRole: 'admin' });
+    }
     logger.info('ADMIN', `Removed ${result.removed} account(s) that joined together with ${anchor.substring(0, 12)} (action ${result.action.id}) by ${actor.substring(0, 12)} (${role})${result.failed.length ? `; ${result.failed.length} refused` : ''}`);
     ctx.body = { success: true, action: result.action, removed: result.removed, failed: result.failed };
 });
+
+/**
+ * Whether a removal about to be made is the owners' to count (sec.members, design case 18 §7): an admin's (#2033 B3, as
+ * sec.settings counts only an admin's), of a member here who is not already removed (#2033 N1: a retry, a second prune
+ * or a key that is no member removes no one). Read before the removal.
+ */
+function removalCounts(ctx: any, pubkey: string): boolean {
+    if (ctx.state?.adminRole !== 'admin') return false;
+    const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(pubkey) as { status?: string } | undefined;
+    return !!row && row.status !== 'pruned' && row.status !== 'migrated';
+}
 
 /**
  * The admin acting on a Decision or a suspension. A key session carries its member's pubkey, which must
@@ -1854,7 +1869,12 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!actor) return;
     if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
+        const heldRole = heldNodeRoleOf(ctx.params.pubkey);
+        const counts = removalCounts(ctx, ctx.params.pubkey);
         adminPruneUser(ctx.params.pubkey, actor);
+        // The owners count an admin's removals (design case 18 §7): how many in the last day, never who. A role holder's
+        // removal already pushed its own line (sec.role), so this one is only told.
+        if (counts) noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor, actorRole: 'admin', quiet: !!heldRole });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
@@ -1871,6 +1891,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await ownerRemovalProof(ctx, 'prune-branch', ctx.params.pubkey, actor))) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.branchesPruned, actor, actorRole: 'owner' });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
@@ -2743,11 +2764,14 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
     if (!(await ownerRemovalProof(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase()))) return;
 
     try {
+        const heldRole = heldNodeRoleOf(String(pubkey).trim().toLowerCase());
+        const counts = removalCounts(ctx, String(pubkey).trim().toLowerCase());
         const result = executeOffboard(
             pubkey,
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
+        if (counts) noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor: effectiveActor, actorRole: 'admin', quiet: !!heldRole });
         // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
         try {
             logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled', lookTokenOf(ctx));

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 127,
-  "hash": "0993947fd44500b8a2227b740ce52c25c03d7573ff15a70d860a4ae555e862d8",
+  "version": 128,
+  "hash": "f7d7effbaa45e20875e673494061addfc3d1e47423ba1061e892e9b679cc8b3a",
   "sections": [
     {
       "id": "setup",
@@ -3260,8 +3260,18 @@
             "more than 20 wrong claim proofs arrive in a minute;",
             "the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until every address it watches is this community's again. The server reads this from its list of addresses every minute, so a database restored from a backup says what that backup's list says;",
             "another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card;",
-            "an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off)."
+            "an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off).",
+            "the community was restored from a backup or rolled back to a restore point (high), told at the next start: \"A backup made 2026-10-01 was restored, by an owner. A restore point was kept.\" A restore with beanpool restore or beanpool restore-point says \"from the server's shell\" instead, and an unlocked backup, whose date is not known, says \"A backup was restored from the server's shell.\". Uploads of another community's backup that Settings refused are counted on one line, for 24 hours from the first: \"2 backups from another community were refused in the last day.\" Past three in an hour, the rest come as one line when the hour is over: \"5 more backups from another community were refused in the hour after the first ones were pushed.\";",
+            "an owner takes the community's address offline, or claims a new name in place of the live one (high), titled \"its address changed\", never as the address taken by another community. When the address was live, every member is told too: \"This community's address changed. Open the app to follow it.\" for a new name, or \"This community's address was taken offline by an owner. Ask your owners for the new one.\" when it was taken offline. Also an owner releasing a name the community held unused, or giving the tunnel a new key;",
+            "an owner replaces the recovery code (high): \"The recovery code was replaced, by an owner. Backups made before still open with the old one.\";",
+            "a backup setting changes, one line each: a replication token made or cleared, a standby forgotten, the server a standby copies from changed, an off-box destination removed or changed, off-box backups kept for fewer days, fewer snapshots kept, snapshots turned off or covering less time, or a standby's own replication token cleared. Past three changes by the same person in an hour, the rest come as one line when the hour is over: \"2 more changes by the same owner\";",
+            "members are removed by an admin (pruned, offboarded or removed with a burst), or a branch of invites is pruned by an owner, as one line counting 24 hours from the first removal: \"2 members were removed in the last day, by an admin.\" Removals after those 24 hours start a line of their own. Past the first three changes by the same admin in an hour, the line is not sent or pushed again, but its count still goes up in the alert history and the Alerts card. A member already removed is not counted again, and an owner's own removals are not told. (A removed owner, admin or moderator is also told as a role taken away, and pushed once.);",
+            "an admin changes the community's name, its callsign or its contact details (low)."
           ]
+        },
+        {
+          "type": "p",
+          "text": "When an owner moves the alert channel to another address or removes it, the old channel gets one last message: \"the alert channel was changed, by an owner. This is the last alert sent here.\" When only the token changes (a new one, or none), the channel gets one line instead, sent with the old token: \"The token for this alert channel was changed in Settings.\""
         },
         {
           "type": "p",

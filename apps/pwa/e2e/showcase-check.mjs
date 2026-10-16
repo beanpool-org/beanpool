@@ -7,10 +7,14 @@
  *      a community screen), the Commons and My Deals in preview, a listing's In return line and its "Request · Beans held
  *      safely" action, Invites' line, a profile's line, the composer's price line; every marker never looks locked;
  *   2. the NET SPY over all of that: no POST, PUT, PATCH or DELETE at all, nothing carrying a `sample-` id, no host but
- *      this machine (map tiles aside, aborted), and the reader's own features read from /api/community/me;
- *   3. a member of a local node (Beans live): the real Ledger, no strip, no line, the real deal button.
+ *      this machine (map tiles aside, aborted), and the reader's own features read from /api/community/me; and on the
+ *      Commons, Invites, the profile (with the app shell's load) and a listing, no read of the reader's own data at
+ *      all (OWN_READS: their balance, ledger, deals, Decisions and voice credits, the pool, treasuries, invites);
+ *   3. a member of a local node (Beans live): the real Ledger, no strip, no line, the real deal button; and the same
+ *      screens DO read the reader's own data there, as they always have.
  *
- * Fails on any sideways scroll, a write, a `sample-` id on the wire, a marker in a locked or greyed style, or a control in
+ * Fails on any sideways scroll, a write, a `sample-` id on the wire, a read of the reader's own data on a screen whose
+ * feature is in preview (global previews audit, "Across all five", P3), a local screen that no longer reads it, a marker in a locked or greyed style, or a control in
  * a preview, a marker, the sheet or the Start screen smaller than 44 x 44 px.
  *
  * Run: pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go)
@@ -80,6 +84,43 @@ async function startNode(root, profile, members) {
         fs.rmSync(dataDir, { recursive: true, force: true });
     };
     return { port, log, stop, origin: `https://localhost:${port}` };
+}
+
+/**
+ * The reads of the reader's own data (and of a previewed feature's own lists) the audit measured on the global node:
+ * a screen whose feature is in preview makes none of them (lib/features readsOwn). Matched on the path. Not here: a
+ * listing's look-up of its AUTHOR's enterprise (GET /api/treasury/<author>), which is not the reader's.
+ */
+const OWN_READS = [
+    ['their balance', /^\/api\/ledger\/balance\//],
+    ['their ledger', /^\/api\/ledger\/transactions/],
+    ['their deals', /^\/api\/marketplace\/transactions\/?$/],
+    ['Decisions and their voice credits', /^\/api\/commons\/decisions/],
+    ['the pool', /^\/api\/commons\/balance/],
+    ['the treasuries', /^\/api\/treasuries\/?$/],
+    ['their invites', /^\/api\/invite\/mine\//],
+    ['their invite tree', /^\/api\/invite\/tree/],
+];
+
+/** The reads in `requests` (to `origin`) of the reader's own data, as "what (path)". */
+function ownReads(requests, origin) {
+    return requests
+        .filter((r) => r.method === 'GET' && r.url.startsWith(origin))
+        .map((r) => new URL(r.url).pathname)
+        .flatMap((p) => OWN_READS.filter(([, re]) => re.test(p)).map(([what]) => `${what} (${p.replace(/[0-9a-f]{64}/g, ':key')})`));
+}
+
+/** On a screen whose features are in preview: none of OWN_READS. */
+function readsNothingOwn(net, since, origin, where) {
+    const bad = ownReads(net.since(since), origin);
+    check(bad.length === 0, `net spy, ${where}: no read of the reader's own data${bad.length ? ` (${[...new Set(bad)].join(', ')})` : ''}`);
+}
+
+/** On a local screen where the features are live: each of `whats` (OWN_READS names) is read, as before. */
+function readsOwnAsBefore(net, since, origin, where, whats) {
+    const seen = new Set(ownReads(net.since(since), origin).map((w) => w.replace(/ \(.*$/, '')));
+    const missing = whats.filter((w) => !seen.has(w));
+    check(missing.length === 0, `net spy, ${where} (local, live): reads ${whats.join(', ')}, as before${missing.length ? ` (missing: ${missing.join(', ')})` : ''}`);
 }
 
 /** Every request the page makes: method, where, and its body, for the net spy. */
@@ -206,6 +247,7 @@ async function globalMember(browser, root, dark) {
         await page.getByRole('button', { name: 'Show the whole note' }).click();
 
         // The Commons: enterprise and Decision in preview, Vote opens the sheet.
+        const tCommons = Date.now();
         await tab(page, 'Commons');
         await page.getByTestId('commons-preview').waitFor({ timeout: 10_000 });
         await page.getByTestId('sample-decision').getByTestId('local-community-action').click();
@@ -215,6 +257,8 @@ async function globalMember(browser, root, dark) {
         await targetsAtLeast44(page, 'Commons preview');
         await markersNeverLocked(page, 'Commons preview');
         await shot(page, `commons-${scheme}`);
+        await wait(1_000);
+        readsNothingOwn(net, tCommons, node.origin, 'the Commons');
 
         // The Market: My Deals in preview; a listing's In return and its deal action.
         await tab(page, 'Market');
@@ -228,6 +272,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('local-community-sheet').waitFor();
         await closeSheet(page);
         await page.getByRole('dialog', { name: 'My Deals' }).getByRole('button', { name: 'Close' }).click();
+        const tListing = Date.now();
         await page.getByText('Sourdough loaves').first().click();
         await page.getByTestId('listing-in-return').waitFor({ timeout: 10_000 });
         const inReturn = await page.getByTestId('listing-in-return').innerText();
@@ -242,10 +287,13 @@ async function globalMember(browser, root, dark) {
         await shot(page, `listing-sheet-${scheme}`);
         await closeSheet(page);
         await markersNeverLocked(page, 'listing');
+        await wait(1_000);
+        readsNothingOwn(net, tListing, node.origin, 'a listing');
 
         await page.keyboard.press('Escape');
 
         // People → Invites: the line.
+        const tInvites = Date.now();
         await tab(page, 'People');
         await page.getByRole('tab', { name: /Invites/ }).click();
         await page.getByTestId('invites-local-line').waitFor({ timeout: 10_000 });
@@ -253,6 +301,8 @@ async function globalMember(browser, root, dark) {
         await noSideScroll(page, 'Invites');
         await targetsAtLeast44(page, 'Invites');
         await shot(page, `invites-${scheme}`);
+        await wait(1_000);
+        readsNothingOwn(net, tInvites, node.origin, 'Invites');
 
         // The composer, on the Map: no price field, the line in its slot.
         await tab(page, 'Map');
@@ -277,6 +327,9 @@ async function globalMember(browser, root, dark) {
         await noSideScroll(page, 'profile');
         await targetsAtLeast44(page, 'profile');
         await shot(page, `profile-${scheme}`);
+        // The reload is the app shell's load too: its deals poll and balance reads come with it.
+        await wait(1_500);
+        readsNothingOwn(net, tReload, node.origin, 'the profile and the app shell\'s load');
 
         // The net spy. Every preview screen and marker above, between landing and the reload: no write at all. Over the
         // whole visit, page loads included: no sample- id on the wire, and no write but the app shell's own on a load
@@ -308,10 +361,13 @@ async function localMember(browser, root) {
     const ana = memberIdentity('Ana');
     const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30 }]);
     console.log(`\nA member of a local node (Beans live), light, on ${node.origin}:`);
-    const { context, page } = await openContext(browser, node.origin, ana, false);
+    const { context, page, net } = await openContext(browser, node.origin, ana, false);
     try {
+        const tLoad = Date.now() - 60_000;
         await page.getByTestId('mobile-bottom-nav').waitFor({ timeout: 30_000 });
         await wait(3_000);
+        // The app shell's load reads the member's deals, as before.
+        readsOwnAsBefore(net, tLoad, node.origin, 'the app shell\'s load', ['their deals']);
         await tab(page, 'Ledger');
         await wait(2_500);
         check(await page.getByTestId('ledger-preview').count() === 0 && await page.getByTestId('local-community-strip').count() === 0, 'Ledger: the real one, no strip');
@@ -320,6 +376,25 @@ async function localMember(browser, root) {
         await page.getByRole('button', { name: /Accept Offer/ }).waitFor({ timeout: 10_000 });
         check(await page.getByTestId('listing-in-return').count() === 0 && await page.getByTestId('local-community-action').count() === 0, 'listing: the price and the real Accept, no marker');
         await shot(page, 'local-listing-light');
+        await page.keyboard.press('Escape');
+
+        // The Commons, Invites and her own profile read her own data here, as they always have.
+        const tCommons = Date.now();
+        await tab(page, 'Commons');
+        await page.getByTestId('voice-credits-card').waitFor({ timeout: 10_000 });
+        await wait(1_500);
+        readsOwnAsBefore(net, tCommons, node.origin, 'the Commons', ['their balance', 'Decisions and their voice credits', 'the pool', 'the treasuries']);
+        const tInvites = Date.now();
+        await tab(page, 'People');
+        await page.getByRole('tab', { name: /Invites/ }).click();
+        await wait(2_000);
+        readsOwnAsBefore(net, tInvites, node.origin, 'Invites', ['their invites', 'their invite tree']);
+        const tProfile = Date.now();
+        await page.goto(`${node.origin}/app#profile=${ana.publicKey}`, { waitUntil: 'load' });
+        await page.reload({ waitUntil: 'load' });
+        await page.getByText(/trust points/).first().waitFor({ timeout: 30_000 });
+        await wait(2_000);
+        readsOwnAsBefore(net, tProfile, node.origin, 'her own profile and the app shell\'s load', ['their balance', 'their deals']);
     } finally {
         await context.close();
         await node.stop();

@@ -659,7 +659,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         // fixed head they filled a 320 dp sheet, and no deal showed until the strip was closed.
                         ListHeaderComponent={preview ? (
                             <View testID="deals-preview-head">
-                                <LocalCommunityMark variant="strip" feature="escrow" />
+                                {/* My Deals is a Modal: every way forward closes it first, so the next screen opens on top. */}
+                                <LocalCommunityMark variant="strip" feature="escrow" onLeave={onClose} />
                                 <ExampleHeader />
                             </View>
                         ) : null}
@@ -693,7 +694,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                 </Pressable>
             </Pressable>
 
-            <LocalCommunitySheet feature="escrow" visible={markOpen} onClose={() => setMarkOpen(false)} />
+            <LocalCommunitySheet feature="escrow" visible={markOpen} onClose={() => setMarkOpen(false)} onLeave={onClose} />
 
             {/* Review Modal */}
             {promptReview && !preview && (

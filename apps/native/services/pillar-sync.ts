@@ -22,6 +22,7 @@ import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-u
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFresh, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
+import { readerFeaturesHeld, readerFeaturesKey, readsOwnWith } from '../utils/reads-own';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import { nearbySetHash } from '../utils/nearby-hash';
 import {
@@ -495,6 +496,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 return result;
             }
         }
+
+        // The reader's own balance, ledger and deals are not asked where their feature is in preview (utils/reads-own.ts;
+        // the global node, whose Ledger and My Deals are Example Valley's): from the node's profile just read and the
+        // account's own set as last answered. Everywhere else, as before.
+        const readerSet = pubKey ? readerFeaturesHeld.get(readerFeaturesKey(anchorUrl, pubKey))?.features ?? null : null;
+        const readsOwnHere = (feature: 'beans' | 'escrow') => readsOwnWith(feature, profile?.features, readerSet);
 
         onProgress?.(2, 5, 'Synchronizing Members & Profiles...');
         const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
@@ -1031,7 +1038,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Fetch balance
-        if (pubKey) {
+        if (pubKey && readsOwnHere('beans')) {
             try {
                 const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}`, {
                     method: 'GET',
@@ -1145,7 +1152,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Fetch transactions
-        if (pubKey) {
+        if (pubKey && readsOwnHere('beans')) {
             try {
                 const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000`, {
                     method: 'GET',
@@ -1164,7 +1171,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Fetch marketplace transactions
-        if (pubKey) {
+        if (pubKey && readsOwnHere('escrow')) {
             try {
                 const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50`, {
                     method: 'GET',

@@ -160,6 +160,7 @@ describe('the Invites page everywhere else: as before', () => {
             expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
             expect(screen.queryByText(/Bring someone here/)).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Show QR code' })).toBeNull();
         });
     }
 

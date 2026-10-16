@@ -511,14 +511,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <button 
-                                                onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
-                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
-                                                aria-label="Show QR code"
-                                                title="Show QR code"
-                                            >
-                                                📱
-                                            </button>
+                                            {isPreview && (
+                                                <button 
+                                                    onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
+                                                    className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                    aria-label="Show QR code"
+                                                    title="Show QR code"
+                                                >
+                                                    📱
+                                                </button>
+                                            )}
                                             {!isPreview && (
                                                 <>
                                                     <button 

@@ -1208,14 +1208,16 @@ export default function PeopleScreen() {
                                                     </Text>
                                                 </View>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-                                                    <Pressable
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={t('Show QR code')}
-                                                        style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8 }]}
-                                                        onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
-                                                    >
-                                                        <Text style={styles.btnCopySmallText}>📱</Text>
-                                                    </Pressable>
+                                                    {invitesPreview && (
+                                                        <Pressable
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={t('Show QR code')}
+                                                            style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8 }]}
+                                                            onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
+                                                        >
+                                                            <Text style={styles.btnCopySmallText}>📱</Text>
+                                                        </Pressable>
+                                                    )}
                                                     {!invitesPreview && (
                                                         <Pressable
                                                             accessibilityRole="button"
@@ -1237,7 +1239,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
 
-                            {usedInvites.length > 0 && (
+                            {invitesPreview && usedInvites.length > 0 && (
                                 <View style={{ marginTop: 24 }}>
                                     <Text style={styles.pendingHeader}>{t('✅ REDEEMED ({count})', { count: usedInvites.length })}</Text>
                                     {usedInvites.map((inv: any) => (
@@ -1260,7 +1262,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
 
-                            {tree.length > 0 && (
+                            {invitesPreview && tree.length > 0 && (
                                 <View style={{ marginTop: 24 }}>
                                     <Text style={styles.sectionHeader}>{t('🌳 Community Tree')}</Text>
                                     <Text style={styles.sectionDesc}>{t('Who invited whom. The tree shows how your community grows.')}</Text>

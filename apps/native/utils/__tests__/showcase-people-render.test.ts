@@ -163,6 +163,8 @@ const render = async (node: unknown) => { await act(async () => { root.render(no
 const text = () => host.textContent ?? '';
 const OWN_CODE = { code: 'OWN-CODE-7731', createdBy: 'a-real-member-key', createdAt: new Date().toISOString() };
 
+const USED_CODE = { code: 'INV-ABCD-EFGH', createdBy: 'a-real-member-key', createdAt: new Date().toISOString(), usedBy: 'someone-else', usedAt: new Date().toISOString(), intendedFor: 'Kofi' };
+
 describe("the control: a local community's Invites, the same screen", () => {
     it("asks its node for the member's own codes, so the spy sees this screen's call", async () => {
         rememberProfile('local', { invites: true, showcase: false });
@@ -171,6 +173,20 @@ describe("the control: a local community's Invites, the same screen", () => {
         expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.invites);
         expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
         expect(text()).not.toContain('Example Valley');
+    });
+
+    it("on a local community with pending and redeemed codes, does not show QR toggle, REDEEMED section, or tree", async () => {
+        rememberProfile('local', { invites: true, showcase: false });
+        await render(createElement(PeopleScreen));
+        await act(async () => { land(INVITES, { invites: [OWN_CODE, USED_CODE] }); });
+        await settle();
+        const t = text();
+        const buttons = Array.from(host.querySelectorAll('button')).map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
+        expect(t).toContain('OWN-CODE-7731');
+        expect(buttons.includes('Show QR code')).toBe(false);
+        expect(buttons.some(b => b.includes('📱'))).toBe(false);
+        expect(/REDEEMED/.test(t)).toBe(false);
+        expect(/Community Tree/.test(t)).toBe(false);
     });
 });
 

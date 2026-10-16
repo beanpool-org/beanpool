@@ -731,12 +731,15 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
 });
 
 /**
- * GET /api/local/admin/auth/break-glass-status
+ * GET /api/local/admin/auth/break-glass-status: whether break-glass mode is on, for a signed-in admin only (public-routes
+ * audit SEC-PUB-08: it was one bit to anyone, and no app reads it).
  */
 router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
     ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
     ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 

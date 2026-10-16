@@ -226,10 +226,15 @@ router.get('/', async (ctx) => {
 //   - the directory switches, push interval and last push: the manager's Node Identity screen and static/settings.js
 //   - acceptKnocks and door (withKnockSetting, below): the manager's Node Identity screen and People & Safety → Invites
 // The operator's public address is read from the admin route /api/local/admin/public-address/status.
-function publicNodeConfig(config: NodeConfig) {
+// The service area's centre is the manager's one map pin, which is also the node's place, and an operator may have set it
+// at home: anyone but an owner or admin gets it to two decimals (~1 km), as /api/local/status and /api/local/dashboard give
+// the place (public-routes audit NEW-1: it was served to ~1 m, even with "publish location" off). The manager's Node
+// Identity screen reads it exact, with its admin credential, so a save never writes the rounded pin back.
+function publicNodeConfig(config: NodeConfig, exactPlace: boolean) {
     const r = config.serviceRadius;
+    const place = (n: number) => (exactPlace || typeof n !== 'number' ? n : Math.round(n * 100) / 100);
     return {
-        serviceRadius: r && typeof r === 'object' ? { lat: r.lat, lng: r.lng, radiusKm: r.radiusKm } : r,
+        serviceRadius: r && typeof r === 'object' ? { lat: place(r.lat), lng: place(r.lng), radiusKm: r.radiusKm } : r,
         publishLocation: config.publishLocation,
         publishMembers: config.publishMembers,
         publishContactEmail: config.publishContactEmail,
@@ -250,9 +255,22 @@ function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: bool
     return { ...config, acceptKnocks: getConfiguredSwitches().knocks, door: getDoor() };
 }
 
+/**
+ * Whether this request is an owner's or admin's (checkAdminAuth, then the role), as /api/local/dashboard asks, but never a
+ * refusal: this read is public, and the web app on the same origin sends the manager's session cookie, so a cookie that
+ * has run out must still get the public answer, not a 401. The refusal checkAdminAuth wrote is replaced by that answer.
+ */
+async function ownerOrAdminAsking(ctx: any): Promise<boolean> {
+    if ((await checkAdminAuth(ctx)) && OWNER_OR_ADMIN.includes(ctx.state?.adminRole)) return true;
+    ctx.status = 200;
+    ctx.remove('Retry-After');
+    ctx.remove('WWW-Authenticate');
+    return false;
+}
+
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const config = publicNodeConfig(getNodeConfig());
+    const config = publicNodeConfig(getNodeConfig(), await ownerOrAdminAsking(ctx));
     // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
     // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
     // is) gets the area alone: the place the community serves, no member's anything, and none of the other settings.
@@ -408,7 +426,7 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         .filter(([, v]) => v !== undefined));
     // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
     // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.
-    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent)));
+    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent), true));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {

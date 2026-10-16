@@ -113,6 +113,7 @@ export function App() {
     const [activeTab, setActiveTab] = useState<Tab>('home');
     // Beans off here and the node shows previews (DESIGN-global-showcase-fable.md §4): the Ledger is Example Valley's.
     const beansMode = useFeatureMode('beans');
+    const enterprisesMode = useFeatureMode('enterprises');
     const invitesMode = useFeatureMode('invites');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
@@ -1046,6 +1047,9 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
+                            enterprisesPreview={enterprisesMode === 'preview'}
+                            onNearYou={() => { setOpenTreasuryPubkey(null); setActiveTab('home'); }}
+                            onGuide={(slug) => { setOpenTreasuryPubkey(null); navigateToTab('guide', slug); }}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
                                 setOpenTreasuryPubkey(null);

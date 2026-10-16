@@ -26,6 +26,7 @@ vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
 }));
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { sampleTreasuries } from '../components/ShowcasePreviews';
 
 const mockTreasuries: Treasury[] = [
     {
@@ -799,6 +800,49 @@ describe('Commons on global with previews AND members on demand (where #1853 mee
         expect(calls.length).toBeGreaterThan(0);
         expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
         expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);
+    });
+});
+
+describe('the Commons on global: Example Valley\'s cards are the real ones, once each, marked, only in the preview (review of #2063, B2)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const globalInfo = {
+        ...localInfo, profile: 'global' as const,
+        features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
+    };
+    const [bakery, project] = sampleTreasuries();
+    beforeEach(() => { vi.clearAllMocks(); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
+
+    it('global: the Bakery and the compost bay once each on the whole page, inside the preview, each with the pill; the list below holds none', async () => {
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        const onOpenTreasury = vi.fn();
+        const { container } = render(<ProjectsPage identity={backerIdentity} onOpenTreasury={onOpenTreasury} />);
+        const preview = await screen.findByTestId('commons-preview');
+        await waitFor(() => expect(getGroups).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(container.textContent?.split(bakery.name).length).toBe(2);
+        expect(container.textContent?.split(project.name).length).toBe(2);
+        const cards = screen.getAllByTestId('sample-enterprise-card');
+        expect(cards).toHaveLength(2);
+        for (const card of cards) {
+            expect(preview.contains(card)).toBe(true);
+            expect(within(card).getByTestId('local-community-pill')).toBeInTheDocument();
+        }
+        // No card of any kind outside the marked preview: the list is the node's own, and it has none here.
+        const allCards = Array.from(container.querySelectorAll('[role="button"][tabindex="0"]')).filter(el => /🫘/.test(el.textContent ?? ''));
+        expect(allCards.every(el => preview.contains(el))).toBe(true);
+        fireEvent.click(cards[0]);
+        expect(onOpenTreasury).toHaveBeenCalledWith(bakery.publicKey);
+        fireEvent.click(cards[1]);
+        expect(onOpenTreasury).toHaveBeenCalledWith(project.publicKey);
+    });
+
+    it('local: no sample card, no pill; the node\'s own cards as before', async () => {
+        const { container } = render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        expect(screen.queryAllByTestId('sample-enterprise-card')).toEqual([]);
+        expect(screen.queryAllByTestId('local-community-pill')).toEqual([]);
+        expect(container.textContent).not.toContain(bakery.name);
     });
 });
 

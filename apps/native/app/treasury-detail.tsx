@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { groupKindLine, isWholeCents, keeperWords, t } from '@beanpool/core';
+import { groupKindLine, isWholeCents, keeperWords, t, isSampleId } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -36,6 +36,10 @@ import { ReportReasonBox } from '../components/ReportReasonBox';
 import { reportedAlertBody } from '../utils/reportReasons';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
+import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/showcase/sample-screens';
+import { LocalCommunityMark, ExampleHeader } from '../components/showcase/LocalCommunityMark';
+import { useReaderFeatures } from '../utils/use-reader-features';
+import { showcaseMode } from '../utils/node-profile';
 
 function decodeThreadMessage(ciphertext: string, type: string, keeper = 'keeper'): string {
     if (type === 'removed') return `removed by a ${keeper}`;
@@ -61,6 +65,17 @@ export default function TreasuryDetailScreen() {
     const treasuryKey = typeof rawKey === 'string' ? rawKey : Array.isArray(rawKey) ? rawKey[0] : undefined;
     const nameParam = typeof params.name === 'string' ? params.name : Array.isArray(params.name) ? params.name[0] : undefined;
     const avatarParam = typeof params.avatar === 'string' ? params.avatar : Array.isArray(params.avatar) ? params.avatar[0] : undefined;
+
+    // Example Valley's enterprise or project (a sample id: the Commons preview's cards): drawn from the sample, every
+    // control a marker, nothing asked of the node. Only a sample id: any other key is a real one, read as before.
+    const isEffectivePreview = isSampleId(treasuryKey);
+    // Enterprises in preview for this reader (the worldwide community): no real one exists here, so a real key (a stale
+    // link) is not asked for and the page says why. Only preview: a local node with enterprises switched off, or a
+    // reader who may only read them, asks as before (review of #2063, B5).
+    const reader = useReaderFeatures();
+    const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
+    const elsewhere = !isEffectivePreview && enterprisesPreview;
+
     const { theme, colors } = useTheme();
 
     const [detail, setDetail] = useState<any>(null);
@@ -335,6 +350,20 @@ export default function TreasuryDetailScreen() {
     const load = useCallback(() => {
         let active = true;
         setLoading(true);
+        if (isEffectivePreview) {
+            const d = sampleTreasuryDetail(treasuryKey);
+            setDetail(d);
+            setIsKeeperOfThis(false);
+            setLoading(false);
+            return () => { active = false; };
+        }
+        // Not until the phone has read its copy of the node's profile (a moment, no network): a preview asks nothing.
+        if (!reader.known) return () => { active = false; };
+        if (elsewhere) {
+            setDetail(null);
+            setLoading(false);
+            return () => { active = false; };
+        }
         (async () => {
             try {
                 const [d, id] = await Promise.all([
@@ -361,10 +390,10 @@ export default function TreasuryDetailScreen() {
         })();
         loadThread();
         return () => { active = false; };
-    }, [treasuryKey]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     const loadThread = useCallback(async () => {
-        if (!treasuryKey) return;
+        if (!treasuryKey || isEffectivePreview || !reader.known || elsewhere) return;
         try {
             const res = await getEnterpriseThread(treasuryKey);
             if (res) {
@@ -374,7 +403,7 @@ export default function TreasuryDetailScreen() {
         } catch {
             // ignore
         }
-    }, [treasuryKey]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     const handlePostThreadMessage = async () => {
         if (!treasuryKey || threadPosting || !threadInput.trim()) return;
@@ -426,7 +455,15 @@ export default function TreasuryDetailScreen() {
     useFocusEffect(useCallback(() => { setDecisionsRefresh(n => n + 1); }, []));
 
     const loadLedger = useCallback(async (period: LedgerPeriod) => {
-        if (!treasuryKey) return;
+        if (isEffectivePreview) {
+            setLedgerLoading(true);
+            setLedgerError(null);
+            setLedger(sampleEnterpriseLedger(treasuryKey));
+            setLedgerShown(LEDGER_PAGE);
+            setLedgerLoading(false);
+            return;
+        }
+        if (!treasuryKey || !reader.known || elsewhere) return;
         // Only the latest request may land: switching period quickly must not let a slower, older reply win.
         const request = ++ledgerRequest.current;
         setLedgerLoading(true);
@@ -442,7 +479,7 @@ export default function TreasuryDetailScreen() {
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
-    }, [treasuryKey]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     // On focus, and again whenever the period changes.
     useFocusEffect(useCallback(() => { loadLedger(ledgerPeriod); }, [loadLedger, ledgerPeriod]));
@@ -856,6 +893,10 @@ export default function TreasuryDetailScreen() {
 
             {loading ? (
                 <View style={styles.centerFill}><ActivityIndicator color={colors.brand.primary} /></View>
+            ) : !detail && elsewhere ? (
+                <View style={styles.centerFill} testID="enterprise-elsewhere">
+                    <LocalCommunityMark variant="line" feature="enterprises" text={t('🏘️ Enterprises live in a local community ›')} />
+                </View>
             ) : !detail ? (
                 <View style={styles.centerFill}>
                     <Text style={styles.emptyNote}>Couldn't load this group. Check your connection.</Text>
@@ -865,6 +906,12 @@ export default function TreasuryDetailScreen() {
                     {/* No keyboardVerticalOffset: keyboard-controller measures this view's absolute frame, so the old
                         64 was added on top and left ~64dp of blank space above the keyboard. */}
                     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                        {isEffectivePreview && (
+                            <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 12 }}>
+                                <LocalCommunityMark variant="strip" feature="enterprises" />
+                                <ExampleHeader />
+                            </View>
+                        )}
                         {/* Identity */}
                         <View style={styles.identityRow}>
                             {avatar ? (
@@ -952,12 +999,21 @@ export default function TreasuryDetailScreen() {
                                     </Text>
 
                                     {/* Inline Pledge Beans Input */}
+                                    {/* In preview (Example Valley's): the marker, never the box. */}
+                                    {isEffectivePreview ? (
+                                        <View style={styles.pledgeBox} testID="pledge-preview">
+                                            <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>
+                                                {t('Back this initiative')}
+                                            </Text>
+                                            <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
+                                        </View>
+                                    ) : (<>
                                     {pledgesClosed ? (
-                                    <View style={styles.pledgeBox} testID="pledges-closed">
-                                        <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
-                                    </View>
+                                        <View style={styles.pledgeBox} testID="pledges-closed">
+                                            <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
+                                        </View>
                                     ) : (
-                                    <View style={styles.pledgeBox}>
+                                        <View style={styles.pledgeBox}>
                                         <View style={styles.pledgeInputRow}>
                                             <TextInput
                                                 accessibilityLabel="Pledge amount"
@@ -993,12 +1049,13 @@ export default function TreasuryDetailScreen() {
                                         </Pressable>
                                     </View>
                                     )}
+                                    </>)}
                                 </View>
                             );
                         })()}
 
                         {/* Pending Keeper Requests (for Lead / Sole Keeper / Admin) */}
-                        {isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
+                        {!isEffectivePreview && isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
                             <View style={styles.requestsCard}>
                                 <Text style={styles.requestsTitle}>PENDING {kw.Keeper.toUpperCase()} REQUESTS ({keeperRequests.length})</Text>
                                 {keeperRequests.map((req: any) => (
@@ -1050,7 +1107,7 @@ export default function TreasuryDetailScreen() {
                         )}
 
                         {/* Keeper changes waiting out the other keepers' 3-day objection window (answers A, M) */}
-                        {keeperChanges.length > 0 && (
+                        {!isEffectivePreview && keeperChanges.length > 0 && (
                             <View style={styles.requestsCard}>
                                 <Text style={styles.requestsTitle}>{kw.Keeper.toUpperCase()} CHANGES WAITING ({keeperChanges.length})</Text>
                                 {keeperChanges.map((c) => (
@@ -1081,7 +1138,7 @@ export default function TreasuryDetailScreen() {
                         )}
 
                         {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
-                        {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
+                        {!isEffectivePreview && Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
                             <View style={styles.successionCard}>
                                 <View style={styles.successionHeader}>
                                     <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.fg} />
@@ -1146,7 +1203,15 @@ export default function TreasuryDetailScreen() {
                         )}
 
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
-                        {identity && !isKeeperOfThis && detail?.status !== 'completed' && (
+                        {isEffectivePreview ? (
+                            <View style={styles.joinCard}>
+                                <Text style={styles.joinTitle}>🤝 {t('Ask to join as a {keeper}', { keeper: kw.keeper }).toUpperCase()}</Text>
+                                <Text style={styles.joinDesc}>
+                                    {t('Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.', { kind: kw.kind })}
+                                </Text>
+                                <LocalCommunityMark variant="action" feature="enterprises" label={t('Join as {keeper}', { keeper: kw.keeper })} />
+                            </View>
+                        ) : identity && !isKeeperOfThis && detail?.status !== 'completed' && (
                             myPendingRequest ? (
                                 <View style={styles.pendingRequestBanner}>
                                     <Text style={styles.pendingRequestTitle}>⏳ {kw.Keeper.toUpperCase()} REQUEST PENDING</Text>
@@ -1233,7 +1298,7 @@ export default function TreasuryDetailScreen() {
                                         );
                                     })}
                                 </View>
-                                {removableKeepers.map((k: any) => (
+                                {!isEffectivePreview && removableKeepers.map((k: any) => (
                                     <Pressable
                                         key={`rm-${k.publicKey}`}
                                         style={[styles.keeperActionBtn, processingChangeId === k.publicKey && { opacity: 0.6 }]}
@@ -1245,7 +1310,7 @@ export default function TreasuryDetailScreen() {
                                         <Text style={styles.keeperActionText}>Remove {k.callsign}</Text>
                                     </Pressable>
                                 ))}
-                                {canStepDown(myPubkey, keeperList) && (
+                                {!isEffectivePreview && canStepDown(myPubkey, keeperList) && (
                                     <Pressable
                                         style={[styles.keeperActionBtn, steppingDown && { opacity: 0.6 }]}
                                         disabled={steppingDown}
@@ -1317,7 +1382,7 @@ export default function TreasuryDetailScreen() {
                         </View>
 
                         {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
-                        {treasuryKey && (
+                        {treasuryKey && !isEffectivePreview && (
                             <EnterpriseDecisions
                                 treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
                                 earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
@@ -1326,172 +1391,196 @@ export default function TreasuryDetailScreen() {
                         )}
 
                         {/* Operator controls */}
-                        {isKeeperOfThis && (
+                        {(isKeeperOfThis || isEffectivePreview) && (
                             <View style={styles.opPanel}>
                                 <View style={styles.opTitleRow}>
                                     <MaterialCommunityIcons name="shield-account" size={16} color={colors.brand.primary} />
                                     <Text style={styles.opTitle}>OPERATOR CONTROLS</Text>
                                 </View>
-                                <View style={styles.opBtnRow}>
-                                    <Pressable
-                                        style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
-                                        accessibilityRole="button"
-                                        disabled={!!postingBlocked}
-                                        accessibilityState={{ disabled: !!postingBlocked }}
-                                        onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'offer', name } })}
-                                    >
-                                        <MaterialCommunityIcons name="tag-plus" size={16} color={colors.text.inverse} />
-                                        <Text style={styles.opBtnText} numberOfLines={1}>Post Offer</Text>
-                                    </Pressable>
-                                    <Pressable
-                                        style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
-                                        accessibilityRole="button"
-                                        disabled={!!postingBlocked}
-                                        accessibilityState={{ disabled: !!postingBlocked }}
-                                        onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'need', name } })}
-                                    >
-                                        <MaterialCommunityIcons name="hand-extended" size={16} color={colors.text.inverse} />
-                                        <Text style={styles.opBtnText} numberOfLines={1}>Post Need</Text>
-                                    </Pressable>
-                                </View>
-                                {!!postingBlocked && <Text style={styles.opNotice}>{postingBlocked}</Text>}
-                                <View style={styles.sweepRow}>
-                                    <TextInput
-                                        style={styles.sweepInput}
-                                        placeholder="Sweep surplus…"
-                                        placeholderTextColor={colors.text.muted}
-                                        keyboardType="numeric"
-                                        value={sweepAmount}
-                                        onChangeText={setSweepAmount}
-                                        accessibilityLabel="Amount to sweep to the Commons"
-                                    />
-                                    <Pressable
-                                        style={[styles.sweepBtn, (sweeping || balance <= 0) && styles.sweepBtnDisabled]}
-                                        disabled={sweeping || balance <= 0}
-                                        onPress={handleSweep}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Sweep to the Commons"
-                                    >
-                                        {sweeping ? <ActivityIndicator color={colors.brand.primary} /> : (
-                                            <>
-                                                <MaterialCommunityIcons name="bank-transfer-out" size={16} color={colors.brand.primary} />
-                                                <Text style={styles.sweepBtnText} numberOfLines={1}>To Commons</Text>
-                                            </>
+                                {isEffectivePreview ? (
+                                    <View style={{ gap: 8, marginTop: 4 }}>
+                                        <LocalCommunityMark variant="action" feature="enterprises" label={t('Post Offer')} />
+                                        <LocalCommunityMark variant="action" feature="enterprises" label={t('Post Need')} />
+                                        <LocalCommunityMark variant="action" feature="enterprises" label={t('To Commons')} />
+                                    </View>
+                                ) : (
+                                    <>
+                                        <View style={styles.opBtnRow}>
+                                            <Pressable
+                                                style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
+                                                accessibilityRole="button"
+                                                disabled={!!postingBlocked}
+                                                accessibilityState={{ disabled: !!postingBlocked }}
+                                                onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'offer', name } })}
+                                            >
+                                                <MaterialCommunityIcons name="tag-plus" size={16} color={colors.text.inverse} />
+                                                <Text style={styles.opBtnText} numberOfLines={1}>Post Offer</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
+                                                accessibilityRole="button"
+                                                disabled={!!postingBlocked}
+                                                accessibilityState={{ disabled: !!postingBlocked }}
+                                                onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'need', name } })}
+                                            >
+                                                <MaterialCommunityIcons name="hand-extended" size={16} color={colors.text.inverse} />
+                                                <Text style={styles.opBtnText} numberOfLines={1}>Post Need</Text>
+                                            </Pressable>
+                                        </View>
+                                        {!!postingBlocked && <Text style={styles.opNotice}>{postingBlocked}</Text>}
+                                        <View style={styles.sweepRow}>
+                                            <TextInput
+                                                style={styles.sweepInput}
+                                                placeholder="Sweep surplus…"
+                                                placeholderTextColor={colors.text.muted}
+                                                keyboardType="numeric"
+                                                value={sweepAmount}
+                                                onChangeText={setSweepAmount}
+                                                accessibilityLabel="Amount to sweep to the Commons"
+                                            />
+                                            <Pressable
+                                                style={[styles.sweepBtn, (sweeping || balance <= 0) && styles.sweepBtnDisabled]}
+                                                disabled={sweeping || balance <= 0}
+                                                onPress={handleSweep}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Sweep to the Commons"
+                                            >
+                                                {sweeping ? <ActivityIndicator color={colors.brand.primary} /> : (
+                                                    <>
+                                                        <MaterialCommunityIcons name="bank-transfer-out" size={16} color={colors.brand.primary} />
+                                                        <Text style={styles.sweepBtnText} numberOfLines={1}>To Commons</Text>
+                                                    </>
+                                                )}
+                                            </Pressable>
+                                        </View>
+
+                                        {pendingBids.length > 0 && (
+                                            <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                                <Text style={[styles.opTitle, { marginBottom: 8 }]}>PENDING BIDS ON NEEDS ({pendingBids.length})</Text>
+                                                {pendingBids.map((b) => (
+                                                    <View key={b.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{b.post_title}</Text>
+                                                        <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                            Bid by <Text style={{ fontWeight: '700', color: colors.text.body }}>{b.peer_callsign || 'Member'}</Text> · {b.credits} 🫘
+                                                        </Text>
+                                                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                                                            <Pressable
+                                                                style={[styles.opBtn, { minHeight: 44, paddingVertical: 8, justifyContent: 'center' }]}
+                                                                disabled={actionState?.id === b.id}
+                                                                onPress={() => handleApproveBid(b.id)}
+                                                                accessibilityRole="button"
+                                                            >
+                                                                {actionState?.id === b.id && actionState?.type === 'approve' ? (
+                                                                    <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                                ) : (
+                                                                    <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
+                                                                )}
+                                                            </Pressable>
+                                                            <Pressable
+                                                                style={[styles.sweepBtn, { minHeight: 44, height: 44, paddingHorizontal: 16 }]}
+                                                                disabled={actionState?.id === b.id}
+                                                                onPress={() => handleRejectBid(b.id)}
+                                                                accessibilityRole="button"
+                                                            >
+                                                                {actionState?.id === b.id && actionState?.type === 'reject' ? (
+                                                                    <ActivityIndicator size="small" color={colors.feedback.warning.fg} />
+                                                                ) : (
+                                                                    <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.fg }]}>Decline</Text>
+                                                                )}
+                                                            </Pressable>
+                                                        </View>
+                                                    </View>
+                                                ))}
+                                            </View>
                                         )}
-                                    </Pressable>
-                                </View>
 
-                                {pendingBids.length > 0 && (
-                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
-                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>PENDING BIDS ON NEEDS ({pendingBids.length})</Text>
-                                        {pendingBids.map((b) => (
-                                            <View key={b.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{b.post_title}</Text>
-                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
-                                                    Bid by <Text style={{ fontWeight: '700', color: colors.text.body }}>{b.peer_callsign || 'Member'}</Text> · {b.credits} 🫘
-                                                </Text>
-                                                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                                                    <Pressable
-                                                        style={[styles.opBtn, { minHeight: 44, paddingVertical: 8, justifyContent: 'center' }]}
-                                                        disabled={actionState?.id === b.id}
-                                                        onPress={() => handleApproveBid(b.id)}
-                                                        accessibilityRole="button"
-                                                    >
-                                                        {actionState?.id === b.id && actionState?.type === 'approve' ? (
-                                                            <ActivityIndicator size="small" color={colors.text.inverse} />
-                                                        ) : (
-                                                            <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
-                                                        )}
-                                                    </Pressable>
-                                                    <Pressable
-                                                        style={[styles.sweepBtn, { minHeight: 44, height: 44, paddingHorizontal: 16 }]}
-                                                        disabled={actionState?.id === b.id}
-                                                        onPress={() => handleRejectBid(b.id)}
-                                                        accessibilityRole="button"
-                                                    >
-                                                        {actionState?.id === b.id && actionState?.type === 'reject' ? (
-                                                            <ActivityIndicator size="small" color={colors.feedback.warning.fg} />
-                                                        ) : (
-                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.fg }]}>Decline</Text>
-                                                        )}
-                                                    </Pressable>
-                                                </View>
-                                            </View>
-                                        ))}
-                                    </View>
-                                )}
-
-                                {activeDeals.length > 0 && (
-                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
-                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>ACTIVE DEALS ({activeDeals.length})</Text>
-                                        {activeDeals.map((d) => (
-                                            <View key={d.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{d.post_title}</Text>
-                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
-                                                    {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
-                                                </Text>
-                                                <View style={{ marginTop: 10 }}>
-                                                    {d.action_required === 'fulfill' ? (
-                                                        <Pressable
-                                                            style={[styles.sweepBtn, { minHeight: 44, height: 44 }]}
-                                                            onPress={() => router.push({ pathname: '/post/[id]', params: { id: d.post_id, txId: d.id } })}
-                                                            accessibilityRole="button"
-                                                        >
-                                                            <Text style={[styles.sweepBtnText, { color: colors.text.secondary }]}>
-                                                                Fulfill Deal · Awaiting Customer Release
-                                                            </Text>
-                                                        </Pressable>
-                                                    ) : (
-                                                        <Pressable
-                                                            style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, minHeight: 44, paddingVertical: 8 }]}
-                                                            disabled={actionState?.id === d.id}
-                                                            onPress={() => handleCompleteDeal(d)}
-                                                            accessibilityRole="button"
-                                                        >
-                                                            {actionState?.id === d.id && actionState?.type === 'complete' ? (
-                                                                <ActivityIndicator size="small" color={colors.text.inverse} />
+                                        {activeDeals.length > 0 && (
+                                            <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                                <Text style={[styles.opTitle, { marginBottom: 8 }]}>ACTIVE DEALS ({activeDeals.length})</Text>
+                                                {activeDeals.map((d) => (
+                                                    <View key={d.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{d.post_title}</Text>
+                                                        <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                            {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
+                                                        </Text>
+                                                        <View style={{ marginTop: 10 }}>
+                                                            {d.action_required === 'fulfill' ? (
+                                                                <Pressable
+                                                                    style={[styles.sweepBtn, { minHeight: 44, height: 44 }]}
+                                                                    onPress={() => router.push({ pathname: '/post/[id]', params: { id: d.post_id, txId: d.id } })}
+                                                                    accessibilityRole="button"
+                                                                >
+                                                                    <Text style={[styles.sweepBtnText, { color: colors.text.secondary }]}>
+                                                                        Fulfill Deal · Awaiting Customer Release
+                                                                    </Text>
+                                                                </Pressable>
                                                             ) : (
-                                                                <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
+                                                                <Pressable
+                                                                    style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, minHeight: 44, paddingVertical: 8 }]}
+                                                                    disabled={actionState?.id === d.id}
+                                                                    onPress={() => handleCompleteDeal(d)}
+                                                                    accessibilityRole="button"
+                                                                >
+                                                                    {actionState?.id === d.id && actionState?.type === 'complete' ? (
+                                                                        <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                                    ) : (
+                                                                        <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
+                                                                    )}
+                                                                </Pressable>
                                                             )}
-                                                        </Pressable>
-                                                    )}
-                                                </View>
+                                                        </View>
+                                                    </View>
+                                                ))}
                                             </View>
-                                        ))}
-                                    </View>
-                                )}
+                                        )}
 
-                                <Text style={styles.opHint}>
-                                    Post the {kw.kind}'s recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
-                                </Text>
+                                        <Text style={styles.opHint}>
+                                            Post the {kw.kind}'s recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
+                                        </Text>
 
-                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
-                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
-                                        <Pressable
-                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
-                                            onPress={handleCancelInitiative}
-                                            disabled={cancelling}
-                                            accessibilityRole="button"
-                                            accessibilityLabel="Cancel initiative and refund escrow"
-                                        >
-                                            {cancelling ? (
-                                                <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
-                                            ) : (
-                                                <>
-                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
-                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
-                                                        Cancel Initiative & Refund Escrow
-                                                    </Text>
-                                                </>
-                                            )}
-                                        </Pressable>
-                                    </View>
+                                        {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                            <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
+                                                <Pressable
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
+                                                    onPress={handleCancelInitiative}
+                                                    disabled={cancelling}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel="Cancel initiative and refund escrow"
+                                                >
+                                                    {cancelling ? (
+                                                        <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
+                                                    ) : (
+                                                        <>
+                                                            <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
+                                                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
+                                                                Cancel Initiative & Refund Escrow
+                                                            </Text>
+                                                        </>
+                                                    )}
+                                                </Pressable>
+                                            </View>
+                                        )}
+                                    </>
                                 )}
                             </View>
                         )}
 
                         {/* Season & lifecycle controls — only what the server lets THIS member do (utils/enterprise-season.ts) */}
-                        {anySeasonControl(controls) && (() => {
+                        {(isEffectivePreview || anySeasonControl(controls)) && (() => {
+                            if (isEffectivePreview) {
+                                return (
+                                    <View style={styles.seasonCard}>
+                                        <View style={styles.opTitleRow}>
+                                            <MaterialCommunityIcons name="sprout" size={16} color={colors.brand.primary} />
+                                            <Text style={styles.seasonTitle}>SEASON & LIFECYCLE CONTROLS</Text>
+                                        </View>
+                                        <View style={{ gap: 8, marginTop: 8 }}>
+                                            <LocalCommunityMark variant="action" feature="enterprises" label={t('Pause for season')} />
+                                            <LocalCommunityMark variant="action" feature="enterprises" label={t('Start wind-up')} />
+                                        </View>
+                                    </View>
+                                );
+                            }
                             const danger = colors.feedback.danger;
                             const warning = colors.feedback.warning;
                             const success = colors.feedback.success;
@@ -1698,7 +1787,12 @@ export default function TreasuryDetailScreen() {
                         {posts.length === 0 ? (
                             <Text style={styles.emptyNote}>No live listings yet.</Text>
                         ) : posts.map((p) => (
-                            <Pressable key={p.id} style={styles.listingCard} onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })} accessibilityRole="button">
+                            <Pressable
+                                key={p.id}
+                                style={styles.listingCard}
+                                onPress={() => !isEffectivePreview && router.push({ pathname: '/post/[id]', params: { id: p.id } })}
+                                accessibilityRole="button"
+                            >
                                 <View style={styles.listingTopRow}>
                                     <View style={[styles.typeBadge, p.type === 'offer' ? styles.typeBadgeOffer : styles.typeBadgeNeed]}>
                                         <Text style={[styles.typeBadgeText, { color: p.type === 'offer' ? colors.brand.primary : colors.text.secondary }]}>{p.type}</Text>
@@ -1753,7 +1847,12 @@ export default function TreasuryDetailScreen() {
                                 </View>
                             )}
 
-                            {threadMessages.length === 0 ? (
+                            {isEffectivePreview ? (
+                                // Example Valley's: no thread to start here, so no "Start the conversation!" (review N4).
+                                <View testID="thread-preview">
+                                    <LocalCommunityMark variant="line" feature="enterprises" text={t('🏘️ In a local community its {keepers} and members talk it over here ›', { keepers: kw.keepers })} />
+                                </View>
+                            ) : threadMessages.length === 0 ? (
                                 <Text style={styles.emptyNote}>No messages yet. Start the conversation!</Text>
                             ) : (
                                 threadMessages.map((m: any, idx: number) => {
@@ -1801,7 +1900,7 @@ export default function TreasuryDetailScreen() {
                                 })
                             )}
 
-                            {!threadReadOnly && (
+                            {!threadReadOnly && !isEffectivePreview && (
                                 <View style={styles.threadInputRow}>
                                     <TextInput
                                         style={[styles.threadInput, threadPosting && { opacity: 0.6 }]}
@@ -1836,30 +1935,32 @@ export default function TreasuryDetailScreen() {
                         </View>
 
                         {/* Report Enterprise Action */}
-                        <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
-                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
-                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
-                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
-                            </Pressable>
-                            {showReportForm && (
-                                // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
-                                <ReportReasonBox
-                                    onCancel={() => setShowReportForm(false)}
-                                    onSubmit={async (reason) => {
-                                        if (!identity?.publicKey || !treasuryKey) return;
-                                        try {
-                                            const sent = await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
-                                            setShowReportForm(false);
-                                            // The thanks, and why the member's words were left out when they were (case 14).
-                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
-                                        } catch (e: any) {
-                                            Alert.alert('Error', e.message || 'Could not submit report.');
-                                            throw e; // the box keeps the choice and the words
-                                        }
-                                    }}
-                                />
-                            )}
-                        </View>
+                        {!isEffectivePreview && (
+                            <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
+                                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
+                                    <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
+                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
+                                </Pressable>
+                                {showReportForm && (
+                                    // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+                                    <ReportReasonBox
+                                        onCancel={() => setShowReportForm(false)}
+                                        onSubmit={async (reason) => {
+                                            if (!identity?.publicKey || !treasuryKey) return;
+                                            try {
+                                                const sent = await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
+                                                setShowReportForm(false);
+                                                // The thanks, and why the member's words were left out when they were (case 14).
+                                                Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
+                                            } catch (e: any) {
+                                                Alert.alert('Error', e.message || 'Could not submit report.');
+                                                throw e; // the box keeps the choice and the words
+                                            }
+                                        }}
+                                    />
+                                )}
+                            </View>
+                        )}
                     </ScrollView>
                 </KeyboardAvoidingView>
             )}

@@ -6,8 +6,10 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
-import type { DecisionWithTally, MyPoolVoting } from '../../utils/db';
-import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote, t } from '@beanpool/core';
+import {
+    SAMPLE_COMMUNITY, TIER_LEVELS, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger, sampleRowNote, t,
+} from '@beanpool/core';
+import type { DecisionWithTally, EnterpriseLedgerResponse, MyPoolVoting, TreasurySummary } from '../../utils/db';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
 
@@ -96,6 +98,25 @@ export function sampleEscrowTotal(): number {
 /** The member's header over a preview: "Example Valley · an example member". */
 export const SAMPLE_MEMBER_HEADER = `${SAMPLE_COMMUNITY.name} · ${SAMPLE_COMMUNITY.member}`;
 export const SAMPLE_MEMBER = SAMPLE_COMMUNITY.member;
+
+/**
+ * Example Valley's enterprise (the Bakery) and project (the compost bay) in the shape the Commons card reads, so the
+ * Commons preview draws the real card fed the sample. The numbers and rows are core's, the web's too
+ * (sample-community.ts sampleEnterpriseCards / Detail / Ledger: review of #2063, N5).
+ */
+export function sampleEnterprises(): TreasurySummary[] {
+    return sampleEnterpriseCards();
+}
+
+/** One of them as the enterprise page reads it in preview: the project's for its id, else the Bakery's. */
+export function sampleTreasuryDetail(pubkey?: string): any {
+    return sampleEnterpriseDetail(pubkey);
+}
+
+/** Its Income & Spend as the enterprise page reads it in preview. */
+export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerResponse {
+    return coreSampleEnterpriseLedger(pubkey);
+}
 
 /**
  * Example Valley's invitations in the shape people.tsx reads (design §1 row 8, Marty's 16 Oct pick):
@@ -192,4 +213,3 @@ export function samplePoolVoting(): MyPoolVoting {
         hasCompletedTrade: true,
     };
 }
-

@@ -342,6 +342,39 @@ async function globalMember(browser, root, dark) {
         await wait(1_000);
         readsNothingOwn(net, tCommons, node.origin, 'the Commons');
 
+        // The enterprise page in preview (review of #2063): the Bakery's real card, once, marked, opens the real page fed
+        // the sample; each of its six controls is a marker; a keeper row is no button, and a tap on one opens no profile.
+        const cards = page.getByTestId('sample-enterprise-card');
+        check(await cards.count() === 2 && await page.getByTestId('commons-preview').getByTestId('sample-enterprise-card').count() === 2,
+            'Commons: the Bakery and the compost bay are the real cards, inside the preview');
+        check((await page.locator('main').innerText()).split('Example Valley Bakery').length === 2, 'Commons: the Bakery shows once');
+        const tPage = Date.now();
+        await cards.first().click();
+        const overlay = page.getByTestId('page-overlay');
+        await overlay.waitFor({ timeout: 10_000 });
+        await wait(1_000);
+        check(await overlay.getByTestId('sample-header').count() === 1, 'enterprise page: the Example header');
+        const pageMarkers = overlay.getByTestId('local-community-action');
+        const markerCount = await pageMarkers.count();
+        check(markerCount === 6, `enterprise page: its six controls are markers (${markerCount})`);
+        for (let i = 0; i < markerCount; i++) {
+            await pageMarkers.nth(i).click();
+            await page.getByTestId('local-community-sheet').waitFor();
+            await closeSheet(page);
+        }
+        check(await overlay.getByRole('button', { name: /a neighbour/ }).count() === 0, 'enterprise page: a keeper row is no button');
+        await overlay.getByText('a neighbour', { exact: true }).first().click();
+        await wait(1_000);
+        check(await overlay.count() === 1 && await page.getByText('sample-keeper-1').count() === 0, 'enterprise page: a tap on a keeper row opens no profile');
+        await noSideScroll(page, 'enterprise page');
+        await targetsAtLeast44(page, 'enterprise page');
+        await markersNeverLocked(page, 'enterprise page');
+        await shot(page, `enterprise-${scheme}`);
+        const pageReqs = net.since(tPage).filter((r) => r.url.startsWith(node.origin) && new URL(r.url).pathname.startsWith('/api/'));
+        check(pageReqs.length === 0, `net spy, the enterprise page, every marker and a keeper tap: not one request${pageReqs.length ? ` (${pageReqs.map((r) => `${r.method} ${new URL(r.url).pathname}`).join(', ')})` : ''}`);
+        await overlay.getByRole('button', { name: 'Go back' }).click();
+        await overlay.waitFor({ state: 'detached', timeout: 5_000 });
+
         // Commons → Decide in preview: each marker in it and the header opens the sheet.
         const tDecide = Date.now();
         await page.getByTestId('commons-section-tabs').getByRole('button', { name: /Decide/ }).click();

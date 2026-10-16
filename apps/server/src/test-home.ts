@@ -342,7 +342,9 @@ async function main(): Promise<void> {
         assert(c.joined?.count7d === 1 && c.joined?.names?.[0]?.callsign === 'HomeCarol', `joined: Carol this week, by name (${JSON.stringify(c.joined)})`);
         // Her face: the URL the members list gives her, made from her row's avatar_ref, never from the photo itself.
         const carolRef = (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(carol.pk) as { avatar_ref: string | null }).avatar_ref;
-        assert(!!carolRef && c.joined?.names?.[0]?.avatarUrl === `/api/avatar/${carol.pk}?size=thumb&v=${carolRef}`,
+        // Keyed (k=) on every node since the public-routes audit's SEC-PUB-02: a face opens only from a URL a member was handed.
+        const carolFace = new RegExp(`^/api/avatar/${carol.pk}\\?size=thumb&v=${carolRef}&k=[A-Za-z0-9_-]{22}$`);
+        assert(!!carolRef && carolFace.test(c.joined?.names?.[0]?.avatarUrl ?? ''),
             `joined: with her photo's URL, made from avatar_ref (${c.joined?.names?.[0]?.avatarUrl}, ref ${carolRef})`);
         assert(c.groups?.items?.some((g: any) => g.name === 'HomeSentinel garden group'), `groups: hers (${JSON.stringify(c.groups)})`);
         const pulse = c.pulse?.items ?? [];
@@ -509,9 +511,12 @@ async function main(): Promise<void> {
         const placed = await get('/api/home?cards=community', erin);
         assert(JSON.stringify(placed.body?.cards?.community?.place) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
             `and the node's location to two decimals once it has one (${JSON.stringify(placed.body?.cards?.community?.place)})`);
-        const status = await get('/api/local/status');
+        const status = await get('/api/local/status', null, { Origin: 'https://evil.example' });
         assert(JSON.stringify(status.body?.location) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
             `/api/local/status, which answers anyone, gives the location rounded to two decimals too (${JSON.stringify(status.body?.location)})`);
+        // Public-routes audit SEC-PUB-04: no wildcard, so another site's page can't read it from a visitor's browser.
+        assert(status.headers.get('access-control-allow-origin') === null,
+            `/api/local/status asked from another origin carries no Access-Control-Allow-Origin (${status.headers.get('access-control-allow-origin')})`);
         // F5 (the sun and moon card): the place is part of the answer's tag, so a move is a fresh answer and no move a 304.
         const samePlace = await get('/api/home?cards=community', erin, { 'If-None-Match': placed.etag! });
         assert(samePlace.status === 304, `an unchanged place is still a 304 (${samePlace.status})`);
@@ -526,6 +531,31 @@ async function main(): Promise<void> {
         updateLocalConfig({ location: null });
         const unplaced = await get('/api/home?cards=community', erin, { 'If-None-Match': movedPlace.etag! });
         assert(unplaced.status === 200 && !('place' in (unplaced.body?.cards?.community ?? {})), `and unset again, the place goes and the tag with it (${unplaced.status})`);
+        // Public-routes audit NEW-1: the service area's centre is the manager's same pin, so anyone but an owner or admin gets
+        // it to two decimals too; the owner gets it exact (the manager's Node Identity screen saves it back).
+        {
+            const { updateNodeConfig } = await import('./state-engine.js');
+            updateNodeConfig({ serviceRadius: { lat: -28.55555, lng: 153.49999, radiusKm: 25 }, publishLocation: false });
+            const rounded = JSON.stringify({ lat: -28.56, lng: 153.5, radiusKm: 25 });
+            const areaUnsigned = await get('/api/node/config');
+            assert(areaUnsigned.status === 200 && JSON.stringify(areaUnsigned.body?.serviceRadius) === rounded,
+                `/api/node/config, unsigned, gives the service area's centre to two decimals (${areaUnsigned.status} ${JSON.stringify(areaUnsigned.body?.serviceRadius)})`);
+            const areaMember = await get('/api/node/config', erin);
+            assert(JSON.stringify(areaMember.body?.serviceRadius) === rounded,
+                `and so does a member's signed read (${JSON.stringify(areaMember.body?.serviceRadius)})`);
+            const { grantNodeRole } = await import('./engine/node-roles.js');
+            const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+            const owner = member('HomeAreaOwner');
+            grantNodeRole(owner.pk, 'owner', 'owner:password');
+            const ownerSession = consumeHandshakeToken(mintHandshakeToken(owner.pk, 'owner').handshakeToken).sessionId!;
+            const areaOwner = await get('/api/node/config', null, { 'X-Admin-Session': ownerSession });
+            assert(areaOwner.status === 200 && JSON.stringify(areaOwner.body?.serviceRadius) === JSON.stringify({ lat: -28.55555, lng: 153.49999, radiusKm: 25 }),
+                `an owner's session gets the exact centre (${areaOwner.status} ${JSON.stringify(areaOwner.body?.serviceRadius)})`);
+            const areaStale = await get('/api/node/config', null, { 'X-Admin-Session': 'a'.repeat(64) });
+            assert(areaStale.status === 200 && JSON.stringify(areaStale.body?.serviceRadius) === rounded,
+                `a session the node doesn't know (a cookie that ran out) still gets the public answer, never a 401 (${areaStale.status} ${JSON.stringify(areaStale.body?.serviceRadius)})`);
+            updateNodeConfig({ serviceRadius: undefined, publishLocation: undefined });
+        }
         // Review of #1697, finding 2: a pending listing never takes a saved search's row. Four live matches and the two newest
         // pending: the card shows the four (main's read let the pending two take two of its five slots and showed three).
         for (let i = 0; i < 4; i++) post(bob, 'offer', 'garden', `HomeZebrafish live ${i}`);

@@ -155,6 +155,7 @@ export const SUITES = [
     'test-federation-link',
     'test-listing-reach',
     'test-listing-pull',
+    'test-connector-url-listings',
     'test-settlement-state',
     'test-settlement-exchange',
     'test-settlement-orchestration',

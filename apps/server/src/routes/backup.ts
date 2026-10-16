@@ -52,7 +52,8 @@ import {
     MISSING_MEMBER, readInBucketMember, livedInCommunity, ownCommunityId,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
-import { checkRestoreDatabase, extractBackupArchive, RESTORE_ARCHIVE_LIMITS, type ArchiveLimits } from '../services/restore-checks.js';
+import { checkRestoreDatabase, extractBackupArchive, RestoreRefused, RESTORE_ARCHIVE_LIMITS, type ArchiveLimits } from '../services/restore-checks.js';
+import { RESTORE_PENDING_PREFIX, RESTORE_WORK_NAMES } from '../boot-file-safety.js';
 import {
     takeRestorePoint, leaveRestoreNotice, listRestorePoints, resolveRestorePoint, restorePointServerFiles, restorePointImagesDir,
     RestorePointError, RESTORE_POINT_DB, RESTORE_POINT_SERVER_TAR, RESTORE_POINT_SERVER_FILES, type RestorePointInfo,
@@ -74,12 +75,58 @@ export function restorePaths() {
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     return {
         DATA_DIR,
-        tmpDir: path.join(DATA_DIR, '.restore-tmp'),
+        tmpDir: path.join(DATA_DIR, RESTORE_WORK_NAMES.tmp),
         // The archive's state.db alone, checked there and copied into place from there (checkRestoreDatabase).
-        candidateDir: path.join(DATA_DIR, '.restore-candidate'),
-        uploadPath: path.join(DATA_DIR, 'uploaded-backup.upload'),
-        openedTarPath: path.join(DATA_DIR, 'uploaded-backup.opened.tar.gz'),
+        candidateDir: path.join(DATA_DIR, RESTORE_WORK_NAMES.candidate),
+        uploadPath: path.join(DATA_DIR, RESTORE_WORK_NAMES.upload),
+        openedTarPath: path.join(DATA_DIR, RESTORE_WORK_NAMES.opened),
     };
+}
+
+/**
+ * One restore or roll-back at a time on this server (verified review H1). They work under the same fixed names in the data
+ * folder (the upload, .restore-tmp, .restore-candidate): a second one started while the first runs empties the first's
+ * unpack, and a roll-back that then finds none of its point's files moves every live one aside and answers 200. So the
+ * restore route (code and phone), the phone's finish, and the roll-back each take this before they write anything, and a
+ * second is answered 409 with nothing written. 'running' is released when the request ends; once a restore or roll-back
+ * has replaced the database it stays 'restarting' until the restart. The shell's commands run with the node stopped.
+ */
+let restoreGuard: 'idle' | 'running' | 'restarting' = 'idle';
+export const RESTORE_BUSY = 'A restore or roll-back is already running on this server; wait for it and the restart.';
+function claimRestore(): boolean {
+    if (restoreGuard !== 'idle') return false;
+    restoreGuard = 'running';
+    return true;
+}
+function endRestoreRequest(): void {
+    if (restoreGuard === 'running') restoreGuard = 'idle';
+}
+function refuseBusy(ctx: { status: number; body: unknown }): void {
+    ctx.status = 409;
+    ctx.body = { error: RESTORE_BUSY, restoreRunning: true };
+}
+/** The restart after a restore or roll-back replaced the database; the guard holds until it. */
+function restartSoon(ms: number, line: string): void {
+    restoreGuard = 'restarting';
+    setTimeout(() => {
+        console.log(line);
+        restoreGuard = 'idle';
+        restartAfterRestore();
+    }, ms);
+}
+
+/**
+ * A 500's words (verified review M2): what went wrong, never the raw error, which names paths in the data folder; that
+ * goes to the server log, where the caller has already written it. A refusal (RestoreRefused, or an error the code gave a
+ * 4xx status) is already in words and passes as it is.
+ */
+function failureWords(e: any): string {
+    if (e instanceof RestoreRefused || (Number(e?.httpStatus) >= 400 && Number(e?.httpStatus) < 500)) return String(e.message);
+    const code = String(e?.code || '');
+    if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'SQLITE_FULL') return "this server's disk is full. Free some space in the data folder and try again.";
+    if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return 'this server could not write to its data folder. Check that it can be written to and try again.';
+    if (code === 'ENOENT') return 'a file it was using went missing part way. The server log has the details.';
+    return 'something went wrong part way. The server log has the details.';
 }
 
 /** What a restore unpacks at most (services/restore-checks.ts). Tests lower it. */
@@ -89,7 +136,7 @@ export function setRestoreArchiveLimitsForTests(limits: ArchiveLimits | null): v
 }
 
 /** Where a sealed upload waits for an owner's phone. One name per upload, so a new restore never hits an old one's file. */
-const PENDING_PREFIX = 'uploaded-backup.pending-';
+const PENDING_PREFIX = RESTORE_PENDING_PREFIX;
 
 export function cleanupRestoreTemp(): void {
     const { tmpDir, candidateDir, uploadPath, openedTarPath } = restorePaths();
@@ -387,7 +434,7 @@ export async function restoreFromTar(
     // Validate that state.db exists and is a regular file
     const extractedDb = path.join(tmpDir, 'state.db');
     if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) {
-        throw new Error('Invalid backup archive: state.db missing');
+        throw new RestoreRefused('Invalid backup archive: it holds no state.db. Nothing was changed.');
     }
     // The database, checked while the live one is still open: it must pass SQLite's integrity check and carry no
     // trigger or view this server's own database does not have (restore-checks.ts checkRestoreDatabase). Alone in a
@@ -488,12 +535,7 @@ export async function restoreFromTar(
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's
     // restore runs with the node stopped: the owner starts it.
-    if (restartAfterMs !== null) {
-        setTimeout(() => {
-            console.log('Restore successful, rebooting node...');
-            restartAfterRestore();
-        }, restartAfterMs);
-    }
+    if (restartAfterMs !== null) restartSoon(restartAfterMs, 'Restore successful, rebooting node...');
 
     // `complete` is the one an operator reads: the database is in and the node is restarting either way, so
     // `success` stays true — but a restore that could not put every object back must never answer with
@@ -601,10 +643,21 @@ export async function rollBackTo(pointDir: string, name: string, restartAfterMs:
     fs.mkdirSync(candidateDir, { recursive: true, mode: 0o700 });
     const candidate = path.join(candidateDir, 'state.db');
     fs.copyFileSync(path.join(pointDir, RESTORE_POINT_DB), candidate);
-    checkRestoreDatabase(candidate, db);
-    const kept = restorePointServerFiles(pointDir).filter((f) => {
+    // The point is this server's own copy: a trigger the live database lacks is no reason to refuse it (verified review H2).
+    checkRestoreDatabase(candidate, db, { ownPoint: true });
+    // Every file point.json lists must have come out of its tar. One that did not is a torn unpack (another restore emptied
+    // the folder, or the tar is cut short): moving the live file of that name aside would strip this server of its key and
+    // genesis and answer 200 (verified review H1). Refused before anything is touched.
+    const listed = restorePointServerFiles(pointDir);
+    if (!listed) throw new RestoreRefused(`restore point ${name} has no readable point.json, so it cannot say which of this server's files it holds. Nothing was changed.`, 500);
+    const kept = listed.filter((f) => {
         try { return fs.lstatSync(path.join(tmpDir, f)).isFile(); } catch { return false; }
     });
+    const lost = listed.filter((f) => !kept.includes(f));
+    if (lost.length) {
+        throw new RestoreRefused(`restore point ${name} did not unpack whole: ${lost.join(', ')} ${lost.length === 1 ? 'is' : 'are'} listed in its `
+            + 'point.json but did not come out of its server files. No file was moved. Nothing was changed.', 500);
+    }
 
     // Its own point first: a roll-back can be rolled back.
     const point = takeRestorePoint('roll-back');
@@ -631,12 +684,7 @@ export async function rollBackTo(pointDir: string, name: string, restartAfterMs:
     cleanupRestoreTemp();
     leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name });
     console.log(`[Restore] An owner rolled this server back to restore point ${name}; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
-    if (restartAfterMs !== null) {
-        setTimeout(() => {
-            console.log('Roll-back done, rebooting node...');
-            restartAfterRestore();
-        }, restartAfterMs);
-    }
+    if (restartAfterMs !== null) restartSoon(restartAfterMs, 'Roll-back done, rebooting node...');
     return {
         success: true,
         rolledBackTo: name,
@@ -1604,6 +1652,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
     // An owner's only: the file replaces the whole database, node_roles with it (Fable's backups review, HIGH). Refused
     // before a byte of the upload is read.
     if (!(await ownerOnly(ctx, RESTORE_OWNER_ONLY))) return;
+    // One at a time, before a byte of the upload is written: the upload's own name is shared (H1).
+    if (!claimRestore()) return refuseBusy(ctx);
 
     const { DATA_DIR, uploadPath, openedTarPath } = restorePaths();
     const cleanupAll = cleanupRestoreTemp;
@@ -1713,24 +1763,34 @@ router.post('/api/local/admin/restore', async (ctx) => {
                     serverUrl: unlockServerUrl(ctx.request.header['x-unlock-server-url'], ctx.origin),
                     file: pending, header, describe: backup, databaseOnly: false,
                     finish: async (dataKey) => {
-                        try {
-                            await openSealedFileTo(pending, { type: 'dataKey', dataKey }, openedTarPath);
-                        } catch (e: any) {
-                            cleanupRestoreTemp();
-                            if (e instanceof SealedEnvelopeError) {
-                                return { ok: false, status: 400, body: { error: 'The backup file did not open: it has been altered or cut short.', backup } };
-                            }
-                            return { ok: false, status: 500, body: { error: 'Restore failed: ' + (e?.message || e) } };
-                        } finally {
+                        // The phone's unlock is a restore of its own: one at a time, with the code path and roll-backs (H1).
+                        if (!claimRestore()) {
                             fs.rmSync(pending, { force: true });
+                            return { ok: false, status: 409, body: { error: RESTORE_BUSY, restoreRunning: true } };
                         }
                         try {
-                            return { ok: true, status: 200, body: await restoreFromTar(openedTarPath, header, 6000) };
-                        } catch (e: any) {
-                            console.error('Restore failed:', e);
-                            cleanupRestoreTemp();
-                            if (e instanceof RestorePointError) return { ok: false, status: e.httpStatus, body: { error: e.message, restorePointFailed: true } };
-                            return { ok: false, status: e?.httpStatus || 500, body: { error: 'Restore failed: ' + e.message } };
+                            try {
+                                await openSealedFileTo(pending, { type: 'dataKey', dataKey }, openedTarPath);
+                            } catch (e: any) {
+                                cleanupRestoreTemp();
+                                if (e instanceof SealedEnvelopeError) {
+                                    return { ok: false, status: 400, body: { error: 'The backup file did not open: it has been altered or cut short.', backup } };
+                                }
+                                console.error('Restore failed:', e);
+                                return { ok: false, status: 500, body: { error: 'Restore failed: ' + failureWords(e) } };
+                            } finally {
+                                fs.rmSync(pending, { force: true });
+                            }
+                            try {
+                                return { ok: true, status: 200, body: await restoreFromTar(openedTarPath, header, 6000) };
+                            } catch (e: any) {
+                                console.error('Restore failed:', e);
+                                cleanupRestoreTemp();
+                                if (e instanceof RestorePointError) return { ok: false, status: e.httpStatus, body: { error: e.message, restorePointFailed: true } };
+                                return { ok: false, status: e?.httpStatus || 500, body: { error: 'Restore failed: ' + failureWords(e) } };
+                            }
+                        } finally {
+                            endRestoreRequest();
                         }
                     },
                 });
@@ -1826,7 +1886,9 @@ router.post('/api/local/admin/restore', async (ctx) => {
         ctx.status = e?.httpStatus || 500;
         ctx.body = e instanceof RestorePointError
             ? { error: e.message, restorePointFailed: true }
-            : { error: e?.httpStatus === 413 ? e.message : ('Restore failed: ' + e.message) };
+            : { error: e?.httpStatus === 413 ? e.message : ('Restore failed: ' + failureWords(e)) };
+    } finally {
+        endRestoreRequest();
     }
 });
 
@@ -1849,8 +1911,10 @@ router.post('/api/local/admin/restore-points/roll-back', async (ctx) => {
         ctx.body = { error: 'There is no restore point by that name. Nothing was changed.' };
         return;
     }
-    if (!(await requireFreshProof(ctx, body.code ?? ctx.get('x-fresh-proof'), 'roll back to a restore point'))) return;
+    // One at a time (H1), before the proof, so a refused second one does not spend the owner's code.
+    if (!claimRestore()) return refuseBusy(ctx);
     try {
+        if (!(await requireFreshProof(ctx, body.code ?? ctx.get('x-fresh-proof'), 'roll back to a restore point'))) return;
         ctx.body = await rollBackTo(pointDir, String(body.name));
     } catch (e: any) {
         console.error('Roll-back failed:', e);
@@ -1858,7 +1922,9 @@ router.post('/api/local/admin/restore-points/roll-back', async (ctx) => {
         ctx.status = e?.httpStatus || 500;
         ctx.body = e instanceof RestorePointError
             ? { error: e.message, restorePointFailed: true }
-            : { error: 'Nothing was rolled back: ' + (e?.message || e) };
+            : { error: 'Nothing was rolled back: ' + failureWords(e) };
+    } finally {
+        endRestoreRequest();
     }
 });
 

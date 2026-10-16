@@ -437,13 +437,42 @@ function quoteName(name: string): string {
 }
 
 /**
+ * The tables, and their key columns, without which a database is not a community's: a file that lacks one would boot as an
+ * empty community with no owner, or not boot at all (verified review H2). Checked by name, so any version's backup that
+ * holds a community passes.
+ */
+export const CORE_TABLES: Record<string, readonly string[]> = {
+    members: ['public_key', 'callsign'],
+    accounts: ['public_key', 'balance'],
+    node_roles: [],
+    node_config: [],
+};
+
+/** The first core table or column `handle` lacks, in words, or null when it has them all. */
+function missingCoreTable(handle: Database.Database): string | null {
+    for (const [table, columns] of Object.entries(CORE_TABLES)) {
+        // A table, not a view of that name: the boot's CREATE TABLE IF NOT EXISTS would pass a view by and then fail on it.
+        if (!handle.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)) return `no ${table} table`;
+        const cols = (handle.prepare(`SELECT name FROM pragma_table_info(?)`).all(table) as { name: string }[]).map((c) => c.name);
+        const lacking = columns.find((c) => !cols.includes(c));
+        if (lacking) return `its ${table} table has no ${lacking} column`;
+    }
+    return null;
+}
+
+/**
  * The database a restore is about to put in place, checked while the live one is still open (see the top of this file).
  * `candidate` must sit alone in a folder of its own, so no `-wal` or `-journal` the archive brought is read with it: what
  * is checked is exactly the file that is copied into place. Throws {@link RestoreRefused} (400) when it is not a
- * database, fails `PRAGMA integrity_check`, or carries a trigger or view `live` does not have. Returns the known ones it
- * dropped because their text differs from `live`'s; the restart makes them again from this version's code.
+ * database, fails `PRAGMA integrity_check`, lacks a core table or key column ({@link CORE_TABLES}), or carries a trigger
+ * or view `live` does not have. Returns the known ones it dropped because their text differs from `live`'s; the restart
+ * makes them again from this version's code.
+ *
+ * `ownPoint`: the candidate is a restore point this server took of itself (a roll-back). Its triggers and views are this
+ * server's own, so one the live database lacks is not a refusal: a live database that is broken (a restore of a file
+ * with no schema) has none at all, and the point is the way back from it (verified review H2, note).
  */
-export function checkRestoreDatabase(candidate: string, live: Database.Database): { remade: string[] } {
+export function checkRestoreDatabase(candidate: string, live: Database.Database, opts: { ownPoint?: boolean } = {}): { remade: string[] } {
     const refuse = (why: string) => new RestoreRefused(`This backup's state.db ${why}. Nothing was changed.`, 400);
     const head = Buffer.alloc(16);
     const fd = fs.openSync(candidate, 'r');
@@ -473,21 +502,25 @@ export function checkRestoreDatabase(candidate: string, live: Database.Database)
             throw refuse(`fails SQLite's integrity check: ${result.slice(0, 3).map((r) => r.integrity_check).join('; ')}`);
         }
 
-        const known = new Map(triggersAndViews(live).map((o) => [`${o.type} ${o.name}`, o.sql]));
+        let notCommunity: string | null;
         let carried: SchemaObject[];
         try {
+            notCommunity = missingCoreTable(handle);
             carried = triggersAndViews(handle);
         } catch (e: any) {
             throw refuse(`has a schema this server cannot read (${e?.message || e})`);
         }
-        const unknown = carried.filter((o) => !known.has(`${o.type} ${o.name}`));
+        if (notCommunity) throw refuse(`is not a BeanPool database (${notCommunity})`);
+
+        const known = new Map(triggersAndViews(live).map((o) => [`${o.type} ${o.name}`, o.sql]));
+        const unknown = opts.ownPoint ? [] : carried.filter((o) => !known.has(`${o.type} ${o.name}`));
         if (unknown.length > 0) {
             const named = unknown.slice(0, 3).map((o) => `${o.type} "${o.name}"`).join(', ') + (unknown.length > 3 ? ', …' : '');
             throw refuse(`carries ${unknown.length === 1 ? 'a' : unknown.length} ${unknown.length === 1 ? unknown[0].type : 'triggers or views'} `
                 + `this server's own database does not have (${named}): it was changed after the backup was made, `
                 + 'or made by a newer version of BeanPool');
         }
-        const remade = carried.filter((o) => known.get(`${o.type} ${o.name}`) !== o.sql);
+        const remade = carried.filter((o) => known.has(`${o.type} ${o.name}`) && known.get(`${o.type} ${o.name}`) !== o.sql);
         for (const o of remade) handle.exec(`DROP ${o.type === 'view' ? 'VIEW' : 'TRIGGER'} ${quoteName(o.name)}`);
         // Into the file itself before it is copied, whatever journal mode it was made in.
         if (remade.length > 0) handle.pragma('wal_checkpoint(TRUNCATE)');

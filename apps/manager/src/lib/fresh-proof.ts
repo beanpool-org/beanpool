@@ -71,14 +71,26 @@ export function throwIfFreshProof(status: number, body: unknown): void {
     if (refusal) throw new FreshProofRequiredError(refusal);
 }
 
+/**
+ * A fresh proof is a code a person types: six digits from the authenticator, or an 8-character backup code. Anything else
+ * (a password or an automation token put in its place by mistake) is never sent as one.
+ */
+const PROOF_SHAPE = /^[A-Za-z0-9-]{4,32}$/;
+function usableProof(code: string | undefined): string | undefined {
+    const clean = typeof code === 'string' ? code.trim() : '';
+    return PROOF_SHAPE.test(clean) ? clean : undefined;
+}
+
 /** The `code` field for a request body: nothing when there is no code yet. */
 export function proofField(code: string | undefined): { code?: string } {
-    return code ? { code } : {};
+    const proof = usableProof(code);
+    return proof ? { code: proof } : {};
 }
 
 /** The X-Fresh-Proof header, for a route whose body already has a `code` of its own (rekey/complete). */
 export function proofHeader(code: string | undefined): Record<string, string> {
-    return code ? { 'X-Fresh-Proof': code } : {};
+    const proof = usableProof(code);
+    return proof ? { 'X-Fresh-Proof': proof } : {};
 }
 
 /**

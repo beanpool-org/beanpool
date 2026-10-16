@@ -249,7 +249,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         setBusy(true);
         setNotice(null);
         try {
-            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa, code);
+            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa, ...(code ? [code] : []));
             proof.close();
             const who = target.pubkey === myKey ? 'You are' : `${target.name} is`;
             setNotice({ kind: 'success', text: `${who} now ${ROLE_ARTICLE[newRole]}.` });
@@ -272,7 +272,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         setBusy(true);
         setNotice(null);
         try {
-            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa, code);
+            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa, ...(code ? [code] : []));
             proof.close();
             setNotice({ kind: 'success', text: `${name} is no longer ${ROLE_ARTICLE[removing.role]}.` });
             setRemoving(null);

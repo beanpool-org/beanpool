@@ -75,7 +75,7 @@ export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshP
     if (refusal.kind !== 'code') {
         const sentence = refusal.kind === 'phone' ? t(W.phone) : refusal.kind === 'step-up' ? t(W.stepUp) : t(W.needs2fa);
         return (
-            <div className="mt-3 p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-sm text-amber-200 break-words"
+            <div className="mt-3 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-sm text-bp-chip-warn-ink break-words"
                 role="alert" data-testid={`${testId}-${refusal.kind}`}>
                 <p className="m-0">{sentence}</p>
                 <button type="button" onClick={proof.close}
@@ -107,11 +107,11 @@ export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshP
                     onChange={(e) => setCode(e.target.value)} autoComplete="one-time-code" inputMode="text" maxLength={32}
                     className="flex-1 min-w-[8rem] px-3 py-2 rounded-lg bg-nature-900 border border-nature-700 text-nature-100 font-mono tracking-widest" />
                 <button type="submit" disabled={!canSend} data-testid={`${testId}-confirm`}
-                    className="px-4 py-2 rounded-lg bg-terra-600 hover:bg-terra-500 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                    className="min-h-[44px] px-4 py-2 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
                     {busy ? t(W.checking) : t(W.confirm)}
                 </button>
                 <button type="button" onClick={proof.close} data-testid={`${testId}-cancel`}
-                    className="px-3 py-2 rounded-lg border border-nature-700 text-nature-300 text-sm bg-transparent">
+                    className="min-h-[44px] px-3 py-2 rounded-lg border border-nature-700 text-nature-300 text-sm bg-transparent">
                     {t(W.cancel)}
                 </button>
             </div>

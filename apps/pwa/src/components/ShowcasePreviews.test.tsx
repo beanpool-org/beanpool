@@ -181,7 +181,10 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
             expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${Math.abs(tx.amount).toFixed(1)}`);
         }
         expect(wallet).toHaveTextContent('from a neighbour · yesterday');
-        expect(wallet).toHaveTextContent('to the Commons · 7 days ago');
+        expect(wallet).toHaveTextContent('to the Example Valley Bakery · 12 days ago');
+        // No circulation fee row: the Wallet itself says nothing goes to the Commons at 200 Beans or less, and the sample holds 85.
+        expect(wallet).not.toHaveTextContent('Circulation fee');
+        expect(wallet).not.toHaveTextContent('to the Commons ·');
         expect(wallet).not.toHaveTextContent('No transactions yet');
     });
 });

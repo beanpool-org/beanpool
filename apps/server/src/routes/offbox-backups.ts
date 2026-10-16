@@ -78,6 +78,8 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
         }
         if (b.removeId !== undefined) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.offBoxRemoved, ...actingAs(ctx.state) });
         else if (changesExisting) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.offBoxChanged, ...actingAs(ctx.state) });
+        // Kept for fewer days asked the proof too (#2033 N5): told as its own line.
+        if (shortens) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.offBoxShorter, ...actingAs(ctx.state) });
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { success: true, status: getOffboxStatus() };
     });

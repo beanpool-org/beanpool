@@ -310,7 +310,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 });
             }
             // A live address replaced by another: the owners are told, and every member's app is told to follow it (§7).
-            if (live?.name && live.status === 'live' && foldName(live.name) !== foldName(name)) addressChangedByOwner(ctx, 'changed');
+            if (live?.name && live.status === 'live' && foldName(live.name) !== foldName(name)) addressChangedByOwner(ctx, 'changed', true);
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
@@ -408,7 +408,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 return;
             }
             console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
-            noteSecurityEvent({ key: 'sec.name', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
+            noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
             ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
         } catch (e: any) {
             ctx.status = 502;
@@ -570,7 +570,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 return;
             }
             addProbeLog('1/2', `✅ ${where} has a new tunnel key; the old one no longer works`, 'success');
-            noteSecurityEvent({ key: 'sec.name', detail: OWNER_ALERT_WORDS.tunnelKey, priority: 3, ...actingAs(ctx.state) });
+            noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.tunnelKey, priority: 3, ...actingAs(ctx.state) });
             const { changed: _changed, rotated: _rotated, attest: _attest, ...answer } = res;
             const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
             if (!stored) {
@@ -624,7 +624,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                     console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);
                 });
             }
-            if (prevConfig?.name) addressChangedByOwner(ctx, 'offline');
+            if (prevConfig?.name) addressChangedByOwner(ctx, 'offline', prevConfig.status === 'live');
             ctx.body = { success: true, ...addressFields(ctx, result), status: 'none' };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Offline failed: ${e.message}`, 'error');
@@ -636,11 +636,16 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     return router;
 }
 
-/** The address taken offline or changed by an owner: the owners' alert (sec.name, high) and the members' critical announcement. */
-function addressChangedByOwner(ctx: any, how: 'offline' | 'changed'): void {
-    noteSecurityEvent({ key: 'sec.name', detail: how === 'offline' ? OWNER_ALERT_WORDS.addressOffline : OWNER_ALERT_WORDS.addressChanged, high: true, priority: 4, ...actingAs(ctx.state) });
+/**
+ * The address taken offline or changed by an owner: the owners' alert (sec.address, high; never sec.name, the hijack's row:
+ * #2033 B1) and, when the address the members used was live, their critical announcement in words for how it went (N4).
+ */
+function addressChangedByOwner(ctx: any, how: 'offline' | 'changed', wasLive: boolean): void {
+    noteSecurityEvent({ key: 'sec.address', detail: how === 'offline' ? OWNER_ALERT_WORDS.addressOffline : OWNER_ALERT_WORDS.addressChanged, high: true, priority: 4, ...actingAs(ctx.state) });
+    if (!wasLive) return;
+    const words = how === 'offline' ? OWNER_ALERT_WORDS.membersAddressOffline : OWNER_ALERT_WORDS.membersAddressChanged;
     try {
-        adminBroadcastAnnouncement(OWNER_ALERT_WORDS.membersAddressChanged.title, OWNER_ALERT_WORDS.membersAddressChanged.body, 'critical');
+        adminBroadcastAnnouncement(words.title, words.body, 'critical');
     } catch (e: any) {
         console.warn('[PublicAddr] The members could not be told the address changed:', e?.message || e);
     }

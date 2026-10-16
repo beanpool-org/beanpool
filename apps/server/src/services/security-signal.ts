@@ -13,7 +13,7 @@
  */
 
 export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name' | 'sec.agent'
-    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings';
+    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address';
 
 /**
  * The address alert's words (sec.name), by why a name is lost, and its end: the name watch tells a change at once, and the
@@ -28,17 +28,21 @@ export const NAME_ALERT_WORDS = {
 
 /**
  * The owner-delete alerts' words (design case 18 §7, S5): what changed and how, a date or a count, never a member's
- * name, callsign or key, nor an address. `{n}` is a day's count (SecurityNote.perDay).
+ * name, callsign or key, nor an address. `{n}` is the count of the last 24 hours (SecurityNote.perDay).
  */
 export const OWNER_ALERT_WORDS = {
-    restored: (madeOn: string, by: 'owner' | 'shell') => `A backup made ${madeOn} was restored, ${by === 'shell' ? "from the server's shell" : 'by an owner'}. A restore point was kept.`,
+    restored: (madeOn: string | null, by: 'owner' | 'shell') => `A backup${madeOn ? ` made ${madeOn}` : ''} was restored${madeOn ? ',' : ''} ${by === 'shell' ? "from the server's shell" : 'by an owner'}. A restore point was kept.`,
     rolledBack: (madeOn: string, by: 'owner' | 'shell') => `This community was rolled back to how it was on ${madeOn}, ${by === 'shell' ? "from the server's shell" : 'by an owner'}. A restore point was kept.`,
-    otherCommunityRefused: { one: 'A backup from another community was refused today.', many: '{n} backups from another community were refused today.' },
+    otherCommunityRefused: { one: 'A backup from another community was refused in the last day.', many: '{n} backups from another community were refused in the last day.' },
+    /** The hour's fold line for those refusals past the bound: refusals, not changes, and nobody to see in Settings. */
+    otherCommunityRefusedMore: { one: 'One more backup from another community was refused in the hour after the first ones were pushed.', many: '{n} more backups from another community were refused in the hour after the first ones were pushed.' },
     addressOffline: "This community's address was taken offline, by an owner.",
     addressChanged: "This community's address was changed, by an owner.",
     nameReleased: 'A name this community held unused was released, by an owner.',
     /** The members' critical announcement when the address changes or goes (§7): the app follows it. */
     membersAddressChanged: { title: "This community's address changed", body: "This community's address changed. Open the app to follow it." },
+    /** Taken offline there is no new address to follow: the members ask their owners (a director's call on #2033 N4). */
+    membersAddressOffline: { title: "This community's address was taken offline", body: "This community's address was taken offline by an owner. Ask your owners for the new one." },
     tunnelKey: "A new tunnel key was made for this community's address, by an owner.",
     recoveryCodeReplaced: 'The recovery code was replaced, by an owner. Backups made before still open with the old one.',
     replicationTokenMade: 'A new replication token was made: a standby can copy this server with it.',
@@ -48,8 +52,12 @@ export const OWNER_ALERT_WORDS = {
     offBoxRemoved: 'An off-box backup destination was removed.',
     offBoxChanged: 'An off-box backup destination was changed.',
     snapshotKeepLowered: (from: number, to: number) => `Fewer snapshots are kept now: ${to}, down from ${from}.`,
-    membersRemoved: { one: 'A member was removed today, by an admin.', many: '{n} members were removed today, by an admin.' },
-    branchesPruned: { one: 'A branch of invites was pruned today, by an owner.', many: '{n} branches of invites were pruned today, by an owner.' },
+    snapshotsOff: 'Snapshots were turned off.',
+    snapshotsShorter: 'Snapshots cover less time now.',
+    offBoxShorter: 'Off-box backups are kept for fewer days now.',
+    standbyTokenCleared: 'This standby no longer holds a replication token: it stops copying until one is saved.',
+    membersRemoved: { one: 'A member was removed in the last day, by an admin.', many: '{n} members were removed in the last day, by an admin.' },
+    branchesPruned: { one: 'A branch of invites was pruned in the last day, by an owner.', many: '{n} branches of invites were pruned in the last day, by an owner.' },
     communityRenamed: "The community's name was changed, by an admin.",
     callsignChanged: "The community's callsign was changed, by an admin.",
     contactsChanged: "The community's contact details were changed, by an admin.",
@@ -82,11 +90,19 @@ export interface SecurityNote {
     /** An owner made or removed, break-glass: never folded out of the channel or the Alerts card, pushed under its own bound. */
     high?: boolean;
     /**
-     * Counted per day (UTC): the book keeps how many it was told today and tells `one` for the first, then `many` with
-     * `{n}` as the count, in place of `detail`.
+     * Counted over the last 24 hours: the book keeps how many it was told in that time and tells `one` for the first, then
+     * `many` with `{n}` as the count, in place of `detail`. The line replaces that count's earlier line of the day: one
+     * line per count, never one per event.
      */
     perDay?: { one: string; many: string };
-    /** Told on the channel and in the card, never pushed: the same act already pushed its own line (a role holder removed: sec.role). */
+    /** How many this note adds to its perDay count (a burst of accounts removed at once); 1 if not given. */
+    perDayAdds?: number;
+    /** The words of the hour's fold line for this actor, in place of "N more changes by the same …" (`{n}` the count). */
+    foldAs?: { one: string; many: string };
+    /**
+     * Never pushed: the same act already pushed its own line (a role holder removed: sec.role). Still under its actor's
+     * bound: told unpushed while the actor's hour has room, past it only counted for the hour's line.
+     */
     quiet?: boolean;
     /** Members also pushed with this one (an owner or admin who lost the role): never kept, never told. */
     alsoPush?: string[];

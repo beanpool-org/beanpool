@@ -72,6 +72,7 @@ import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { cleanLabel } from '../config/clean-label.js';
 import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
@@ -139,7 +140,7 @@ export type AlertKey =
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
-    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings'
+    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address'
     | 'sec.log'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy';
@@ -188,6 +189,11 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.members': { title: 'members removed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     /** The community's name, callsign or contacts changed by an admin. */
     'sec.settings': { title: "the community's details changed", priority: 2, webhook: true, pushEveryMs: EACH, banner: true },
+    /**
+     * An owner's own act on the address (taken offline, a new name over the live one, a spare name released, a new tunnel
+     * key): its own row, never sec.name's, so it neither reads as a hijack nor stamps sec.name's day (#2033 B1).
+     */
+    'sec.address': { title: 'its address changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
@@ -209,6 +215,7 @@ const REPORT_KEYS: ReadonlySet<AlertKey> = new Set<AlertKey>(['reports.new', 're
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
 const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>([
     'sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent', 'sec.restore', 'sec.backups', 'sec.members', 'sec.settings',
+    'sec.address',
 ]);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
@@ -233,6 +240,8 @@ export interface Condition {
     push?: boolean;
     /** Members pushed with the owners for it (an owner or admin who lost the role): never kept. */
     alsoPush?: string[];
+    /** A count's line (SecurityNote.perDay): it replaces the same count's earlier line of the last day. */
+    dayLine?: string;
 }
 
 export interface AlertEvent {
@@ -252,6 +261,8 @@ export interface AlertEvent {
      * banner; the history keeps it.
      */
     standby?: true;
+    /** A count's line (Condition.dayLine): one per count and day in each list, the newest words in place of the older. */
+    dayLine?: string;
 }
 
 /** One actor's hour (raiseSecurity): what went out at once, and what folds into the hour's one line. */
@@ -262,6 +273,8 @@ interface ActorHour {
     folded: number;
     foldedHigh: number;
     role: string;
+    /** The fold line's own words (SecurityNote.foldAs), `{n}` the count. */
+    foldAs?: { one: string; many: string };
 }
 
 interface Raised {
@@ -304,8 +317,8 @@ interface BookState {
     reports: ReportWindow | null;
     /** Child-safety reports (noteNewReport): those told at once in the last hour, each reporter's hour, the open summary. */
     child: ChildReports;
-    /** The day's counts of SecurityNote.perDay lines, by key and words: the UTC day and how many. */
-    dayCounts: Record<string, { day: string; n: number }>;
+    /** The counts of SecurityNote.perDay lines, by key and words: how many in each hour of the last 24 (hour number → n). */
+    dayCounts: Record<string, Record<string, number>>;
 }
 
 interface ChildReports {
@@ -475,7 +488,8 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
         : input.token === undefined && before?.source === 'settings' && before.url === url ? before.token : null;
     writeFileAtomic(file, JSON.stringify({ url, format: input.format === 'json' ? 'json' : 'ntfy', token }, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
-    if (old && (old.url !== url || old.token !== token)) tellOldChannel(old, 'changed');
+    // A new token for the same channel is the same channel: nothing to say (#2033 N3).
+    if (old && old.url !== url) tellOldChannel(old, 'changed');
     const s = readState();
     s.channel = emptyChannel();
     writeState();
@@ -531,8 +545,8 @@ function when(ms: number): string {
 function communityName(): string {
     try {
         const lc = getLocalConfig() as any;
-        const name = (lc.communityName || lc.callsign || '').toString().trim();
-        return name ? name.slice(0, 60) : 'Your BeanPool server';
+        // The callsign fallback is cleaned as the name is (#2033 N6): no control or bidi character reaches a title.
+        return cleanLabel(String(lc.communityName || lc.callsign || ''), 60) ?? 'Your BeanPool server';
     } catch {
         return 'Your BeanPool server';
     }
@@ -739,12 +753,11 @@ const DISK_LEVEL: Partial<Record<AlertKey, number>> = { 'disk.80': 80, 'disk.90'
  * the disk as one condition (a level under a higher one that is active is counted as told, never named).
  */
 function pushOwners(s: BookState, events: readonly AlertEvent[], t: number,
-    quiet: ReadonlySet<AlertEvent> = new Set(), also: ReadonlyMap<AlertEvent, string[]> = new Map(),
-    each: ReadonlySet<AlertEvent> = new Set()): void {
+    quiet: ReadonlySet<AlertEvent> = new Set(), also: ReadonlyMap<AlertEvent, string[]> = new Map()): void {
     if (getNodeRole() !== 'primary') return;
     const due = events.filter((e) => {
         if (quiet.has(e)) return false;
-        const every = each.has(e) ? EACH : ROWS[e.key].pushEveryMs;
+        const every = ROWS[e.key].pushEveryMs;
         const last = s.pushedAt[e.key];
         return every !== 0 && e.kind !== 'cleared' && (every === EACH || last === undefined || t - last >= every);
     });
@@ -790,12 +803,9 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     const told: AlertEvent[] = [];
     const quiet = new Set<AlertEvent>();
     const also = new Map<AlertEvent, string[]>();
-    const each = new Set<AlertEvent>();
-    const tell = (e: AlertEvent, oneShot = false) => {
+    const tell = (e: AlertEvent) => {
         told.push(e);
-        // A one-shot on a condition's row (sec.name: the address taken offline by an owner) is a security event too.
-        const security = SECURITY_ONE_SHOTS.has(e.key) || (oneShot && e.key.startsWith('sec.'));
-        if (security) each.add(e);
+        const security = SECURITY_ONE_SHOTS.has(e.key);
         keepIn(s.history, e, MAX_HISTORY, security || REPORT_KEYS.has(e.key));
         if (security) {
             const standby = getNodeRole() === 'backup';
@@ -808,8 +818,11 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
         const r = s.raised[c.key];
         const priority = c.priority ?? ROWS[c.key].priority;
         if (c.active && c.oneShot) {
-            const e: AlertEvent = { key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}) };
-            tell(e, true);
+            const e: AlertEvent = {
+                key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}),
+                ...(c.dayLine ? { dayLine: c.dayLine } : {}),
+            };
+            tell(e);
             if (c.push === false) quiet.add(e);
             if (c.alsoPush?.length) also.set(e, c.alsoPush);
         } else if (c.active && !r) {
@@ -842,7 +855,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             }
         }
     }
-    pushOwners(s, told, t, quiet, also, each);
+    pushOwners(s, told, t, quiet, also);
     writeState();
     await flushAlerts();
     return told;
@@ -862,9 +875,17 @@ const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.prio
  * lines, which the coalescing keeps to a handful). A new report line with no older one to drop makes room with the oldest
  * disk, backup or other condition line that is not high, never a security line, and only then drops itself: so a
  * history full of daily reminders still shows the reports (the deciding review of #1850, confirmation 2, finding 1).
+ * A count's line (dayLine) takes the place of the same count's earlier line of the last day that is not on its way: a
+ * day's removals are one line, the newest count, however many there were (#2033 B2).
  * Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
+    const older = e.dayLine ? list.findIndex((x) => x.dayLine === e.dayLine && e.at - x.at < DAY && !inFlight.includes(x)) : -1;
+    if (older >= 0) {
+        const [x] = list.splice(older, 1);
+        list.push({ ...e, priority: Math.max(x.priority, e.priority) as AlertPriority });
+        return 0;
+    }
     const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
     if (same >= 0) {
         const [x] = list.splice(same, 1);
@@ -906,7 +927,7 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
         return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
     }
     if (!happened(note)) return Promise.resolve([]);
-    if (note.perDay) note = { ...note, detail: dayCountWords(note.key, note.perDay) };
+    if (note.perDay) note = { ...note, detail: dayCountWords(note.key, note.perDay, note.perDayAdds ?? 1) };
     if (note.state === undefined) return raiseBounded(note);
     if (note.state === 'seen') {
         readState().seenAt[note.key] = now();
@@ -916,16 +937,25 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
 
 const HOUR_MS = 60 * 60_000;
 
-/** One more of a counted line today (UTC), in its words: `one` for the first, else `many` with the count. */
-function dayCountWords(key: AlertKey, words: { one: string; many: string }): string {
+/** The line a count is told on (SecurityNote.perDay): its key and words. */
+const dayLineOf = (key: AlertKey, words: { one: string }) => `${key}:${words.one}`;
+
+/**
+ * `adds` more of a counted line, in its words for the last 24 hours (#2033 N8: a rolling day, not the UTC one, which
+ * restarted mid-morning in Australia): `one` while the count is 1, else `many` with the count. Kept by the hour.
+ */
+function dayCountWords(key: AlertKey, words: { one: string; many: string }, adds: number): string {
     const s = readState();
-    const day = new Date(now()).toISOString().slice(0, 10);
-    s.dayCounts ??= {};
-    const id = `${key}:${words.one}`;
-    const c = s.dayCounts[id]?.day === day ? s.dayCounts[id] : (s.dayCounts[id] = { day, n: 0 });
-    c.n++;
-    for (const [k, v] of Object.entries(s.dayCounts)) if (v.day !== day) delete s.dayCounts[k];
-    return c.n === 1 ? words.one : words.many.replace('{n}', String(c.n));
+    const hour = Math.floor(now() / HOUR_MS);
+    const counts = (s.dayCounts ??= {});
+    for (const [id, hours] of Object.entries(counts)) {
+        for (const h of Object.keys(hours)) if (hour - Number(h) >= 24 || !Number.isFinite(Number(h))) delete hours[h];
+        if (!Object.keys(hours).length) delete counts[id];
+    }
+    const hours = (counts[dayLineOf(key, words)] ??= {});
+    hours[hour] = (hours[hour] ?? 0) + Math.max(1, Math.floor(adds));
+    const n = Object.values(hours).reduce((a, b) => a + b, 0);
+    return n === 1 ? words.one : words.many.replace('{n}', String(n));
 }
 
 function actorId(actor: string): string {
@@ -944,19 +974,27 @@ function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
     const t = now();
     const id = actorId(note.actor ?? 'server');
     const before = foldedConditions(s, t, id);
-    const w = s.actors[id] ??= { from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server' };
+    const w = s.actors[id] ??= {
+        from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server', ...(note.foldAs ? { foldAs: note.foldAs } : {}),
+    };
+    // A quiet note counts against its actor's hour as any other (#2033 B2): one admin removing 55 role holders tells the
+    // first few, unpushed, and folds the rest into the hour's line, so their lines never push an earlier one out.
     let push = true;
-    if (note.quiet) push = false;
-    else if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
+    if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
     else if (!note.high && w.pushed < SECURITY_PUSHES_PER_HOUR) w.pushed++;
     else {
         push = false;
         w.folded++;
         if (note.high) w.foldedHigh++;
     }
+    const tellIt = push || !!note.high;
+    if (note.quiet) push = false;
     const conditions = [...before];
-    if (push || note.high || note.quiet) {
-        conditions.push({ key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push, alsoPush: push ? note.alsoPush : undefined });
+    if (tellIt) {
+        conditions.push({
+            key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push,
+            alsoPush: push ? note.alsoPush : undefined, ...(note.perDay ? { dayLine: dayLineOf(note.key, note.perDay) } : {}),
+        });
     }
     if (!conditions.length) {
         writeState();
@@ -974,8 +1012,10 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
         if (w.folded === 0) continue;
         out.push({
             key: 'sec.more', active: true, oneShot: true, high: w.foldedHigh > 0,
-            detail: `${w.folded} more change${w.folded === 1 ? '' : 's'} by the same ${w.role} in the hour after its first ones were pushed`
-                + `${w.foldedHigh ? ` (${w.foldedHigh} of them listed on their own)` : ''}. Open Settings to see who.`,
+            detail: w.foldAs
+                ? (w.folded === 1 ? w.foldAs.one : w.foldAs.many.replace('{n}', String(w.folded)))
+                : `${w.folded} more change${w.folded === 1 ? '' : 's'} by the same ${w.role} in the hour after its first ones were pushed`
+                    + `${w.foldedHigh ? ` (${w.foldedHigh} of them listed on their own)` : ''}. Open Settings to see who.`,
         });
     }
     return out;

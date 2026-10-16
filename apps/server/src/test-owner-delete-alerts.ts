@@ -4,18 +4,26 @@
  * leaves this machine.
  *
  *  1. sec.restore: a restore from the server's shell and an owner's roll-back each raise it once at the next boot, high,
- *     saying how ("from the server's shell" / "by an owner") and when the backup was made; the restore and roll-back paths
- *     leave that "who" in their notice; a refused upload of another community's backup is counted ("2 backups … today").
- *  2. sec.name widened: an owner takes the address offline, or claims a new name over the live one: told once, high; the
- *     members are told the address changed.
+ *     saying how ("from the server's shell" / "by an owner") and when the backup was made (an unlocked one, with no date:
+ *     said without one); the restore and roll-back paths leave that "who" in their notice; a refused upload of another
+ *     community's backup is counted, one line for the last 24 hours ("2 backups … in the last day"), its hour's fold line
+ *     says refusals.
+ *  2. sec.address (#2033 B1): an owner takes the address offline, or claims a new name over the live one: told once, high,
+ *     on its own row, never "not its own"; the members are told, in words for how it went, only when it was live; a real
+ *     hijack inside the same day still pushes the owners.
  *  3. sec.keys: replacing the recovery code is told once, high; making the first one is not.
  *  4. sec.backups: a replication token made, then cleared; the server a standby copies from changed; fewer snapshots kept:
  *     one line each. A fourth change by the same owner in the hour folds into one "1 more change" line when the hour ends.
- *  5. The alert channel changed, then removed: the last message goes to the OLD channel each time.
- *  6. sec.members: two members removed by an admin are counted ("2 members were removed today"); a branch pruned by an
- *     owner too.
+ *  4. (also) every lessening the proof is asked for: snapshots off, covering less time, off-box kept fewer days, a
+ *     standby's own token cleared.
+ *  5. The alert channel changed, then removed: the last message goes to the OLD channel each time; a new token for the
+ *     same channel says nothing.
+ *  6. sec.members: an admin's removals are one counted line ("2 members were removed in the last day"), an offboard too;
+ *     a repeat, a non-member or an owner's or the password's removal is not counted; a branch pruned by an owner is; one
+ *     admin removing 30 moderators is one line, and 60 with the channel down leave the admin's earlier rename in place.
  *  7. sec.settings: an admin renaming the community, its callsign or its contacts is told, low; the owner's own is not.
  *  8. No alert, in the book or on the channel, says a member's callsign or key, the address, the new callsign or a contact.
+ *  9. The community's name in a title: a hostile callsign standing in for it is cleaned (#2033 N6).
  *
  * Run: SERVER_SUITES_ONLY=test-owner-delete-alerts node scripts/run-server-suites.mjs
  */
@@ -79,6 +87,19 @@ async function main(): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR;
     assert(!!dataDir, 'BEANPOOL_DATA_DIR is set');
     refuseEdge();
+    // Expo's push door answered here: the owners' pushes are counted, and nothing leaves this machine.
+    const pushes: Array<{ k: string; title: string }> = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return realFetch(input, init);
+        if (url.hostname === 'exp.host') {
+            const batch = JSON.parse(String(init?.body ?? '[]')) as any[];
+            for (const m of batch) pushes.push({ k: String(m?.data?.k ?? ''), title: String(m?.title ?? '') });
+            return new Response(JSON.stringify({ data: batch.map(() => ({ status: 'ok', id: crypto.randomUUID() })) }), { status: 200 });
+        }
+        throw new Error(`nothing leaves this machine (${url.hostname})`);
+    }) as typeof fetch;
 
     // The address service: a stub on loopback that releases and grants whatever it is asked, signs nothing back.
     const registrar = http.createServer((req, res) => {
@@ -116,7 +137,11 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { putPushTokenRow } = await import('./services/push-token-seal.js');
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
+    const { recordRegistrarAnswer } = await import('./engine/registrar-names.js');
     const { noteSecurityEvent } = await import('./services/security-signal.js');
     const alerts = await import('./services/alerts.js');
     const { leaveRestoreNotice, startRestoreNoticeWatch } = await import('./services/restore-points.js');
@@ -152,6 +177,8 @@ async function main(): Promise<void> {
     join(branchRoot, CALLSIGNS[4], owner);
     join(branchKid, CALLSIGNS[5], branchRoot);
     grantNodeRole(admin, 'admin', owner);
+    putPushTokenRow(owner, 'ExponentPushToken[owner-alerts]', 'android');
+    const ownerPushes = () => pushes.filter((p) => p.k === 'owner.alert').length;
     const session = (pk: string, role: 'owner' | 'admin', phone = false) => {
         const ex = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
         if (!ex.ok || ex.role !== role) throw new Error(`setup: no ${role} session: ${ex.error}`);
@@ -215,34 +242,99 @@ async function main(): Promise<void> {
     assert(byShell.length === 2, `1c. restoreFromTar and rollBackTo both leave "by" in the notice: the shell's (no restart) or an owner's (${byShell.length})`);
     fresh();
     // The refused upload of another community's backup (S2b's 409 otherCommunity) is counted, never whose file.
-    assert(/otherCommunity: true[\s\S]{0,40}/.test(backupSource) && /noteSecurityEvent\(\{ key: 'sec\.restore'[^\n]*otherCommunityRefused/.test(backupSource),
-        '1d. the 409 otherCommunity refusal notes sec.restore with the day\'s count');
-    noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: { one: 'A backup from another community was refused today.', many: '{n} backups from another community were refused today.' }, actor: 'restore:other-community', actorRole: 'uploader' } as any);
-    noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: { one: 'A backup from another community was refused today.', many: '{n} backups from another community were refused today.' }, actor: 'restore:other-community', actorRole: 'uploader' } as any);
+    assert(/otherCommunity: true[\s\S]{0,40}/.test(backupSource)
+        && /noteSecurityEvent\(\{\s*key: 'sec\.restore', detail: '', perDay: OWNER_ALERT_WORDS\.otherCommunityRefused, foldAs: OWNER_ALERT_WORDS\.otherCommunityRefusedMore/.test(backupSource),
+        '1d. the 409 otherCommunity refusal notes sec.restore with the count of the last day, and its own fold words');
+    const { OWNER_ALERT_WORDS } = await import('./services/security-signal.js');
+    noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: OWNER_ALERT_WORDS.otherCommunityRefused, actor: 'restore:other-community', actorRole: 'uploader' });
+    noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: OWNER_ALERT_WORDS.otherCommunityRefused, actor: 'restore:other-community', actorRole: 'uploader' });
     await sleep(50);
     r = lines('sec.restore');
-    assert(r.some((e) => e.detail === 'A backup from another community was refused today.') && r.some((e) => e.detail === '2 backups from another community were refused today.'),
-        `1d. two refusals: "2 backups from another community were refused today." (${JSON.stringify(r.map((e) => e.detail))})`);
+    assert(r.length === 1 && r[0].detail === '2 backups from another community were refused in the last day.',
+        `1d. two refusals: one line, "2 backups from another community were refused in the last day." (${JSON.stringify(r.map((e) => e.detail))})`);
+    fresh();
+    // The route's own note (words and fold words), 5 times: 3 told as one line, 2 folded; the hour's line says refusals.
+    const refusal = () => noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: OWNER_ALERT_WORDS.otherCommunityRefused, foldAs: OWNER_ALERT_WORDS.otherCommunityRefusedMore, actor: 'restore:other-community', actorRole: 'uploader' });
+    for (let i = 0; i < 5; i++) refusal();
+    await sleep(100);
+    alerts.setAlertsClockForTests(61 * 60_000);
+    await alerts.checkServerAlerts();
+    let more1 = lines('sec.more');
+    assert(lines('sec.restore').length === 1 && more1.length === 1 && /^2 more backups from another community were refused/.test(more1[0].detail) && !/see who|change/.test(more1[0].detail),
+        `1e. past the bound the hour's line says refusals, not changes, and no "see who" (${JSON.stringify([...lines('sec.restore'), ...more1].map((e) => e.detail))})`);
+    // A rolling day (#2033 N8): 23 h on the count goes on; 25 h after the first ones it starts again.
+    alerts.setAlertsClockForTests(23 * 60 * 60_000);
+    refusal();
+    await sleep(50);
+    const at23 = lines('sec.restore').map((e) => e.detail);
+    alerts.setAlertsClockForTests(25 * 60 * 60_000 + 60_000);
+    refusal();
+    await sleep(50);
+    const at25 = lines('sec.restore').map((e) => e.detail);
+    alerts.setAlertsClockForTests(0);
+    assert(at23.some((d) => d === '6 backups from another community were refused in the last day.') && at25.length === 1 && at25[0] === '2 backups from another community were refused in the last day.',
+        `1f. "in the last day" is the last 24 hours, not the UTC day (${JSON.stringify({ at23, at25 })})`);
+    fresh();
+    alerts.resetAlertsForTests();
+    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: null, point: 'point-c', by: 'shell' } as any);
+    startRestoreNoticeWatch(bootDeps);
+    await sleep(50);
+    r = lines('sec.restore');
+    assert(r.length === 1 && r[0].detail === "A backup was restored from the server's shell. A restore point was kept.",
+        `1g. an unlocked shell restore, its date unknown: "A backup was restored from the server's shell." (${JSON.stringify(r.map((e) => e.detail))})`);
     fresh();
 
     // ── 2. sec.name widened ────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n— 2. sec.name —');
+    console.log('\n— 2. sec.address —');
+    const notices = () => (db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>);
+    let n0 = notices().length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
     const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'direct' });
-    let n = lines('sec.name');
+    let n = lines('sec.address');
+    const told2a = notices().slice(n0);
     assert(claimed.status === 200 && n.length === 1 && /address was changed, by an owner/.test(n[0].detail) && (n[0].high === true || n[0].priority >= 4),
-        `2a. a new name claimed over the live one: sec.name told once, high, "changed, by an owner" (${claimed.status} ${JSON.stringify(claimed.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
+        `2a. a new name claimed over the live one: sec.address told once, high, "changed, by an owner" (${claimed.status} ${JSON.stringify(claimed.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
+    assert(lines('sec.name').length === 0, `2a. not on sec.name, the hijack's row (${lines('sec.name').length})`);
+    assert(told2a.length === 1 && told2a[0].body === "This community's address changed. Open the app to follow it.",
+        `2c. the members get the critical announcement "This community's address changed. Open the app to follow it." (${JSON.stringify(told2a)})`);
     fresh();
+    n0 = notices().length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
     const offline = await call('/api/local/admin/public-address/offline', ownerPhone(), {});
-    n = lines('sec.name');
-    assert(offline.status === 200 && n.length === 1 && /taken offline, by an owner/.test(n[0].detail),
-        `2b. the address taken offline: sec.name told once, "taken offline, by an owner" (${offline.status} ${JSON.stringify(offline.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
-    const addressSource = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'routes', 'public-address.ts'), 'utf8');
-    assert(/adminBroadcastAnnouncement\([^;]*membersAddressChanged[^;]*'critical'\)/.test(addressSource)
-        && /This community's address changed\. Open the app to follow it\./.test(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'services', 'security-signal.ts'), 'utf8')),
-        '2c. the members get the critical announcement "This community\'s address changed. Open the app to follow it."');
-    assert(/key: 'sec\.name', detail: OWNER_ALERT_WORDS\.tunnelKey, priority: 3/.test(addressSource), '2d. a new tunnel key notes sec.name, normal');
+    n = lines('sec.address');
+    const told2b = notices().slice(n0);
+    assert(offline.status === 200 && n.length === 1 && /taken offline, by an owner/.test(n[0].detail) && lines('sec.name').length === 0,
+        `2b. the address taken offline: sec.address told once, "taken offline, by an owner" (${offline.status} ${JSON.stringify(offline.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
+    assert(told2b.length === 1 && told2b[0].body === "This community's address was taken offline by an owner. Ask your owners for the new one.",
+        `2b. the members are told it was taken offline, and to ask their owners (${JSON.stringify(told2b)})`);
+    fresh();
+    n0 = notices().length;
+    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'pending' } } as any);
+    const offlineUnused = await call('/api/local/admin/public-address/offline', ownerPhone(), {});
+    assert(offlineUnused.status === 200 && notices().length === n0 && lines('sec.address').length === 1,
+        `2c. an address that was never live taken offline: the owners told, the members not (${offlineUnused.status}, ${notices().length - n0} announcements)`);
+    const words2 = received.filter((m) => /taken offline|address was changed/.test(m.body)).map((m) => m.title);
+    assert(words2.length >= 2 && words2.every((t) => /its address changed/.test(t) && !/not its own/.test(t)),
+        `2d. an owner's act is titled "its address changed", never "not its own" (${JSON.stringify(words2)})`);
+    fresh();
+    // A real hijack inside the same day as an owner's address act still pushes the owners (#2033 B1, the review's P1).
+    recordRegistrarAnswer({ status: 'live', name: 'hijackvale', hostname: 'hijackvale.beanpool.org' } as any, 'claim');
+    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+    await call('/api/local/admin/public-address/offline', ownerPhone(), {});
+    await sleep(100);
+    const pBefore = ownerPushes();
+    alerts.setAlertsClockForTests(2 * 60 * 60_000);
+    noteNameStandingForTests('lost-another-key', 'hijackvale.beanpool.org');
+    await sleep(300);
+    await alerts.checkServerAlerts();
+    await sleep(300);
+    const hijackPushed = ownerPushes() - pBefore;
+    const hijackActive = (book().active as any[]).some((a) => a.key === 'sec.name');
+    noteNameStandingForTests('held', 'hijackvale.beanpool.org');
+    alerts.setAlertsClockForTests(3 * 60 * 60_000);
+    await alerts.checkServerAlerts();
+    alerts.setAlertsClockForTests(0);
+    assert(hijackActive && hijackPushed >= 1, `2e. a hijack 2 h after the owner took the address offline: active, and the owners pushed (${hijackActive}, ${hijackPushed} pushes)`);
     fresh();
 
     // ── 3. sec.keys on a recovery-code replace ─────────────────────────────────────────────────────────────────────
@@ -288,6 +380,37 @@ async function main(): Promise<void> {
         '4g. an off-box destination removed or changed notes sec.backups');
     assert(/key: 'sec\.backups', detail: OWNER_ALERT_WORDS\.standbyForgotten/.test(backupSource), '4h. a standby forgotten notes sec.backups');
     fresh();
+    // Every lessening the fresh proof is asked for is told (#2033 N5).
+    await call('/api/local/admin/snapshots/config', asOwner, { enabled: true, intervalHours: 6, keep: 7 });
+    fresh();
+    const off = await call('/api/local/admin/snapshots/config', ownerPhone(), { enabled: false });
+    b = lines('sec.backups');
+    assert(off.status === 200 && b.length === 1 && b[0].detail === 'Snapshots were turned off.', `4i. snapshots turned off: told (${off.status} ${JSON.stringify(b.map((e) => e.detail))})`);
+    fresh();
+    await call('/api/local/admin/snapshots/config', asOwner, { enabled: true, intervalHours: 6, keep: 7 });
+    fresh();
+    const often = await call('/api/local/admin/snapshots/config', ownerPhone(), { intervalHours: 1 });
+    b = lines('sec.backups');
+    assert(often.status === 200 && b.length === 1 && b[0].detail === 'Snapshots cover less time now.', `4j. as many kept, more often: they cover less time, told (${often.status} ${JSON.stringify(often.json?.error ?? '')} ${JSON.stringify(b.map((e) => e.detail))})`);
+    fresh();
+    const longer = await call('/api/local/admin/snapshots/config', ownerPhone(), { intervalHours: 400 });
+    b = lines('sec.backups');
+    assert(longer.status === 200 && b.length === 1 && b[0].detail === 'Snapshots cover less time now.', `4k. an interval past their age: less time, told (${longer.status} ${JSON.stringify(longer.json?.error ?? '')} ${JSON.stringify(b.map((e) => e.detail))})`);
+    fresh();
+    const keepLong = await call('/api/local/admin/offbox-backups/settings', asOwner, { retentionDays: 30 });
+    fresh();
+    const keepShort = await call('/api/local/admin/offbox-backups/settings', ownerPhone(), { retentionDays: 7 });
+    b = lines('sec.backups');
+    assert(keepLong.status === 200 && keepShort.status === 200 && b.length === 1 && b[0].detail === 'Off-box backups are kept for fewer days now.',
+        `4l. off-box backups kept for fewer days: told (${keepLong.status} ${keepShort.status} ${JSON.stringify(keepShort.json?.error ?? '')} ${JSON.stringify(b.map((e) => e.detail))})`);
+    fresh();
+    await call('/api/local/admin/replication-config/save', ownerPhone(), { primaryUrl: 'https://main.example.test', primaryToken: 'standby-token-4m' });
+    fresh();
+    const dropTok = await call('/api/local/admin/replication-config/save', ownerPhone(), { primaryUrl: 'https://main.example.test', primaryToken: '' });
+    b = lines('sec.backups');
+    assert(dropTok.status === 200 && b.length === 1 && /no longer holds a replication token/.test(b[0].detail),
+        `4m. a standby clearing its own replication token: told (${dropTok.status} ${JSON.stringify(b.map((e) => e.detail))})`);
+    fresh();
 
     // ── 5. The alert channel changed or removed: the last message to the OLD channel ───────────────────────────────
     console.log('\n— 5. the old channel —');
@@ -299,6 +422,12 @@ async function main(): Promise<void> {
     assert(removed.status === 200 && await until(() => received.some((m) => m.topic === '/newtopic' && /alert channel was removed/.test(m.body))),
         `5b. removed: the channel that was set gets the last message (${removed.status})`);
     assert((setChannel('owners') as any).ok === true, '5c. the owners\' channel set again for the rest');
+    const r5 = received.length;
+    const tok = await call('/api/local/admin/alerts/settings', asOwner, { url: `${channelBase}/owners`, format: 'ntfy', token: 'tk_owner_alerts_5d' });
+    await sleep(300);
+    assert(tok.status === 200 && !received.slice(r5).some((m) => /last alert sent here/.test(m.body)),
+        `5d. a new token for the same channel: no "last alert sent here" (${tok.status}, ${received.slice(r5).length} messages)`);
+    assert((setChannel('owners') as any).ok === true, '5d. the owners\' channel set again, no token');
     fresh();
 
     // ── 6. sec.members counts ──────────────────────────────────────────────────────────────────────────────────────
@@ -306,16 +435,68 @@ async function main(): Promise<void> {
     const p1 = await call(`/api/local/admin/users/${plainA}/prune`, asAdmin);
     const p2 = await call(`/api/local/admin/users/${plainB}/prune`, asAdmin);
     let m = lines('sec.members');
-    assert(p1.status === 200 && p2.status === 200 && m.some((e) => e.detail === 'A member was removed today, by an admin.')
-        && m.some((e) => e.detail === '2 members were removed today, by an admin.'),
-        `6a. two members removed by an admin: counted, "2 members were removed today, by an admin." (${p1.status} ${p2.status} ${JSON.stringify(m.map((e) => e.detail))})`);
+    assert(p1.status === 200 && p2.status === 200 && m.length === 1 && m[0].detail === '2 members were removed in the last day, by an admin.',
+        `6a. two members removed by an admin: one counted line, "2 members were removed in the last day, by an admin." (${p1.status} ${p2.status} ${JSON.stringify(m.map((e) => e.detail))})`);
+    // A repeat and a key that is no member remove no one (#2033 N1).
+    const again = await call(`/api/local/admin/users/${plainA}/prune`, asAdmin);
+    const ghost = await call(`/api/local/admin/users/${pubkey()}/prune`, asAdmin);
+    m = lines('sec.members');
+    assert(m.length === 1 && m[0].detail === '2 members were removed in the last day, by an admin.',
+        `6c. a member pruned again and a key that is no member: not counted (${again.status} ${ghost.status} ${JSON.stringify(m.map((e) => e.detail))})`);
+    fresh();
+    // An offboard by an admin, over HTTP, then the same offboard again: one more, not two (N1, N7).
+    const plainC = pubkey();
+    join(plainC, 'Plainmems', owner);
+    const off1 = await call(`/api/local/admin/members/${plainC}/offboard`, asAdmin, { resolution: 'prune_zero_balance' });
+    const off2 = await call(`/api/local/admin/members/${plainC}/offboard`, asAdmin, { resolution: 'prune_zero_balance' });
+    m = lines('sec.members');
+    assert(off1.status === 200 && m.length === 1 && m[0].detail === 'A member was removed in the last day, by an admin.',
+        `6d. an admin's offboard counted, its retry not (${off1.status} ${off2.status} ${JSON.stringify(off1.json?.error ?? '')} ${JSON.stringify(m.map((e) => e.detail))})`);
+    fresh();
+    // An owner's removals are not "by an admin" (#2033 B3): an owner's key session and the admin password say nothing.
+    const plainD = pubkey();
+    const plainE = pubkey();
+    join(plainD, 'Plainmemt', owner);
+    join(plainE, 'Plainmemu', owner);
+    const ownPrune = await call(`/api/local/admin/users/${plainD}/prune`, asOwner);
+    // The password opens Settings only with 2FA on: on for this one.
+    turnOn2faForTests(PW);
+    const pwOff = await call(`/api/local/admin/members/${plainE}/offboard`, { 'x-admin-session': createPasswordSession().sessionId }, { resolution: 'prune_zero_balance' });
+    updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
+    const pwPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(plainE) as any)?.status;
+    assert(ownPrune.status === 200 && lines('sec.members').length === 0, `6e. an owner's prune: no "by an admin" line (${ownPrune.status} ${JSON.stringify(lines('sec.members').map((e) => e.detail))})`);
+    assert(pwOff.status === 200 && pwPruned === 'pruned' && lines('sec.members').length === 0,
+        `6f. the admin password's offboard: no "by an admin" line (${pwOff.status} ${JSON.stringify(pwOff.json?.error ?? '')} ${pwPruned} ${JSON.stringify(lines('sec.members').map((e) => e.detail))})`);
     fresh();
     const br = await call(`/api/local/admin/branches/${branchRoot}/prune`, asOwner);
     m = lines('sec.members');
-    assert(br.status === 200 && m.length === 1 && /branch of invites was pruned today, by an owner/.test(m[0].detail),
+    assert(br.status === 200 && m.length === 1 && /branch of invites was pruned in the last day, by an owner/.test(m[0].detail),
         `6b. a branch pruned by an owner: counted (${br.status} ${JSON.stringify(br.json?.error ?? '')} ${JSON.stringify(m.map((e) => e.detail))})`);
-    const adminSource = fs.readFileSync(path.join(routesDir, 'admin.ts'), 'utf8');
-    assert(/executeOffboard\([\s\S]{0,200}\);\s*noteSecurityEvent\(\{ key: 'sec\.members'/.test(adminSource), '6c. an offboard by an admin is counted too');
+    fresh();
+    // One admin removing 30 moderators: one sec.members line, however many (#2033 B2, the review's P9).
+    const mods = Array.from({ length: 30 }, () => pubkey());
+    mods.forEach((pk, i) => { join(pk, `Modqz${i}`, owner); grantNodeRole(pk, 'moderator', owner); });
+    alerts.resetAlertsForTests();
+    for (const pk of mods) await call(`/api/local/admin/users/${pk}/prune`, asAdmin);
+    await sleep(500);
+    m = lines('sec.members');
+    assert(m.length === 1, `6g. 30 moderators removed by one admin: one sec.members line (${m.length}: ${JSON.stringify(m.map((e) => e.detail))})`);
+    fresh();
+    // The channel down, all held: an admin renames the community, then removes 60 role holders. The rename stays in the
+    // history and in the channel's queue, and nothing is dropped (#2033 B2, the review's P10).
+    alerts.updateAlertChannel({ url: 'http://127.0.0.1:9/down', format: 'ntfy' });
+    alerts.resetAlertsForTests();
+    await call('/api/local/update-identity', asAdmin, { communityName: 'Riverbend Renamed' });
+    await sleep(200);
+    const holders = Array.from({ length: 60 }, () => pubkey());
+    holders.forEach((pk, i) => { join(pk, `Rhqa${i}`, owner); grantNodeRole(pk, 'moderator', owner); });
+    for (const pk of holders) await call(`/api/local/admin/users/${pk}/prune`, asAdmin);
+    await sleep(500);
+    const held = book();
+    assert(lines('sec.settings').length === 1 && held.dropped === 0 && lines('sec.members').length === 1,
+        `6h. the channel down, an admin's rename then 60 role holders removed: the rename still there, nothing dropped, one count line (${lines('sec.settings').length} ${held.dropped} ${lines('sec.members').length} waiting ${held.waiting})`);
+    await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY });
+    assert((setChannel('owners') as any).ok === true, '6h. the owners\' channel set again');
     fresh();
 
     // ── 7. sec.settings ────────────────────────────────────────────────────────────────────────────────────────────
@@ -348,6 +529,18 @@ async function main(): Promise<void> {
     for (const w of found) console.error(`   ${w} in: …${all.slice(Math.max(0, all.indexOf(w) - 160), all.indexOf(w) + 60)}…`);
     assert(everything.length > 5 && received.length > 2 && found.length === 0,
         `8. no alert in the book or on the channel says a member's callsign or key, the address, the copy-from server or a contact (${found.length ? found.join(', ') : 'none'}; ${received.length} messages)`);
+
+    // ── 9. A hostile callsign standing in for the community's name (#2033 N6) ─────────────────────────────────────
+    console.log('\n— 9. the name in a title —');
+    alerts.resetAlertsForTests();
+    const r9 = received.length;
+    await call('/api/local/update-identity', asOwner, { communityName: '' });
+    const hostile = await call('/api/local/update-identity', asAdmin, { callsign: '\u001b[2J\u0007\u202eEVIL https://x.y' });
+    await until(() => received.length > r9, 3000);
+    const msgs9 = received.slice(r9);
+    assert(hostile.status === 200 && msgs9.length >= 1 && msgs9.every((x) => !/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e]/.test(x.title + x.body)),
+        `9. no control or bidi character reaches a title or body (${hostile.status} ${JSON.stringify(msgs9.map((x) => x.title))})`);
+    await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY, callsign: 'RIVBND' });
 
     registrar.close();
     channel.close();

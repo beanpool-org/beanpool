@@ -288,7 +288,9 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
         try {
             const by = notice.by === 'shell' ? 'shell' : 'owner';
             // The owners' alert (sec.restore, high; design case 18 §7), in the server's words: a date, by whom, never a member.
-            const detail = (notice.kind === 'restore' ? OWNER_ALERT_WORDS.restored(day(notice.madeAt), by) : OWNER_ALERT_WORDS.rolledBack(day(notice.madeAt), by));
+            // An unlocked shell restore has no date: said without one (#2033 N8), never "made an earlier date".
+            const madeOn = notice.madeAt && Number.isFinite(Date.parse(notice.madeAt)) ? day(notice.madeAt) : null;
+            const detail = notice.kind === 'restore' ? OWNER_ALERT_WORDS.restored(madeOn, by) : OWNER_ALERT_WORDS.rolledBack(madeOn ?? day(null), by);
             noteSecurityEvent({ key: 'sec.restore', detail, high: true, priority: 4 });
         } catch { /* an alert never blocks the boot */ }
         deps.log(`[RESTORE] ${body} Restore point kept before it: ${notice.point} (at ${notice.at}).`);

@@ -16,8 +16,9 @@ import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, re
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
-import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
+import { sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
+import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
@@ -26,10 +27,12 @@ import { QRCodeSVG } from 'qrcode.react';
 
 const QRCodeSVGComponent = QRCodeSVG as any;
 
-interface Props {
+interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
     /** Where the 🏘️ sheet's in-app ways forward lead (Home's Find card, a guide page). */
     onNavigate?: (tab: string, contextId?: string) => void;
+    /** Invites are previewed on this node: Example Valley's invitations and tree, and the marker's sheet for every action. */
+    preview?: boolean;
 }
 
 interface TreeNode {
@@ -40,7 +43,12 @@ interface TreeNode {
     children: TreeNode[];
 }
 
-export function InvitePage({ identity, onNavigate }: Props) {
+export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways }: Props) {
+    const waysForward: LocalCommunityWays = {
+        onNearYou: ways.onNearYou ?? (onNavigate ? () => onNavigate('home') : undefined),
+        onGuide: ways.onGuide ?? (onNavigate ? (slug) => onNavigate('guide', slug) : undefined),
+    };
+
     const [invites, setInvites] = useState<InviteCode[]>([]);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
@@ -69,9 +77,11 @@ export function InvitePage({ identity, onNavigate }: Props) {
         return () => { cancelled = true; };
     }, []);
 
+    const isPreview = propPreview !== undefined ? propPreview : modeFor('invites', nodeInfo, reader) === 'preview';
+
     // Where only its admins invite (lib/node-invites.ts), this member's role, as the node says it (GET
     // /api/node-admin/me). Not heard yet, or no answer, counts as before: the node refuses a member's invite itself.
-    const doorAdmins = onlyAdminsInvite(nodeInfo);
+    const doorAdmins = !isPreview && onlyAdminsInvite(nodeInfo);
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
     useEffect(() => {
         if (!doorAdmins) return;
@@ -87,40 +97,42 @@ export function InvitePage({ identity, onNavigate }: Props) {
     }, [doorAdmins]);
     // The node's own words, when it refused a generate because only admins invite here.
     const [adminsRefused, setAdminsRefused] = useState<string | null>(null);
-    const adminsOnly = adminsRefused !== null || !mayInviteHere(nodeInfo, role);
+    const adminsOnly = !isPreview && (adminsRefused !== null || !mayInviteHere(nodeInfo, role));
     // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
     const [notice, setNotice] = useState<string | null>(null);
 
     // The member's own codes and their invite tree: never asked where invites are in preview (the global node, which
-    // makes no invite; lib/features readsOwn). The offline tickets kept in this browser are still shown.
+    // makes no invite; lib/features readsOwn).
     useEffect(() => {
+        if (isPreview) {
+            setInvites(sampleInvites());
+            setTree(sampleInviteTree(identity.publicKey));
+            return;
+        }
         let cancelled = false;
         readsOwn('invites').then((reads) => {
             if (cancelled) return;
-            loadInvites(reads);
-            if (reads) loadTree();
+            if (reads) {
+                loadInvites(true);
+                loadTree();
+            }
         });
         return () => { cancelled = true; };
-    }, []);
+    }, [isPreview, identity.publicKey]);
 
     async function loadInvites(askNode: boolean) {
+        if (isPreview || !askNode) return;
         let serverInvites: InviteCode[] = [];
-        if (askNode) {
-            try {
-                const result = await getMyInvites(identity.publicKey);
-                serverInvites = result.invites;
-            } catch { /* offline */ }
-        }
+        try {
+            const result = await getMyInvites(identity.publicKey);
+            serverInvites = result.invites;
+        } catch { /* offline */ }
 
         // Merge with local offline tickets that haven't been redeemed
         try {
             const storedOffline = localStorage.getItem(`bp_offline_invites_${identity.publicKey}`);
             if (storedOffline) {
                 const localInvites: InviteCode[] = JSON.parse(storedOffline);
-                
-                // Only keep local offline invites that haven't miraculously appeared in the server sync
-                // i.e., once a local invite's Hash matches a redeemed code in the DB (hard to sync perfectly offline though)
-                // For simplicity, we just inject all offline tickets. When redeemed, they remain 'unused' to the inviter until they clear cache.
                 const merged = [...localInvites, ...serverInvites];
                 setInvites(merged);
                 return;
@@ -144,6 +156,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
     }
 
     async function loadTree() {
+        if (isPreview) return;
         try {
             const result = await getInviteTree();
             setTree(result);
@@ -279,7 +292,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
 
     // Where only admins invite, a paper ticket made on this device before the switch is refused by the node, so it is
     // not listed as a code that still works.
-    const offlineCodes = adminsOnly ? localOfflineCodes(identity.publicKey) : new Set<string>();
+    const offlineCodes = (!isPreview && adminsOnly) ? localOfflineCodes(identity.publicKey) : new Set<string>();
     const unusedInvites = invites.filter(i => !i.usedBy && !offlineCodes.has(i.code));
     const usedInvites = invites.filter(i => i.usedBy);
 
@@ -316,7 +329,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
         );
     };
 
-    if (!makes) {
+    if (!makes && !isPreview) {
         return (
             <div className="p-4 max-w-[500px] mx-auto min-h-full">
                 <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
@@ -328,9 +341,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                 {linkActions()}
                 {marked(modeFor('invites', nodeInfo, reader)) && (
                     <div className="mt-5" data-testid="invites-local-line">
-                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites}
-                            onNearYou={onNavigate ? () => onNavigate('home') : undefined}
-                            onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites} {...waysForward} />
                     </div>
                 )}
             </div>
@@ -339,6 +350,20 @@ export function InvitePage({ identity, onNavigate }: Props) {
 
     return (
         <div className="p-4 max-w-[500px] mx-auto min-h-full">
+            {isPreview && (
+                <div className="mb-6">
+                    <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                        📤 Bring someone here
+                    </h2>
+                    <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                        {refused ?? `This community doesn’t use invites. Anyone can join it with ${nodeInfo?.features?.wordsDoor === false ? '' : '12 words or '}a sign-in, so just share its link.`}
+                    </p>
+                    {linkActions()}
+                    <div className="mt-5" data-testid="invites-local-line">
+                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites} {...waysForward} />
+                    </div>
+                </div>
+            )}
             {/* Section tabs */}
             <div className="flex gap-2 mb-6">
                 <button 
@@ -395,17 +420,21 @@ export function InvitePage({ identity, onNavigate }: Props) {
                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
 
-                    <button
-                        onClick={handleGenerate}
-                        disabled={generating}
-                        className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
-                            generating 
-                                ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
-                        }`}
-                    >
-                        {generating ? 'Generating...' : '✨ Generate New Invite'}
-                    </button>
+                    {isPreview ? (
+                        <LocalCommunityAction feature="invites" label={t('✨ Generate New Invite')} className="w-full p-4 mb-6 text-[15px] shadow-md" {...waysForward} />
+                    ) : (
+                        <button
+                            onClick={handleGenerate}
+                            disabled={generating}
+                            className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
+                                generating 
+                                    ? 'bg-nature-400 text-white cursor-not-allowed' 
+                                    : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
+                            }`}
+                        >
+                            {generating ? 'Generating...' : '✨ Generate New Invite'}
+                        </button>
+                    )}
                     {notice && (
                         <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{notice}</p>
                     )}
@@ -417,11 +446,11 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                 {newCode.length > 20 ? `${newCode.substring(0, 16)}...` : newCode.toUpperCase()}
                             </p>
                             <div className="bg-white rounded-xl p-4 inline-block mb-5 shadow-sm">
-                                <QRCodeSVGComponent value={`${window.location.origin}/?invite=${newCode}`} size={200} />
+                                <QRCodeSVGComponent value={isPreview ? newCode : `${window.location.origin}/?invite=${newCode}`} size={200} />
                             </div>
                             <div className="flex gap-3 justify-center">
                                 <button 
-                                    onClick={() => handleCopyProxy(newCode)} 
+                                    onClick={() => isPreview && newCode ? handleCopy(newCode) : (newCode && handleCopyProxy(newCode))} 
                                     className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
                                         copied 
                                             ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400' 
@@ -432,14 +461,18 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                 >
                                     {copied ? '✓ Copied!' : '📋 Copy'}
                                 </button>
-                                <button 
-                                    onClick={() => handleShare(newCode)} 
-                                    className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
-                                    aria-label="Share invite link"
-                                    title="Share invite link"
-                                >
-                                    📤 Share
-                                </button>
+                                {isPreview ? (
+                                    <LocalCommunityAction feature="invites" label={t('Share')} className="py-3 px-6 text-[14px]" {...waysForward} />
+                                ) : (
+                                    <button 
+                                        onClick={() => newCode && handleShare(newCode)} 
+                                        className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
+                                        aria-label="Share invite link"
+                                        title="Share invite link"
+                                    >
+                                        📤 Share
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -467,23 +500,35 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                                 {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
                                             </span>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex items-center gap-2">
                                             <button 
-                                                onClick={() => handleCopyProxy(inv.code)} 
+                                                onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
+                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                aria-label="Show QR code"
+                                                title="Show QR code"
+                                            >
+                                                📱
+                                            </button>
+                                            <button 
+                                                onClick={() => isPreview ? handleCopy(inv.code) : handleCopyProxy(inv.code)} 
                                                 className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
                                                 aria-label="Copy invite link"
                                                 title="Copy invite link"
                                             >
                                                 📋
                                             </button>
-                                            <button 
-                                                onClick={() => handleShare(inv.code)} 
-                                                className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
-                                                aria-label="Share invite link"
-                                                title="Share invite link"
-                                            >
-                                                📤
-                                            </button>
+                                            {isPreview ? (
+                                                <LocalCommunityAction feature="invites" label={t('Share')} className="py-2 px-3 text-[12px]" {...waysForward} />
+                                            ) : (
+                                                <button 
+                                                    onClick={() => handleShare(inv.code)} 
+                                                    className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
+                                                    aria-label="Share invite link"
+                                                    title="Share invite link"
+                                                >
+                                                    📤
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                     <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">

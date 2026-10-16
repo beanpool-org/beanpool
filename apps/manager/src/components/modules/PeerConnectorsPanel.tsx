@@ -4,7 +4,7 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
-import { proofField } from '../../lib/fresh-proof';
+import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 export interface PeerConnector {
@@ -21,6 +21,9 @@ export interface PeerConnector {
     publicUrl?: string;
     name?: string;
     peerId?: string;
+    pinnedPeerId?: string;
+    error?: string | null;
+    lastError?: string | null;
     url?: string;
     id?: string;
     [key: string]: unknown;
@@ -526,6 +529,14 @@ export function PeerConnectorsPanel({
                                     </div>
                                 </div>
 
+                                {/* Status Error Alert */}
+                                {!isConnected && Boolean(c?.lastError || c?.error) && (
+                                    <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-800/60 text-xs text-red-200 flex items-center gap-2">
+                                        <span aria-hidden="true">⚠️</span>
+                                        <span className="font-mono text-[11px] break-all">{String(c.lastError || c.error)}</span>
+                                    </div>
+                                )}
+
                                 {/* Dual Active Collision Alert */}
                                 {isCollision && (
                                     <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-xs text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -661,7 +672,7 @@ export function PeerConnectorsPanel({
                                 aria-required="true"
                                 value={newAddress}
                                 onChange={(e) => setNewAddress(e.target.value)}
-                                placeholder="e.g. us.beanpool.org:4001 or wss://peer.beanpool.org"
+                                placeholder={t('e.g. /dns4/peer.beanpool.org/tcp/4001/p2p/12D3KooW... or us.beanpool.org:4001')}
                                 className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]"
                             />
                         </div>

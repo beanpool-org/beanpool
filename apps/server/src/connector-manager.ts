@@ -65,6 +65,11 @@ export interface ConnectorConfig {
      * config. A compromised peer must not be able to raise the limit that constrains it.
      */
     creditCap?: number;
+    /**
+     * Pinned peer ID recorded on the first successful dial of a host:port connector.
+     * Absent when not yet recorded or for multiaddrs that already specify /p2p/.
+     */
+    pinnedPeerId?: string;
 }
 
 export interface ConnectorStatus extends ConnectorConfig {
@@ -76,6 +81,7 @@ export interface ConnectorStatus extends ConnectorConfig {
     lastVerified: number | null;
     peerId: string | null;
     error: string | null;
+    lastError: string | null;
 }
 
 interface StatusEntry {
@@ -87,6 +93,7 @@ interface StatusEntry {
     lastVerified: number | null;
     peerId: string | null;
     error: string | null;
+    lastError: string | null;
 }
 
 let connectors: ConnectorConfig[] = [];
@@ -273,6 +280,7 @@ function newStatus(): StatusEntry {
         lastVerified: null,
         peerId: null,
         error: null,
+        lastError: null,
     };
 }
 
@@ -291,10 +299,15 @@ export function initConnectorManager(node: Libp2p): void {
             // names a peer, so /ipfs/ and /p2p/ can't be treated differently in different checks.
             if (connector.address && peerIdFromAddress(connector.address) === peerId) {
                 matches = true;
-            }
-            const status = statuses.get(connector.address);
-            if (status?.peerId === peerId) {
-                matches = true;
+            } else if (connector.pinnedPeerId) {
+                if (connector.pinnedPeerId === peerId) {
+                    matches = true;
+                }
+            } else {
+                const status = statuses.get(connector.address);
+                if (status?.peerId === peerId) {
+                    matches = true;
+                }
             }
 
             if (matches) {
@@ -306,6 +319,7 @@ export function initConnectorManager(node: Libp2p): void {
                 status.peerId = peerId;
                 status.connected = true;
                 status.error = null;
+                status.lastError = null;
                 retryState.delete(connector.address);
             }
         }
@@ -314,6 +328,7 @@ export function initConnectorManager(node: Libp2p): void {
             if (status.peerId === peerId) {
                 status.connected = true;
                 status.error = null;
+                status.lastError = null;
                 // Reset retry state on successful connection
                 retryState.delete(addr);
             }
@@ -506,13 +521,37 @@ export async function connectToAddress(address: string): Promise<boolean> {
     const status = statuses.get(address) || newStatus();
     statuses.set(address, status);
 
+    const connector = connectors.find(c => c.address === address);
+    const hasPeerInAddress = Boolean(peerIdFromAddress(address));
+
+    // If the address doesn't already specify a /p2p/ peer ID, but we already have a pinnedPeerId from the first dial,
+    // dial address + /p2p/<pinnedPeerId> so libp2p itself refuses a different node.
+    let dialTarget: string;
+    const baseMa = resolveMultiaddr(address);
+    if (!hasPeerInAddress && connector?.pinnedPeerId) {
+        dialTarget = `${baseMa}/p2p/${connector.pinnedPeerId}`;
+    } else {
+        dialTarget = baseMa;
+    }
+
     try {
-        const ma = multiaddr(resolveMultiaddr(address));
+        const ma = multiaddr(dialTarget);
         const conn = await p2pNode.dial(ma);
+        const remotePeerId = conn.remotePeer.toString();
+
         status.connected = true;
-        status.peerId = conn.remotePeer.toString();
+        status.peerId = remotePeerId;
         status.lastVerified = Date.now();
         status.error = null;
+        status.lastError = null;
+
+        // The FIRST successful dial of a host:port connector records which node answered in its own field
+        if (!hasPeerInAddress && connector && !connector.pinnedPeerId) {
+            connector.pinnedPeerId = remotePeerId;
+            saveConnectors();
+            logger.info('P2P', `[Connectors] Pinned peer ID for ${address} to ${remotePeerId}`);
+        }
+
         logger.info('P2P', `[Connectors] ✅ Connected to ${address} (PeerId: ${status.peerId})`);
 
         // Immediately run handshake to check mutual trust
@@ -538,7 +577,17 @@ export async function connectToAddress(address: string): Promise<boolean> {
         // "this peer is down" into a rejected promise from `connectToAddress`, which the retry loop reads as
         // the whole loop failing rather than one address failing.
         status.connected = false;
-        status.error = errorMessage(e, 'Connection failed');
+        const rawMsg = errorMessage(e);
+        const isIdentityMismatch = (e as any)?.name === 'EncryptionFailedError' ||
+            rawMsg.includes('does not match expected remote identity key') ||
+            rawMsg.includes('does not match expected remote');
+
+        if (isIdentityMismatch) {
+            status.error = 'A different node answered at this address';
+        } else {
+            status.error = errorMessage(e, 'Connection failed');
+        }
+        status.lastError = status.error;
         logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
         return false;
     }
@@ -564,11 +613,53 @@ export async function disconnectFromAddress(address: string): Promise<void> {
         status.remoteActive = null;
         status.latencyMs = null;
         status.error = null;
+        status.lastError = null;
     }
     logger.info('P2P', `[Connectors] Disconnected from ${address}`);
 }
 
-export function addConnector(address: string, trustLevel: TrustLevel, callsign?: string, publicUrl?: string, enabled?: boolean): ConnectorConfig {
+export function editConnectorAddress(oldAddress: string, newAddress: string): ConnectorConfig | null {
+    const existing = connectors.find(c => c.address === oldAddress);
+    if (!existing) return null;
+    existing.address = newAddress;
+    delete existing.pinnedPeerId;
+    statuses.delete(oldAddress);
+    retryState.delete(oldAddress);
+    saveConnectors();
+    logger.info('P2P', `[Connectors] Edited connector address: ${oldAddress} → ${newAddress} (cleared pinned peer ID)`);
+    return existing;
+}
+
+export function addConnector(
+    address: string,
+    trustLevel: TrustLevel,
+    callsign?: string,
+    publicUrl?: string,
+    enabled?: boolean,
+    oldAddress?: string
+): ConnectorConfig {
+    if (oldAddress && oldAddress !== address) {
+        const existingOld = connectors.find(c => c.address === oldAddress);
+        if (existingOld) {
+            existingOld.address = address;
+            existingOld.trustLevel = trustLevel;
+            if (callsign !== undefined) existingOld.callsign = callsign;
+            if (publicUrl !== undefined) {
+                existingOld.publicUrl = publicUrl;
+            } else if (typeof existingOld.publicUrl === 'string' && existingOld.publicUrl.startsWith('https:///')) {
+                existingOld.publicUrl = derivePublicUrl(address);
+            }
+            if (enabled !== undefined) existingOld.enabled = enabled;
+            // Editing the connector's address clears the record, so the admin can deliberately link to a new node
+            delete existingOld.pinnedPeerId;
+            statuses.delete(oldAddress);
+            retryState.delete(oldAddress);
+            saveConnectors();
+            logger.info('P2P', `[Connectors] Edited connector address: ${oldAddress} → ${address} (cleared pinned peer ID)`);
+            return existingOld;
+        }
+    }
+
     // NOTE THE ORDER: derivation happens only on the INSERT path, below. Deriving up here — as this function
     // used to — meant `publicUrl` was never undefined by the time the update branch tested it, so any update
     // that omitted it (changing trust level, toggling enabled) silently overwrote an operator's stated URL with
@@ -584,6 +675,10 @@ export function addConnector(address: string, trustLevel: TrustLevel, callsign?:
             // Repair a malformed stored value in passing, so a node that is reconfigured without being
             // restarted converges too. Still never replaces a GOOD value with a guess.
             existing.publicUrl = derivePublicUrl(address);
+        }
+
+        if (oldAddress === address) {
+            delete existing.pinnedPeerId;
         }
 
         // If it was enabled and is now disabled (made passive), automatically disconnect
@@ -710,7 +805,13 @@ export function peerIdFromAddress(address?: string): string | null {
  */
 function materialise(c: ConnectorConfig): ConnectorStatus {
     const status = statuses.get(c.address) || newStatus();
-    return { ...c, ...status, peerId: status.peerId ?? peerIdFromAddress(c.address) };
+    return {
+        ...c,
+        ...status,
+        peerId: status.peerId ?? c.pinnedPeerId ?? peerIdFromAddress(c.address),
+        error: status.error,
+        lastError: status.lastError ?? status.error,
+    };
 }
 
 export function getConnectors(): ConnectorStatus[] {
@@ -730,6 +831,10 @@ export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | nu
 
 export function getConnectorByPeerId(peerId: string): ConnectorStatus | null {
     for (const c of connectors) {
+        if (c.pinnedPeerId) {
+            if (c.pinnedPeerId === peerId) return materialise(c);
+            continue;
+        }
         const status = statuses.get(c.address);
         const effectivePeerId = status?.peerId ?? (c.address ? peerIdFromAddress(c.address) : null);
         if (effectivePeerId === peerId) return materialise(c);
@@ -745,6 +850,13 @@ export function isPeerTrusted(peerId: string): { trusted: boolean; trustLevel: T
     // ⚡ Bolt: Iterate raw array instead of calling getConnectors().find() which allocates all objects
     for (const c of connectors) {
         if (c.trustLevel === 'blocked') continue;
+
+        if (c.pinnedPeerId) {
+            if (c.pinnedPeerId === peerId) {
+                return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
+            }
+            continue;
+        }
 
         const status = statuses.get(c.address);
         if (status?.peerId === peerId) {
@@ -802,10 +914,15 @@ export function updateInboundHandshakeStatus(
         let matches = false;
         if (connector.address && peerIdFromAddress(connector.address) === peerId) {
             matches = true;
-        }
-        const status = statuses.get(connector.address);
-        if (status?.peerId === peerId) {
-            matches = true;
+        } else if (connector.pinnedPeerId) {
+            if (connector.pinnedPeerId === peerId) {
+                matches = true;
+            }
+        } else {
+            const status = statuses.get(connector.address);
+            if (status?.peerId === peerId) {
+                matches = true;
+            }
         }
 
         if (matches) {
@@ -817,6 +934,7 @@ export function updateInboundHandshakeStatus(
             status.peerId = peerId;
             status.connected = true;
             status.error = null;
+            status.lastError = null;
             
             // Mutual trust is true if both we trust them and they trust us
             const ourTrust = isPeerTrusted(peerId);

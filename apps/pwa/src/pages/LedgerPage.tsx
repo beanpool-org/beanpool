@@ -709,7 +709,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                         >
                             {!canSend
                                 ? (earned <= 0 ? '🔒 Send Beans (needs 1 completed trade)' : '🔒 Send Beans (needs positive balance)')
-                                : showSend ? '✕ Cancel' : `💸 ${t('Send Beans')}`}
+                                : showSend ? '✕ Cancel' : <><span>💸</span> <span>{t('Send Beans')}</span></>}
                         </button>
 
                         {/* Send Form */}

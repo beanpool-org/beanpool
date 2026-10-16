@@ -30,7 +30,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const hex6 = (c: string) => (/^#[0-9a-f]{3}$/i.test(c) ? `#${[...c.slice(1)].map(x => x + x).join('')}` : c).toLowerCase();
 function bubble(colors: unknown, balance: number, floor = -200) {
-    act(() => root.render(createElement(CreditBar, { balance, floor, colors })));
+    act(() => root.render(createElement(CreditBar, { balance, floor, colors }) as any));
     const style = (id: string) => JSON.parse(host.querySelector(`[data-testid="${id}"]`)!.getAttribute('data-style')!);
     return { bg: hex6(style('credit-bar-bubble').backgroundColor), fg: hex6(style('credit-bar-label').color), text: host.querySelector('[data-testid="credit-bar-label"]')!.textContent };
 }

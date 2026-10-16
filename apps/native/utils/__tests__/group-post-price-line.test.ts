@@ -93,7 +93,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const render = async () => {
-    await act(async () => { root.render(createElement(GroupPostScreen)); });
+    await act(async () => { root.render(createElement(GroupPostScreen) as any); });
     for (let i = 0; i < 5; i++) await act(async () => {});
 };
 const text = () => host.textContent ?? '';

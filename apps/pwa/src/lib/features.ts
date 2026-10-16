@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import { featureModeFor, readsOwnData, SHOWCASE_FEATURES, START_COMMUNITY_URL_DEFAULT, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
-import { getCommunityMe, type CommunityInfo } from './api';
+import { getCommunityMe, getTreasuries, type CommunityInfo, type Treasury } from './api';
 import { loadIdentity } from './identity';
 import { communityInfoOnce } from './visitor-lobby-gate';
 
@@ -151,6 +151,19 @@ export function useReadsOwn(feature: ShowcaseFeature, enabled = true): boolean {
         return () => { cancelled = true; };
     }, [feature, enabled]);
     return reads;
+}
+
+/**
+ * The whole enterprise list, read only where the light statuses read (GET /api/enterprises/statuses) failed: an older
+ * node. Not where the node refused that read as `feature_off`, and not where enterprises are a preview for this reader
+ * (the global node, whose list answers the same refusal): there is no enterprise to hide (review of #2035, N1). Null
+ * where it is not read; an empty list where the read fails, as before.
+ */
+export async function treasuriesFallback(statusesError: unknown): Promise<{ treasuries: Treasury[] } | null> {
+    const refusal = statusesError as { status?: number; code?: string } | null;
+    if (refusal?.status === 404 && refusal.code === 'feature_off') return null;
+    if (!(await readsOwn('enterprises'))) return null;
+    return getTreasuries().catch(() => ({ treasuries: [] }));
 }
 
 /** Preview or read-only: the feature lives in a local community for this reader, so its actions carry the marker. */

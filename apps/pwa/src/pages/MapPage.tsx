@@ -53,7 +53,7 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
@@ -675,8 +675,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             .map((t: any) => t.publicKey)
                     );
                     setInactiveEnterpriseKeys(inactiveKeys);
-                }).catch(() => {
-                    getTreasuries().then(res => {
+                }).catch((e) => {
+                    // Never where enterprises are a preview or off (lib/features treasuriesFallback).
+                    treasuriesFallback(e).then(res => {
+                        if (!res) return;
                         const inactiveKeys = new Set(
                             (res?.treasuries || [])
                                 .filter((t: any) => t.paused || t.status === 'winding_up' || t.status === 'completed')

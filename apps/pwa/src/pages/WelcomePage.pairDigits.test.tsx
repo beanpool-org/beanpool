@@ -127,9 +127,14 @@ describe('linking with the phone: the two digits', () => {
         render(<WelcomePage onComplete={vi.fn()} start="restore" />);
         fireEvent.click((await screen.findAllByRole('button', { name: /Link with Mobile App/ }))[0]);
         expect(await screen.findByRole('img', { name: /QR code/ })).toBeTruthy();
-        await act(async () => { vi.advanceTimersByTime(18_000); });
+        // From the countdown the page shows, not from the wall clock: real time also moves these timers, and on a busy
+        // machine whole seconds pass between the code going up and the QR being found (one run in four failed at load 60).
+        const left = () => Number(/Expires in (\d+) seconds/.exec(screen.getByLabelText(/Expires in \d+ seconds/).getAttribute('aria-label') ?? '')?.[1]);
+        await act(async () => { vi.advanceTimersByTime((left() - 103) * 1_000); });
+        expect(left()).toBeGreaterThan(100);
         expect(screen.queryByText(SILENT)).toBeNull();
-        await act(async () => { vi.advanceTimersByTime(3_000); });
+        await act(async () => { vi.advanceTimersByTime(5_000); });
+        expect(left()).toBeLessThanOrEqual(100);
         const hint = screen.getByText(SILENT);
         expect(hint.getAttribute('role')).toBe('status');
         expect(SILENT.exec(hint.textContent ?? '')?.[1]).toBe(window.location.host);

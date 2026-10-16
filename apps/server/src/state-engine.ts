@@ -8735,7 +8735,12 @@ export function getDirectoryInfo(): any {
     };
 
     if (config.publishLocation) {
-        info.serviceRadius = config.serviceRadius;
+        // The centre to two decimals (~1 km), as /api/node/config gives it to anyone but an owner or admin: this is served
+        // unsigned at /api/directory/info and pushed to the directory, and the pin may be the operator's home. An area
+        // needs no closer place to warn a neighbour before they start a second community there.
+        const r = config.serviceRadius;
+        const km = (n: number) => (typeof n === 'number' ? Math.round(n * 100) / 100 : n);
+        info.serviceRadius = r && typeof r === 'object' ? { lat: km(r.lat), lng: km(r.lng), radiusKm: r.radiusKm } : r;
     } else {
         info.serviceRadius = null;
     }

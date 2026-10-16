@@ -554,6 +554,18 @@ async function main(): Promise<void> {
             const areaStale = await get('/api/node/config', null, { 'X-Admin-Session': 'a'.repeat(64) });
             assert(areaStale.status === 200 && JSON.stringify(areaStale.body?.serviceRadius) === rounded,
                 `a session the node doesn't know (a cookie that ran out) still gets the public answer, never a 401 (${areaStale.status} ${JSON.stringify(areaStale.body?.serviceRadius)})`);
+            // Review of #2049, B1: with "publish location" on (the default), the directory preview gives the same centre to
+            // anyone, owner included, as it is what a push sends the directory (getDirectoryInfo).
+            updateNodeConfig({ publishLocation: true });
+            const dirUnsigned = await get('/api/directory/info');
+            assert(dirUnsigned.status === 200 && JSON.stringify(dirUnsigned.body?.serviceRadius) === rounded,
+                `/api/directory/info, unsigned, with publish location on, gives the centre to two decimals (${dirUnsigned.status} ${JSON.stringify(dirUnsigned.body?.serviceRadius)})`);
+            const dirOwner = await get('/api/directory/info', null, { 'X-Admin-Session': ownerSession });
+            assert(dirOwner.status === 200 && JSON.stringify(dirOwner.body?.serviceRadius) === rounded,
+                `and so to an owner: it shows what a push sends (${dirOwner.status} ${JSON.stringify(dirOwner.body?.serviceRadius)})`);
+            const { getDirectoryInfo } = await import('./state-engine.js');
+            assert(JSON.stringify(getDirectoryInfo().serviceRadius) === rounded,
+                `a push to the directory sends it to two decimals (${JSON.stringify(getDirectoryInfo().serviceRadius)})`);
             updateNodeConfig({ serviceRadius: undefined, publishLocation: undefined });
         }
         // Review of #1697, finding 2: a pending listing never takes a saved search's row. Four live matches and the two newest

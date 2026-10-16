@@ -106,7 +106,9 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
             expect(r.amount).toBeGreaterThan(0);
             expect(r.peer).toMatch(/^(a neighbour|the Commons|the Example Valley Bakery)$/);
         }
-        expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'credit', 'debit', 'credit', 'debit']);
+        // No circulation fee row (a member at 85 Beans never pays one): the fourth row is a trade in.
+        expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'credit', 'credit', 'credit', 'debit']);
+        expect(rows.some(r => /fee/i.test(r.memo))).toBe(false);
         expect(JSON.stringify([b, rows])).not.toMatch(/Ʀ/);
     });
 });

@@ -266,27 +266,36 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(host.querySelector('[data-testid="commons-info"]')).not.toBeNull();
         });
 
-        it("My Deals in preview is the member's own sheet fed Example Valley: the deal held safely, the one done; every press opens the sheet", async () => {
+        it("My Deals in preview is the member's own sheet fed Example Valley: the deal waiting on you, the one held safely, the one sold; every press opens the sheet", async () => {
             review.opened = 0;
             await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: true }));
             const sheetText = () => host.querySelector('[data-testid="local-community-sheet"]')?.textContent ?? '';
             expect(host.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
             expect(text()).toContain('Example Valley · an example member');
             const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
+            const held = SAMPLE_COMMUNITY.deals.find(d => d.status === 'held')!;
             const done = SAMPLE_COMMUNITY.deals.find(d => d.status === 'done')!;
-            // In Progress: the deal waiting on you, its Beans held safely, the amount drawn.
+            // In Progress: the deal waiting on you (requested: Action Required) and the one whose Beans are held, amounts drawn.
             expect(text()).toContain(waiting.what);
-            expect(text()).toContain('Held in Trust');
+            expect(text()).toContain('Action Required');
             expect(text()).toContain(String(waiting.amount));
+            expect(text()).toContain(held.what);
+            expect(text()).toContain('Held in Trust');
+            expect(text()).toContain(String(held.amount));
+            const cardText = (id: string) => host.querySelector(`[data-testid="deal-card-${id}-post"]`)?.textContent ?? '';
+            expect(cardText(waiting.id)).toContain('Action Required');
+            expect(cardText(held.id)).toContain('Held in Trust');
             expect(text()).not.toMatch(/Ʀ|🔒/);
             const card = Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(waiting.what)).pop()!;
             await press(card);
             expect(sheetText()).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
             expect(routes.pushed).toEqual([]);
-            // History: the one done, from "an example member" to a neighbour; Review opens the sheet, never the review form.
+            // History: the one done, which the member SOLD, so + 30 as on the Ledger's row; Review opens the sheet, never the review form.
             await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'History')!);
             expect(text()).toContain(done.what);
-            expect(text()).toContain(`- ${done.amount}`);
+            expect(text()).toContain(`+ ${done.amount}`);
+            expect(text()).not.toContain(`- ${done.amount}`);
+            expect(SAMPLE_COMMUNITY.transactions.find(t => t.what === done.what)?.amount).toBe(done.amount);
             await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Review')!);
             expect(sheetText()).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
             expect(review.opened).toBe(0);

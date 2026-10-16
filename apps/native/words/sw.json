@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Msimbo huu hauwezi kusomwa kwa usalama, kwa hivyo hakuna kilichotumwa: tengeneza msimbo mpya kwenye kifaa kingine na uchanganue huo.",
   "OK": "Sawa",
   "Connect to your community first.": "Unganisha na jumuiya yako kwanza.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii: inatumia {own}. Hakuna kilichotumwa. Changanua msimbo unaoonyeshwa na {own} kwenye kifaa kingine, au rejesha akaunti yako huko kwa maneno yako 12.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii. Hakuna kilichotumwa. Ili kutumia akaunti yako huko, irejeshe kwa maneno yako 12.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii: inatumia {own}. Hakuna kilichotumwa. Fungua BeanPool kwenye {own} katika kifaa kingine na uchanganue msimbo huko, au kwanza jiunge na {host} kwenye simu hii, kisha uchanganue tena.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii. Hakuna kilichotumwa. Kwanza jiunge na {host} kwenye simu hii, kisha uchanganue tena, au rejesha akaunti yako huko kwa maneno yako 12.",
   "Confirm it is you to send your account to another device.": "Thibitisha kuwa ni wewe ili kutuma akaunti yako kwenye kifaa kingine.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Simu yako haina kifunga skrini, kwa hivyo BeanPool haitatuma akaunti yako. Weka PIN, mchoro au nywila katika Mipangilio ya simu yako, chini ya Usalama, kisha ujaribu tena.",
   "The phone's unlock did not pass, so nothing was sent.": "Kufungua simu hakukufaulu, kwa hivyo hakuna kilichotumwa.",
@@ -285,5 +285,8 @@
   "The people who run this community's server are alerted even without your words.": "Watu wanaoendesha seva ya jumuiya hii wanaarifiwa hata bila maneno yako.",
   "If a child is in danger right now, call your local emergency number first.": "Ikiwa mtoto yuko hatarini sasa hivi, piga simu ya dharura ya eneo lako kwanza.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Urejeshaji huu ulisitishwa, kutoka kwa simu iliyo na akaunti yako au na urejeshaji mpya ulioanzishwa kwenye kifaa kingine, kwa hivyo hakuna kilichorudi. Ikiwa hukuwa wewe, tumia maneno yako 12.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Urejeshaji huo tayari umekamilika: simu nyingine ina akaunti yako sasa. Ikiwa hukuwa wewe, mtu mwingine ana akaunti yako: hakikisha akaunti ya kuingia iliyotumika ni yako pekee, na uwaombe usaidizi wasimamizi wa jumuiya yako."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Urejeshaji huo tayari umekamilika: simu nyingine ina akaunti yako sasa. Ikiwa hukuwa wewe, mtu mwingine ana akaunti yako: hakikisha akaunti ya kuingia iliyotumika ni yako pekee, na uwaombe usaidizi wasimamizi wa jumuiya yako.",
+  "Link a device": "Unganisha kifaa",
+  "🌍 Join the global community": "🌍 Jiunge na jumuiya ya kimataifa",
+  "Join {host}": "Jiunge na {host}"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "لا يمكن قراءة هذا الرمز بأمان، لذا لم يُرسل شيء: أنشئ رمزًا جديدًا على الجهاز الآخر وامسحه ضوئيًا.",
   "OK": "حسنًا",
   "Connect to your community first.": "اتصل بمجتمعك أولًا.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك: هاتفك يستخدم {own}. لم يُرسل شيء. امسح الرمز الذي يعرضه {own} على الجهاز الآخر، أو استعد حسابك هناك باستخدام كلماتك الـ 12.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك. لم يُرسل شيء. لاستخدام حسابك هناك، استعده باستخدام كلماتك الـ 12.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك: هاتفك يستخدم {own}. لم يُرسل شيء. افتح BeanPool على {own} في الجهاز الآخر وامسح الرمز هناك، أو انضم إلى {host} على هذا الهاتف أولاً، ثم امسح مرة أخرى.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك. لم يُرسل شيء. انضم إلى {host} على هذا الهاتف أولاً، ثم امسح مرة أخرى، أو استعد حسابك هناك باستخدام كلماتك الـ 12.",
   "Confirm it is you to send your account to another device.": "أكّد هويتك لإرسال حسابك إلى جهاز آخر.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "هاتفك لا يحتوي على قفل شاشة، لذا لن يرسل BeanPool حسابك. عيّن رقم تعريف شخصي أو نمطًا أو كلمة مرور في إعدادات هاتفك ضمن الأمان، ثم حاول مجددًا.",
   "The phone's unlock did not pass, so nothing was sent.": "لم يتم إلغاء قفل الهاتف بنجاح، لذا لم يُرسل شيء.",
@@ -301,5 +301,8 @@
   "The people who run this community's server are alerted even without your words.": "يتم تنبيه مديري خادم هذا المجتمع حتى بدون كلماتك.",
   "If a child is in danger right now, call your local emergency number first.": "إذا كان هناك طفل في خطر الآن، فاتصل برقم الطوارئ المحلي أولًا.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "تم إيقاف هذا الاسترداد من هاتف يحتوي على حسابك أو عبر استرداد أحدث بدأ على جهاز آخر، لذا لم يُستعد شيء. إذا لم تكن أنت، فاستخدم كلماتك الـ 12.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "لقد اكتمل ذلك الاسترداد بالفعل: الهاتف الآخر لديه حسابك الآن. إذا لم تكن أنت، فهناك شخص آخر لديه حسابك: تأكد من أن حساب تسجيل الدخول المستخدم يخصك وحدك، واطلب المساعدة من مشرفي مجتمعك."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "لقد اكتمل ذلك الاسترداد بالفعل: الهاتف الآخر لديه حسابك الآن. إذا لم تكن أنت، فهناك شخص آخر لديه حسابك: تأكد من أن حساب تسجيل الدخول المستخدم يخصك وحدك، واطلب المساعدة من مشرفي مجتمعك.",
+  "Link a device": "ربط جهاز",
+  "🌍 Join the global community": "🌍 انضم إلى المجتمع العالمي",
+  "Join {host}": "انضم إلى {host}"
 }

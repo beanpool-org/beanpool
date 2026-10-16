@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "این کد را نمی‌توان به‌طور ایمن خواند، بنابراین چیزی ارسال نشد: در دستگاه دیگر یک کد جدید بسازید و آن را اسکن کنید.",
   "OK": "تأیید",
   "Connect to your community first.": "ابتدا به جامعهٔ خود متصل شوید.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "این کد از {host} است، سروری که تلفن شما از آن استفاده نمی‌کند: تلفن شما از {own} استفاده می‌کند. چیزی ارسال نشد. کدی را که {own} روی دستگاه دیگر نشان می‌دهد اسکن کنید، یا حساب خود را با ۱۲ کلمه خود در آنجا بازیابی کنید.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "این کد از {host} است، سروری که تلفن شما از آن استفاده نمی‌کند. چیزی ارسال نشد. برای استفاده از حساب خود در آنجا، آن را با ۱۲ کلمه خود بازیابی کنید.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "این کد از {host} است، سروری که تلفن شما از آن استفاده نمی‌کند: تلفن شما از {own} استفاده می‌کند. چیزی ارسال نشد. در دستگاه دیگر BeanPool را در {own} باز کنید و کد را آنجا اسکن کنید، یا ابتدا در این تلفن به {host} بپیوندید و سپس دوباره اسکن کنید.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "این کد از {host} است، سروری که تلفن شما از آن استفاده نمی‌کند. چیزی ارسال نشد. ابتدا در این تلفن به {host} بپیوندید و سپس دوباره اسکن کنید، یا حساب خود را با ۱۲ کلمه خود در آنجا بازیابی کنید.",
   "Confirm it is you to send your account to another device.": "تأیید کنید خودتان هستید تا حسابتان به دستگاه دیگری فرستاده شود.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "تلفن شما قفل صفحه ندارد، بنابراین BeanPool حسابتان را ارسال نمی‌کند. در تنظیمات تلفن در بخش امنیت، یک پین، الگو یا گذرواژه تعیین کنید، سپس دوباره امتحان کنید.",
   "The phone's unlock did not pass, so nothing was sent.": "قفل‌گشایی تلفن انجام نشد، بنابراین چیزی ارسال نشد.",
@@ -285,5 +285,8 @@
   "The people who run this community's server are alerted even without your words.": "مدیران سرور این جامعه حتی بدون پیام شما نیز مطلع می‌شوند.",
   "If a child is in danger right now, call your local emergency number first.": "اگر کودکی همین الان در خطر است، ابتدا با شماره‌های اضطراری محلی تماس بگیرید.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "این بازیابی از طریق تلفنی که حسابتان را دارد یا با یک بازیابی جدیدتر متوقف شد، بنابراین حسابی بازنگشت. اگر کار شما نبود، از ۱۲ کلمه خود استفاده کنید.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "آن بازیابی قبلاً انجام شده است: تلفن دیگر اکنون حسابتان را دارد. اگر کار شما نبود، شخص دیگری حسابتان را دارد: مطمئن شوید حساب ورود تنها مال شماست و از مدیران کمک بخواهید."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "آن بازیابی قبلاً انجام شده است: تلفن دیگر اکنون حسابتان را دارد. اگر کار شما نبود، شخص دیگری حسابتان را دارد: مطمئن شوید حساب ورود تنها مال شماست و از مدیران کمک بخواهید.",
+  "Link a device": "اتصال دستگاه",
+  "🌍 Join the global community": "🌍 پیوستن به جامعهٔ جهانی",
+  "Join {host}": "پیوستن به {host}"
 }

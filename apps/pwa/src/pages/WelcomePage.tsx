@@ -2605,7 +2605,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 <div style={{ fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>{t('How to scan:')}</div>
                                 <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                                     <li><BoldWords text={t('Open **BeanPool** on your mobile phone')} /></li>
-                                    <li><BoldWords text={t('Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)')} /></li>
+                                    <li><BoldWords text={t('Go to **Settings → Link a device** (older apps: **Use your account on another device**)')} /></li>
                                     <li>{t('Point camera at this screen')}</li>
                                 </ol>
                             </div>

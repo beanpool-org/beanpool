@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "এই কোডটি নিরাপদে পড়া যায়নি, তাই কিছুই পাঠানো হয়নি: অন্য ডিভাইসে একটি নতুন কোড তৈরি করুন এবং সেটি স্ক্যান করুন।",
   "OK": "ঠিক আছে",
   "Connect to your community first.": "প্রথমে আপনার কমিউনিটির সঙ্গে যুক্ত হন।",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "এই কোডটি {host} থেকে এসেছে, যা আপনার ফোন ব্যবহার করে না: এটি {own} ব্যবহার করে। কিছুই পাঠানো হয়নি। অন্য ডিভাইসে {own} যে কোডটি দেখায় তা স্ক্যান করুন, অথবা সেখানে আপনার 12 শব্দ দিয়ে অ্যাকাউন্ট ফিরিয়ে আনুন।",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "এই কোডটি {host} থেকে এসেছে, যা আপনার ফোন ব্যবহার করে না। কিছুই পাঠানো হয়নি। সেখানে আপনার অ্যাকাউন্ট ব্যবহার করতে 12 শব্দ দিয়ে তা ফিরিয়ে আনুন।",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "এই কোডটি {host} থেকে এসেছে, যা আপনার ফোন ব্যবহার করে না: এটি {own} ব্যবহার করে। কিছুই পাঠানো হয়নি। অন্য ডিভাইসে {own}-এ BeanPool খুলে সেখানকার কোডটি স্ক্যান করুন, অথবা আগে এই ফোনে {host}-এ যোগ দিন, তারপর আবার স্ক্যান করুন।",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "এই কোডটি {host} থেকে এসেছে, যা আপনার ফোন ব্যবহার করে না। কিছুই পাঠানো হয়নি। আগে এই ফোনে {host}-এ যোগ দিন, তারপর আবার স্ক্যান করুন, অথবা সেখানে আপনার 12 শব্দ দিয়ে অ্যাকাউন্ট ফিরিয়ে আনুন।",
   "Confirm it is you to send your account to another device.": "অন্য ডিভাইসে অ্যাকাউন্ট পাঠাতে এটি যে আপনি তা নিশ্চিত করুন।",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "আপনার ফোনে স্ক্রিন লক নেই, তাই BeanPool আপনার অ্যাকাউন্ট পাঠাবে না। ফোনের সেটিংসে গিয়ে সিকিউরিটির অধীনে একটি পিন, প্যাটার্ন বা পাসওয়ার্ড সেট করুন, তারপর আবার চেষ্টা করুন।",
   "The phone's unlock did not pass, so nothing was sent.": "ফোনের আনলক সফল হয়নি, তাই কিছুই পাঠানো হয়নি।",
@@ -285,5 +285,8 @@
   "The people who run this community's server are alerted even without your words.": "আপনার কথা ছাড়াই কমিউনিটির সার্ভার পরিচালকদের সতর্ক করা হয়েছে।",
   "If a child is in danger right now, call your local emergency number first.": "কোনো শিশু এখনই বিপদে থাকলে প্রথমে স্থানীয় জরুরি নম্বরে কল করুন।",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "আপনার অ্যাকাউন্ট আছে এমন ফোন থেকে বা অন্য ডিভাইসে শুরু হওয়া নতুন রিস্টোরের কারণে এটি বন্ধ করা হয়েছে, তাই কিছুই ফিরে আসেনি। এটি আপনি না হলে 12 শব্দ ব্যবহার করুন।",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "সেই রিস্টোর ইতিমধ্যে সম্পন্ন হয়েছে: অন্য ফোনে এখন আপনার অ্যাকাউন্ট রয়েছে। এটি আপনি না হলে অন্য কেউ আপনার অ্যাকাউন্ট নিয়েছে: সাইন-ইন অ্যাকাউন্টটি শুধু আপনার কিনা নিশ্চিত করুন এবং অ্যাডমিনদের সাহায্য নিন।"
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "সেই রিস্টোর ইতিমধ্যে সম্পন্ন হয়েছে: অন্য ফোনে এখন আপনার অ্যাকাউন্ট রয়েছে। এটি আপনি না হলে অন্য কেউ আপনার অ্যাকাউন্ট নিয়েছে: সাইন-ইন অ্যাকাউন্টটি শুধু আপনার কিনা নিশ্চিত করুন এবং অ্যাডমিনদের সাহায্য নিন।",
+  "Link a device": "ডিভাইস যুক্ত করুন",
+  "🌍 Join the global community": "🌍 বৈশ্বিক কমিউনিটিতে যোগ দিন",
+  "Join {host}": "{host}-এ যোগ দিন"
 }

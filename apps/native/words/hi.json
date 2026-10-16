@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "इस कोड को सुरक्षित रूप से नहीं पढ़ा जा सका, इसलिए कुछ भी नहीं भेजा गया: दूसरी डिवाइस पर एक नया कोड बनाएँ और उसे स्कैन करें।",
   "OK": "ठीक है",
   "Connect to your community first.": "पहले अपने समुदाय से जुड़ें।",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता: यह {own} का उपयोग करता है। कुछ भी नहीं भेजा गया। दूसरी डिवाइस पर वह कोड स्कैन करें जो {own} दिखाता है, या अपने 12 शब्दों से वहाँ अपना खाता पुनर्स्थापित करें।",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता। कुछ भी नहीं भेजा गया। वहाँ अपने खाते का उपयोग करने के लिए, इसे अपने 12 शब्दों से पुनर्स्थापित करें।",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता: यह {own} का उपयोग करता है। कुछ भी नहीं भेजा गया। दूसरी डिवाइस पर {own} पर BeanPool खोलें और वहाँ कोड स्कैन करें, या पहले इस फ़ोन पर {host} से जुड़ें, फिर दोबारा स्कैन करें।",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता। कुछ भी नहीं भेजा गया। पहले इस फ़ोन पर {host} से जुड़ें, फिर दोबारा स्कैन करें, या अपने 12 शब्दों से वहाँ अपना खाता पुनर्स्थापित करें।",
   "Confirm it is you to send your account to another device.": "अपने खाते को किसी अन्य डिवाइस पर भेजने के लिए पुष्टि करें कि यह आप ही हैं।",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "आपके फ़ोन में कोई स्क्रीन लॉक नहीं है, इसलिए BeanPool आपका खाता नहीं भेजेगा। अपने फ़ोन की सेटिंग में 'सुरक्षा' के अंतर्गत पिन, पैटर्न या पासवर्ड सेट करें, फिर पुनः प्रयास करें।",
   "The phone's unlock did not pass, so nothing was sent.": "फ़ोन का अनलॉक पास नहीं हुआ, इसलिए कुछ भी नहीं भेजा गया।",
@@ -285,5 +285,8 @@
   "The people who run this community's server are alerted even without your words.": "आपके शब्दों के बिना भी इस समुदाय के सर्वर को चलाने वाले लोगों को सचेत कर दिया जाता है।",
   "If a child is in danger right now, call your local emergency number first.": "यदि कोई बच्चा अभी खतरे में है, तो पहले अपने स्थानीय आपातकालीन नंबर पर कॉल करें।",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "यह पुनर्स्थापना उस फ़ोन से रोक दी गई थी जिसमें आपका खाता है या किसी अन्य डिवाइस पर शुरू की गई नई पुनर्स्थापना द्वारा, इसलिए कुछ भी वापस नहीं आया। यदि वह आप नहीं थे, तो अपने 12 शब्दों का उपयोग करें।",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "वह पुनर्स्थापना पहले ही हो चुकी है: दूसरे फ़ोन के पास अब आपका खाता है। यदि वह आप नहीं थे, तो किसी और के पास आपका खाता है: सुनिश्चित करें कि इस्तेमाल किया गया साइन-इन खाता केवल आपका है, और अपने समुदाय के एडमिन से मदद माँगें।"
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "वह पुनर्स्थापना पहले ही हो चुकी है: दूसरे फ़ोन के पास अब आपका खाता है। यदि वह आप नहीं थे, तो किसी और के पास आपका खाता है: सुनिश्चित करें कि इस्तेमाल किया गया साइन-इन खाता केवल आपका है, और अपने समुदाय के एडमिन से मदद माँगें।",
+  "Link a device": "डिवाइस जोड़ें",
+  "🌍 Join the global community": "🌍 वैश्विक समुदाय से जुड़ें",
+  "Join {host}": "{host} से जुड़ें"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "Огонь",
   "Free\u0004price": "Бесплатно",
   "Gallery": "Галерея",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "Откройте **Настройки → Использовать аккаунт на другом устройстве** (в старых версиях: **Связать другое устройство**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "Откройте **Настройки → Привязать устройство** (в старых версиях: **Use your account on another device**)",
   "Going": "Пойду",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "Есть код приглашения или вы отсканировали QR? Введите его ниже вместе с выбранным позывным, чтобы присоединиться.",
   "Green Bean": "Зелёный боб",
@@ -478,5 +478,6 @@
   "That did not go through. Try again.": "Не удалось выполнить. Попробуйте ещё раз.",
   "Type the two digits your phone shows": "Введите две цифры, которые показывает телефон",
   "Confirm": "Подтвердить",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ваш аккаунт откроется здесь только после ввода правильных цифр. После трёх неверных попыток ничего не будет отправлено."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ваш аккаунт откроется здесь только после ввода правильных цифр. После трёх неверных попыток ничего не будет отправлено.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "С вашего телефона пока ничего не пришло. Этот код от {host}. Если телефон пишет, что код от сервера, который он не использует, откройте BeanPool по адресу вашего сообщества или сначала вступите в {host} на телефоне, а затем отсканируйте снова. Если телефон не показывает цифры, обновите на нём приложение BeanPool, а затем отсканируйте снова."
 }

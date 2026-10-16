@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Kode ini tidak dapat dibaca dengan aman, jadi tidak ada yang dikirim: buat kode baru di perangkat lain dan pindai kode tersebut.",
   "OK": "Oke",
   "Connect to your community first.": "Hubungkan ke komunitasmu terlebih dahulu.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Kode ini berasal dari {host}, server yang tidak digunakan ponselmu: ponselmu menggunakan {own}. Tidak ada yang dikirim. Pindai kode yang ditampilkan {own} di perangkat lain, atau pulihkan akunmu di sana dengan 12 katamu.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Kode ini berasal dari {host}, server yang tidak digunakan ponselmu. Tidak ada yang dikirim. Untuk menggunakan akunmu di sana, pulihkan dengan 12 katamu.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Kode ini berasal dari {host}, server yang tidak digunakan ponselmu: ponselmu menggunakan {own}. Tidak ada yang dikirim. Buka BeanPool di {own} pada perangkat lain dan pindai kodenya di sana, atau gabung dulu ke {host} di ponsel ini, lalu pindai lagi.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Kode ini berasal dari {host}, server yang tidak digunakan ponselmu. Tidak ada yang dikirim. Gabung dulu ke {host} di ponsel ini, lalu pindai lagi, atau pulihkan akunmu di sana dengan 12 katamu.",
   "Confirm it is you to send your account to another device.": "Konfirmasikan bahwa ini kamu untuk mengirim akunmu ke perangkat lain.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Ponselmu tidak memiliki kunci layar, jadi BeanPool tidak akan mengirim akunmu. Atur PIN, pola, atau kata sandi di Pengaturan ponsel, bagian Keamanan, lalu coba lagi.",
   "The phone's unlock did not pass, so nothing was sent.": "Buka kunci ponsel gagal, jadi tidak ada yang dikirim.",
@@ -281,5 +281,8 @@
   "The people who run this community's server are alerted even without your words.": "Pengelola server komunitas ini diberi tahu meskipun tanpa pesanmu.",
   "If a child is in danger right now, call your local emergency number first.": "Jika ada anak dalam bahaya saat ini, segera hubungi nomor darurat setempat terlebih dahulu.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Pemulihan ini dihentikan dari ponsel yang memiliki akunmu atau oleh pemulihan lebih baru di perangkat lain, jadi tidak ada yang dipulihkan. Jika itu bukan kamu, gunakan 12 katamu.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Pemulihan itu sudah berhasil: ponsel lain kini memiliki akunmu. Jika itu bukan kamu, orang lain telah menguasai akunmu: pastikan akun masuk yang digunakan hanya milikmu, dan minta bantuan admin komunitas."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Pemulihan itu sudah berhasil: ponsel lain kini memiliki akunmu. Jika itu bukan kamu, orang lain telah menguasai akunmu: pastikan akun masuk yang digunakan hanya milikmu, dan minta bantuan admin komunitas.",
+  "Link a device": "Tautkan perangkat",
+  "🌍 Join the global community": "🌍 Gabung ke komunitas global",
+  "Join {host}": "Gabung ke {host}"
 }

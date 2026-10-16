@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Αυτός ο κωδικός δεν μπορεί να διαβαστεί με ασφάλεια, οπότε δεν στάλθηκε τίποτα: δημιουργήστε νέο κωδικό στην άλλη συσκευή και σαρώστε τον.",
   "OK": "OK",
   "Connect to your community first.": "Συνδεθείτε πρώτα στην κοινότητά σας.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Αυτός ο κωδικός προέρχεται από τον διακομιστή {host}, τον οποίο το τηλέφωνό σας δεν χρησιμοποιεί: χρησιμοποιεί τον {own}. Δεν στάλθηκε τίποτα. Σαρώστε τον κωδικό που δείχνει ο {own} στην άλλη συσκευή ή επαναφέρετε τον λογαριασμό σας εκεί με τις 12 λέξεις σας.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Αυτός ο κωδικός προέρχεται από τον διακομιστή {host}, τον οποίο το τηλέφωνό σας δεν χρησιμοποιεί. Δεν στάλθηκε τίποτα. Για να χρησιμοποιήσετε τον λογαριασμό σας εκεί, επαναφέρετε τον με τις 12 λέξεις σας.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Αυτός ο κωδικός προέρχεται από τον διακομιστή {host}, τον οποίο το τηλέφωνό σας δεν χρησιμοποιεί: χρησιμοποιεί τον {own}. Δεν στάλθηκε τίποτα. Ανοίξτε το BeanPool στον {own} στην άλλη συσκευή και σαρώστε τον κωδικό εκεί, ή εγγραφείτε πρώτα στον {host} από αυτό το τηλέφωνο και μετά σαρώστε ξανά.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Αυτός ο κωδικός προέρχεται από τον διακομιστή {host}, τον οποίο το τηλέφωνό σας δεν χρησιμοποιεί. Δεν στάλθηκε τίποτα. Εγγραφείτε πρώτα στον {host} από αυτό το τηλέφωνο και μετά σαρώστε ξανά, ή επαναφέρετε τον λογαριασμό σας εκεί με τις 12 λέξεις σας.",
   "Confirm it is you to send your account to another device.": "Επιβεβαιώστε ότι είστε εσείς για να στείλετε τον λογαριασμό σας σε άλλη συσκευή.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Το τηλέφωνό σας δεν έχει κλείδωμα οθόνης, οπότε το BeanPool δεν θα στείλει τον λογαριασμό σας. Ορίστε PIN, μοτίβο ή κωδικό στις Ρυθμίσεις του τηλεφώνου, στην Ασφάλεια, και δοκιμάστε ξανά.",
   "The phone's unlock did not pass, so nothing was sent.": "Το ξεκλείδωμα του τηλεφώνου απέτυχε, οπότε δεν στάλθηκε τίποτα.",
@@ -285,5 +285,8 @@
   "The people who run this community's server are alerted even without your words.": "Οι διαχειριστές του διακομιστή της κοινότητας ειδοποιούνται ακόμη και χωρίς τα λόγια σας.",
   "If a child is in danger right now, call your local emergency number first.": "Αν ένα παιδί βρίσκεται σε άμεσο κίνδυνο, καλέστε πρώτα τον τοπικό αριθμό έκτακτης ανάγκης.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Αυτή η επαναφορά διακόπηκε από τηλέφωνο που έχει τον λογαριασμό σας ή από νεότερη επαναφορά σε άλλη συσκευή, οπότε τίποτα δεν επανήλθε. Αν δεν ήσασταν εσείς, χρησιμοποιήστε τις 12 λέξεις σας.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Εκείνη η επαναφορά έχει ήδη ολοκληρωθεί: το άλλο τηλέφωνο έχει τώρα τον λογαριασμό σας. Αν δεν ήσασταν εσείς, κάποιος άλλος έχει τον λογαριασμό σας: βεβαιωθείτε ότι ο λογαριασμός σύνδεσης ανήκει αποκλειστικά σε εσάς και ζητήστε βοήθεια από τους διαχειριστές της κοινότητας."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Εκείνη η επαναφορά έχει ήδη ολοκληρωθεί: το άλλο τηλέφωνο έχει τώρα τον λογαριασμό σας. Αν δεν ήσασταν εσείς, κάποιος άλλος έχει τον λογαριασμό σας: βεβαιωθείτε ότι ο λογαριασμός σύνδεσης ανήκει αποκλειστικά σε εσάς και ζητήστε βοήθεια από τους διαχειριστές της κοινότητας.",
+  "Link a device": "Σύνδεση συσκευής",
+  "🌍 Join the global community": "🌍 Εγγραφή στην παγκόσμια κοινότητα",
+  "Join {host}": "Εγγραφή στον {host}"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,8 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Цей код не вдалося безпечно прочитати, тому нічого не відправлено: створіть новий код на іншому пристрої та відскануйте його.",
   "OK": "OK",
   "Connect to your community first.": "Спочатку підключіться до своєї спільноти.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Цей код із сервера {host}, який ваш телефон не використовує: він використовує {own}. Нічого не надіслано. Відскануйте код, який {own} показує на іншому пристрої, або відновіть обліковий запис там за допомогою 12 слів.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Цей код із сервера {host}, який ваш телефон не використовує. Нічого не надіслано. Щоб використовувати свій акаунт там, відновіть його за допомогою 12 слів.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Цей код із сервера {host}, який ваш телефон не використовує: він використовує {own}. Нічого не надіслано. Відкрийте BeanPool на {own} на іншому пристрої та відскануйте код там або спершу приєднайтеся до {host} на цьому телефоні, а тоді відскануйте знову.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Цей код із сервера {host}, який ваш телефон не використовує. Нічого не надіслано. Спершу приєднайтеся до {host} на цьому телефоні, а тоді відскануйте знову, або відновіть обліковий запис там за допомогою 12 слів.",
   "Confirm it is you to send your account to another device.": "Підтвердьте, що це ви, щоб надіслати свій акаунт на інший пристрій.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "На вашому телефоні немає блокування екрана, тому BeanPool не надсилатиме ваш акаунт. Установіть PIN-код, графічний ключ або пароль у Налаштуваннях телефону (розділ «Безпека») та повторіть спробу.",
   "The phone's unlock did not pass, so nothing was sent.": "Розблокування телефону не вдалося, тому нічого не надіслано.",
@@ -293,5 +293,8 @@
   "The people who run this community's server are alerted even without your words.": "Адміністратори сервера цієї спільноти отримають сповіщення навіть без вашого тексту.",
   "If a child is in danger right now, call your local emergency number first.": "Якщо дитина перебуває в небезпеці просто зараз, спочатку зателефонуйте до місцевої служби екстреної допомоги.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Це відновлення було зупинено з телефона з вашим акаунтом або через нове відновлення на іншому пристрої, тому нічого не повернуто. Якщо це були не ви, використайте 12 слів.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Це відновлення вже відбулося: на іншому телефоні тепер ваш акаунт. Якщо це були не ви, ваш акаунт у когось іншого: переконайтеся, що використаний обліковий запис належить лише вам, і зверніться по допомогу до адміністраторів спільноти."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Це відновлення вже відбулося: на іншому телефоні тепер ваш акаунт. Якщо це були не ви, ваш акаунт у когось іншого: переконайтеся, що використаний обліковий запис належить лише вам, і зверніться по допомогу до адміністраторів спільноти.",
+  "Link a device": "Під’єднати пристрій",
+  "🌍 Join the global community": "🌍 Приєднатися до глобальної спільноти",
+  "Join {host}": "Приєднатися до {host}"
 }

@@ -307,6 +307,29 @@ async function main() {
     px.close();
     await nodeZ.stop();
 
+    // ── 8. Stale pinnedPeerId on /p2p/ connector dropped in migrateConnector (N5) ──
+    const staleP2pAddr = `/ip4/127.0.0.1/tcp/1234/p2p/${peerIdY}`;
+    fs.writeFileSync(CONNECTORS_PATH, JSON.stringify([{
+        address: staleP2pAddr,
+        trustLevel: 'peer',
+        enabled: true,
+        pinnedPeerId: peerIdX, // stale pin
+    }], null, 2));
+
+    cm.loadConnectors();
+
+    const migrated = cm.getConnectorByAddress(staleP2pAddr);
+    assert(migrated?.pinnedPeerId === undefined,
+        `8a. stale pinnedPeerId was dropped for /p2p/ connector (got ${migrated?.pinnedPeerId})`);
+    assert(cm.isPeerTrusted(peerIdY).trusted === true,
+        `8b. peer ID in address is trusted`);
+    assert(cm.isPeerTrusted(peerIdX).trusted === false,
+        `8c. stale pinned peer ID is NOT trusted`);
+
+    const diskAfterMigration = JSON.parse(fs.readFileSync(CONNECTORS_PATH, 'utf-8'));
+    assert(diskAfterMigration[0]?.pinnedPeerId === undefined,
+        `8d. stale pinnedPeerId was removed from disk on migration`);
+
     // Cleanup
     await localNode.stop();
     await nodeY.stop();

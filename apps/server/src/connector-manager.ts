@@ -199,6 +199,12 @@ function migrateConnector(c: any): ConnectorConfig {
         c.publicUrl = derivePublicUrl(c.address);
     }
 
+    // Drop redundant pinnedPeerId if address itself names a node (/p2p/)
+    if (c.pinnedPeerId && c.address && peerIdFromAddress(c.address)) {
+        logger.info('P2P', `[Connectors] Dropped redundant pinnedPeerId for ${c.callsign || c.address}: address itself names node`);
+        delete c.pinnedPeerId;
+    }
+
     return c as ConnectorConfig;
 }
 
@@ -235,6 +241,7 @@ export function loadConnectors(): void {
             const needsMigration = dropped.length > 0 || kept.some((c: any) => {
                 if (['credit_verification', 'read_only'].includes(c.trustLevel)) return true;
                 if (c.address && c.address.includes(',')) return true;
+                if (c.pinnedPeerId && c.address && peerIdFromAddress(c.address)) return true;
                 const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
                 if (!current || current.startsWith('https:///')) {
                     return derivePublicUrl(c.address) !== current;

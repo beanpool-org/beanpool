@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "ارقام اشتباه زیادی وارد شد، بنابراین چیزی ارسال نشد. کد جدیدی ایجاد کرده و دوباره امتحان کنید.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "انقضای آن کد تمام شده است، بنابراین چیزی ارسال نشد. کد جدید بسازید و دوباره امتحان کنید.",
   "That did not go through. Try again.": "انجام نشد. دوباره امتحان کنید.",
-  "Type the two digits your phone shows": "دو رقمی را که تلفنتان نشان می‌دهد تایپ کنید",
+  "Type the four digits your phone shows": "چهار رقمی را که تلفنتان نشان می‌دهد تایپ کنید",
   "Confirm": "تأیید",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "حساب شما در اینجا تنها پس از ورود ارقام صحیح باز می‌شود. با سه بار تلاش اشتباه، چیزی ارسال نمی‌شود.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "هنوز چیزی از تلفن شما نرسیده است. این کد از {host} است. اگر تلفن شما می‌گوید این کد از سروری است که از آن استفاده نمی‌کند، BeanPool را در نشانی جامعهٔ خودتان باز کنید، یا ابتدا در تلفن خود به {host} بپیوندید و سپس دوباره اسکن کنید. اگر تلفن شما هیچ رقمی نشان نمی‌دهد، برنامهٔ BeanPool را روی آن به‌روز کنید و سپس دوباره اسکن کنید."

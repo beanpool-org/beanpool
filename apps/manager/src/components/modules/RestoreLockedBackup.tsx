@@ -1,23 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
-import { restoreShortfall, shortfallSuffix } from '../../lib/backup-shortfall';
+import { restoreDoneWords } from '../../lib/restore-words';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
 
 /**
  * Restore → a locked backup (`.bpsealed`, sealed-keys.md §6.2). The server has read the file's public header and said
- * who can open it; this asks for one of them: the printed recovery code (slice 3's X-Recovery-Code), or an owner's
- * phone (slice 6: the file waits on the server, the owner scans a QR, the phone opens it for this server). A backup's
- * keys bring back the community's admin password, so this server's own stops working part-way: the phone path follows
- * the restore with the one-time follow token the upload answered, and says "restarting" when the server goes quiet.
+ * who can open it; this is the confirmation (design case 18 §3.4, no window confirm(): the proof is the confirmation).
+ * It shows the file's community and the machine that locked it beside this server's own (the shell's prompt does the
+ * same, #2017: a file's code and owner stanzas are whoever sealed it, so "it opened" proves nothing about this
+ * community), says what is lost and that a restore point is taken first, then asks for one way to open it: the printed
+ * recovery code (X-Recovery-Code), or an owner's phone (the file waits on the server, the owner scans a QR, the phone
+ * opens it for this server). A backup's keys bring back the community's admin password, so this server's own stops
+ * working part-way: the phone path follows the restore with the one-time follow token the upload answered, and says
+ * "restarting" when the server goes quiet.
  */
 
 export interface LockedBackupInfo {
     envelopeId?: string;
     createdAt?: string;
     opensWith?: string;
+    /** The file's community (its genesis communityId), from the header. */
+    communityId?: string;
+    /** The node key that locked the file (its PeerId), from the header. */
+    sealedBy?: string;
+}
+
+/** This server's own community and node key (GET /api/local/admin/backup-enroll), to set beside the file's. */
+interface ThisServer {
+    communityId: string | null;
+    peerId: string | null;
 }
 
 function day(iso: string | undefined): string {
@@ -27,6 +41,18 @@ function day(iso: string | undefined): string {
 }
 
 const BTN = 'min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50';
+
+/** What the two IDs say together, in one line; null while this server's own are not known. */
+function verdict(backup: LockedBackupInfo, here: ThisServer | null): string | null {
+    if (!here || !here.communityId || !backup.communityId) return null;
+    if (backup.communityId !== here.communityId) {
+        return "A different community's backup. Restoring it replaces the community on this server with that one.";
+    }
+    if (here.peerId && backup.sealedBy && backup.sealedBy !== here.peerId) {
+        return 'This community\'s backup, locked by another machine.';
+    }
+    return 'This community\'s backup, locked by this server.';
+}
 
 export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canUsePhone, onDone, onCancel, pollMs = 2000 }: {
     activeNode: NodeProfile;
@@ -43,19 +69,32 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const [error, setError] = useState<string | null>(null);
     const [phone, setPhone] = useState<OwnerPhoneSession | null>(null);
     const [restarting, setRestarting] = useState(false);
+    const [here, setHere] = useState<ThisServer | null>(null);
+    const [hereUnknown, setHereUnknown] = useState(false);
     const restartingRef = useRef(false);
     const onDoneRef = useRef(onDone);
     onDoneRef.current = onDone;
 
-    /**
-     * What a restore that did not come back whole has to say. Shared with `ApplianceSection`'s own restore
-     * path (`../../lib/backup-shortfall`), which takes the same answer from the same route.
-     *
-     * A restore that is short of photos still answers `success: true` — the database IS in and the node IS
-     * restarting — so the only place the operator can learn of it is here. Without it they find out at the
-     * first 503.
-     */
-    const shortfall = (body: unknown): string => shortfallSuffix(restoreShortfall(body));
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-enroll'), {
+                    method: 'GET', headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (res.ok && typeof data.communityId === 'string') {
+                    setHere({ communityId: data.communityId, peerId: typeof data.primaryPeerId === 'string' ? data.primaryPeerId : null });
+                } else {
+                    setHereUnknown(true);
+                }
+            } catch {
+                if (!cancelled) setHereUnknown(true);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [activeNode]);
 
     const upload = async (extra: Record<string, string>) => {
         const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
@@ -72,7 +111,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
         setError(null);
         try {
             const { res, data } = await upload({ 'X-Recovery-Code': code });
-            if (res.ok) onDone('Backup restored. The server restarts to load it; sign in again with the community\'s admin password.' + shortfall(data));
+            if (res.ok) onDone(restoreDoneWords(data));
             else setError(typeof data.error === 'string' ? data.error : `The server answered HTTP ${res.status}.`);
         } catch (err: unknown) {
             setError(`The server did not answer: ${err instanceof Error ? err.message : String(err)}`);
@@ -109,13 +148,13 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
                 if (data.state === 'restored') {
-                    onDoneRef.current(`Backup restored, opened by ${data.unlockedBy}'s phone. The server restarts to load it; sign in again with the community's admin password.${shortfall(data.result)}`);
+                    onDoneRef.current(restoreDoneWords(data.result, String(data.unlockedBy || 'an owner')));
                     return;
                 }
                 if (data.state === 'failed') { setError(data.error || 'The restore failed.'); setPhone(null); return; }
                 if (data.state === 'expired' || data.state === 'closed' || data.state === 'gone' || res.status === 401) {
                     // After the restore the server restarts and forgets the session: that is not a failure to report.
-                    if (restartingRef.current) { onDoneRef.current('The server restarted with the restored backup. Sign in again with the community\'s admin password.'); return; }
+                    if (restartingRef.current) { onDoneRef.current('The server restarted with the restored backup. A restore point of the server as it was is kept: you can roll back from Backups & Restore. Sign in again.'); return; }
                     setError('The code ran out before a phone used it. Try again.');
                     setPhone(null);
                     return;
@@ -141,10 +180,37 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
         onCancel();
     };
 
+    const said = verdict(backup, here);
+    const idRow = (label: string, fileValue: string | undefined, serverValue: string | null | undefined, testId: string) => (
+        <div className="space-y-0.5" data-testid={testId}>
+            <dt className="text-nature-400">{label}</dt>
+            <dd className="m-0 font-mono text-white">This backup: {fileValue || 'not stated'}</dd>
+            <dd className="m-0 font-mono text-nature-300">
+                This server: {here ? (serverValue || 'not known') : hereUnknown ? 'could not be read' : 'reading…'}
+            </dd>
+        </div>
+    );
+
     return (
         <div className="space-y-3 text-xs text-nature-200 min-w-0" data-testid="restore-locked-backup" style={{ overflowWrap: 'anywhere' }}>
-            <p className="m-0 text-sm text-white font-bold">This backup is locked.</p>
-            <p className="m-0">Made {day(backup.createdAt)}. It opens with: {backup.opensWith || 'its owners or the recovery code'}.</p>
+            <p className="m-0 text-sm text-white font-bold">Restore this backup?</p>
+            <dl className="m-0 space-y-2" data-testid="restore-confirmation">
+                <div className="space-y-0.5">
+                    <dt className="text-nature-400">File</dt>
+                    <dd className="m-0 text-white">{file.name}, made {day(backup.createdAt)}</dd>
+                </div>
+                {idRow('Community', backup.communityId, here?.communityId, 'restore-community')}
+                {idRow('Locked by (node key)', backup.sealedBy, here?.peerId, 'restore-signer')}
+                <div className="space-y-0.5">
+                    <dt className="text-nature-400">Opens with</dt>
+                    <dd className="m-0 text-white">{backup.opensWith || 'its owners or the recovery code'}</dd>
+                </div>
+            </dl>
+            {said && <p className="m-0 text-white font-bold" data-testid="restore-verdict">{said}</p>}
+            <p className="m-0 p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-bp-ink-terra">
+                Everything on this server since {day(backup.createdAt)} will be lost. A restore point is taken first: you can roll
+                back from Backups &amp; Restore (Restore points), or on the server with <code className="font-mono">beanpool restore-point</code>.
+            </p>
             {error && <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-200">{error}</div>}
             {restarting && <p className="m-0 text-amber-200" aria-live="polite">The server is restarting with the restored backup…</p>}
             {phone ? (

@@ -43,6 +43,8 @@ export interface LocalConfig {
     totpEnabled?: boolean;
     totpSecret?: string | null;
     totpBackupCodesHashes?: string[];
+    /** The time step of the last 2FA code accepted for totpSecret (totp.ts useTotpCode): a number, never a code. */
+    totpLastAcceptedStep?: number;
     totpPendingSecret?: string | null;
     totpPendingBackupCodesHashes?: string[];
     thresholds?: Thresholds;

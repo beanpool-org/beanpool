@@ -8,7 +8,7 @@
  * - On the screen a link is read by the same function as a scan (readPairingCode), so every code gets the same verdict
  *   either way, and the same saved-server rule (transferTarget) decides where it may go.
  * - Nothing is sent on the way: the link's path only fills the sheet; Confirm & Link Device (the member's tap, the
- *   phone's unlock, then the two digits) is still the only thing that sends.
+ *   phone's unlock, then the four digits) is still the only thing that sends.
  */
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -205,13 +205,13 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         expect(effect).not.toContain('fetch(');
     });
 
-    it('only Confirm & Link Device sends, after the unlock; the transfer says this app shows the digits', () => {
+    it('only Confirm & Link Device sends, after the unlock; the transfer says this app shows four digits', () => {
         const src = pair();
         expect(src.split('handleConfirmLink').length - 1).toBe(2); // its definition and the button's onPress
         expect(src).toContain('onPress={handleConfirmLink}');
         const confirm = slice(src, 'async function handleConfirmLink() {', '\n    }\n');
         expect(confirm.indexOf("await requireDeviceUnlock(")).toBeLessThan(confirm.indexOf('await fetch(urls.transfer'));
-        expect(slice(confirm, 'await fetch(urls.transfer', '});')).toContain("confirm: 'digits'");
+        expect(slice(confirm, 'await fetch(urls.transfer', '});')).toContain("confirm: 'four-digits'");
     });
 
     it("a link never replaces an open sheet (as a camera scan can't): not while it asks, sends, shows the digits, or at all (review N2)", () => {

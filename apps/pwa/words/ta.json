@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "பல தவறான இலக்கங்கள் உள்ளிடப்பட்டன, எனவே எதுவும் அனுப்பப்படவில்லை. புதிய குறியீட்டை உருவாக்கி மீண்டும் முயற்சிக்கவும்.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "அந்தக் குறியீட்டின் காலம் முடிந்துவிட்டது, எனவே எதுவும் அனுப்பப்படவில்லை. புதிய குறியீட்டை உருவாக்கி மீண்டும் முயற்சிக்கவும்.",
   "That did not go through. Try again.": "அது வெற்றிகரமாக முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
-  "Type the two digits your phone shows": "உங்கள் தொலைபேசி காட்டும் இரண்டு இலக்கங்களைத் தட்டச்சு செய்யவும்",
+  "Type the four digits your phone shows": "உங்கள் தொலைபேசி காட்டும் நான்கு இலக்கங்களைத் தட்டச்சு செய்யவும்",
   "Confirm": "உறுதிப்படுத்து",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "சரியான இலக்கங்களுக்குப் பிறகே உங்கள் கணக்கு இங்கே திறக்கும். மூன்று தவறான முயற்சிகளுக்குப் பிறகு எதுவும் அனுப்பப்படாது.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "உங்கள் தொலைபேசியிலிருந்து இன்னும் எதுவும் வரவில்லை. இந்தக் குறியீடு {host}-இலிருந்து வந்தது. உங்கள் தொலைபேசி இது தான் பயன்படுத்தாத சர்வரிலிருந்து வந்தது என்று சொன்னால், உங்கள் சொந்த சமூகத்தின் முகவரியில் BeanPool-ஐத் திறக்கவும், அல்லது முதலில் உங்கள் தொலைபேசியில் {host}-இல் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும். உங்கள் தொலைபேசி எண்களைக் காட்டவில்லை என்றால், அதில் உள்ள BeanPool செயலியைப் புதுப்பித்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும்."

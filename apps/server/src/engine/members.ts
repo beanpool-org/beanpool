@@ -383,7 +383,10 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
-        if (homeNodeUrl && !existing.home_node_url) {
+        // A visitor's row only (FED-01): a home stamped on one of our members made them read as remote, and
+        // assertLocalSettlement then refused their own spending. Every caller refuses a local member first; this holds
+        // whatever a future caller forgets.
+        if (homeNodeUrl && !existing.home_node_url && existing.is_visitor) {
             db.prepare("UPDATE members SET home_node_url = ? WHERE public_key = ?").run(homeNodeUrl, publicKey);
             changed = true;
         }

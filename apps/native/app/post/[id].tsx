@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
@@ -35,6 +35,7 @@ import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
+import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
@@ -508,7 +509,9 @@ export default function PostDetailModal() {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;
                         try {
-                            const b = await getBalance(activeIdentity.publicKey);
+                            // Which enterprises the reader keeps: never asked where enterprises are in preview
+                            // (utils/reads-own.ts; the global node, where there are none).
+                            const b = await readsOwn('enterprises', activeIdentity.publicKey) ? await getBalance(activeIdentity.publicKey) : null;
                             const mine: string[] = Array.isArray((b as any)?.keeperOf) ? (b as any).keeperOf : [];
                             if (currentPost?.author_pubkey && mine.includes(currentPost.author_pubkey)) {
                                 isKeeper = true;
@@ -580,8 +583,7 @@ export default function PostDetailModal() {
                         });
                 };
                 reload();
-                
-                const { DeviceEventEmitter } = require('react-native');
+
                 const sub = DeviceEventEmitter.addListener('sync_data_updated', reload);
                 // The by-id read found no such listing on the node (utils/db.ts). With no row on the phone either, the
                 // shown listing goes, and the not-found timer's text shows; a row the phone holds stays until the sync drops it.
@@ -664,9 +666,13 @@ export default function PostDetailModal() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         let cancelled = false;
-        getBalance(identity.publicKey)
+        const key = identity.publicKey;
+        // Gate 1 is a Beans rule and keeperOf an enterprises one: where both are in preview (the global node) the
+        // reader's balance is never asked (utils/reads-own.ts).
+        Promise.all([readsOwn('beans', key), readsOwn('enterprises', key)])
+            .then(([beans, enterprises]) => (beans || enterprises ? getBalance(key) : null))
             .then(b => {
-                if (!cancelled) {
+                if (!cancelled && b) {
                     setBlockedFromTrading(!!(b as any).isBlockedFromTrading);
                     const mine: string[] = Array.isArray((b as any).keeperOf) ? (b as any).keeperOf : [];
                     setOperatedTreasuries(mine);

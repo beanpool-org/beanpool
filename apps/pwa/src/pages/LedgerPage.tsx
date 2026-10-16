@@ -29,6 +29,7 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITL
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
 import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
+import { useReadsOwn } from '../lib/features';
 
 interface Props extends LocalCommunityWays {
     /** Null only in preview: a visitor with no key reads Example Valley's ledger in the lobby (GuestLobby). */
@@ -83,6 +84,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
     // Built each render (it is small), so its words follow a change of language.
     const sample = preview ? sampleLedger() : null;
+    // The member's balance and ledger are Beans: nothing of theirs is asked until the node has said Beans are not a
+    // preview here (lib/features readsOwn), as on the phone. Until then the page draws a neutral wait, never a live 0
+    // (review of #2035, N2). A local community answers at once and reads as before.
+    const readsBeans = useReadsOwn('beans', viewerIsMember && !preview);
+    const waitingForMode = viewerIsMember && !preview && !readsBeans;
     // App learns guest status after mount, so a member-style refresh can still be in flight when this
     // flips to false; its failure must not put an error in front of the guest.
     const viewerIsMemberRef = useRef(viewerIsMember);
@@ -150,6 +156,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
 
     const lastRefreshTimeRef = useRef<number>(0);
     const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // The directory's read at open is the effect's below (once the node has said it reads whole); the refresh at open,
+    // which now waits for Beans' mode and so can come after it, does not read it a second time.
+    const refreshedOnceRef = useRef(false);
     // Guards the state writes below: this refresh is now also triggered by the socket, so it can
     // easily still be in flight when the member navigates away from the ledger.
     const isMountedRef = useRef(true);
@@ -166,6 +175,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
             lastRefreshTimeRef.current = Date.now();
             return;
         }
+        // Not yet known: no read, and no stamp, so the read at open is made once the mode is known.
+        if (!readsBeans) return;
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             try {
@@ -176,7 +187,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                     // the Send picker keeps who it had and the next refresh reads them again.
                     // Read only once the node has said it reads whole (the effect below reads them when it says so).
                     // A 403 members_on_demand turns the switch on (getMembersWhole): the picker then searches.
-                    membersOnDemandRef.current === false ? getMembersWhole().catch(() => null) : null,
+                    membersOnDemandRef.current === false && refreshedOnceRef.current ? getMembersWhole().catch(() => null) : null,
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -201,11 +212,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
             } finally {
                 setLoading(false);
                 refreshPromiseRef.current = null;
+                refreshedOnceRef.current = true;
             }
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [myKey, viewerIsMember, preview]);
+    }, [myKey, viewerIsMember, preview, readsBeans]);
 
     // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
     useEffect(() => {
@@ -368,6 +380,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
         : pickerSearch.state === 'failed' ? (pickerSearch.refusal ?? "Couldn't search just now. Check your connection and try again.")
         : pickerSearch.found && pickable.length === 0 ? 'Nobody here has a name starting with that.'
         : null;
+
+    if (waitingForMode) {
+        return (
+            <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid="ledger-waiting">
+                <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your ledger…')}</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid={preview ? 'ledger-preview' : undefined}>

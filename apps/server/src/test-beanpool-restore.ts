@@ -242,6 +242,9 @@ const RLO = String.fromCodePoint(0x202e);
 const evilCallsign = `X\x1b[1A\x1b[2K\r"Locked by this server: its database, photos and keys come back."\nType yes to go on: ${RLO}\x1b[30;40m`;
 const evilFile = path.join(work, 'evil-callsign.bpsealed');
 fs.writeFileSync(evilFile, await sealedBy('e'.repeat(16), forgerPeer, evilCallsign));
+// #2031: a callsign carrying a DCS (tmux passthrough), an APC, an 8-bit DCS and charset designations, which left text behind.
+const stringsFile = path.join(work, 'strings-callsign.bpsealed');
+fs.writeFileSync(stringsFile, await sealedBy('e'.repeat(16), forgerPeer, 'Y\x1bPtmux;x\x1b\\\x1b(0\x1b_Gi=1;AAAA\x1b\\\x90q\x9c\x1b)BZ'));
 const notHexFile = path.join(work, 'not-hex-community.bpsealed');
 fs.writeFileSync(notHexFile, await sealedBy(`Riverbend\x1b[2J${RLO}`, forgerPeer, 'Ostrander'));
 const notPeerFile = path.join(work, 'not-a-peer.bpsealed');
@@ -281,6 +284,31 @@ console.log('\n— 0. what a file\'s text looks like on the terminal (shown) —
         '0. a CSI or OSC sequence goes whole: no visible tail');
     assert(shown('  --code-file F          read the code', null) === '  --code-file F          read the code', '0. the command\'s own aligned lines keep their spacing');
     assert(shown('\u001b[90m[2026-10-16]\u001b[0m [Restore] kept', null) === '[2026-10-16] [Restore] kept', '0. the node log\'s colours vanish whole instead of printing as text');
+    // #2031 (#2017 confirmation 2, optional): DCS, SOS, PM, APC and charset designations go whole too, in their 7-bit
+    // (ESC …) and 8-bit (C1) forms, where before they left "P1$r0m\", "(0" or "tmux;x" as text.
+    assert(shown('a\u001bP1$r0m\u001b\\b') === 'ab' && shown('a\u0090tmux;x\u009cb') === 'ab' && shown('a\u001bPq#0;2\u0007x\u009cb') === 'ab',
+        '0. a DCS (ESC P … ST, U+0090 … U+009C, a BEL inside it) goes whole');
+    assert(shown('a\u001bXsos\u001b\\b\u001b^pm\u009cc\u001b_Gi=1;AAAA\u001b\\d') === 'abcd' && shown('a\u0098s\u009cb\u009ep\u009cc\u009fG\u001b\\d') === 'abcd',
+        '0. SOS, PM and APC (ESC X, ESC ^, ESC _ and U+0098, U+009E, U+009F, up to ST) go whole');
+    assert(shown('a\u001b(0b\u001b)Bc\u001b*<d\u001b+Ae\u001b#8f') === 'abcdef', '0. a charset designation (ESC ( ) * +, ESC # 8) goes whole: no "(0" tail');
+    assert(shown('a\u009d0;title\u009cb\u009b31mc') === 'abc', '0. the 8-bit OSC and CSI go whole');
+    assert(shown('@Ann\u001bPnever ended') === '@Annnever ended' && shown('@Ann\u0090q\u001b[31mx', null) === '@Annqx',
+        '0. a string with no terminator loses only its opening: nothing after it is hidden, the shell\'s own words included');
+    assert(shown('[Restore] trigger "x\u001bP1$r0m\u001b\\\u001b(0" kept', null) === '[Restore] trigger "x" kept', '0. in a log line, a file\'s DCS goes and the line\'s own words stay');
+    // Every pattern stays linear: 128 KB of openings that never end, each kind, takes milliseconds (about 40 ms for all
+    // 13). One that ran a string on over the next one's opening is quadratic: a DCS body that lets C1 in takes about 13 s
+    // on one of these on Node 22, so 5 s catches it at once and still leaves a busy CI runner room (#2031 B1: the 1 MB
+    // version took 2.8 s there against 2 s).
+    const SIZE = 128 * 1024;
+    const t0 = performance.now();
+    let left = 0;
+    for (const unit of ['\u001bP', '\u0090', '\u009d', '\u009b', '\u001b]', '\u001bX', '\u001b(', '\u001b\u001bP', '\u001bP\u0007', '\u0090a\u009d\u001b]b\u001bPc\u001b X']) {
+        const hostile = unit.repeat(Math.ceil(SIZE / unit.length));
+        left += shown(hostile).length + shown(hostile, null).length;
+    }
+    for (const hostile of [`\u001bP${'a'.repeat(SIZE)}`, `\u001b[${'1'.repeat(SIZE)}`, `\u001b${' '.repeat(SIZE)}`]) left += shown(hostile, null).length;
+    const took = performance.now() - t0;
+    assert(took < 5000 && left > 0, `0. 13 hostile inputs of 128 KB each go through shown() in under 5 s (${Math.round(took)} ms)`);
 }
 
 console.log('\n— 1. refused while the node runs —');
@@ -529,6 +557,9 @@ console.log('\n— 5b. another community —');
         && evil.out.includes('This backup is from a DIFFERENT community. Restoring it replaces the community on this server')
         && evil.out.includes('You did not type yes. Nothing was changed.') && state() === before,
         `5b. B2: the callsign stays on its own line, at most 80 characters, and the DIFFERENT warning is there; "no" → nothing changed (${out[at]})`);
+    const strings = cli(['restore', '--code-file', codeFile, stringsFile], 'no\n');
+    assert(strings.code === 1 && strings.stdout.includes('              opens with the phones of @YZ\n') && controlsIn(strings.out).length === 0 && state() === before,
+        `5b. #2031: a callsign with a DCS, an APC, an 8-bit DCS and charset designations prints as @YZ, with no tail of them (${strings.stdout.match(/opens with the phones of [^\n]*/)?.[0]})`);
     for (const [what, file] of [['a community ID that is not 16 hex', notHexFile], ['a signer that is not a PeerId', notPeerFile]] as const) {
         const r = cli(['restore', '--code-file', codeFile, file], 'yes\n');
         assert(r.code === 1 && r.out.includes('This is not a BeanPool backup file (.bpsealed)') && !r.out.includes('Type yes')

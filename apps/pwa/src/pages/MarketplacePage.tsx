@@ -22,7 +22,7 @@ import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
-import { marked, useFeatureMode } from '../lib/features';
+import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -52,7 +52,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
-    getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
+    getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
@@ -569,7 +569,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         };
         const held = myTransactions.find(x => x.id === openReviewTxId);
         if (held) open(myTransactions);
-        else getMyMarketplaceTransactions(me).then(open).catch(() => {
+        // Deals in preview: none of the member's is asked, and there is none to rate (lib/features readsOwn).
+        else readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(me) : [])).then(open).catch(() => {
             // Not "could not be found": the read failed, the trade may well be there (review #1980 N1).
             if (!live) return;
             setPostLinkNotice(t("Your trades couldn't be loaded. Check your connection and try again."));
@@ -628,7 +629,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
-                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
+                let statusesError: unknown = null;
+                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch((e) => { statusesError = e; return null; });
                 // Online events have no place, so a read by radius never meets them: read beside it where the feed asks for
                 // events (DESIGN-event-times §9).
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
@@ -638,8 +640,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     getMarketplacePosts({ ...filter, ...nearParams(near) }),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
-                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
-                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] }))),
+                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock),
+                    // and never where enterprises are a preview or off (lib/features treasuriesFallback).
+                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : treasuriesFallback(statusesError)),
                     near && wantsEvents ? getMarketplacePosts({ ...filter, online: true }).catch(() => []) : Promise.resolve([]),
                 ]);
 
@@ -717,14 +720,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Track whether the viewer still needs to list an Offer (Gate 1). A guest has no balance on the node, so
     // it is only asked once App knows the viewer is a member.
     const canLoadBalance = !!identity && isMember !== false && isMember !== null;
+    // Gate 1 is a Beans rule (the server holds it only where they are on): in preview the balance is never asked.
+    const readsBalance = useReadsOwn('beans', canLoadBalance);
     useEffect(() => {
-        if (!identity || !canLoadBalance) return;
+        if (!identity || !canLoadBalance || !readsBalance) return;
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => { if (!cancelled) setBlockedFromTrading(!!b.isBlockedFromTrading); })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity, canLoadBalance]);
+    }, [identity, canLoadBalance, readsBalance]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -944,7 +949,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (selectedPost.type === 'need') {
             const txPromise = myTransactions.length > 0
                 ? Promise.resolve(myTransactions)
-                : (identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]));
+                : (identity
+                    ? readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : [])).catch(() => [])
+                    : Promise.resolve([]));
             txPromise
                 .then(async txs => {
                     const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');

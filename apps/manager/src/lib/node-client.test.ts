@@ -22,7 +22,6 @@ import {
     revokeNodeRoleApi,
     fetchNodeSnapshots,
     createNodeSnapshot,
-    deleteNodeSnapshot,
     updateNodeReplicationCadence,
     forceNodeResync,
     normalizeNodeData,
@@ -850,7 +849,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(generateNodeInvite('https://node.example.com', 'pw')).resolves.toMatchObject({ code: 'INV-REAL-1' });
     });
 
-    it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {
+    it('fetchNodeSnapshots and createNodeSnapshot handle snapshot management (no client deletes one: the route is gone)', async () => {
         const mockSnapshot = { name: 'snap-1.db', sizeBytes: 1024, createdAt: '2026-01-01' };
 
         fetchMock.mockResolvedValueOnce({
@@ -866,12 +865,6 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         });
         const created = await createNodeSnapshot('https://node.example.com', 'pwd');
         expect(created).toEqual(mockSnapshot);
-
-        fetchMock.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ success: true }),
-        });
-        await expect(deleteNodeSnapshot('https://node.example.com', 'snap-1.db', 'pwd')).resolves.toBeUndefined();
     });
 
     it('updateNodeReplicationCadence and forceNodeResync trigger replication updates', async () => {

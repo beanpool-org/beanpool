@@ -53,6 +53,8 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
             className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
         >
             <div className="space-y-3">
+                {/* Example Valley's: the pill on its own row, the card's full width (beside the name it ran past the card at 320 px). */}
+                {sample && <div><LocalCommunityPill /></div>}
                 {/* Top row: Avatar + Name + Lifecycle Tag */}
                 <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center overflow-hidden shrink-0 text-xl font-bold text-emerald-400">
@@ -69,10 +71,11 @@ export function EnterpriseCard({ treasury: t, onOpen, sample = false }: { treasu
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors truncate">
+                            {/* The whole name, wrapped: at 320 px with 1.3x text one line held "Example …", and three held no more than
+                                "A compost bay by the…" beside the photo. */}
+                            <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors break-words min-w-0">
                                 {t.name}
                             </h3>
-                            {sample && <LocalCommunityPill />}
                             {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
                                     ⏸️ Paused

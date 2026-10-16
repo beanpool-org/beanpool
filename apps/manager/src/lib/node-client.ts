@@ -1027,31 +1027,38 @@ export async function freezeNodeUser(
     return res.json();
 }
 
+/**
+ * Remove a member. Removing an owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it; a refusal
+ * that asks for it throws FreshProofRequiredError.
+ */
 export async function pruneNodeUser(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean }> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...proofField(code) }),
     });
-    // The node's own sentence: removing an owner asks a fresh proof (a current code, or Manage on the phone).
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
 
+/** Remove a member and everyone they invited. A branch with an owner in it asks the fresh proof, as pruneNodeUser. */
 export async function pruneInviteBranch(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; error?: string }> {
     if (!pubkey || typeof pubkey !== 'string' || !pubkey.trim()) {
         throw new Error('Valid public key is required to prune an invite branch');
@@ -1060,10 +1067,11 @@ export async function pruneInviteBranch(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...proofField(code) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -2750,7 +2758,11 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
         body: JSON.stringify({ ...body, ...passwordField(adminPassword) }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    if (!res.ok) {
+        // A refusal asking an owner's fresh proof keeps its sentence as the message, so a screen without the box is unchanged.
+        throwIfFreshProof(res.status, data);
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
     return data as T;
 }
 
@@ -2817,16 +2829,18 @@ export async function haltDecision(nodeUrl: string, decisionId: string, reason: 
 
 /**
  * Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" Decision. If members
- * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision.
+ * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision. Suspending an
+ * owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it.
  */
 export async function emergencySuspendMember(
     nodeUrl: string,
     pubkey: string,
     reason: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; decision?: { id: string; closesAt: string; params?: { noVote?: boolean } } }> {
-    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason }, adminPassword, tfaToken);
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason, ...proofField(code) }, adminPassword, tfaToken);
 }
 
 /** Lift a suspension by hand; an open "Keep this suspension?" vote about it closes with it. */
@@ -3093,6 +3107,7 @@ export async function fetchOffboardPreviewApi(
     return res.json();
 }
 
+/** Offboard a member. Offboarding an owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it. */
 export async function executeOffboardApi(
     nodeUrl: string,
     pubkey: string,
@@ -3101,16 +3116,18 @@ export async function executeOffboardApi(
         giftRecipientPubkey?: string;
     },
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<OffboardResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...proofField(code) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         const err: any = new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
         err.code = body.code;
         err.status = res.status;

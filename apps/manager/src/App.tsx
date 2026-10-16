@@ -1575,14 +1575,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onPruneUser={async (pubkey) => {
+                                        onPruneUser={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                             }
                                         }}
-                                        onPruneBranch={async (pubkey) => {
+                                        onPruneBranch={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1740,14 +1740,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onPruneUser={async (pubkey) => {
+                                        onPruneUser={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                             }
                                         }}
-                                        onPruneBranch={async (pubkey) => {
+                                        onPruneBranch={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}

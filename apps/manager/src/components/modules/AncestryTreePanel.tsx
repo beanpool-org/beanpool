@@ -10,7 +10,7 @@ export interface AncestryTreePanelProps {
     nodeDataLoading?: boolean;
     activeNode: NodeProfile;
     onRefresh?: () => void;
-    onPruneBranch?: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onSelectMember?: (member: MemberItem) => void;
 }
 
@@ -304,15 +304,17 @@ export function AncestryTreePanel({
         }));
     };
 
-    const handleExecutePrune = async (pubkey: string) => {
+    const handleExecutePrune = async (pubkey: string, code?: string) => {
+        const proof = code ? [code] : [];
         if (onPruneBranch) {
-            await onPruneBranch(pubkey);
+            await onPruneBranch(pubkey, ...proof);
         } else {
             await pruneInviteBranch(
                 activeNode.url,
                 pubkey,
                 nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id)
+                getTfaSessionToken(activeNode.id),
+                ...proof
             );
             onRefresh?.();
         }

@@ -5,6 +5,7 @@ import {
     type OffboardPreviewResponse,
 } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { GATED_FOCUS, gatedProps, guardGated } from '../../lib/gated-control';
 
 /** The elements holding the visible reason each rule gives, so a blocked control can point at them. */
@@ -110,8 +111,10 @@ export function OffboardMemberWizard({
     const blockedByRule = blockingReasonIds.length > 0;
 
     const submittingRef = useRef(false);
+    // Offboarding an owner asks an owner's fresh proof each time (server ownerRemovalProof).
+    const proof = useFreshProof();
 
-    const handleConfirmOffboard = async () => {
+    const handleConfirmOffboard = async (code?: string) => {
         if (!preview) return;
         if (submittingRef.current || submitting) return;
         if (isSelfDealing) {
@@ -141,11 +144,14 @@ export function OffboardMemberWizard({
                     giftRecipientPubkey: resolution === 'gift_to_member' ? giftRecipient : undefined,
                 },
                 adminPassword,
-                tfaToken
+                tfaToken,
+                ...(code ? [code] : [])
             );
+            proof.close();
             setCompleted(true);
             onSuccess?.();
         } catch (err: any) {
+            if (proof.checkError(err, (c) => handleConfirmOffboard(c), code)) return;
             setError(err?.message || 'Failed to offboard member');
         } finally {
             submittingRef.current = false;
@@ -183,6 +189,7 @@ export function OffboardMemberWizard({
                 </div>
 
                 {/* Error Banner */}
+                <FreshProofBox proof={proof} testId="offboard-proof" />
                 {error && (
                     <div className="p-3 bg-red-950/90 border border-red-800/80 rounded-2xl text-xs text-red-200">
                         ⚠️ {error}

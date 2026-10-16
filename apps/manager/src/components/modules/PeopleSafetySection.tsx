@@ -27,8 +27,8 @@ interface PeopleSafetySectionProps {
     nodeDataLoading: boolean;
     onRefresh: () => void;
     onFreezeUser: (pubkey: string, freeze: boolean) => Promise<void>;
-    onPruneUser: (pubkey: string) => Promise<void>;
-    onPruneBranch?: (pubkey: string) => Promise<void>;
+    onPruneUser: (pubkey: string, code?: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
@@ -116,8 +116,8 @@ export function PeopleSafetySection({
         }
     }, [subTab, reportFilter, activeNode?.url, activeNode?.id, nodeData?.reports]);
 
-    const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
-        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+    const handlePruneBranch = onPruneBranch || (async (pubkey: string, code?: string) => {
+        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), ...(code ? [code] : []));
         onRefresh();
     });
     const [bulkDeleting, setBulkDeleting] = useState(false);

@@ -12,6 +12,7 @@
  *   N2     a sweep's count of what it took ahead lasts one batch of after-commit hooks, not the event-loop turn.
  *   N1/N5  the admin's stranded-escrow list is the audit's count; a projects row with a NULL id hides nothing.
  *   N4     a grant, and a keeper's surplus sweep, are to the cent.
+ * Fix round 2: a balance holding a part of a cent (older data) still sends, pledges and sweeps its whole cents.
  * Every check that moves Beans asserts conservation: the node's total (every account plus the pot) changes by 0.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -376,6 +377,30 @@ async function main(): Promise<void> {
     const whole = await call('POST', keeper, `/api/treasury/${farm}/sweep`, { amount: 1.25 });
     assert(whole.status === 200 && r2(rowBal(farm)) === 8.75, `a keeper's sweep of 1.25 goes (${show(whole)}; ${rowBal(farm)})`);
     conserved(totalN4, 'refused and taken grant proposals and sweeps');
+
+    // Round 2: older data. A balance holding a part of a cent (made before the cent rule) locks nothing: its whole cents
+    // are sent, pledged and swept as ever, and the part of a cent stays where it was.
+    const totalOld = nodeTotalExact();
+    const oldSender = makeMember('OldSender');
+    // Past the first-trade gate on sends: a sale of hers, completed.
+    const oldBuyer = makeMember('OldBuyer', 20);
+    createPost('offer', 'produce', 'OldBuyer mends things', 'Repairs', 20, 'fixed', oldBuyer.pk);
+    const jam = createPost('offer', 'produce', "OldSender's jam", 'Jam', 5, 'fixed', oldSender.pk)!.id;
+    const sold = await call('POST', oldBuyer, '/api/marketplace/posts/accept', { postId: jam, buyerPublicKey: oldBuyer.pk });
+    if (sold.body?.transaction?.id) completePostTransaction(sold.body.transaction.id, oldBuyer.pk);
+    assert(rowBal(oldSender.pk) > 0, `setup: OldSender sells her jam (${show(sold)})`);
+    const oldBacker = makeMember('OldBacker');
+    const { publicKey: oldFarm } = createTreasury('OldFarm', AVATAR, 100);
+    db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', 'admin')`).run(oldFarm, keeper.pk);
+    for (const pk of [oldSender.pk, oldBacker.pk, oldFarm]) transfer('genesis', pk, 10.333 - rowBal(pk), 'older data', 'direct', true);
+    assert([oldSender.pk, oldBacker.pk, oldFarm].every(pk => Math.abs(rowBal(pk) - 10.333) < 1e-9), 'setup: a member, a backer and an enterprise each hold 10.333');
+    const oldSend = await call('POST', oldSender, '/api/ledger/transfer', { from: oldSender.pk, to: friend.pk, amount: 10.33, memo: 'all but the sliver' });
+    assert(oldSend.status === 200 && Math.abs(rowBal(oldSender.pk) - 0.003) < 1e-9, `a balance of 10.333 still sends 10.33, the part of a cent left (${show(oldSend)}; ${rowBal(oldSender.pk)})`);
+    const oldPledge = await call('POST', oldBacker, `/api/crowdfund/projects/${shade}/pledge`, { amount: 10.33 });
+    assert(oldPledge.status === 200 && Math.abs(rowBal(oldBacker.pk) - 0.003) < 1e-9, `a balance of 10.333 still pledges 10.33 (${show(oldPledge)}; ${rowBal(oldBacker.pk)})`);
+    const oldSweep = await call('POST', keeper, `/api/treasury/${oldFarm}/sweep`, { amount: 10.33 });
+    assert(oldSweep.status === 200 && Math.abs(rowBal(oldFarm) - 0.003) < 1e-9, `an enterprise holding 10.333 still sweeps 10.33 (${show(oldSweep)}; ${rowBal(oldFarm)})`);
+    conserved(totalOld, 'sends, pledges and sweeps from balances with a part of a cent');
 
     // ═══════════════ NEW-3: a goal pledged in full in whole cents ═══════════════
     console.log('\n── NEW-3 a goal pledged in full in cents is funded ──');

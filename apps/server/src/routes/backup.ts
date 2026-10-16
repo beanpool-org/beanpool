@@ -49,7 +49,7 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle,
-    MISSING_MEMBER, readInBucketMember, livedInCommunity, ownCommunityId, SHELL_COMING_SUFFIX,
+    MISSING_MEMBER, readInBucketMember, livedInCommunity, ownCommunityId,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 import { checkRestoreDatabase, extractBackupArchive, RESTORE_ARCHIVE_LIMITS, type ArchiveLimits } from '../services/restore-checks.js';
@@ -70,7 +70,7 @@ export function setRestoreRestartForTests(fn: (() => void) | null): void {
     restartAfterRestore = fn ?? (() => process.exit(0));
 }
 
-function restorePaths() {
+export function restorePaths() {
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     return {
         DATA_DIR,
@@ -91,7 +91,7 @@ export function setRestoreArchiveLimitsForTests(limits: ArchiveLimits | null): v
 /** Where a sealed upload waits for an owner's phone. One name per upload, so a new restore never hits an old one's file. */
 const PENDING_PREFIX = 'uploaded-backup.pending-';
 
-function cleanupRestoreTemp(): void {
+export function cleanupRestoreTemp(): void {
     const { tmpDir, candidateDir, uploadPath, openedTarPath } = restorePaths();
     for (const p of [tmpDir, candidateDir, uploadPath, openedTarPath]) {
         try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -362,11 +362,15 @@ function openDoorAfterRestore(dataDir: string, carried: boolean): { records: num
 /**
  * The restore from an opened sealed file's tar on: the hostile-archive checks, a restore point of this server as it is
  * (services/restore-points.ts), state.db, node_config.json, the take-over bundle when the file carries one, the notice
- * for the next boot, then a restart. Shared by restore-by-code and restore by an owner's phone. Returns the answer body;
- * throws on a bad archive, or when the restore point cannot be written (the caller cleans up; nothing was replaced).
+ * for the next boot, then a restart. Shared by restore-by-code, restore by an owner's phone, and `beanpool restore` on
+ * the stopped server (restore-command.ts), which passes `restartAfterMs: null` (no node to restart) and, for a file it
+ * restores database-only (a signer accepted by name without --with-keys) or an old unlocked file (`sealedHeader` null),
+ * `applyKeys: false`. Returns the answer body; throws on a bad archive, or when the restore point cannot be written (the
+ * caller cleans up; nothing was replaced).
  */
-async function restoreFromTar(
-    tarPath: string, sealedHeader: SealedEnvelopeHeader, restartAfterMs = 1000,
+export async function restoreFromTar(
+    tarPath: string, sealedHeader: SealedEnvelopeHeader | null, restartAfterMs: number | null = 1000,
+    opts: { applyKeys?: boolean } = {},
 ): Promise<Record<string, unknown>> {
     const { DATA_DIR, tmpDir, candidateDir } = restorePaths();
 
@@ -399,8 +403,9 @@ async function restoreFromTar(
             + `dropped from it, and made again from this version's code at the restart: ${remade.join(', ')}`);
     }
     // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a file whose
-    // signer passed signerCheck reaches here (pinned, or a fresh server's first restore). Harvester-sealed files carry none.
-    const bundle = readBundleFrom(tmpDir, sealedHeader);
+    // signer passed signerCheck reaches here (pinned, or a fresh server's first restore), or one the shell's owner accepted
+    // by name with --with-keys. Harvester-sealed files carry none. An unlocked file never brings keys, whatever it holds.
+    const bundle = sealedHeader && opts.applyKeys !== false ? readBundleFrom(tmpDir, sealedHeader) : null;
 
     // Where this node keeps its photos, and where the backup's are. Decided BEFORE anything is replaced.
     const store = getImageStore();
@@ -478,14 +483,17 @@ async function restoreFromTar(
 
     cleanupRestoreTemp();
     // Everyone is told at the next boot, on the database now in place (services/restore-points.ts), and the log keeps it.
-    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader.createdAt ?? null, point: point.name });
-    console.log(`[Restore] A backup made ${sealedHeader.createdAt} was restored by an owner; restore point ${point.name} was kept first. Restarting.`);
+    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name });
+    console.log(`[Restore] A backup made ${sealedHeader?.createdAt ?? '(unlocked, date unknown)'} was restored by an owner; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
 
-    // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished.
-    setTimeout(() => {
-        console.log('Restore successful, rebooting node...');
-        restartAfterRestore();
-    }, restartAfterMs);
+    // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's
+    // restore runs with the node stopped: the owner starts it.
+    if (restartAfterMs !== null) {
+        setTimeout(() => {
+            console.log('Restore successful, rebooting node...');
+            restartAfterRestore();
+        }, restartAfterMs);
+    }
 
     // `complete` is the one an operator reads: the database is in and the node is restarting either way, so
     // `success` stays true — but a restore that could not put every object back must never answer with
@@ -555,11 +563,12 @@ async function restoreFromTar(
             store: nodeBucket ? { kind: 's3', bucket: nodeBucket.bucket } : { kind: 'disk' },
         },
         ...(warning ? { warning } : {}),
-        sealed: true,
+        sealed: !!sealedHeader,
         restoredKeys: restoredKeys.length > 0,
+        keysWritten: restoredKeys,
         ...(recoverySeal ? { recoverySeal } : {}),
         ...(openDoor ? { openDoor } : {}),
-        backup: describeSealedHeader(sealedHeader),
+        backup: sealedHeader ? describeSealedHeader(sealedHeader) : null,
         ...restorePointWords(point),
     };
 }
@@ -569,7 +578,7 @@ function restorePointWords(point: RestorePointInfo): Record<string, unknown> {
     return {
         restorePoint: point,
         restorePointNote: `Restore point ${point.name} is kept until at least ${point.keptAtLeastUntil.slice(0, 10)}. `
-            + `You can roll back to it from Backups & Restore, or on the server with \`beanpool restore-point\`${SHELL_COMING_SUFFIX}.`,
+            + `You can roll back to it from Backups & Restore, or on the server with \`beanpool restore-point roll-back ${point.name}\`.`,
         restartNote: 'The server restarts now; sign in again.',
     };
 }
@@ -579,9 +588,10 @@ function restorePointWords(point: RestorePointInfo): Record<string, unknown> {
  * references, and the per-server files, after keeping a point of the server as it is now. The point is read like any
  * archive (the hostile-archive reader for its tar, the restore's database checks on a copy of its state.db); the point
  * itself is never changed. A per-server file the point did not hold is moved aside (`<file>.rolled-back-<time>`), never
- * deleted. Then the notice and a restart, as a restore. Throws before anything is replaced; the caller cleans up.
+ * deleted. Then the notice and a restart, as a restore (none from the shell: `restartAfterMs` null, the node is stopped).
+ * Throws before anything is replaced; the caller cleans up.
  */
-async function rollBackTo(pointDir: string, name: string, restartAfterMs = 1000): Promise<Record<string, unknown>> {
+export async function rollBackTo(pointDir: string, name: string, restartAfterMs: number | null = 1000): Promise<Record<string, unknown>> {
     const { DATA_DIR, tmpDir, candidateDir } = restorePaths();
     const takenAt = listRestorePoints().find((p) => p.name === name)?.takenAt ?? null;
     if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
@@ -620,11 +630,13 @@ async function rollBackTo(pointDir: string, name: string, restartAfterMs = 1000)
     }
     cleanupRestoreTemp();
     leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name });
-    console.log(`[Restore] An owner rolled this server back to restore point ${name}; restore point ${point.name} was kept first. Restarting.`);
-    setTimeout(() => {
-        console.log('Roll-back done, rebooting node...');
-        restartAfterRestore();
-    }, restartAfterMs);
+    console.log(`[Restore] An owner rolled this server back to restore point ${name}; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
+    if (restartAfterMs !== null) {
+        setTimeout(() => {
+            console.log('Roll-back done, rebooting node...');
+            restartAfterRestore();
+        }, restartAfterMs);
+    }
     return {
         success: true,
         rolledBackTo: name,
@@ -1640,7 +1652,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
         if (isGzip(readFileStart(uploadPath, 2))) {
             return refuse(400, {
                 error: 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is '
-                    + `locked. An old unlocked file restores on the server itself with \`beanpool restore --unlocked FILE\`${SHELL_COMING_SUFFIX}. `
+                    + `locked. An old unlocked file restores on the server itself with \`beanpool restore --unlocked FILE\`. `
                     + 'Nothing was changed.',
                 notLocked: true,
                 command: 'beanpool restore --unlocked FILE',
@@ -1668,7 +1680,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
                 // No pin because this server cannot read its own genesis, or (its own community's file) its node key.
                 return refuse(409, {
                     error: 'This server cannot read its own community record or node key, so Settings cannot tell whose backup '
-                        + `this is. Fix the data folder, or restore on the server with \`${command}\`${SHELL_COMING_SUFFIX}. Nothing was changed.`,
+                        + `this is. Fix the data folder, or restore on the server with \`${command}\`. Nothing was changed.`,
                     ownRecordUnreadable: true, livedIn: true, command,
                     fileCommunityId: sealedHeader.communityId, thisCommunityId, backup,
                 });
@@ -1676,7 +1688,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
             return refuse(409, {
                 error: 'This backup is from a different community, and people have already joined the community on this server. '
                     + "To bring the backup's community back, restore the file on a fresh server (install, claim, restore), or on "
-                    + `this server with \`${command}\`${SHELL_COMING_SUFFIX}. Nothing was changed.`,
+                    + `this server with \`${command}\`. Nothing was changed.`,
                 otherCommunity: true, livedIn: true, command,
                 fileCommunityId: sealedHeader.communityId, thisCommunityId, backup,
             });

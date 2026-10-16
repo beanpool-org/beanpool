@@ -137,6 +137,7 @@ export const SUITES = [
     'test-2fa-session-credential-bound',
     'test-breakglass-and-backup-codes',
     'test-beanpool-recover',
+    'test-beanpool-restore',
     'test-claim-cli',
     'test-atomic-state-writes',
     'test-boot-file-safety',

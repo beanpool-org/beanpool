@@ -3,7 +3,7 @@
  * fable.md §4.2 and §4.3; services/stager.ts builds the copy in `data/staging`).
  *
  * Run before the database opens: db/db.ts calls it right before it opens `state.db`, whichever module imported it
- * first, and index.ts imports this module first of all (right after the report scrub), as the take-over harness does. It
+ * first, and index.ts imports this module first of all (right after the report scrub and the node's lock, boot-lock.ts), as the take-over harness does. It
  * imports nothing that opens the database, only Node, better-sqlite3 and services/stager.ts's constants (that module
  * imports nothing of the server's at its top level). Once a process: the first call does it.
  *

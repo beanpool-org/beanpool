@@ -28,7 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
-import { groupKindLine, keeperWords } from '@beanpool/core';
+import { groupKindLine, isWholeCents, keeperWords, t } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -699,6 +699,11 @@ export default function TreasuryDetailScreen() {
         const amt = Number(pledgeAmount);
         if (isNaN(amt) || amt <= 0) {
             Alert.alert('Invalid Amount', 'Please enter a positive number of Beans to pledge.');
+            return;
+        }
+        // To the cent, as the node takes it (core isWholeCents).
+        if (!isWholeCents(amt)) {
+            Alert.alert(t('Invalid amount'), t('The amount is a number of Beans above 0, to the cent.'));
             return;
         }
         setPledging(true);

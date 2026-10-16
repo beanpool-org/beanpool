@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -2988,11 +2988,8 @@ export function updateCrowdfundProject(
 
 /** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
 export const WHOLE_CENTS_ERROR = 'The amount is a number of Beans above 0, to the cent.';
-/** At least a cent, in whole cents, within float noise (0.1 + 0.2 is 30 cents; 5e-324 is no cent at all). */
-export function isWholeCents(amount: unknown): amount is number {
-    return typeof amount === 'number' && Number.isFinite(amount) && Math.round(amount * 100) >= 1
-        && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
-}
+/** At least a cent, in whole cents (@beanpool/core ledger.ts): the apps check the same before they send. */
+export { isWholeCents };
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);

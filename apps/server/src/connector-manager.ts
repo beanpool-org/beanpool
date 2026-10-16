@@ -28,6 +28,7 @@ import { getNodeRole } from './config/node-role.js';
 import { sweepExpiredDebts } from './engine/names-debts.js';
 import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { deletePeerListings } from './federation-listings.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 // Experimental peer‑connector toggle – defaults to off for production safety
@@ -660,10 +661,17 @@ export function removeConnector(address: string): boolean {
     const idx = connectors.findIndex(c => c.address === address);
     if (idx === -1) return false;
 
+    const connector = connectors[idx];
+    const status = statuses.get(address);
+    const peerId = status?.peerId ?? peerIdFromAddress(connector.address);
+    const publicUrl = connector.publicUrl ?? derivePublicUrl(connector.address);
+
     connectors.splice(idx, 1);
     statuses.delete(address);
     saveConnectors();
     logger.info('P2P', `[Connectors] Removed connector: ${address}`);
+
+    deletePeerListings(peerId, publicUrl);
     return true;
 }
 

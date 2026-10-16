@@ -152,6 +152,7 @@ export const SUITES = [
     'test-connector-credit-cap',
     'test-connector-handshake-errors',
     'test-connector-public-url',
+    'test-removed-connector-listings',
     'test-federation-link',
     'test-listing-reach',
     'test-listing-pull',

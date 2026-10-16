@@ -240,6 +240,43 @@ export function cacheRemoteListings(
 }
 
 /**
+ * Delete a peer's cached listings from the database (#2067).
+ *
+ * When a connector is removed, the listings cached from that peer are deleted in the same step,
+ * matched EXACTLY as cacheRemoteListings matches them:
+ *   (substr(id, 1, prefix length) = prefix — never LIKE, it ignores case — OR origin_node = that connector's publicUrl)
+ * and rings post_updated (via ringListingDoorbell) if anything was deleted.
+ *
+ * Local listings (origin_node IS NULL, un-prefixed id) and other peers' caches are never touched.
+ */
+export function deletePeerListings(peerId?: string | null, originNode?: string | null): number {
+    let deletedCount = 0;
+    const peerPrefix = peerId ? `${REMOTE_ID_PREFIX}${peerId.slice(-12)}:` : null;
+    const hasOrigin = typeof originNode === 'string' && originNode.length > 0;
+
+    if (peerPrefix && hasOrigin) {
+        const res = db.prepare('DELETE FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ?')
+            .run(peerPrefix.length, peerPrefix, originNode);
+        deletedCount = res.changes;
+    } else if (peerPrefix) {
+        const res = db.prepare('DELETE FROM posts WHERE substr(id, 1, ?) = ?')
+            .run(peerPrefix.length, peerPrefix);
+        deletedCount = res.changes;
+    } else if (hasOrigin) {
+        const res = db.prepare('DELETE FROM posts WHERE origin_node = ?')
+            .run(originNode);
+        deletedCount = res.changes;
+    }
+
+    if (deletedCount > 0) {
+        bumpPostsVersion();
+        ringListingDoorbell('post_updated');
+    }
+
+    return deletedCount;
+}
+
+/**
  * Peer ids this node could name in a listing's reach: peers we actually settle with.
  *
  * A cap is the line between "configured" and "we trade with them" everywhere else in federation, so naming a

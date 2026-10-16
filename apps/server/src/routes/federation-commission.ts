@@ -147,8 +147,9 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         if (!connector || connector.trustLevel !== 'peer') {
             ctx.status = 403;
             ctx.body = {
-                // A cached listing whose peer is now `blocked` or gone. The listing will disappear at the
-                // next pull; until then the refusal has to say something true.
+                // A cached listing whose peer is now `blocked` or whose connector was removed. A removed
+                // connector deletes its cached listings immediately; for a blocked peer no pull targets them
+                // again, and until any stale state settles the refusal has to say something true.
                 error: 'That listing came from a community this node no longer trades with.',
                 code: SETTLEMENT_REFUSED_CODE,
             };

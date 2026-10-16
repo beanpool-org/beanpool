@@ -9,7 +9,8 @@
  *     in it. 320 @130% and 1280, for the phone's stale hand-off (the sentence) and the password's code (the field).
  *     Connector Remove and "Replace it" (the recovery code) close a confirm modal around the refusal, with the node
  *     answering at once: going back past the modal's history entry must not scroll the page back to where it stood when
- *     the modal opened (opus-2028 confirm B1).
+ *     the modal opened (opus-2028 confirm B1). Once no modal is open (closed from the page, or by Back), the page's
+ *     scroll restores as usual again.
  *  2. The second Manage press (opus-2028 B3): a stale refusal, then a NEW `#handoff=` link reaching the open page (as an
  *     Android Custom Tab brought back to the front does). The re-key wizard is still open and still ticked, offboard is
  *     still open, the gateway still holds the owner's edit, and the same press then goes through with what was entered.
@@ -169,6 +170,8 @@ try {
             const m = await page.evaluate(atPress, flow.testId);
             const shown = m.found && m.top >= 0 && (m.bottom <= m.vh || (m.bottom - m.top > m.vh && m.top < m.vh));
             check(shown && m.hitInside && m.focusInside, `${at}: whole on screen at the press, on top, focused`, JSON.stringify(m));
+            const restore = await page.evaluate(() => ({ modals: document.querySelectorAll('[data-bp-modal]').length, mode: window.history.scrollRestoration }));
+            if (!restore.modals) check(restore.mode === 'auto', `${at}: with no modal open, the page's scroll restores as usual again`, JSON.stringify(restore));
             if (k.kind === 'code') {
                 await page.locator(`[data-testid="${flow.testId}-input"]`).fill('123456');
                 await page.locator(`[data-testid="${flow.testId}-confirm"]`).click();
@@ -179,6 +182,22 @@ try {
             check(errors.length === 0, `${at}: no page errors`, errors.join('; '));
         } catch (e) {
             check(false, at, String(e).split('\n')[0]);
+        }
+        await context.close();
+    }
+
+    {
+        // Back closes a modal: the page's own entry restores its scroll as usual again (opus-2028 confirm B1).
+        const { context, page } = await openSettings(browser, origin, { width: 320, textScale: 1.3, screen: { tab: 'people', sub: 'directory' } });
+        try {
+            await inspectFirst(page);
+            const open = await page.evaluate(() => window.history.scrollRestoration);
+            await page.evaluate(() => window.history.back());
+            await page.waitForTimeout(600);
+            const closed = await page.evaluate(() => ({ modals: document.querySelectorAll('[data-bp-modal]').length, mode: window.history.scrollRestoration }));
+            check(open === 'manual' && closed.modals === 0 && closed.mode === 'auto', 'Back closes member detail, and the page scrolls as usual again', JSON.stringify({ open, closed }));
+        } catch (e) {
+            check(false, 'member detail, then Back', String(e).split('\n')[0]);
         }
         await context.close();
     }

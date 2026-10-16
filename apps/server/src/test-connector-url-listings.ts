@@ -26,7 +26,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import * as cm from './connector-manager.js';
-import { pullAllPeerListings, REMOTE_ID_PREFIX } from './federation-listings.js';
+import { cacheRemoteListings, pullAllPeerListings, REMOTE_ID_PREFIX } from './federation-listings.js';
 
 let PORT = 0;
 let BASE = '';
@@ -194,6 +194,17 @@ async function main() {
         '5d. THE CRITICAL CHECK: Peer C did NOT inherit Peer B\'s old listings ("Peer B old carpentry" is gone)');
     assert(listingsUnderUrlB.length === 1 && listingsUnderUrlB[0].title === 'Peer C pottery',
         `5e. Only Peer C's own listing is present under urlB (got ${listingsUnderUrlB.map(p => p.title).join(', ')})`);
+
+    // 6. Two peers whose ids end in the same letters but in a different case are two peers: one's pull never touches the
+    //    other's listings (SQLite's LIKE ignores case; peer ids do not).
+    // The cache keys a listing by the peer id's last 12 letters: these two differ there only in case.
+    const lower = '12D3KooWcasefoldxxabcdefghijkm';
+    const upper = '12D3KooWcasefoldyyABCDEFGHIJKM';
+    const lowerOrigin = 'https://lower.example', upperOrigin = 'https://upper.example';
+    cacheRemoteListings(lower, lowerOrigin, [listing({ title: 'Lower-case peer listing' })]);
+    cacheRemoteListings(upper, upperOrigin, [listing({ title: 'Upper-case peer listing' })]);
+    assert(cachedFor(lowerOrigin).length === 1 && cachedFor(upperOrigin).length === 1,
+        `6. A peer whose id differs only in case keeps its own listings (${cachedFor(lowerOrigin).length}, ${cachedFor(upperOrigin).length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

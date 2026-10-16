@@ -148,22 +148,21 @@ export function cacheRemoteListings(
     let cached = 0, dropped = 0;
 
     const peerPrefix = `${REMOTE_ID_PREFIX}${peerId.slice(-12)}:`;
-    const peerPattern = `${peerPrefix}%`;
 
     let deletedCount = 0;
     // The columns written below from this peer's answer, before the round and after, so an answer that changed nothing
     // rings nobody: every round replaces them all.
     // Keyed to the peer, not merely to its address: matches this peer's listings (under any previous URL)
     // as well as any listings currently tied to this originNode (so a new peer identity at this address
-    // never inherits a previous peer's listings).
+    // never inherits a previous peer's listings). An exact prefix compare, not LIKE: LIKE ignores case, and peer ids do not.
     const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
-        updated_at, active, status, reach FROM posts WHERE id LIKE ? OR origin_node = ? ORDER BY id`);
+        updated_at, active, status, reach FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
     let changed = false;
     db.transaction(() => {
-        const before = JSON.stringify(heldForPeer.all(peerPattern, originNode));
+        const before = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode));
         // Everything we currently hold FOR THIS PEER. Deleted below unless the answer re-states it, so a
         // withdrawn listing disappears without a retraction message.
-        const delRes = db.prepare('DELETE FROM posts WHERE id LIKE ? OR origin_node = ?').run(peerPattern, originNode);
+        const delRes = db.prepare('DELETE FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ?').run(peerPrefix.length, peerPrefix, originNode);
         deletedCount = delRes.changes;
 
         for (const raw of incoming) {
@@ -232,7 +231,7 @@ export function cacheRemoteListings(
                 dropped++;
             }
         }
-        changed = JSON.stringify(heldForPeer.all(peerPattern, originNode)) !== before;
+        changed = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode)) !== before;
     })();
 
     if (deletedCount > 0 || cached > 0) {

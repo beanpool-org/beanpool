@@ -53,6 +53,9 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
+// The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
+const INVITE_PERK = 'Invite others to join';
+
 export default function LedgerScreen() {
     // Large "Ledger" title above the page's one list; folds away once the list scrolls. The
     // profile/balance bar, cards and Levels/Wallet switch are the top of that list (#1633).
@@ -80,10 +83,10 @@ export default function LedgerScreen() {
         const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: string; perks: string[] }> = {
             Newcomer: { tone: colors.trust.newcomer,
                 blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-                perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
+                perks: ['Browse & trade the marketplace', 'Receive credits', INVITE_PERK, 'Send credits after first trade (needs positive balance)'] },
             Resident: { tone: colors.trust.resident,
                 blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-                perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
+                perks: ['Credit floor deepens with the value you trade', INVITE_PERK] },
             Steward: { tone: colors.trust.steward,
                 blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
                 perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
@@ -632,7 +635,7 @@ export default function LedgerScreen() {
                     </Text>
                 </View>
 
-                {sel.perks.map((p: string) => (
+                {sel.perks.filter((p: string) => !(preview && p === INVITE_PERK)).map((p: string) => (
                     <View key={p} style={styles.detailPerkRow}>
                         <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : sel.color} />
                         <Text style={styles.detailPerkText}>{p}</Text>

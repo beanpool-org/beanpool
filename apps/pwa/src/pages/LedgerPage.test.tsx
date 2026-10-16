@@ -453,6 +453,7 @@ describe('the Levels words: true on global, and Send Beans on both', () => {
         await screen.findByTestId('levels-shelf');
         expect(screen.queryByText('Invite Members')).toBeNull();
         expect(document.body.textContent).not.toMatch(/Anyone can invite/);
+        expect(document.body.textContent).not.toMatch(/Invite others to join/);
         expect(document.body.textContent).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require/);
     });
 
@@ -461,6 +462,7 @@ describe('the Levels words: true on global, and Send Beans on both', () => {
         await screen.findByTestId('levels-shelf');
         expect(screen.getByText('Invite Members')).toBeInTheDocument();
         expect(document.body.textContent).toMatch(/Anyone can invite\./);
+        expect(document.body.textContent).toContain('Invite others to join');
         await waitFor(() => expect(screen.getAllByText('Send Beans').length).toBeGreaterThan(0));
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         expect(await screen.findByRole('button', { name: /💸 Send Beans/ })).toBeInTheDocument();

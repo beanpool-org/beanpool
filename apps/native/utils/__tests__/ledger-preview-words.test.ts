@@ -176,6 +176,7 @@ for (const scheme of ['light', 'dark'] as const) {
             await render(createElement(LedgerScreen));
             expect(text()).toContain(SAMPLE_COMMUNITY.member);
             expect(perkPills()).toEqual([]);
+            expect(text()).not.toMatch(/Invite others to join/);
             expect(text()).not.toMatch(/Anyone can invite/);
             expect(text()).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require a positive balance/);
             expect(net.calls).toEqual([]);
@@ -187,6 +188,7 @@ for (const scheme of ['light', 'dark'] as const) {
             await render(createElement(LedgerScreen));
             expect(text()).toContain('RealMember');
             expect(perkPills()).toHaveLength(1);
+            expect(text()).toContain('Invite others to join');
             expect(text()).toMatch(/Anyone can invite\./);
             expect(text()).toContain('Send Beans');
             await press(host.querySelector('[data-testid="ledger-wallet-tab"]')!);

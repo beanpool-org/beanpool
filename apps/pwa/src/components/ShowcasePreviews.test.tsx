@@ -208,6 +208,15 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
             expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${Math.abs(tx.amount).toFixed(1)}`);
         }
         expect(wallet).toHaveTextContent('from a neighbour · yesterday');
+        // The held deal's row, as a node's escrow hold reads here: "Held in trust · Fixing a bike puncture", −20, yesterday.
+        const held = S.deals.find(d => d.state === 'pending')!;
+        const holdNote = within(wallet).getByText(`Held in trust · ${held.what}`);
+        const holdRow = holdNote.closest('div.rounded-xl') as HTMLElement;
+        expect(holdRow).toHaveTextContent(/↑ Sent/);
+        expect(holdRow).toHaveTextContent(`−${held.amount.toFixed(1)}`);
+        expect(within(holdRow).getByText('yesterday')).toBeInTheDocument();
+        expect(holdRow).not.toHaveTextContent('to a neighbour');
+        expect(held.amount).toBe(S.inEscrow);
         expect(wallet).toHaveTextContent('to the Example Valley Bakery · 12 days ago');
         // No circulation fee row: the Wallet itself says nothing goes to the Commons at 200 Beans or less, and the sample holds 85.
         expect(wallet).not.toHaveTextContent('Circulation fee');

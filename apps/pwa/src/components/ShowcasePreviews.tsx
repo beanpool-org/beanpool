@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, t, tn, type SampleDeal } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
 import type { BalanceInfo } from '../lib/api';
@@ -62,7 +62,7 @@ export interface LedgerRowView {
  * Example Valley's "example member" in the shapes LedgerPage reads, so the Ledger in preview is the member's own screen
  * fed the sample (design §1 row 3): the balance answer (85 Beans, floor −200, one live Offer, level 2 of 4 with the
  * sample's own trust, value traded, partners and rating, the figures the phone's Ledger reads too) and the recent rows,
- * newest first, each with who it was with and when.
+ * newest first, each with who it was with and when; the held deal's row says its Beans are held in trust, and when.
  */
 export function sampleLedger(): { member: string; balance: BalanceInfo; rows: LedgerRowView[] } {
     const c = SAMPLE_COMMUNITY;
@@ -90,8 +90,9 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
         rows: c.transactions.map(x => ({
             id: x.id,
             sent: x.amount < 0,
-            note: x.what,
-            when: x.amount < 0
+            note: sampleRowNote(x),
+            when: x.kind === 'hold' ? ago(x.daysAgo)
+                : x.amount < 0
                 ? t('to {who} · {when}', { who: x.who, when: ago(x.daysAgo) })
                 : t('from {who} · {when}', { who: x.who, when: ago(x.daysAgo) }),
             amount: Math.abs(x.amount),
@@ -137,7 +138,7 @@ export function CommonsPreview({ enterprises = true, decisions = true, ...ways }
             <section className={`${CARD} mb-4`} data-testid="sample-decision">
                 <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Decide · closes in {d.closesInDays} days</p>
                 <h3 className="font-bold text-nature-900 dark:text-nature-50">{d.question}</h3>
-                <p className="text-sm text-nature-600 dark:text-nature-300">{d.fromPool} Beans from the pool · {d.votesFor} for, {d.votesAgainst} against</p>
+                <p className="text-sm text-nature-600 dark:text-nature-300">{d.fromPool} Beans from the pool · {d.yesWeight} for, {d.noWeight} against</p>
                 <div className="mt-3">
                     <LocalCommunityAction feature="decisions" label="Vote" className="w-full" {...ways} />
                 </div>

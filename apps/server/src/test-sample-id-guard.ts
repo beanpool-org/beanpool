@@ -316,7 +316,7 @@ async function main() {
         const { checkInvite } = await import('./state-engine.js');
         const { SAMPLE_COMMUNITY } = await import('@beanpool/core');
         const codes = SAMPLE_COMMUNITY.invites.map(i => i.code);
-        assert(codes.length === 2, `the sample has two example invitations (${codes.join(', ')})`);
+        assert(codes.length === 3, `the sample has three example invitations (${codes.join(', ')})`);
         for (const code of codes) {
             INVITE_CODE_PATTERN.lastIndex = 0;
             assert(!INVITE_CODE_PATTERN.test(code) && !code.startsWith('BP-'), `${code}: not the shape of a node's invite code or a ticket`);
@@ -339,6 +339,34 @@ async function main() {
         const json = await res.json().catch(() => null) as { valid?: boolean; reason?: string } | null;
         assert(res.status === 200 && json?.reason === 'unknown_inviter', `the control: a real-shaped code the node holds is found (${json?.reason})`);
         db.prepare('DELETE FROM invite_codes WHERE code = ?').run(real);
+    }
+
+    // The sample Decision is one this node could make (core sample-community.ts SampleDecision): its effect touches what
+    // it says, its franchise is the one createDecision gives that touch (franchiseForTouch: a pool Decision is quadratic),
+    // its quorum and threshold are its effect's, and its numbers are tallyDecision's: voters for turnout, weights for the
+    // tally, and each vote's voice credits what castVote charges (N² for N votes when quadratic, 1 otherwise).
+    {
+        const { franchiseForTouch, TOUCHES_FOR_EFFECT, quorumRatioForEffect, thresholdForEffect, getQuorumRequired } = await import('./decisions-engine.js');
+        const { SAMPLE_COMMUNITY } = await import('@beanpool/core');
+        assert(SAMPLE_COMMUNITY.decisions.length > 0, `the sample has a Decision (${SAMPLE_COMMUNITY.decisions.length})`);
+        for (const d of SAMPLE_COMMUNITY.decisions) {
+            assert(TOUCHES_FOR_EFFECT[d.effect] === d.touches, `${d.id}: ${d.effect} touches the ${TOUCHES_FOR_EFFECT[d.effect]} (the sample says ${d.touches})`);
+            assert(franchiseForTouch(d.touches) === d.franchise, `${d.id}: the node gives a ${d.touches} Decision ${franchiseForTouch(d.touches)} (the sample says ${d.franchise})`);
+            assert(quorumRatioForEffect(d.effect, d.touches) === d.quorumRatio && thresholdForEffect(d.effect, d.touches) === d.thresholdRequired,
+                `${d.id}: the quorum share and threshold are its effect's (${quorumRatioForEffect(d.effect, d.touches)}, ${thresholdForEffect(d.effect, d.touches)})`);
+            const quorumRequired = getQuorumRequired({ effect: d.effect, touches: d.touches }, undefined, d.electorate);
+            assert(quorumRequired === d.quorumRequired, `${d.id}: ${quorumRequired} voters needed of ${d.electorate} (the sample says ${d.quorumRequired})`);
+            const quadratic = franchiseForTouch(d.touches) === 'quadratic_trade';
+            assert(d.votes.every(v => Number.isInteger(v.weight) && v.weight >= 1 && (quadratic ? v.creditsUsed === v.weight ** 2 : v.weight === 1 && v.creditsUsed === 1)),
+                `${d.id}: each vote costs what castVote charges (${quadratic ? 'N² voice credits for N votes' : 'one vote, one credit'})`);
+            const yesWeight = d.votes.filter(v => v.support === 1).reduce((n, v) => n + v.weight, 0);
+            const noWeight = d.votes.filter(v => v.support === 0).reduce((n, v) => n + v.weight, 0);
+            const quorumMet = d.votes.length >= quorumRequired;
+            const total = yesWeight + noWeight;
+            const passed = quorumMet && total > 0 && yesWeight / total >= d.thresholdRequired && yesWeight > noWeight;
+            assert(d.totalVoters === d.votes.length && d.quorumMet === quorumMet && d.yesWeight === yesWeight && d.noWeight === noWeight && d.passed === passed,
+                `${d.id}: tallied as tallyDecision does: ${d.votes.length} voters (quorum ${quorumMet ? 'met' : 'unmet'}), Yes ${yesWeight} · No ${noWeight}, ${passed ? 'passes' : 'fails'}`);
+        }
     }
 
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('event_reminders_sent')").all() as { name: string }[]).map(t => t.name);

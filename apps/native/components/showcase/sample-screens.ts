@@ -6,7 +6,7 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
-import { SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote } from '@beanpool/core';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
 
@@ -38,14 +38,14 @@ export function sampleBalance() {
     };
 }
 
-/** The Ledger's transaction rows, newest first: "a neighbour", what it was for, and when. */
+/** The Ledger's transaction rows, newest first: "a neighbour", what it was for (a hold: "Held in trust · …"), and when. */
 export function sampleTransactions() {
     return SAMPLE_COMMUNITY.transactions.map(t => ({
         id: t.id,
         type: t.amount < 0 ? 'debit' : 'credit',
         amount: Math.abs(t.amount),
         peer: t.who,
-        memo: t.what,
+        memo: sampleRowNote(t),
         timestamp: when(t.daysAgo),
     }));
 }

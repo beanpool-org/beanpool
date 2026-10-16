@@ -10,8 +10,11 @@
  * - **Never written anywhere.** Every id starts with `sample-` (SAMPLE_ID_PREFIX). The server refuses any write that
  *   carries one with 400 `sample_id` (apps/server/src/sample-id-guard.ts), so no number from here can reach a ledger or
  *   any API write, whatever a screen's bug.
- * - **Never a working invitation.** An example invite's code (`EXAMPLE-1234`) is a shape no node and no app reads as an
- *   invite, a ticket, a pairing or a claim, and carries no address: copied, typed or drawn as a QR, it joins nobody.
+ * - **Never a working invitation.** An example invite's code (`EXAMPLE-1234`) is a shape no node mints, and carries no
+ *   address: copied, typed or drawn as a QR, it joins nobody. The phone reads it as no invite, ticket, pairing or claim.
+ *   The web's join box rewrites any code that isn't `INV-` as a ticket (`BP-EXAM-PLE1`), which a node refuses as
+ *   malformed, since a ticket is signed (apps/pwa/src/lib/invite-code.test.ts runs every spelling through the node's
+ *   own check).
  * - **Words to translate.** Every sentence a screen draws is marked with `word()`, so it is translated where it is shown
  *   (`t(sample.what)`); ids, codes and states are not words.
  *
@@ -19,7 +22,7 @@
  * numbers agree with each other and with the rules the real screens use).
  */
 
-import { word, type WordKey } from './words.js';
+import { t, word, type WordKey } from './words.js';
 
 /** Every id in the sample starts with this, and the server refuses a write that carries one. */
 export const SAMPLE_ID_PREFIX = 'sample-';
@@ -40,7 +43,8 @@ export interface SampleTransaction {
     who: WordKey;
     /** Beans: positive in, negative out. */
     amount: number;
-    kind: 'trade' | 'deal' | 'gift';
+    /** `hold`: Beans a held deal moved into trust (a node's escrow hold), out of the balance and into In Escrow. */
+    kind: 'trade' | 'deal' | 'gift' | 'hold';
     daysAgo: number;
 }
 
@@ -107,29 +111,55 @@ export interface SampleProject {
     daysToGo: number;
 }
 
+/** One vote cast on a Decision, as the node records it (decisions-engine DecisionVote). */
+export interface SampleVote {
+    /** 1 Yes, 0 No. */
+    support: 1 | 0;
+    /** What it adds to its side of the tally: on a quadratic Decision, the N votes its voter cast. */
+    weight: number;
+    /** The voice credits it spent: N² for N votes. */
+    creditsUsed: number;
+}
+
+/**
+ * A pool grant, as the Decide card draws it. Its franchise is the node's rule, not a choice: a grant touches the pool
+ * (decisions-engine TOUCHES_FOR_EFFECT.grant_enterprise), and a Decision that touches the pool is quadratic on earned
+ * trade (franchiseForTouch('pool') === 'quadratic_trade', which createDecision always applies). The type pins that pair,
+ * so no sample can draw a pool grant as one member, one vote; the server's test-sample-id-guard checks it through
+ * franchiseForTouch itself. So, as the node tallies it (tallyDecision), turnout counts VOTERS against the quorum, and the
+ * tally counts WEIGHTS against the threshold: a voter who casts N votes adds N and spends N² voice credits.
+ */
 export interface SampleDecision {
     id: string;
     question: WordKey;
     /** Beans the Decision would pay from the Commons pool. */
     fromPool: number;
     closesInDays: number;
-    votesFor: number;
-    votesAgainst: number;
     /** What it touches (the Decide card's tags): the Commons pool, by a grant. */
     touches: 'pool';
     effect: 'grant_enterprise';
     /** Whom the grant goes to: the sample project. */
     subject: string;
-    /** One member, one vote. */
-    franchise: '1m1v';
+    /** Quadratic on earned trade: what the node gives every Decision that touches the pool. */
+    franchise: 'quadratic_trade';
     /** Members who may vote and were active in the last 30 days: the turnout base. */
     electorate: number;
     /** Share of the electorate that must vote. */
     quorumRatio: number;
-    /** Votes needed: the share of the electorate, at least 3 (the node's rule). */
+    /** Voters needed: the share of the electorate, at least 3 (the node's rule). */
     quorumRequired: number;
-    /** Share of the votes cast that must be Yes. */
+    /** Share of the tally's weight that must be Yes. */
     thresholdRequired: number;
+    /** The votes cast so far, one per voter. The example member hasn't voted: Vote is theirs. */
+    votes: readonly SampleVote[];
+    /** Turnout: how many members have voted (DecisionTally.totalVoters), and whether that meets the quorum. */
+    totalVoters: number;
+    quorumMet: boolean;
+    /** The tally: the weight of the Yes votes and of the No votes (DecisionTally.yesWeight, noWeight). */
+    yesWeight: number;
+    noWeight: number;
+    /** Whether it passes if it closes as it stands: quorum met, Yes at least the threshold and more than No. */
+    passed: boolean;
 }
 
 export interface SampleInvite {
@@ -189,7 +219,7 @@ export interface SampleCommunity {
     enterprises: readonly SampleEnterprise[];
     projects: readonly SampleProject[];
     decisions: readonly SampleDecision[];
-    /** The member's invitations: one waiting, one used. */
+    /** The member's invitations, newest first: one waiting, and the one each member they brought in joined by. */
     invites: readonly SampleInvite[];
     /** Who came in through whom: the member, and the two they brought in. */
     inviteTree: SampleTreeMember;
@@ -210,11 +240,22 @@ const NEIGHBOUR = word('a neighbour');
 const BAKERY = word('the Example Valley Bakery');
 
 /**
+ * What a Ledger row says it was for. A hold row says its Beans are held in trust, as the web's Ledger relabels a node's
+ * "Escrow hold for …" (LedgerPage renderMemoText); any other row says what it was for.
+ */
+export function sampleRowNote(row: SampleTransaction): string {
+    return row.kind === 'hold' ? t('Held in trust · {what}', { what: row.what }) : row.what;
+}
+
+/**
  * Example Valley, frozen (design §2: balance 85, room to spend 285 down to −200, level 2 of 4 with 200 trust, six rows).
  *
  * No circulation fee row: the fee is charged only above the fee-free ceiling, and a member at 85 Beans never pays it, so
  * a fee row beside 85 would teach the wrong rule. The design's balance stays (every screen's 85 · room 285 · level 2
  * agrees with it); the row is a sixth trade instead.
+ *
+ * The held deal has its row, as on a node: when the member approved it, its 20 Beans moved out to trust (escrow.ts's
+ * "Escrow hold for …" transfer), so "Held in trust · Fixing a bike puncture −20 · yesterday" is a row, and In Escrow is 20.
  */
 export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
     id: 'sample-community-example-valley',
@@ -236,9 +277,9 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
     beansPerHour: 40,
     transactions: [
         { id: 'sample-tx-bread', what: word('A loaf of bread'), who: NEIGHBOUR, amount: 12, kind: 'trade', daysAgo: 1 },
+        { id: 'sample-tx-bike-held', what: word('Fixing a bike puncture'), who: NEIGHBOUR, amount: -20, kind: 'hold', daysAgo: 1 },
         { id: 'sample-tx-gardening', what: word('An hour of gardening'), who: NEIGHBOUR, amount: -40, kind: 'trade', daysAgo: 3 },
         { id: 'sample-tx-mending', what: word('Mending a jacket'), who: NEIGHBOUR, amount: 30, kind: 'deal', daysAgo: 5 },
-        { id: 'sample-tx-jam', what: word('Two jars of jam'), who: NEIGHBOUR, amount: 8, kind: 'trade', daysAgo: 7 },
         { id: 'sample-tx-gift', what: word('A thank-you gift'), who: NEIGHBOUR, amount: 5, kind: 'gift', daysAgo: 9 },
         { id: 'sample-tx-seedlings', what: word('A tray of seedlings'), who: BAKERY, amount: -18, kind: 'trade', daysAgo: 12 },
     ],
@@ -283,21 +324,38 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
             question: word('Build a compost bay by the community garden'),
             fromPool: 40,
             closesInDays: 3,
-            votesFor: 12,
-            votesAgainst: 2,
             touches: 'pool',
             effect: 'grant_enterprise',
             subject: 'sample-project-compost-bay',
-            franchise: '1m1v',
+            franchise: 'quadratic_trade',
             electorate: 20,
             quorumRatio: 0.3,
             quorumRequired: 6,
             thresholdRequired: 0.6,
+            // Nine voters: seven Yes, casting 3, 2, 2, 2, 1, 1 and 1 votes (9 + 4 + 4 + 4 + 1 + 1 + 1 voice credits), and
+            // two No with a vote each. Turnout 9 of 6 needed; Yes 12 (86%) · No 2 · needs 60%.
+            votes: [
+                { support: 1, weight: 3, creditsUsed: 9 },
+                { support: 1, weight: 2, creditsUsed: 4 },
+                { support: 1, weight: 2, creditsUsed: 4 },
+                { support: 1, weight: 2, creditsUsed: 4 },
+                { support: 1, weight: 1, creditsUsed: 1 },
+                { support: 1, weight: 1, creditsUsed: 1 },
+                { support: 1, weight: 1, creditsUsed: 1 },
+                { support: 0, weight: 1, creditsUsed: 1 },
+                { support: 0, weight: 1, creditsUsed: 1 },
+            ],
+            totalVoters: 9,
+            quorumMet: true,
+            yesWeight: 12,
+            noWeight: 2,
+            passed: true,
         },
     ],
     invites: [
         { id: 'sample-invite-waiting', code: 'EXAMPLE-1234', intendedFor: NEIGHBOUR, status: 'pending', daysAgo: 2 },
         { id: 'sample-invite-used', code: 'EXAMPLE-5678', intendedFor: NEIGHBOUR, status: 'used', daysAgo: 10, usedBy: 'sample-member-second', usedDaysAgo: 6 },
+        { id: 'sample-invite-first', code: 'EXAMPLE-9012', intendedFor: NEIGHBOUR, status: 'used', daysAgo: 45, usedBy: 'sample-member-first', usedDaysAgo: 40 },
     ],
     inviteTree: {
         id: 'sample-member-example',

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId } from '../sample-community.js';
+import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId, sampleRowNote, type SampleDecision } from '../sample-community.js';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, earnedCreditFromValue, memberLevel, tierIndexForCredit } from '../protocol.js';
 import { monthlyCirculation } from '../circulation.js';
 import { parseInviteTicketText } from '../request-signing.js';
@@ -33,11 +33,11 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
         expect(s.name).toBe('Example Valley');
         expect([s.balance, s.floor, s.roomToSpend, s.liveOffers, s.level, s.levels, s.pool]).toEqual([85, -200, 285, 1, 2, 4, 640]);
         expect(s.roomToSpend).toBe(s.balance - s.floor);
-        expect(s.transactions.map(t => t.amount)).toEqual([12, -40, 30, 8, 5, -18]);
+        expect(s.transactions.map(t => t.amount)).toEqual([12, -20, -40, 30, 5, -18]);
         expect(s.deals.map(d => d.status).sort()).toEqual(['done', 'held', 'waiting-on-you']);
         expect(s.enterprises).toHaveLength(1);
         expect(s.enterprises[0]).toMatchObject({ name: 'Example Valley Bakery', keepers: 3, season: 120 });
-        expect(s.decisions[0]).toMatchObject({ fromPool: 40, closesInDays: 3, votesFor: 12, votesAgainst: 2 });
+        expect(s.decisions[0]).toMatchObject({ fromPool: 40, closesInDays: 3, totalVoters: 9, yesWeight: 12, noWeight: 2 });
     });
 
     it('its Levels card adds up with the tiers the screens use: 200 trust is level 2 of 4, earned from the value traded', () => {
@@ -61,7 +61,7 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
 
     it('every id is a sample id, and every sample id is unique', () => {
         const ids = walk(SAMPLE_COMMUNITY).filter(([p]) => /\.id$/.test(p)).map(([, v]) => v);
-        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 2 + 3);
+        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 3 + 3);
         for (const id of ids) {
             expect(typeof id === 'string' && id.startsWith(SAMPLE_ID_PREFIX), String(id)).toBe(true);
             expect(isSampleId(id), String(id)).toBe(true);
@@ -114,20 +114,58 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
         // In Escrow is what the held deal holds, and only that: a requested deal holds nothing yet.
         expect(s.inEscrow).toBe(byStatus.held.amount);
         expect(s.inEscrow).toBe(s.deals.filter(d => d.state === 'pending' && d.side === 'bought').reduce((n, d) => n + d.amount, 0));
+        // And the hold is a row, as on a node (escrow.ts moves the Beans out to trust on approval): "Held in trust ·
+        // Fixing a bike puncture −20 · yesterday". Only a held deal has one; the requested deal has moved nothing.
+        const holds = s.transactions.filter(t => t.kind === 'hold');
+        expect(holds).toHaveLength(1);
+        expect(holds[0]).toMatchObject({ what: byStatus.held.what, amount: -byStatus.held.amount, daysAgo: byStatus.held.daysAgo });
+        expect(sampleRowNote(holds[0])).toBe('Held in trust · Fixing a bike puncture');
+        expect(holds[0].daysAgo).toBe(1);
+        expect(s.transactions.some(t => t.what === byStatus['waiting-on-you'].what)).toBe(false);
+        expect(-holds.reduce((n, t) => n + t.amount, 0)).toBe(s.inEscrow);
+        for (const t of s.transactions.filter(x => x.kind !== 'hold')) expect(sampleRowNote(t)).toBe(t.what);
+        // Newest first.
+        const ages = s.transactions.map(t => t.daysAgo);
+        expect(ages).toEqual([...ages].sort((a, b) => a - b));
     });
 
-    it('the Decision carries everything the Decide card draws, and its numbers add up', () => {
+    it('the Decision is a pool grant, so quadratic as the node makes it: turnout in voters, the tally in weights, and they add up', () => {
         const d = s.decisions[0];
-        expect(d).toMatchObject({ touches: 'pool', effect: 'grant_enterprise', franchise: '1m1v', closesInDays: 3 });
-        // Turnout: votes cast against the quorum, by the node's rule (decisions-engine getQuorumRequired: at least 3).
-        const cast = d.votesFor + d.votesAgainst;
+        // franchiseForTouch('pool') === 'quadratic_trade' (apps/server decisions-engine; the server's test-sample-id-guard
+        // checks this pair through it). The type pins it too: a pool grant can't be one member, one vote.
+        expect(d).toMatchObject({ touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', closesInDays: 3 });
+        // @ts-expect-error a Decision that touches the pool is never one member, one vote
+        const oneMemberOneVote: SampleDecision['franchise'] = '1m1v';
+        expect(oneMemberOneVote).not.toBe(d.franchise);
+        // Each vote as the node casts it on a quadratic Decision: N votes weigh N and cost N² voice credits.
+        for (const v of d.votes) {
+            expect(Number.isInteger(v.weight) && v.weight >= 1, JSON.stringify(v)).toBe(true);
+            expect(v.creditsUsed, JSON.stringify(v)).toBe(v.weight ** 2);
+        }
+        // Turnout, in voters (tallyDecision: votes.length against getQuorumRequired, at least 3): 9 of 6 needed, Met.
+        expect(d.totalVoters).toBe(d.votes.length);
         expect(d.quorumRequired).toBe(Math.max(3, Math.ceil(d.quorumRatio * d.electorate)));
-        expect(cast).toBeLessThanOrEqual(d.electorate);
-        expect(cast >= d.quorumRequired).toBe(true); // Met
-        // Tally: Yes 12 (86%) · No 2 · Needs 60%.
+        expect(d.quorumMet).toBe(d.totalVoters >= d.quorumRequired);
+        expect([d.totalVoters, d.quorumRequired, d.quorumMet]).toEqual([9, 6, true]);
+        // The example member is on the roll and hasn't voted (Vote is theirs), so fewer voters than the electorate.
+        expect(d.totalVoters).toBeLessThan(d.electorate);
+        // The tally, in weights: Yes 12 (86%) · No 2 · needs 60%. Weights, not voters: some voters cast more than one.
+        const weightOf = (support: 0 | 1) => d.votes.filter(v => v.support === support).reduce((n, v) => n + v.weight, 0);
+        expect([d.yesWeight, d.noWeight]).toEqual([weightOf(1), weightOf(0)]);
+        expect([d.yesWeight, d.noWeight]).toEqual([12, 2]);
+        expect(d.yesWeight + d.noWeight).toBeGreaterThan(d.totalVoters);
+        const support = d.yesWeight / (d.yesWeight + d.noWeight);
         expect(d.thresholdRequired).toBe(0.6);
-        expect(Math.round((d.votesFor / cast) * 100)).toBe(86);
-        expect(d.votesFor / cast).toBeGreaterThanOrEqual(d.thresholdRequired);
+        expect(Math.round(support * 100)).toBe(86);
+        expect(support).toBeGreaterThanOrEqual(d.thresholdRequired);
+        // Ties fail; so it passes as it stands (tallyDecision's rule).
+        expect(d.passed).toBe(d.quorumMet && support >= d.thresholdRequired && d.yesWeight > d.noWeight);
+        expect(d.passed).toBe(true);
+        // What the example member could spend on it: 582 voice credits, so at most 24 votes (24² = 576 ≤ 582 < 625).
+        const most = Math.floor(Math.sqrt(s.voiceCredits));
+        expect(most).toBe(24);
+        expect(most ** 2).toBeLessThanOrEqual(s.voiceCredits);
+        expect((most + 1) ** 2).toBeGreaterThan(s.voiceCredits);
         // The grant goes to the sample project, from the pool, and is what the project still needs.
         const p = s.projects.find(x => x.id === d.subject)!;
         expect(p).toBeDefined();
@@ -162,21 +200,33 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
         expect(p.backers).toBeGreaterThan(0);
     });
 
-    it('invites: one waiting, one used by a member in the tree; two example members under "an example member"', () => {
-        expect(s.invites.map(i => i.status)).toEqual(['pending', 'used']);
-        const used = s.invites.find(i => i.status === 'used')!;
+    it('invites: one waiting, and the one each of the two members under "an example member" joined by', () => {
+        expect(s.invites.map(i => i.status)).toEqual(['pending', 'used', 'used']);
         const tree = s.inviteTree;
         expect(tree.who).toBe(s.member);
         expect(tree.invited).toHaveLength(2);
         for (const m of tree.invited) expect(m.invited).toEqual([]);
-        expect(tree.invited.map(m => m.id)).toContain(used.usedBy);
-        const joiner = tree.invited.find(m => m.id === used.usedBy)!;
-        expect(used.usedDaysAgo).toBe(joiner.joinedDaysAgo);
-        expect(used.usedDaysAgo!).toBeLessThanOrEqual(used.daysAgo);
-        // An invite lasts 30 days: the waiting one is still good.
-        expect(s.invites.find(i => i.status === 'pending')!.daysAgo).toBeLessThan(30);
+        // Each member in the tree joined by exactly one of the member's invites, on the day they joined, within the
+        // 30 days an invite lasts, and after the member themself joined.
+        const used = s.invites.filter(i => i.status === 'used');
+        expect(used.map(i => i.usedBy).sort()).toEqual(tree.invited.map(m => m.id).sort());
+        for (const m of tree.invited) {
+            const by = used.find(i => i.usedBy === m.id)!;
+            expect(by, m.id).toBeDefined();
+            expect(by.usedDaysAgo, m.id).toBe(m.joinedDaysAgo);
+            expect(by.usedDaysAgo!, m.id).toBeLessThanOrEqual(by.daysAgo);
+            expect(by.daysAgo - by.usedDaysAgo!, m.id).toBeLessThan(30);
+            expect(by.daysAgo, m.id).toBeLessThan(tree.joinedDaysAgo);
+        }
+        // A waiting invite has no one who used it, and is still good.
+        const waiting = s.invites.find(i => i.status === 'pending')!;
+        expect(waiting.usedBy).toBeUndefined();
+        expect(waiting.daysAgo).toBeLessThan(30);
+        // Newest first.
+        const ages = s.invites.map(i => i.daysAgo);
+        expect(ages).toEqual([...ages].sort((a, b) => a - b));
         // Every reference to another sample object is a sample id too.
-        for (const v of [used.usedBy, s.decisions[0].subject]) expect(isSampleId(v), String(v)).toBe(true);
+        for (const v of [...used.map(i => i.usedBy), s.decisions[0].subject]) expect(isSampleId(v), String(v)).toBe(true);
     });
 
     it('an example invite code is obviously not a code: no node mints or reads its shape, and it names no address', () => {
@@ -189,7 +239,9 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
             expect(code).not.toMatch(/^(INV|BP)-/i);
             expect(code).not.toMatch(/(?:INV|BP)-[A-Z0-9]{4}-[A-Z0-9]{4}/i);
             expect(parseInviteTicketText(code)).toBeNull();
-            // 8 letters and digits once the dashes go would read as INV-XXXX-XXXX in the apps' normaliser: never 8.
+            // 8 letters and digits once the dashes go would read as INV-XXXX-XXXX in the phone's normaliser: never 8.
+            // (The web's join box rewrites any code that isn't INV- as a ticket, BP-EXAM-PLE1, which a node refuses as
+            // malformed: apps/pwa/src/lib/invite-code.test.ts runs every spelling through the node's own check.)
             expect(code.replace(/[^a-zA-Z0-9]/g, '').length).not.toBe(8);
             expect(code).not.toMatch(/[/:.?=&#@]/);
             expect(isSampleId(code)).toBe(false);

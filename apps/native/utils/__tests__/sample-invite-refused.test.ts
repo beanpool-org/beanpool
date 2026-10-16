@@ -30,8 +30,8 @@ const FORMS = CODES.flatMap(code => [code, ` ${code}\n`, code.toLowerCase(), `/$
 const INVITE_SHAPE = /^(INV-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}|BP-)/i;
 
 describe('an example invite code is no invitation on the phone', () => {
-    it('the fixture has two, both EXAMPLE-dddd', () => {
-        expect(CODES).toEqual(['EXAMPLE-1234', 'EXAMPLE-5678']);
+    it('the fixture has three, each EXAMPLE-dddd', () => {
+        expect(CODES).toEqual(['EXAMPLE-1234', 'EXAMPLE-5678', 'EXAMPLE-9012']);
     });
 
     it('the invite parser never turns it into an INV- code or a ticket', () => {

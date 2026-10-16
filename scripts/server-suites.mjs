@@ -146,6 +146,7 @@ export const SUITES = [
     'test-report-dedup-and-sync',
     'test-ledger-export',
     'test-ledger-audit-startup',
+    'test-ledger-verified',
     'test-mirror-sync-audit-log',
     'test-federation-bridge',
     'test-connector-credit-cap',

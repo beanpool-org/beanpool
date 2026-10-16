@@ -2988,9 +2988,10 @@ export function updateCrowdfundProject(
 
 /** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
 export const WHOLE_CENTS_ERROR = 'The amount is a number of Beans above 0, to the cent.';
-/** A positive, finite number of Beans in whole cents, within float noise (0.1 + 0.2 is 30 cents). */
+/** At least a cent, in whole cents, within float noise (0.1 + 0.2 is 30 cents; 5e-324 is no cent at all). */
 export function isWholeCents(amount: unknown): amount is number {
-    return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
+    return typeof amount === 'number' && Number.isFinite(amount) && Math.round(amount * 100) >= 1
+        && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
 }
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {

@@ -130,7 +130,9 @@ export function useTotpCode(token: string, secretBase32: string, window = 1): To
     const id = crypto.createHash('sha256').update(base32Decode(secretBase32)).digest('hex');
     let last = lastAcceptedStep.get(id);
     // The node's own secret's last step is kept in local-config too, the step number only, so a restart cannot reopen a
-    // code used just before it (AUTH-07, 2026-10-16). Sign-ins are rare, so the write costs nothing.
+    // code used just before it (AUTH-07, 2026-10-16). Sign-ins are rare, so the write costs nothing. The kept step is not per
+    // secret: a secret put in without a confirming sign-in (a take-over install, a hand edit) refuses its first code inside
+    // the old step's 60 s as "already used", and the next code works. That fails safe (review opus-2038 NB2).
     const nodeSecret = isNodeTotpSecret(secretBase32);
     if (nodeSecret) {
         const kept = getLocalConfig().totpLastAcceptedStep;

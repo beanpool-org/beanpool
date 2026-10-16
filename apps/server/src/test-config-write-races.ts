@@ -203,10 +203,11 @@ async function main() {
             setPassword(PW);
             fs.writeFileSync(firstPasswordPath(), PW + '\n', { mode: 0o600 });
             const cfgPath = `${process.env.BEANPOOL_DATA_DIR}/local-config.json`;
+            const codeC = tfa.code(); // before the file is read-only: code() forgets the used steps, in local-config too (AUTH-07)
             fs.chmodSync(cfgPath, 0o444); // saveLocalConfig's write fails, and it only logs that
             let changedC: { status: number; body: any };
             try {
-                changedC = await call('/api/local/change-password', {}, { password: PW, totpCode: tfa.code(), currentPassword: PW, newPassword: NEW_PW });
+                changedC = await call('/api/local/change-password', {}, { password: PW, totpCode: codeC, currentPassword: PW, newPassword: NEW_PW });
             } finally {
                 fs.chmodSync(cfgPath, 0o644);
             }

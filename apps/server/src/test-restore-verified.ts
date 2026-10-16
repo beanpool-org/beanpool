@@ -218,11 +218,16 @@ async function child(): Promise<void> {
     const port = await httpsServer.startHttpsServer(0);
     const base = `https://localhost:${port}`;
     const owner = process.env.TEST_OWNER!;
+    // A server that wrongly replaced its database has closed it, and no session can be made there: the request then goes
+    // with none (401), so the run still reports every row.
     const session = (phone = false): string => {
-        const ex = keyAuth.consumeHandshakeToken(keyAuth.mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(),
-            phone ? { idleTtlMs: keyAuth.PHONE_HANDOFF_IDLE_TTL_MS } : {});
-        if (!ex.ok) throw new Error(`setup: no owner session: ${ex.error}`);
-        return ex.sessionId!;
+        try {
+            const ex = keyAuth.consumeHandshakeToken(keyAuth.mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(),
+                phone ? { idleTtlMs: keyAuth.PHONE_HANDOFF_IDLE_TTL_MS } : {});
+            return ex.ok ? ex.sessionId! : 'none';
+        } catch {
+            return 'none';
+        }
     };
     const call = async (method: string, route: string, headers: Record<string, string>, body?: unknown, raw?: Uint8Array) => {
         resetAdminAuthTarpit();
@@ -557,7 +562,7 @@ async function main(): Promise<void> {
                 assert(row?.answer?.status === 400 && row?.answer?.error === 'Restore failed: ' + words(why),
                     `4. the ${k.toLowerCase()} file through the route: 400 in words (${JSON.stringify(row?.answer)})`);
                 assert(row?.same === true && row?.dbOpen === true && row?.after?.points?.length === 0 && row?.after?.leftovers?.length === 0,
-                    `4. …nothing changed: the database, the server's files, no point, nothing left (${JSON.stringify(row?.after).slice(0, 200)})`);
+                    `4. …nothing changed: the database, the server's files, no point, nothing left (${String(JSON.stringify(row?.after)).slice(0, 200)})`);
             }
             assert(r.real?.status === 200 && r.real?.success === true && Array.isArray(r.state?.callsigns) && r.state.callsigns.includes('MarkerOne'),
                 `4. a real backup then restores (${JSON.stringify(r.real)})`);

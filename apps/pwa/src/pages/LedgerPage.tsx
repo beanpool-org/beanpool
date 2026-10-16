@@ -370,10 +370,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
             {/* Identity & Balance Overview */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-6 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-full border-2 border-emerald-500 overflow-hidden bg-oat-50 dark:bg-nature-800 shadow-inner flex items-center justify-center">
+                    <div className="w-14 h-14 shrink-0 rounded-full border-2 border-emerald-500 overflow-hidden bg-oat-50 dark:bg-nature-800 shadow-inner flex items-center justify-center">
                         <img src="/assets/logo-192x192.png" className="w-[70%] h-[70%] object-contain" alt="Identity" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{sample ? sample.member : identity?.callsign}</h2>
                         <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
@@ -501,12 +501,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
+                                <span>{canSend ? t('Send Beans') : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
                             </button>}
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
+                            {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites tab says so. */}
+                            {!preview && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
                                 <span>Invite Members</span>
-                            </div>
+                            </div>}
                         </div>
                     </div>
 
@@ -590,7 +591,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">{preview
+                            ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
+                            : t("Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")}</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -705,8 +708,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                             }`}
                         >
                             {!canSend
-                                ? (earned <= 0 ? '🔒 Send Credits (needs 1 completed trade)' : '🔒 Send Credits (needs positive balance)')
-                                : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                                ? (earned <= 0 ? '🔒 Send Beans (needs 1 completed trade)' : '🔒 Send Beans (needs positive balance)')
+                                : showSend ? '✕ Cancel' : `💸 ${t('Send Beans')}`}
                         </button>
 
                         {/* Send Form */}

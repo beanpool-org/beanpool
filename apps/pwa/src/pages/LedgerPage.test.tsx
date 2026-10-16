@@ -230,7 +230,7 @@ describe('the Send picker when the node is too busy to send the members list', (
         render(<LedgerPage identity={identity} isMember={true} />);
         await waitFor(() => expect(getMembers).toHaveBeenCalledTimes(1));
         fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
-        fireEvent.click(await screen.findByRole('button', { name: /Send Credits/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Beans/ }));
         fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
         expect(await screen.findByText('Dana')).toBeInTheDocument();
 
@@ -262,7 +262,7 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
 
     const openPicker = async () => {
         fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
-        fireEvent.click(await screen.findByRole('button', { name: /Send Credits/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Beans/ }));
         fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
     };
     const syncPast2s = async () => {
@@ -435,5 +435,42 @@ describe('the Wallet\'s Community Circulation box', () => {
         const box = await walletWith(1500);
         expect(box).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
         expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−20.50');
+    });
+});
+
+// The audit (scratch/global-previews-audit/REPORT.md, "#2020 against the rest" 1, 3, 5): inviting is off on a node that
+// previews Beans, so its Levels never promise it; Beans is the currency on both, so local's send is "Send Beans".
+describe('the Levels words: true on global, and Send Beans on both', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 20, earnedCredit: 9, floor: -50, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+    });
+    afterEach(() => { info.value = { profile: 'local', features: {} }; });
+
+    it('in preview: no "Invite Members" perk and no "Anyone can invite"; the rest of the note stays', async () => {
+        info.value = { profile: 'global', features: { beans: false, showcase: true } };
+        render(<LedgerPage identity={identity} isMember={true} preview />);
+        await screen.findByTestId('levels-shelf');
+        expect(screen.queryByText('Invite Members')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/Anyone can invite/);
+        expect(document.body.textContent).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require/);
+    });
+
+    it('local: the perk and the note keep inviting, and the send says Beans, not Credits', async () => {
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await screen.findByTestId('levels-shelf');
+        expect(screen.getByText('Invite Members')).toBeInTheDocument();
+        expect(document.body.textContent).toMatch(/Anyone can invite\./);
+        await waitFor(() => expect(screen.getAllByText('Send Beans').length).toBeGreaterThan(0));
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        expect(await screen.findByRole('button', { name: /💸 Send Beans/ })).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/Send Credits/);
+    });
+
+    it("the example member's avatar keeps its width beside a long, wrapping name (no oval at 320)", async () => {
+        render(<LedgerPage identity={identity} isMember={true} preview />);
+        const avatar = screen.getByAltText('Identity').parentElement!;
+        expect(avatar).toHaveClass('w-14', 'h-14', 'shrink-0', 'rounded-full');
+        expect(avatar.nextElementSibling).toHaveClass('min-w-0');
     });
 });

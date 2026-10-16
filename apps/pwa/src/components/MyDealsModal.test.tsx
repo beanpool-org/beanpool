@@ -246,4 +246,58 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
         expect(document.activeElement).toBe(triggerBtn);
         document.body.removeChild(triggerBtn);
     });
+
+    describe('preview mode', () => {
+        it('renders the sample deals and the strip when preview is true, even without passed posts/transactions', () => {
+            render(
+                <MyDealsModal
+                    visible={true}
+                    identity={mockIdentity}
+                    preview={true}
+                    onClose={vi.fn()}
+                />
+            );
+
+            expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+            expect(screen.getByTestId('deals-preview-head')).toBeInTheDocument();
+            expect(screen.getByTestId('sample-deal-sample-deal-shelves')).toBeInTheDocument();
+            expect(screen.getByTestId('sample-deal-sample-deal-bike')).toBeInTheDocument();
+        });
+
+        it('opens the local community sheet when a deal card is clicked in preview', async () => {
+            render(
+                <MyDealsModal
+                    visible={true}
+                    identity={mockIdentity}
+                    preview={true}
+                    onClose={vi.fn()}
+                />
+            );
+
+            const card = screen.getByTestId('sample-deal-sample-deal-shelves');
+            fireEvent.click(card);
+
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            expect(screen.queryByTestId('local-community-sheet')).not.toBeInTheDocument();
+        });
+
+        it('local mode (preview=false) remains unchanged and does not render the preview head', () => {
+            render(
+                <MyDealsModal
+                    visible={true}
+                    identity={mockIdentity}
+                    preview={false}
+                    onClose={vi.fn()}
+                    posts={mockPosts}
+                    transactions={mockTransactions}
+                />
+            );
+
+            expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+            expect(screen.queryByTestId('deals-preview-head')).not.toBeInTheDocument();
+            expect(screen.getByTestId('deal-card-tx-1')).toBeInTheDocument();
+        });
+    });
 });
+

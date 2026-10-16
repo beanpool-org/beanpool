@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 135,
-  "hash": "5f653cce08ec5ea670e7d799b21be3a10e62841a82e76f9ce7909dd52af53d6e",
+  "version": 136,
+  "hash": "41dc63ba096a362db4e9dd8346987790c4c646f2fddbcda74ef61e0ce49f125f",
   "sections": [
     {
       "id": "about",
@@ -2687,7 +2687,7 @@
           "type": "ul",
           "items": [
             "In the web app on the computer, choose to link with the mobile app. It shows a QR code.",
-            "On the phone, open **Settings** and tap **Use your account on another device** (older apps: **Link Another Device**).",
+            "On the phone, open **Settings** and tap **Link a device** (older apps: **Use your account on another device**).",
             "Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that."
           ]
         },

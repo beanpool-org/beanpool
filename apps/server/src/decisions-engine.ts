@@ -43,7 +43,7 @@ import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
-import { db, writeTombstone } from './db/db.js';
+import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
@@ -792,11 +792,13 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
  * A grant proposal's amount against the cap. Throws the member's sentence; writes nothing. A grant with no usable amount
  * could never be paid (preflightAssert blocks it), so it gets its plain answer here instead of a vote. A cap of 0 or
  * less refuses every grant outright: the 1e-6 float allowance would otherwise let a sliver of a Bean through, to be
- * queued unpayable on a new node's empty Commons.
+ * queued unpayable on a new node's empty Commons. To the cent, as every payment a member makes is (LED-05): a part of a
+ * cent would be paid as it is and land in a hardship shield rounded to a cent (state-engine.ts sweepRepayment).
  */
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
+    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
     // While the pot is unknown there is no cap to measure against: NaN or Infinity made both tests below false, and a
     // grant of any size was opened for a vote (#1465 re-review, NB-1). Refused in the pause words, and nothing is written.
     if (potIsUnknown()) throw new CommonsPotUnknownError();
@@ -1182,7 +1184,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
         }
         const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount)) {
+        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
             return { status: 'blocked', reason: 'Invalid grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
@@ -1197,7 +1199,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Invalid or missing hardship recipient member' };
         }
         const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount)) {
+        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {

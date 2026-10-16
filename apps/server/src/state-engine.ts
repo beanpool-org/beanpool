@@ -27,7 +27,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -5486,21 +5486,51 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
  * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
  * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
  * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
- * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
- * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back:
- * the grant raises the debt's `hardship_held` (the shield), and each sweep keeps back the part of it the member still held
- * before this payment came in (`received`, what it brought them). Spending the grant shrinks the shield, so what is
- * earned afterwards is swept.
+ * grant Decision (decisions-engine.ts grant_hardship) made while the member is working the debt off (flagged, even while
+ * a second admin has yet to agree) is not swept: the community chose to give those Beans for hardship, and taking them
+ * straight back would undo its own Decision. They count toward the debt only once spent and earned back: the grant raises
+ * the debt's `hardship_held` (the shield), and each sweep keeps back the part of it the member still held before this
+ * payment came in (`received`, what it brought them). Spending the grant shrinks the shield, so what is earned afterwards
+ * is swept; it shrinks the same way while the work-off waits for its second admin (nothing is swept then), so a grant
+ * spent in the wait shields nothing earned in it. A grant made before the work-off was flagged has no shield: those are
+ * Beans the member held when it started, and the first payment sweeps them (§9). The shield is this work-off's alone
+ * (engine/names-debts.ts): it ends with it.
  * Returns what moved.
  */
 const sweptAhead = new Map<string, number>();
+/** A work-off waiting for its second admin: what this batch's payments brought the member so far (shrinkWaitingShield). */
+const receivedWaiting = new Map<string, number>();
+const forgetAtBatchEnd = (memberPubkey: string) => whenPostCommitBatchOver(() => {
+    sweptAhead.delete(memberPubkey);
+    receivedWaiting.delete(memberPubkey);
+});
+
+/**
+ * A flagged work-off that is not live yet (a second admin has yet to agree, engine/names-debts.ts repaymentOf) sweeps
+ * nothing, but its grant's shield still shrinks to what the member held before this batch of payments: what is left of
+ * the grant, never what was earned. Several payments in one commit each add theirs, so the last one's sweep has taken
+ * all of them off. Writes only a shield that gets smaller.
+ */
+function shrinkWaitingShield(memberPubkey: string, received: number): void {
+    const held = db.prepare(`SELECT id FROM names_debts WHERE repaying_pubkey = ? AND status = 'open' AND hardship_held > 0`).get(memberPubkey) as { id: string } | undefined;
+    if (!held) return;
+    const brought = (receivedWaiting.get(memberPubkey) ?? 0) + Math.max(0, received);
+    receivedWaiting.set(memberPubkey, brought);
+    forgetAtBatchEnd(memberPubkey);
+    const left = Math.max(0, getBalance(memberPubkey).balance - brought);
+    db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ? AND hardship_held > ?').run(left, held.id, left);
+}
+
 export function sweepRepayment(memberPubkey: string, received = 0): number {
     const debt = repaymentOf(memberPubkey);
-    if (!debt) return 0;
+    if (!debt) {
+        shrinkWaitingShield(memberPubkey, received);
+        return 0;
+    }
     const { balance } = getBalance(memberPubkey);
     // Several payments to one member in one transaction run their sweeps one after another, after it commits: the first
     // already swept what the later ones brought, so a later one must not count that again as money it brought (it would
-    // read the grant as spent and sweep it). Cleared once the batch of after-commit sweeps is over.
+    // read the grant as spent and sweep it). Cleared when that batch of after-commit hooks is over (db.ts), never later.
     const ahead = sweptAhead.get(memberPubkey) ?? 0;
     const own = Math.max(0, received - ahead);
     const shield = Math.max(0, Math.min(Number(debt.hardship_held) || 0, balance - own));
@@ -5517,7 +5547,7 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
             if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
             // What is left of the grant: what was spent of it is gone from the shield.
             db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ?').run(shield, debt.id);
-            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?
+            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?, hardship_held = 0
                         WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
@@ -5527,8 +5557,8 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
     const over = amount - own;
     if (over > 0 || ahead > 0) {
         const next = Math.max(0, ahead - received) + Math.max(0, over);
-        if (!sweptAhead.has(memberPubkey)) setImmediate(() => sweptAhead.delete(memberPubkey));
         sweptAhead.set(memberPubkey, next);
+        forgetAtBatchEnd(memberPubkey);
     }
     // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
     try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }

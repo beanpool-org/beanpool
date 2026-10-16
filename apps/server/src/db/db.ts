@@ -86,6 +86,19 @@ export function migrateCallsignFold(conn: Database.Database): void {
     }
 }
 
+let postCommitDepth = 0;
+const postCommitBatchOver: (() => void)[] = [];
+
+/**
+ * Runs `fn` once the batch of post-commit hooks now running is over (a hook's own transaction runs its hooks inside the
+ * batch), or at once when none is running. For state that belongs to one batch of after-commit work and must not reach
+ * unrelated work later in the same event-loop turn (state-engine.ts sweepRepayment's).
+ */
+export function whenPostCommitBatchOver(fn: () => void): void {
+    if (postCommitDepth === 0) fn();
+    else postCommitBatchOver.push(fn);
+}
+
 export function afterTransactionCommit(fn: () => void): void {
     if (!(db as any).inTransaction) {
         fn();
@@ -103,8 +116,16 @@ function wrapTxnFn(origFn: any) {
             const res = origFn.apply(this, args);
             if (isOuter && pendingPostCommitHooks.length > 0) {
                 const hooks = pendingPostCommitHooks.splice(0, pendingPostCommitHooks.length);
-                for (const hook of hooks) {
-                    try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                postCommitDepth++;
+                try {
+                    for (const hook of hooks) {
+                        try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                    }
+                } finally { postCommitDepth--; }
+                if (postCommitDepth === 0) {
+                    for (const over of postCommitBatchOver.splice(0, postCommitBatchOver.length)) {
+                        try { over(); } catch (e) { console.error('[DB] Post-commit batch end failed:', e); }
+                    }
                 }
             }
             return res;

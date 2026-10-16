@@ -27,7 +27,8 @@ export interface DebtRecord {
     repaying_pubkey: string | null; repaid: number; settled_how: 'pay_back' | 'work_off' | 'forgiven' | null;
     settled_by: string | null; settled_at: string | null; settle_ref: string | null; note: string | null;
     work_off_confirmation_id: string | null; work_off_floor_before: string | null; work_off_floor_set_at: string | null;
-    /** What a hardship grant gave the member working this debt off, as far as they still hold it (never swept). */
+    /** What a hardship grant gave the member working this debt off, as far as they still hold it (never swept). It is this
+     *  work-off's alone: 0 again when it ends (revoked, the member leaves), a new one starts, or the debt is settled or forgiven. */
     hardship_held: number;
 }
 
@@ -45,7 +46,7 @@ const nowIso = () => new Date().toISOString();
  * stops repaying it: that record stays open, with nobody repaying.
  */
 export function recordDepartedDebt(pubkey: string, entryId: string | null, balance: number, reason: 'removed' | 'account_deleted'): void {
-    db.prepare(`UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL
+    db.prepare(`UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0
                 WHERE repaying_pubkey = ? AND status = 'open'`).run(pubkey);
     const amount = round2(-balance);
     if (!entryId || !(amount > 0)) return;
@@ -111,7 +112,7 @@ export function countDebtPayment(debtId: string, txId: string, payer: string, am
         const left = row ? round2(row.amount - row.repaid) : 0;
         throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
     }
-    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?
+    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?, hardship_held = 0
                 WHERE id = ? AND status = 'open' AND repaid >= amount`).run(settledBy, nowIso(), txId, debtId);
     const after = debtRecord(debtId)!;
     return round2(after.amount - after.repaid);
@@ -138,10 +139,11 @@ const logFloor = (actor: string, action: string, member: string, oldValue: strin
  * confirmation is live, a known floor of 0. Inside confirmMember's transaction (engine/names-list.ts confirmToWorkOff).
  * Where a second admin must agree, the flag only reserves the debt: the floor waits for secondConfirmation
  * (workOffGoesLive), and the sweep reads a live confirmation (repaymentOf). A new work-off of the debt starts with no
- * floor of its own: what an earlier one lowered is no business of this one.
+ * floor of its own: what an earlier one lowered is no business of this one. Nor a hardship grant's shield: an earlier
+ * member's grant never protects what this one holds (`hardship_held` back to 0; endWorkOff and recordDepartedDebt clear it too).
  */
 export function startWorkOff(actor: string, debtId: string, member: string, confirmationId: string, live: boolean): void {
-    db.prepare(`UPDATE names_debts SET repaying_pubkey = ?, work_off_confirmation_id = ?, work_off_floor_before = NULL, work_off_floor_set_at = NULL
+    db.prepare(`UPDATE names_debts SET repaying_pubkey = ?, work_off_confirmation_id = ?, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0
                 WHERE id = ? AND status = 'open'`).run(member, confirmationId, debtId);
     if (live) setWorkOffFloor(actor, debtId, member);
 }
@@ -163,7 +165,7 @@ export function endWorkOff(actor: string, member: string, confirmationId: string
     const debt = db.prepare("SELECT id, work_off_floor_before, work_off_floor_set_at FROM names_debts WHERE work_off_confirmation_id = ? AND repaying_pubkey = ? AND status = 'open'")
         .get(confirmationId, member) as Pick<DebtRecord, 'id' | 'work_off_floor_before' | 'work_off_floor_set_at'> | undefined;
     if (!debt) return;
-    db.prepare('UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL WHERE id = ?').run(debt.id);
+    db.prepare('UPDATE names_debts SET repaying_pubkey = NULL, work_off_confirmation_id = NULL, work_off_floor_before = NULL, work_off_floor_set_at = NULL, hardship_held = 0 WHERE id = ?').run(debt.id);
     const before = debt.work_off_floor_before;
     if (before === null) return;
     const now = floorRow(member);
@@ -261,6 +263,6 @@ export function forgiveDebt(actor: string, id: unknown, body: { note?: unknown; 
     requireOpen(row);
     const note = cleanNote(body.note);
     db.prepare(`UPDATE names_debts SET status = 'forgiven', settled_how = 'forgiven', settled_by = ?, settled_at = ?, settle_ref = ?,
-                note = COALESCE(?, note), repaying_pubkey = NULL WHERE id = ?`).run(actor, nowIso(), body.ref ?? null, note, row.id);
+                note = COALESCE(?, note), repaying_pubkey = NULL, hardship_held = 0 WHERE id = ?`).run(actor, nowIso(), body.ref ?? null, note, row.id);
     return debtRow(row.id);
 }

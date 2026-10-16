@@ -14,8 +14,9 @@
  *   2. An upgraded node says what it said. A database from before the move, its photos inline, one member for every kind
  *      of value a live node's avatar_url holds, booted: each member's URL in the full list and in a delta (both apps'
  *      sync), in the community members list, the avatar route's answer (status, type, ETag, bytes) and the profile page's
- *      photo are what the old code made of the inline value (the rules kept below as the oracle); a reader with no member
- *      key is refused the list as before.
+ *      photo are what the old code made of the inline value (the rules kept below as the oracle; since SEC-PUB-02 a
+ *      shipped picture's bare address answers 404, its lists carrying bundled://<name>); a reader with no member key is
+ *      refused the list as before.
  *   3. A photo set, changed and removed by a member through POST /api/profile/update: each time the list's URL, the
  *      delta, the avatar route and the row's reference follow; nothing reads the photo to answer a list.
  *
@@ -323,12 +324,16 @@ async function main(): Promise<void> {
             const inCommunity = communityList.find((m) => m.publicKey === pk)?.avatarUrl;
             assert(unkeyed(inFull) === want && unkeyed(inDelta) === want && unkeyed(inCommunity) === want && [inFull, inDelta, inCommunity].every(keyedIfAvatar),
                 `${label}: the full list, the delta and the community list give ${want === null ? 'no URL' : 'its URL'}, as before (${inFull}, ${inDelta}, ${inCommunity})`);
-            const was = oldAvatar(value);
+            // Since SEC-PUB-02 the bare address answers 404 for a shipped picture, where the old route served the jpg: a 200 told
+            // anyone the key was a member's. No route hands that address out; the lists carry bundled://<name> (checked above),
+            // which each app draws from its own assets.
+            const shipped = typeof value === 'string' && value.trim().startsWith('bundled://');
+            const was = shipped ? { status: 404 } : oldAvatar(value);
             // Asked as a member is handed it: the list's URL, with its key; with none, the bare address.
             const got = await call(server.base, 'GET', typeof inFull === 'string' && inFull.startsWith('/api/avatar/') ? inFull : `/api/avatar/${pk}?size=thumb`, null);
             const same = got.status === was.status && (was.status !== 200
                 || (got.bytes.equals(was.bytes!) && got.headers.get('content-type') === was.type && got.headers.get('etag') === was.etag));
-            assert(same, `${label}: the avatar route answers ${was.status}${was.status === 200 ? ' with the same bytes, type and ETag' : ''}, as before (${got.status} ${got.headers.get('content-type') ?? ''})`);
+            assert(same, `${label}: the avatar route answers ${was.status}${was.status === 200 ? ' with the same bytes, type and ETag' : ''}, ${shipped ? 'at the bare address no list hands out' : 'as before'} (${got.status} ${got.headers.get('content-type') ?? ''})`);
             if (oldUrl(pk, value) !== null) {
                 const profile = JSON.parse((await call(server.base, 'GET', `/api/profile/${pk}`, member)).text);
                 assert(profile?.avatar === value, `${label}: the profile page hands the photo out as it is stored, as before`);

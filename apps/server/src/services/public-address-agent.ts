@@ -4,6 +4,7 @@
 //   PUBLIC_ADDRESS_AUTO=1            enable (or just set PUBLIC_ADDRESS_NAME)
 //   PUBLIC_ADDRESS_NAME=cairns       desired label (defaults to a slug of the community name)
 //   PUBLIC_ADDRESS_MODE=tunnel|direct  (default tunnel)
+//   PUBLIC_ADDRESS_IP=<IPv4>           (direct only: the address its A record points at; direct claims nothing without it)
 //   REGISTRAR_URL=https://beanpool.org
 //
 // Every 5 min on a main server it asks the registrar about this server's name and saves a live answer; the tunnel inside
@@ -27,7 +28,7 @@ import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { noteTurnedAway } from '../config/turned-away-names.js';
 import { dataDir } from '../recover-command.js';
 import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
-import { claimAddress, addressStatus } from './registrar-client.js';
+import { claimAddress, addressStatus, isPublicIpv4 } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
@@ -145,8 +146,14 @@ export async function reconcile(): Promise<void> {
     const communityName = cleanLabel(process.env.PUBLIC_ADDRESS_COMMUNITY_NAME, REGISTRAR_COMMUNITY_NAME_MAX)
         || cleanLabel(getLocalConfig().communityName, REGISTRAR_COMMUNITY_NAME_MAX);
 
+    // The registrar refuses a direct claim without an address (SEC-REG-01): asked for nothing rather than refused.
+    const publicIp = process.env.PUBLIC_ADDRESS_IP?.trim();
+    if (mode === 'direct' && !isPublicIpv4(publicIp)) {
+        console.warn('[PublicAddr] PUBLIC_ADDRESS_MODE=direct needs PUBLIC_ADDRESS_IP (this server\'s public IPv4 address): nothing claimed.');
+        return;
+    }
     try {
-        const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName);
+        const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName, mode === 'direct' ? publicIp : undefined);
         const stored = persistAddressIfUnchanged({ name, mode, communityName, contact, ...res, ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}) }, 'claim', since);
         if (!stored) { lateClaim(name, res); return; }
         await stored;

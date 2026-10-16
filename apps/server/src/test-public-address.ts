@@ -26,7 +26,7 @@ import Koa from 'koa';
 import { startP2P } from './p2p.js';
 import { initStateEngine, getNodeConfig } from './state-engine.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, nodePubkeyHex } from './services/registrar-client.js';
+import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, PROTOCOLS, SEND_PROTO, nodePubkeyHex } from './services/registrar-client.js';
 import { tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN } from './services/tunnel-connector.js';
 import { useFakeCloudflared } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
@@ -90,19 +90,24 @@ async function run() {
     assert(typeof attestation.signature === 'string' && attestation.signature.length === 128, 'Attestation produces valid 64-byte Ed25519 hex signature');
     // Domain separation (2026-08-26 oracle finding). /api/attest signs a caller-supplied nonce with
     // the same identity key that authorises registrar requests, so the two messages must live in
-    // different namespaces or the public endpoint is a forgery oracle for the private one.
-    {
+    // different namespaces or the public endpoint is a forgery oracle for the private one. Checked under v1 (the old
+    // node's tags, ATTEST_DOMAIN/REQUEST_DOMAIN) and under the protocol this node sends (v2 since SEC-REG-04).
+    assert(SEND_PROTO === 'v2' && attestation.proto === 'v2', `the node signs under v2 (SEC-REG-04): sends ${SEND_PROTO}, attests ${attestation.proto ?? 'v1'}`);
+    for (const proto of ['v1', SEND_PROTO] as const) {
         const { publicKeyFromRaw } = await import('@libp2p/crypto/keys');
         const pub = publicKeyFromRaw(Buffer.from(pubkey, 'hex'));
-        const sig = Buffer.from(attestation.signature, 'hex');
-        const tagged = new TextEncoder().encode(`${ATTEST_DOMAIN}\n${testNonce}\n${attestation.timestamp}`);
-        const untagged = new TextEncoder().encode(`${testNonce}\n${attestation.timestamp}`);
-        assert(await pub.verify(tagged, sig), 'Attestation signs the DOMAIN-TAGGED message');
-        assert(!(await pub.verify(untagged, sig)), 'Attestation does NOT sign the bare nonce+timestamp (pre-fix shape)');
+        const att = proto === SEND_PROTO ? attestation : await buildAttestation(testNonce, proto);
+        const sig = Buffer.from(att.signature, 'hex');
+        const attestTag = proto === 'v1' ? ATTEST_DOMAIN : PROTOCOLS[proto].attest;
+        const requestTag = proto === 'v1' ? REQUEST_DOMAIN : PROTOCOLS[proto].request;
+        const tagged = new TextEncoder().encode(`${attestTag}\n${testNonce}\n${att.timestamp}`);
+        const untagged = new TextEncoder().encode(`${testNonce}\n${att.timestamp}`);
+        assert(await pub.verify(tagged, sig), `Attestation signs the DOMAIN-TAGGED message (${proto})`);
+        assert(!(await pub.verify(untagged, sig)), `Attestation does NOT sign the bare nonce+timestamp (pre-fix shape) (${proto})`);
         // The shape the exploit needed: a nonce that reads as a signed request.
-        const smuggled = `POST\n/api/registrar/offline\n${attestation.timestamp}`;
-        const asRequest = new TextEncoder().encode(`${REQUEST_DOMAIN}\n${smuggled}\n${attestation.timestamp}`);
-        assert(!(await pub.verify(asRequest, sig)), 'An attestation can never verify under the request domain');
+        const smuggled = `POST\n/api/registrar/offline\n${att.timestamp}`;
+        const asRequest = new TextEncoder().encode(`${requestTag}\n${smuggled}\n${att.timestamp}`);
+        assert(!(await pub.verify(asRequest, sig)), `An attestation can never verify under the request domain (${proto})`);
     }
 
     // 2. Setup Mock Registrar Server
@@ -111,6 +116,8 @@ async function run() {
     let registrarCommunityName = '';
     let registrarContact = '';
     let registrarOrigin: unknown = undefined;
+    // What reached the fake registrar: each request's path, protocol and body (SEC-REG-01, 02 and 04, verified 2026-10-16).
+    const registrarSeen: { path: string; proto: unknown; nonce: boolean; body: any }[] = [];
     const registrarToken = 'cf-tunnel-token-secret-123456789';
 
     const mockRegistrar = http.createServer(async (req, res) => {
@@ -131,6 +138,7 @@ async function run() {
                 return;
             }
 
+            registrarSeen.push({ path: url.pathname, proto: headers['x-bp-proto'], nonce: typeof headers['x-bp-nonce'] === 'string', body: bodyText ? JSON.parse(bodyText) : null });
             if (url.pathname === '/api/registrar/claim' && req.method === 'POST') {
                 const b = JSON.parse(bodyText || '{}');
                 registrarName = b.name;
@@ -277,6 +285,19 @@ async function run() {
 
         allowAdmin = true;
 
+        // --- Test 4a: a Direct claim with no public IPv4 address is refused here, and nothing reaches the registrar (SEC-REG-01) ---
+        for (const extra of [{}, { publicIp: 'not-an-ip' }, { publicIp: '2001:db8::1' }]) {
+            const directRes = await fetch(`${baseUrl}/api/local/admin/public-address/claim`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'mullum-direct', mode: 'direct', ...extra }),
+            });
+            const directBody = await directRes.json().catch(() => ({}));
+            assert(directRes.status === 400 && /public IPv4 address/.test(directBody.error || ''),
+                `a Direct claim with ${JSON.stringify(extra)} is a 400 that says why (${directRes.status} ${directBody.error})`);
+        }
+        assert(!registrarSeen.some((r) => r.path === '/api/registrar/claim'), 'and no Direct claim without an address reached the registrar');
+        assert(!(getNodeConfig() as any).publicAddress, 'nor changed the stored address');
+
         // --- Test 4: Claim Public Address & Provision Tunnel ---
         const claimRes = await fetch(`${baseUrl}/api/local/admin/public-address/claim`, {
             method: 'POST',
@@ -297,6 +318,10 @@ async function run() {
         assert(claimBody.success === true, 'Claim response has success: true');
         assert(claimBody.hostname === 'mullum-test.beanpool.org', 'Claim returns assigned hostname');
         assert(claimBody.tunnelToken === registrarToken, 'Claim returns provisioned Cloudflare tunnel token');
+        const claimSeen = registrarSeen.filter((r) => r.path === '/api/registrar/claim');
+        assert(claimSeen.length === 1 && claimSeen[0].proto === 'v2' && claimSeen[0].nonce,
+            'the claim went out signed under v2, with its one-use nonce (SEC-REG-04)');
+        assert(claimSeen[0].body && !('public_ip' in claimSeen[0].body), 'a tunnel claim carries no public_ip');
 
         // Verify Node Config Persistence
         const config = getNodeConfig() as any;
@@ -333,6 +358,9 @@ async function run() {
             })
         });
         assert(updateRes.status === 200, 'POST /update succeeds with HTTP 200');
+        const updateSeen = registrarSeen.filter((r) => r.path === '/api/registrar/update').at(-1);
+        assert(updateSeen?.body?.name === 'mullum-test', `the update names the stored name, so a key with two names relabels the one in use (SEC-REG-02): ${JSON.stringify(updateSeen?.body)}`);
+        assert(updateSeen?.proto === 'v2', 'and is signed under v2');
         const updatedConfig = getNodeConfig() as any;
         assert(updatedConfig.publicAddress.communityName === 'Updated Community Name', 'Node config reflects updated community name');
         assert(updatedConfig.publicAddress.contact === 'new-contact@beanpool.org', 'Node config reflects updated contact');

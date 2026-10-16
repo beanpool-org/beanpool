@@ -3,6 +3,7 @@
 // budget of new auto names) and REG-06 (/admin framed). Each test here failed on cea6229a.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ReadableStream } from 'node:stream/web';
 import { world, makeKey, liveName, nowS, toHex } from './harness.js';
 import worker from '../src/index.js';
 

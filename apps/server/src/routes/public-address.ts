@@ -9,7 +9,7 @@
 
 import Router from '@koa/router';
 import http from 'node:http';
-import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder } from '../services/registrar-client.js';
+import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder, isPublicIpv4 } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
@@ -272,6 +272,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // The name's shape before the proof (#2018 NB3): the registrar's own NAME_RE, so it refuses nothing the registrar takes.
         // Folded as the rest of the route keys it (a trailing dot is the same name: #1583 r4176138168).
         if (!isAddressLabel(foldName(name))) { ctx.status = 400; ctx.body = { error: 'That is not an address name: 3 to 32 letters a–z, digits and hyphens, with no hyphen at either end.' }; return; }
+        // A direct name points an A record at this server's public IPv4 address, which only the owner can say (SEC-REG-01):
+        // without one nothing is asked of the registrar, which would refuse it.
+        const publicIp = b.publicIp ?? b.public_ip;
+        if (mode === 'direct' && !isPublicIpv4(publicIp)) { ctx.status = 400; ctx.body = { error: 'Direct mode needs this server\'s public IPv4 address. Without one, use Tunnel.' }; return; }
         // Claiming over a different live name changes the community's address: the fresh proof (design case 18, B3, as the
         // director narrowed it). A first claim, or the same name again, stays plain, so setting up has no hard gate.
         const live = (getNodeConfig() as any).publicAddress;
@@ -287,7 +291,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `⏳ Requesting tunnel allocation for "${name}.beanpool.org"...`, 'info');
             // The tunnel runs inside this server, so it always leads to this server's own loopback.
             const communityName = b.communityName || b.community_name;
-            const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, b.contact, communityName);
+            const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, b.contact, communityName, mode === 'direct' ? publicIp : undefined);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
             // Recorded before the stored address changes: a name held until now is kept, as former.
@@ -421,7 +425,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
         try {
             const communityName = b.communityName !== undefined ? b.communityName : b.community_name;
-            const result = await updateAddressMetadata(communityName, b.contact);
+            // The stored name, so a key holding two names relabels the one in use (SEC-REG-02).
+            const result = await updateAddressMetadata(communityName, b.contact, (getNodeConfig() as any).publicAddress?.name);
             const prev = (getNodeConfig() as any).publicAddress || {};
             const updatedPa = { ...prev };
             if (communityName !== undefined) updatedPa.communityName = communityName;

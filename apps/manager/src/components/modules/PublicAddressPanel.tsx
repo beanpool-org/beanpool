@@ -93,7 +93,6 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
     // Form inputs for claim
     const [claimName, setClaimName] = useState('');
-    const [claimMode, setClaimMode] = useState<'tunnel' | 'direct'>('tunnel');
     const [communityName, setCommunityName] = useState('');
     const [contact, setContact] = useState('');
     const [formError, setFormError] = useState<string | null>(null);
@@ -327,7 +326,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
                     name: trimmedName,
-                    mode: claimMode,
+                    // Always a tunnel: a direct name needs this server's public IPv4 address, which Settings can't know
+                    // (SEC-REG-01, verified 2026-10-16). Direct stays for operators who set PUBLIC_ADDRESS_MODE=direct
+                    // and PUBLIC_ADDRESS_IP themselves.
+                    mode: 'tunnel',
                     communityName: communityName.trim() || undefined,
                     contact: contact.trim() || undefined,
                 }),
@@ -965,28 +967,16 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
                         {/* Reachability Mode (per docs/node-dns-registrar.md) */}
                         <div>
-                            <label htmlFor="pubaddr-mode-select" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
+                            <span id="pubaddr-mode-label" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
                                 Reachability Mode
-                            </label>
-                            <select
-                                id="pubaddr-mode-select"
-                                value={claimMode}
-                                onChange={(e) => setClaimMode(e.target.value as 'tunnel' | 'direct')}
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
-                            >
-                                <option value="tunnel">🛡️ Tunnel (recommended default)</option>
-                                <option value="direct">🌐 Direct (public IP / own cert)</option>
-                            </select>
+                            </span>
+                            <div aria-labelledby="pubaddr-mode-label" data-testid="pubaddr-mode" className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white min-h-[44px] flex items-center">
+                                🛡️ Tunnel
+                            </div>
                             <div className="text-[10px] text-nature-400 mt-1 leading-normal">
-                                {claimMode === 'tunnel' ? (
-                                    <span>
-                                        The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
-                                    </span>
-                                ) : (
-                                    <span>
-                                        Direct DNS A-record to your server IP. Requires static public IP, open :443/:80, and self-managed TLS certificates.
-                                    </span>
-                                )}
+                                <span>
+                                    The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
+                                </span>
                             </div>
                         </div>
                     </div>

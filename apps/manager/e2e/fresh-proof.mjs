@@ -4,12 +4,16 @@
  * API is answered from fixtures.mjs, with the one refusal under test routed on top: nothing here talks to a real node.
  *
  *  1. At the press (opus-2028 B1): Claim, connector add, the re-key wizard and offboard put the box far from the button
- *     pressed. Right after the press, with NO scrolling by this script, the box's top is on screen, the point at the
- *     centre of what shows is inside the box (not under a modal), and focus is in it. 320 @130% and 1280, for the
- *     phone's stale hand-off (the sentence) and the password's code (the field).
+ *     pressed. Right after the press, with NO scrolling by this script, the whole box is on screen (its top, when it is
+ *     taller than the screen), the point at the centre of what shows is inside the box (not under a modal), and focus is
+ *     in it. 320 @130% and 1280, for the phone's stale hand-off (the sentence) and the password's code (the field).
+ *     Connector Remove and "Replace it" (the recovery code) close a confirm modal around the refusal, with the node
+ *     answering at once: going back past the modal's history entry must not scroll the page back to where it stood when
+ *     the modal opened (opus-2028 confirm B1).
  *  2. The second Manage press (opus-2028 B3): a stale refusal, then a NEW `#handoff=` link reaching the open page (as an
  *     Android Custom Tab brought back to the front does). The re-key wizard is still open and still ticked, offboard is
  *     still open, the gateway still holds the owner's edit, and the same press then goes through with what was entered.
+ *     A link that signs the page in as ANOTHER key closes the wizard and the code it shows (opus-2028 confirm N1).
  *  3. A spent code is never offered again (opus-2028 B4): after an accepted code, the next box on the same screen opens
  *     empty with Confirm off; Cancel empties it too.
  *  4. Member detail's Grant Admin (opus-2028 B2): the box opens in the member's screen and the code re-sends the grant.
@@ -93,11 +97,18 @@ const FLOWS = [
     { name: 'Member detail, Grant Admin', screen: { tab: 'people', sub: 'directory' }, testId: 'member-role-proof',
         refuses: (p, m) => m === 'POST' && p === '/api/local/admin/node-roles',
         press: async (page) => { await inspectFirst(page); await press(page, /Grant Admin$/, topOverlay(page)); } },
+    { name: 'Connector Remove (its confirm modal closes first)', screen: { tab: 'appliance', sub: 'gateway' }, testId: 'connector-proof',
+        refuses: (p, m) => m === 'POST' && p === '/api/local/connectors/remove',
+        press: async (page) => { await press(page, /^Remove$/); await settle(page); await press(page, /^Remove Connector$/, topOverlay(page)); } },
+    { name: 'Replace the recovery code (its confirm modal closes as the box opens)', screen: { tab: 'appliance', sub: 'backups' }, testId: 'recovery-proof',
+        overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) },
+        refuses: (p, m) => m === 'POST' && p === '/api/local/admin/takeover/recovery-code',
+        press: async (page) => { await press(page, /^Replace it$/); await settle(page); await press(page, /^Make a new code$/, topOverlay(page)); } },
 ];
 const SIZES = [{ width: 320, textScale: 1.3, label: '320 @130%' }, { width: 1280, textScale: 1, label: '1280' }];
 const KINDS = [{ kind: 'step-up', status: 403, json: STALE }, { kind: 'code', status: 401, json: ASK }];
 
-/** Where the box is right after the press, with no scrolling: on screen, on top, focused. */
+/** Where the box is right after the press, with no scrolling: on screen (whole, when it fits), on top, focused. */
 function atPress(testId) {
     const el = document.querySelector(`[data-testid="${testId}-step-up"], [data-testid="${testId}-code"]`);
     if (!el) return { found: false };
@@ -156,7 +167,8 @@ try {
             await page.locator(`[data-testid="${flow.testId}-${k.kind}"]`).waitFor({ state: 'attached', timeout: 8000 });
             await page.waitForTimeout(300);
             const m = await page.evaluate(atPress, flow.testId);
-            check(m.found && m.top >= 0 && m.top < m.vh && m.hitInside && m.focusInside, `${at}: on screen at the press, on top, focused`, JSON.stringify(m));
+            const shown = m.found && m.top >= 0 && (m.bottom <= m.vh || (m.bottom - m.top > m.vh && m.top < m.vh));
+            check(shown && m.hitInside && m.focusInside, `${at}: whole on screen at the press, on top, focused`, JSON.stringify(m));
             if (k.kind === 'code') {
                 await page.locator(`[data-testid="${flow.testId}-input"]`).fill('123456');
                 await page.locator(`[data-testid="${flow.testId}-confirm"]`).click();
@@ -254,6 +266,30 @@ try {
             check(bodies.length === 2 && sentValues.includes(edited) && !sentValues.includes(original), 'gateway: the next Save sends the edit, not the node\'s old value', JSON.stringify(bodies[1] ?? null));
         } catch (e) {
             check(false, 'gateway across two Manage presses', String(e).split('\n')[0]);
+        }
+        await context.close();
+    }
+
+    {
+        // A link for ANOTHER key reaching the open page (opus-2028 confirm N1): owner A's wizard and the code it shows are
+        // not admin B's to carry on.
+        const { context, page } = await asPhone(browser, origin, { tab: 'people', sub: 'directory' });
+        await page.route(/\/rekey\/issue-code$/, (route) => route.fulfill({ status: 200, contentType: 'application/json',
+            body: JSON.stringify({ success: true, code: 'RK7Q2M9XPA', expiresAt: Date.now() + 600000 }) }));
+        try {
+            await rekeyReady(page);
+            await press(page, /Make a re-key code/, topOverlay(page));
+            await settle(page);
+            const now = async () => ({ overlays: await page.locator('.fixed.inset-0').count(), code: await page.evaluate(() => document.body.innerText.includes('RK7Q2M9XPA')) });
+            const before = await now();
+            await page.route(/\/api\/local\/admin\/auth\/exchange$/, (route) => route.fulfill({ status: 200, contentType: 'application/json',
+                body: JSON.stringify({ role: 'admin', memberPubkey: 'b'.repeat(64), csrfToken: 'csrf-B' }) }));
+            await manageAgain(page);
+            const after = await now();
+            check(before.overlays > 0 && before.code && after.overlays === 0 && !after.code,
+                "another key's link: the wizard and the code it showed close", JSON.stringify({ before, after }));
+        } catch (e) {
+            check(false, "re-key wizard, then another key's link", String(e).split('\n')[0]);
         }
         await context.close();
     }

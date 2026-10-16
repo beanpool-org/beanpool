@@ -17,6 +17,11 @@ import { carriesHandoff } from '../../lib/key-session';
  * fragment navigation: a new entry with no state, and a `popstate` that looks like Back. It is not Back: the modals stay
  * open with what was typed or ticked in them, and the new entry is marked as theirs (lib/key-session.ts keeps the mark
  * when it takes the link out of the address bar) (opus-2028 B3).
+ *
+ * The entry under a modal keeps its scroll where it is (`history.scrollRestoration` 'manual' from the modal's push until
+ * the way back to it has landed). The page moves under a modal only by a fresh-proof box scrolling itself into view
+ * (FreshProofBox.tsx), and a confirm modal closing around that refusal must not jump the page back to where it stood when
+ * the modal opened, which put the box off screen again (opus-2028 B1).
  */
 type ModalBackdropProps = React.HTMLAttributes<HTMLDivElement> & {
     onClose: () => void;
@@ -37,6 +42,21 @@ let traversalListener = false;
 /** The state of the top modal's entry, to mark a hand-off link's new entry with (the screen's `bpSettings` too). */
 let modalEntryState: Record<string, unknown> | null = null;
 
+/** From here until the way back has landed, going back to the current entry leaves the page's scroll where it is. */
+function holdScroll() {
+    window.history.scrollRestoration = 'manual';
+}
+
+/**
+ * The page's own entry scrolls as usual again once no modal is open. Run after the traversal's task: the browser
+ * restores (or not) after it fires popstate, by the mode of the entry it landed on.
+ */
+function releaseScroll() {
+    setTimeout(() => {
+        if (!openModals.length && !traversalPending) window.history.scrollRestoration = 'auto';
+    }, 0);
+}
+
 function modalDepth(state: unknown): number {
     const d = (state as { bpModal?: unknown } | null)?.bpModal;
     return typeof d === 'number' ? d : 0;
@@ -52,10 +72,17 @@ function dropClosedModalEntries() {
     setTimeout(() => {
         historySyncQueued = false;
         const extra = modalDepth(window.history.state) - openModals.length;
-        if (extra <= 0) return;
+        if (extra <= 0) {
+            // Closed by Back: that traversal has landed.
+            if (!traversalPending) releaseScroll();
+            return;
+        }
         if (!traversalListener) {
             traversalListener = true;
-            window.addEventListener('popstate', () => { traversalPending = false; });
+            window.addEventListener('popstate', () => {
+                traversalPending = false;
+                releaseScroll();
+            });
         }
         traversalPending = true;
         window.history.go(-extra);
@@ -79,6 +106,8 @@ export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDo
         const depthOf = () => openModals.indexOf(me) + 1;
         const pushEntry = (depth: number) => {
             modalEntryState = { ...(window.history.state ?? {}), bpModal: depth };
+            // The entry under this one (and this one, which copies its mode) keeps its scroll on the way back.
+            holdScroll();
             window.history.pushState(modalEntryState, '');
         };
         // A modal opened as another closes (in the same click) takes over its entry, unless we are already going back

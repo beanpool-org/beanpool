@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId, sampleRowNote, type SampleDecision } from '../sample-community.js';
+import {
+    SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger, sampleRowNote,
+    type SampleDecision,
+} from '../sample-community.js';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, earnedCreditFromValue, memberLevel, tierIndexForCredit } from '../protocol.js';
 import { monthlyCirculation } from '../circulation.js';
 import { parseInviteTicketText } from '../request-signing.js';
@@ -62,7 +65,9 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
 
     it('every id is a sample id, and every sample id is unique', () => {
         const ids = walk(SAMPLE_COMMUNITY).filter(([p]) => /\.id$/.test(p)).map(([, v]) => v);
-        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 3 + 3);
+        // The community, 6 rows, 3 deals, the enterprise, its listing, the project, the Decision, 3 invites, the invite
+        // tree's 3, and the P&L rows (the Bakery's 2, the project's 1: review of #2063, N5).
+        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 3 + 3 + 2 + 1);
         for (const id of ids) {
             expect(typeof id === 'string' && id.startsWith(SAMPLE_ID_PREFIX), String(id)).toBe(true);
             expect(isSampleId(id), String(id)).toBe(true);
@@ -181,7 +186,8 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
 
     it('the enterprise: credit line, live offers, surplus, ceiling, P&L, a listing, and a lifecycle with pause and wind-up', () => {
         const e = s.enterprises[0];
-        expect(e.pnl).toEqual({ days: 30, cameIn: 180, wentOut: 60, net: 120 });
+        expect(e.pnl).toEqual({ days: 30, cameIn: 180, wentOut: 60, net: 120, rows: e.pnl.rows });
+        expect(e.pnl.rows.map(r => [r.what, r.amount, r.daysAgo])).toEqual([['Sourdough orders', 180, 3], ['Organic flour and seeds', -60, 10]]);
         expect(e.pnl.net).toBe(e.pnl.cameIn - e.pnl.wentOut);
         expect(e.season).toBe(e.pnl.net);
         expect(e.liveOffers).toBe(e.listings.length);
@@ -258,6 +264,58 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
         // Ids and codes are not words.
         for (const [path, v] of strings(SAMPLE_COMMUNITY).filter(([p]) => /\.(id|code|subject|usedBy)$/.test(p))) {
             expect(words.has(v), path).toBe(false);
+        }
+    });
+});
+
+describe('the enterprise page and the Commons card in preview: one adapter for both apps (review of #2063, N5)', () => {
+    const e = SAMPLE_COMMUNITY.enterprises[0];
+    const p = SAMPLE_COMMUNITY.projects[0];
+    const NOW = Date.parse('2026-10-17T00:00:00.000Z');
+
+    it('the rows are the sample\'s and add up: the Bakery came in 180, went out 60, net 120; the project\'s pledges are what it raised', () => {
+        expect(e.pnl.rows.filter(r => r.amount > 0).reduce((n, r) => n + r.amount, 0)).toBe(e.pnl.cameIn);
+        expect(-e.pnl.rows.filter(r => r.amount < 0).reduce((n, r) => n + r.amount, 0)).toBe(e.pnl.wentOut);
+        expect(e.pnl.cameIn - e.pnl.wentOut).toBe(e.pnl.net);
+        expect(e.pnl.net).toBe(e.season);
+        expect(p.rows.reduce((n, r) => n + r.amount, 0)).toBe(p.pledged);
+        for (const r of [...e.pnl.rows, ...p.rows]) {
+            expect(isSampleId(r.id), r.id).toBe(true);
+            expect(r.daysAgo).toBeLessThanOrEqual(e.pnl.days);
+        }
+    });
+
+    it('the ledger works back from what it holds: each running balance, the starting balance and the totals agree', () => {
+        for (const [id, balance, rows] of [[e.id, e.balance, e.pnl.rows], [p.id, p.pledged, p.rows]] as const) {
+            const l = sampleEnterpriseLedger(id, NOW);
+            expect(l.entries.map(x => x.id)).toEqual(rows.map(r => r.id));
+            expect(l.summary.endingBalance).toBe(balance);
+            expect(l.entries[0].runningBalance).toBe(balance);
+            for (let i = 1; i < l.entries.length; i++) expect(l.entries[i].runningBalance).toBe(l.entries[i - 1].runningBalance - l.entries[i - 1].netAmount);
+            const last = l.entries[l.entries.length - 1];
+            expect(l.summary.startingBalance).toBe(last.runningBalance - last.netAmount);
+            expect(l.summary.startingBalance + l.summary.netChange).toBe(balance);
+            expect(l.summary.transactionCount).toBe(rows.length);
+            for (const x of l.entries) {
+                expect(x.counterpartyName).toBe('a neighbour');
+                expect(isSampleId(x.counterparty)).toBe(true);
+                expect(Date.parse(x.timestamp)).toBeLessThan(NOW);
+            }
+        }
+        expect(sampleEnterpriseLedger(e.id, NOW).summary).toMatchObject({ totalIncome: 180, totalSpend: 60, netChange: 120, startingBalance: 40, endingBalance: 160 });
+    });
+
+    it('the cards and the page carry the sample\'s numbers, every id a sample id, a neighbour for every keeper', () => {
+        const [bakery, project] = sampleEnterpriseCards(NOW);
+        expect(bakery).toMatchObject({ publicKey: e.id, name: e.name, balance: 160, creditLine: 200, liveOffers: 1, earnedSurplus: 90, workingCapitalCeiling: 500, lifecycle: 'ongoing' });
+        expect(project).toMatchObject({ publicKey: p.id, name: p.title, goalAmount: 120, currentAmount: 80, lifecycle: 'bounded' });
+        expect(Date.parse(project.deadlineAt!) - NOW).toBe(p.daysToGo * 24 * 60 * 60 * 1000);
+        expect(bakery.keepers).toHaveLength(e.keepers);
+        expect(bakery.keepers.map(k => k.role)).toEqual(['lead', 'keeper', 'keeper']);
+        expect(sampleEnterpriseDetail(e.id, NOW).posts.map((x: { title: string; price: number }) => [x.title, x.price])).toEqual([[e.listings[0].title, 12]]);
+        expect(sampleEnterpriseDetail(p.id, NOW)).toMatchObject({ publicKey: p.id, backersCount: p.backers, posts: [] });
+        for (const [path, v] of strings([sampleEnterpriseCards(NOW), sampleEnterpriseDetail(e.id, NOW), sampleEnterpriseDetail(p.id, NOW), sampleEnterpriseLedger(e.id, NOW), sampleEnterpriseLedger(p.id, NOW)])) {
+            if (/(publicKey|pubkey|\.id|counterparty)$/.test(path)) expect(isSampleId(v), `${path} ${v}`).toBe(true);
         }
     });
 });

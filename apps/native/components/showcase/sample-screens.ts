@@ -6,7 +6,9 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
-import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote, t } from '@beanpool/core';
+import {
+    SAMPLE_COMMUNITY, TIER_LEVELS, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger, sampleRowNote,
+} from '@beanpool/core';
 import type { TreasurySummary, EnterpriseLedgerResponse } from '../../utils/db';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
@@ -98,237 +100,20 @@ export const SAMPLE_MEMBER_HEADER = `${SAMPLE_COMMUNITY.name} · ${SAMPLE_COMMUN
 export const SAMPLE_MEMBER = SAMPLE_COMMUNITY.member;
 
 /**
-  * Example Valley's enterprise (the Bakery) and project (the Compost Bay) in the shape projects.tsx reads,
-  * so the Commons enterprise list shows the real enterprise card fed the sample.
-  */
+ * Example Valley's enterprise (the Bakery) and project (the compost bay) in the shape the Commons card reads, so the
+ * Commons preview draws the real card fed the sample. The numbers and rows are core's, the web's too
+ * (sample-community.ts sampleEnterpriseCards / Detail / Ledger: review of #2063, N5).
+ */
 export function sampleEnterprises(): TreasurySummary[] {
-    const c = SAMPLE_COMMUNITY;
-    const e = c.enterprises[0];
-    const p = c.projects[0];
-    const now = Date.now();
-
-    const enterprise: TreasurySummary = {
-        publicKey: e.id,
-        name: e.name,
-        callsign: e.name,
-        avatar: null,
-        avatarUrl: null,
-        balance: e.balance,
-        creditLine: e.creditLine,
-        liveOffers: e.liveOffers,
-        earnedSurplus: e.earnedSurplus,
-        workingCapitalCeiling: e.capitalCeiling,
-        purpose: e.what,
-        goalAmount: 0,
-        currentAmount: null,
-        deadlineAt: null,
-        lifecycle: 'ongoing',
-        status: e.lifecycle.status,
-        paused: false,
-        keepers: [
-            { pubkey: 'sample-keeper-1', callsign: t('a neighbour'), role: 'lead' },
-            { pubkey: 'sample-keeper-2', callsign: t('a neighbour'), role: 'keeper' },
-            { pubkey: 'sample-keeper-3', callsign: t('a neighbour'), role: 'keeper' },
-        ],
-    };
-
-    const project: TreasurySummary = {
-        publicKey: p.id,
-        name: p.title,
-        callsign: p.title,
-        avatar: null,
-        avatarUrl: null,
-        balance: p.pledged,
-        creditLine: 0,
-        liveOffers: 0,
-        earnedSurplus: 0,
-        workingCapitalCeiling: null,
-        purpose: p.what,
-        goalAmount: p.goal,
-        currentAmount: p.pledged,
-        deadlineAt: new Date(now + p.daysToGo * DAY_MS).toISOString(),
-        lifecycle: 'bounded',
-        status: 'active',
-        paused: false,
-        keepers: [
-            { pubkey: 'sample-keeper-1', callsign: t('a neighbour'), role: 'lead' },
-        ],
-    };
-
-    return [enterprise, project];
+    return sampleEnterpriseCards();
 }
 
-/**
-  * Full enterprise detail for treasury-detail.tsx in preview mode.
-  */
+/** One of them as the enterprise page reads it in preview: the project's for its id, else the Bakery's. */
 export function sampleTreasuryDetail(pubkey?: string): any {
-    const c = SAMPLE_COMMUNITY;
-    const isProject = pubkey === c.projects[0].id;
-    const now = Date.now();
-
-    if (isProject) {
-        const p = c.projects[0];
-        return {
-            publicKey: p.id,
-            id: p.id,
-            name: p.title,
-            purpose: p.what,
-            description: p.what,
-            goalAmount: p.goal,
-            currentAmount: p.pledged,
-            balance: p.pledged,
-            creditLine: 0,
-            liveOffers: 0,
-            earnedSurplus: 0,
-            workingCapitalCeiling: null,
-            lifecycle: 'bounded',
-            status: 'active',
-            paused: false,
-            deadlineAt: new Date(now + p.daysToGo * DAY_MS).toISOString(),
-            backersCount: p.backers,
-            keepers: [
-                { pubkey: 'sample-keeper-1', publicKey: 'sample-keeper-1', callsign: t('a neighbour'), role: 'lead' },
-            ],
-            posts: [],
-            flow: [],
-            pendingBids: [],
-            activeDeals: [],
-            deferredClaims: [],
-        };
-    }
-
-    const e = c.enterprises[0];
-    return {
-        publicKey: e.id,
-        id: e.id,
-        name: e.name,
-        purpose: e.what,
-        description: e.what,
-        balance: e.balance,
-        creditLine: e.creditLine,
-        liveOffers: e.liveOffers,
-        earnedSurplus: e.earnedSurplus,
-        workingCapitalCeiling: e.capitalCeiling,
-        goalAmount: 0,
-        currentAmount: null,
-        deadlineAt: null,
-        lifecycle: 'ongoing',
-        status: e.lifecycle.status,
-        paused: false,
-        keepers: [
-            { pubkey: 'sample-keeper-1', publicKey: 'sample-keeper-1', callsign: t('a neighbour'), role: 'lead' },
-            { pubkey: 'sample-keeper-2', publicKey: 'sample-keeper-2', callsign: t('a neighbour'), role: 'keeper' },
-            { pubkey: 'sample-keeper-3', publicKey: 'sample-keeper-3', callsign: t('a neighbour'), role: 'keeper' },
-        ],
-        posts: e.listings.map(l => ({
-            id: l.id,
-            title: l.title,
-            type: l.type,
-            credits: l.price,
-            price: l.price,
-            description: '',
-            repeatable: true,
-        })),
-        flow: [],
-        pendingBids: [],
-        activeDeals: [],
-        deferredClaims: [],
-    };
+    return sampleEnterpriseDetail(pubkey);
 }
 
-/**
-  * Enterprise P&L ledger data for treasury-detail.tsx in preview mode.
-  */
+/** Its Income & Spend as the enterprise page reads it in preview. */
 export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerResponse {
-    const c = SAMPLE_COMMUNITY;
-    const isProject = pubkey === c.projects[0].id;
-    const now = Date.now();
-
-    if (isProject) {
-        const p = c.projects[0];
-        return {
-            enterprise: {
-                publicKey: p.id,
-                name: p.title,
-                purpose: p.what,
-                status: 'active',
-                paused: false,
-                balance: p.pledged,
-            },
-            period: { since: null, until: null },
-            summary: {
-                totalIncome: p.pledged,
-                totalSpend: 0,
-                netChange: p.pledged,
-                startingBalance: 0,
-                endingBalance: p.pledged,
-                transactionCount: p.backers,
-            },
-            entries: [
-                {
-                    id: 'sample-entry-pledges',
-                    timestamp: new Date(now - 2 * DAY_MS).toISOString(),
-                    direction: 'income',
-                    amount: p.pledged,
-                    fee: 0,
-                    netAmount: p.pledged,
-                    counterparty: 'sample-member-neighbour',
-                    counterpartyName: t('a neighbour'),
-                    memo: t('Backer pledges'),
-                    runningBalance: p.pledged,
-                    authSigner: null,
-                },
-            ],
-        };
-    }
-
-    const e = c.enterprises[0];
-    return {
-        enterprise: {
-            publicKey: e.id,
-            name: e.name,
-            purpose: e.what,
-            status: e.lifecycle.status,
-            paused: false,
-            balance: e.balance,
-        },
-        period: { since: null, until: null },
-        summary: {
-            totalIncome: e.pnl.cameIn,
-            totalSpend: e.pnl.wentOut,
-            netChange: e.pnl.net,
-            startingBalance: e.balance - e.pnl.net,
-            endingBalance: e.balance,
-            transactionCount: 2,
-        },
-        entries: [
-            {
-                id: 'sample-entry-bread',
-                timestamp: new Date(now - 3 * DAY_MS).toISOString(),
-                direction: 'income',
-                amount: e.pnl.cameIn,
-                fee: 0,
-                netAmount: e.pnl.cameIn,
-                counterparty: 'sample-member-neighbour',
-                counterpartyName: t('a neighbour'),
-                memo: t('Sourdough orders'),
-                runningBalance: e.balance,
-                authSigner: null,
-            },
-            {
-                id: 'sample-entry-flour',
-                timestamp: new Date(now - 10 * DAY_MS).toISOString(),
-                direction: 'spend',
-                amount: e.pnl.wentOut,
-                fee: 0,
-                netAmount: -e.pnl.wentOut,
-                counterparty: 'sample-member-neighbour',
-                counterpartyName: t('a neighbour'),
-                memo: t('Organic flour and seeds'),
-                runningBalance: e.balance - e.pnl.cameIn,
-                authSigner: null,
-            },
-        ],
-    };
+    return coreSampleEnterpriseLedger(pubkey);
 }
-

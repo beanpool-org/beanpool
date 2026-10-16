@@ -75,6 +75,16 @@ export interface SampleListing {
     price: number;
 }
 
+/** One line of an enterprise's or a project's Income & Spend, with a neighbour. */
+export interface SamplePnlRow {
+    id: string;
+    /** What it was for, as the row shows it. */
+    what: WordKey;
+    /** Beans: + came in, − went out. */
+    amount: number;
+    daysAgo: number;
+}
+
 export interface SampleEnterprise {
     id: string;
     name: WordKey;
@@ -91,8 +101,8 @@ export interface SampleEnterprise {
     earnedSurplus: number;
     /** The most it may hold: above this, Beans go back to the Commons. */
     capitalCeiling: number;
-    /** Income & Spend over the last 30 days. */
-    pnl: { days: number; cameIn: number; wentOut: number; net: number };
+    /** Income & Spend over the last 30 days, and its rows, newest first (they add up to cameIn and wentOut). */
+    pnl: { days: number; cameIn: number; wentOut: number; net: number; rows: readonly SamplePnlRow[] };
     /** Its live offers. */
     listings: readonly SampleListing[];
     /** Active, and its keepers may pause it or wind it up (both open the sheet in a preview). */
@@ -109,6 +119,8 @@ export interface SampleProject {
     pledged: number;
     backers: number;
     daysToGo: number;
+    /** Its Income & Spend: the backers' pledges, newest first (they add up to pledged). */
+    rows: readonly SamplePnlRow[];
 }
 
 /** One vote cast on a Decision, as the node records it (decisions-engine DecisionVote). */
@@ -300,7 +312,13 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
             liveOffers: 1,
             earnedSurplus: 90,
             capitalCeiling: 500,
-            pnl: { days: 30, cameIn: 180, wentOut: 60, net: 120 },
+            pnl: {
+                days: 30, cameIn: 180, wentOut: 60, net: 120,
+                rows: [
+                    { id: 'sample-pnl-sourdough', what: word('Sourdough orders'), amount: 180, daysAgo: 3 },
+                    { id: 'sample-pnl-flour', what: word('Organic flour and seeds'), amount: -60, daysAgo: 10 },
+                ],
+            },
             listings: [
                 { id: 'sample-listing-sourdough', title: word('Sourdough loaves, baked twice a week'), type: 'offer', price: 12 },
             ],
@@ -316,6 +334,9 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
             pledged: 80,
             backers: 6,
             daysToGo: 12,
+            rows: [
+                { id: 'sample-pnl-pledges', what: word('Backer pledges'), amount: 80, daysAgo: 2 },
+            ],
         },
     ],
     decisions: [
@@ -368,3 +389,93 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
     },
     pool: 640,
 });
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const at = (now: number, days: number) => new Date(now + days * DAY_MS).toISOString();
+
+/** A card as the Commons list reads it: the fields both apps' card and page use. */
+export interface SampleEnterpriseCard {
+    publicKey: string; name: string; avatar: null; avatarUrl: null; balance: number; creditLine: number;
+    liveOffers: number; earnedSurplus: number; workingCapitalCeiling: number | null; purpose: string; goalAmount: number;
+    currentAmount: number | null; deadlineAt: string | null; lifecycle: string; status: string; paused: boolean;
+    keepers: Array<{ pubkey: string; publicKey: string; callsign: string; role: string }>;
+}
+
+/** Its keepers as the enterprise page lists them: "a neighbour" each, the first the lead. */
+function sampleKeepers(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+        pubkey: `sample-keeper-${i + 1}`, publicKey: `sample-keeper-${i + 1}`, callsign: t('a neighbour'), role: i === 0 ? 'lead' : 'keeper',
+    }));
+}
+
+/**
+ * Example Valley's enterprise and project as the Commons card reads a node's list (GET /api/treasuries): the Bakery,
+ * then the compost bay. Both apps draw their own card from these (review of #2063, N5: one adapter, one set of numbers).
+ */
+export function sampleEnterpriseCards(now = Date.now()): [SampleEnterpriseCard, SampleEnterpriseCard] {
+    const e = SAMPLE_COMMUNITY.enterprises[0];
+    const p = SAMPLE_COMMUNITY.projects[0];
+    return [
+        {
+            publicKey: e.id, name: t(e.name), avatar: null, avatarUrl: null,
+            balance: e.balance, creditLine: e.creditLine, liveOffers: e.liveOffers, earnedSurplus: e.earnedSurplus,
+            workingCapitalCeiling: e.capitalCeiling, purpose: t(e.what), goalAmount: 0, currentAmount: null, deadlineAt: null,
+            lifecycle: 'ongoing', status: e.lifecycle.status, paused: false, keepers: sampleKeepers(e.keepers),
+        },
+        {
+            publicKey: p.id, name: t(p.title), avatar: null, avatarUrl: null,
+            balance: p.pledged, creditLine: 0, liveOffers: 0, earnedSurplus: 0, workingCapitalCeiling: null, purpose: t(p.what),
+            goalAmount: p.goal, currentAmount: p.pledged, deadlineAt: at(now, p.daysToGo), lifecycle: 'bounded', status: 'active',
+            paused: false, keepers: sampleKeepers(1),
+        },
+    ];
+}
+
+/** The project's id, or else the enterprise's: the one an enterprise page in preview draws. */
+const isSampleProject = (id: string | undefined) => id === SAMPLE_COMMUNITY.projects[0].id;
+
+/** One enterprise or project as the enterprise page reads it (GET /api/treasury/:key): the project's for its id, else the Bakery's. */
+export function sampleEnterpriseDetail(id: string | undefined, now = Date.now()) {
+    const [enterprise, project] = sampleEnterpriseCards(now);
+    if (isSampleProject(id)) {
+        const p = SAMPLE_COMMUNITY.projects[0];
+        return { ...project, id: p.id, description: project.purpose, backersCount: p.backers, posts: [], flow: [], pendingBids: [], activeDeals: [], deferredClaims: [] };
+    }
+    const e = SAMPLE_COMMUNITY.enterprises[0];
+    return {
+        ...enterprise, id: e.id, description: enterprise.purpose,
+        posts: e.listings.map(l => ({ id: l.id, title: t(l.title), type: l.type, credits: l.price, price: l.price, description: '', repeatable: true })),
+        flow: [], pendingBids: [], activeDeals: [], deferredClaims: [],
+    };
+}
+
+/**
+ * Its Income & Spend as the enterprise page reads it (GET /api/enterprise/:key/ledger): the sample's rows, newest
+ * first, each with a neighbour, the running balance worked back from what it holds now, so the rows, the totals, the
+ * starting balance and the balance agree.
+ */
+export function sampleEnterpriseLedger(id: string | undefined, now = Date.now()) {
+    const project = isSampleProject(id);
+    const e = SAMPLE_COMMUNITY.enterprises[0];
+    const p = SAMPLE_COMMUNITY.projects[0];
+    const rows = project ? p.rows : e.pnl.rows;
+    const balance = project ? p.pledged : e.balance;
+    const cameIn = rows.filter(r => r.amount > 0).reduce((n, r) => n + r.amount, 0);
+    const wentOut = rows.filter(r => r.amount < 0).reduce((n, r) => n - r.amount, 0);
+    let running = balance;
+    const entries = rows.map(r => {
+        const entry = {
+            id: r.id, timestamp: at(now, -r.daysAgo), direction: (r.amount > 0 ? 'income' : 'spend') as 'income' | 'spend',
+            amount: Math.abs(r.amount), fee: 0, netAmount: r.amount, counterparty: 'sample-member-neighbour',
+            counterpartyName: t('a neighbour'), memo: t(r.what), runningBalance: running, authSigner: null,
+        };
+        running -= r.amount;
+        return entry;
+    });
+    return {
+        enterprise: { publicKey: project ? p.id : e.id, name: project ? t(p.title) : t(e.name), purpose: project ? t(p.what) : t(e.what), status: project ? 'active' : e.lifecycle.status, paused: false, balance },
+        period: { since: null, until: null },
+        summary: { totalIncome: cameIn, totalSpend: wentOut, netChange: cameIn - wentOut, startingBalance: running, endingBalance: balance, transactionCount: rows.length },
+        entries,
+    };
+}

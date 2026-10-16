@@ -334,7 +334,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
-    '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
+    '/api/federation/links',         // members only (MEMBERS_ONLY_READS_EXACT): link cards carry each link's Beans balance (FED-10)
     '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
@@ -391,6 +391,9 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
 export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
     '/api/pulse/feed',
+    // The link cards (#143): each link enterprise's Beans balance with a peer community. Public by design until the
+    // 2026-09-28 decision that balances are members' business (FED-10); no app reads it, and a member still does.
+    '/api/federation/links',
 ]);
 // And every read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
 // projects, where they are switched on (switched off, each answers 404 feature_off to everyone). Members only rather

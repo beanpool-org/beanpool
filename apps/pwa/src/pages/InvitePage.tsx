@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react';
 import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { marked, modeFor, useReaderFeatures } from '../lib/features';
+import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import {
@@ -91,17 +91,26 @@ export function InvitePage({ identity, onNavigate }: Props) {
     // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
     const [notice, setNotice] = useState<string | null>(null);
 
+    // The member's own codes and their invite tree: never asked where invites are in preview (the global node, which
+    // makes no invite; lib/features readsOwn). The offline tickets kept in this browser are still shown.
     useEffect(() => {
-        loadInvites();
-        loadTree();
+        let cancelled = false;
+        readsOwn('invites').then((reads) => {
+            if (cancelled) return;
+            loadInvites(reads);
+            if (reads) loadTree();
+        });
+        return () => { cancelled = true; };
     }, []);
 
-    async function loadInvites() {
+    async function loadInvites(askNode: boolean) {
         let serverInvites: InviteCode[] = [];
-        try {
-            const result = await getMyInvites(identity.publicKey);
-            serverInvites = result.invites;
-        } catch { /* offline */ }
+        if (askNode) {
+            try {
+                const result = await getMyInvites(identity.publicKey);
+                serverInvites = result.invites;
+            } catch { /* offline */ }
+        }
 
         // Merge with local offline tickets that haven't been redeemed
         try {

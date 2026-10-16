@@ -13,7 +13,7 @@ import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } f
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
-import { marked, useFeatureMode } from '../lib/features';
+import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 
@@ -157,15 +157,18 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             .then(res => { if (!cancelled) setChannels(res.channels || []); })
             .catch(() => { if (!cancelled) setChannels([]); });
 
+        // The reader's own balance (their trust card, or the vouch button on someone else's) is Beans: where they are in
+        // preview (the global node) it is never asked (lib/features readsOwn), and the line takes the card's slot.
+        const ownBalance = (key: string) => readsOwn('beans').then((reads) => (reads ? getBalance(key) : null)).catch(() => null);
         Promise.all([
             getMemberProfile(pubkey, identity.publicKey).catch(() => null),
             getMemberRatings(pubkey).catch(() => null),
             getMarketplacePosts({ author: pubkey }).catch(() => []),
-            isSelf ? getBalance(pubkey).catch(() => null) : Promise.resolve(null),
+            isSelf ? ownBalance(pubkey) : Promise.resolve(null),
             isSelf ? getRatingsGiven(pubkey).catch(() => ({ ratings: [] })) : Promise.resolve({ ratings: [] }),
             isSelf ? getFriends(pubkey).catch(() => []) : Promise.resolve([]),
             // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
-            isSelf ? Promise.resolve(null) : getBalance(identity.publicKey).catch(() => null),
+            isSelf ? Promise.resolve(null) : ownBalance(identity.publicKey),
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
             isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
         ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal, viewerProf]) => {

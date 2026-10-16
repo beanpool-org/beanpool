@@ -55,6 +55,7 @@ import { placeNameAfterPick } from '../utils/address-search';
 import { deviceLocalClock, looksLikeStreetAddress, PLACE_WORDS, t, tn, zoneLabelFor, type AddressResult, repeatRefusalText, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields } from './EventRepeatFields';
 import { onlineEventsOn } from '../utils/node-profile';
+import { readsOwn } from '../utils/reads-own';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -192,9 +193,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                     .map(g => ({ id: g.id, name: g.name, convenor: g.viewerRole === 'convenor' })));
             })
             .catch(() => {});
-        Promise.all([getBalance(identity.publicKey), getTreasuries()])
-            .then(([bal, treasuries]) => {
-                if (cancelled) return;
+        // The enterprises the member keeps, to post as: never asked where enterprises are in preview (utils/reads-own.ts;
+        // the global node, where there are none).
+        const key = identity.publicKey;
+        readsOwn('enterprises', key)
+            .then(reads => (reads ? Promise.all([getBalance(key), getTreasuries()]) : null))
+            .then((both) => {
+                if (cancelled || !both) return;
+                const [bal, treasuries] = both;
                 const keeperOf: string[] = Array.isArray((bal as any)?.keeperOf) ? (bal as any).keeperOf : [];
                 // ⚡ Bolt: O(1) Map lookup for enterprise treasuries by publicKey instead of O(T) .find() scans
                 const treasuriesMap = new Map((treasuries || []).map(t => [t.publicKey, t.name]));

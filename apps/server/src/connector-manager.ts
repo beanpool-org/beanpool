@@ -677,10 +677,6 @@ export function addConnector(
             existing.publicUrl = derivePublicUrl(address);
         }
 
-        if (oldAddress === address) {
-            delete existing.pinnedPeerId;
-        }
-
         // If it was enabled and is now disabled (made passive), automatically disconnect
         if (enabled === false && existing.enabled !== false) {
             disconnectFromAddress(address).catch((err: unknown) => {

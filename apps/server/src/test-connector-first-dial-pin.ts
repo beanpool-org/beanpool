@@ -154,6 +154,19 @@ async function main() {
     assert(diskRecord1?.pinnedPeerId === peerIdX,
         `2g. pinnedPeerId persisted to connectors.json on disk`);
 
+    // ── Panel's Make Passive / Make Active and oldAddress === address save keep pinnedPeerId (N2) ──
+    await postConnector({ address: hostPortAddr, trustLevel: 'peer', callsign: 'NodeX', enabled: false });
+    assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
+        `2h. panel "Make Passive" body keeps pinnedPeerId`);
+
+    await postConnector({ address: hostPortAddr, trustLevel: 'peer', callsign: 'NodeX', enabled: true });
+    assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
+        `2i. panel "Make Active" body keeps pinnedPeerId`);
+
+    await postConnector({ address: hostPortAddr, oldAddress: hostPortAddr, trustLevel: 'peer', callsign: 'NodeX-Renamed' });
+    assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
+        `2j. save with oldAddress === address keeps pinnedPeerId`);
+
     // ── 3. Stop X, start node Y (different key) on the same port, dial again ──
     await nodeX.stop();
 

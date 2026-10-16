@@ -58,7 +58,7 @@ import {
     RestorePointError, RESTORE_POINT_DB, RESTORE_POINT_SERVER_TAR, RESTORE_POINT_SERVER_FILES, type RestorePointInfo,
 } from '../services/restore-points.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
-import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
+import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
 import {
     isOpenJoinKeyId, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId, openJoinKeyOffLine, OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW,
@@ -915,6 +915,7 @@ router.post('/api/local/admin/standby-health/forget', async (ctx) => {
         ctx.body = { error: 'No standby with that id is watched here' };
         return;
     }
+    noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.standbyForgotten, ...actingAs(ctx.state) });
     ctx.body = { success: true, ...getStandbyHealthBanner() };
 });
 
@@ -974,6 +975,7 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
     if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'change which server this standby copies from'))) return;
 
     const config = getLocalConfig();
+    const copiedFrom = config.backupPrimaryUrl || null;
     config.backupPrimaryUrl = primaryUrl.trim() || null;
     // Replication token this standby presents to its main server. Empty string clears it
     // (copying stops until a new one is saved); undefined leaves it unchanged.
@@ -983,6 +985,7 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
     // A saved token supersedes a legacy stored admin password: wipe it.
     if (config.backupReplicationToken) config.backupAdminPassword = null;
     saveLocalConfig(config);
+    if (config.backupPrimaryUrl !== copiedFrom) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.copyFromChanged, ...actingAs(ctx.state) });
     ctx.body = { success: true, credential: getStandbyCredentialState() };
 });
 
@@ -1007,6 +1010,7 @@ router.post('/api/local/admin/replication-token/generate', async (ctx) => {
     if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     const token = generateReplicationToken();
     setReplicationToken(token);
+    noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.replicationTokenMade, ...actingAs(ctx.state) });
     // Returned ONCE — only the hash is persisted, so it can never be shown again.
     ctx.body = { success: true, token };
 });
@@ -1027,7 +1031,9 @@ router.post('/api/local/admin/replication-token/mode', async (ctx) => {
 
 router.post('/api/local/admin/replication-token/clear', async (ctx) => {
     if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
+    const had = hasReplicationToken();
     clearReplicationToken();
+    if (had) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.replicationTokenCleared, ...actingAs(ctx.state) });
     ctx.body = { success: true };
 });
 
@@ -1174,9 +1180,11 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     // confirmation N-2, #1992 confirmation NB 2; Marty, 15 Oct, card owner-stolen-session). A change that keeps the span
     // or lengthens it (keeping more, turning them on, a longer interval within their age) asks nothing more.
     if (hasUpdate && snapshotsLessened(body) && !(await requireFreshProof(ctx, body.code ?? ctx.get('x-fresh-proof'), 'keep fewer snapshots, or make them cover less time'))) return;
+    const keptBefore = getAutoSnapshotConfig().keep;
     const config = hasUpdate
         ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })
         : getAutoSnapshotConfig();
+    if (config.keep < keptBefore) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.snapshotKeepLowered(keptBefore, config.keep), ...actingAs(ctx.state) });
     ctx.body = { success: true, config };
 });
 

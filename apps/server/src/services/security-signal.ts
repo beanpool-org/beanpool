@@ -87,6 +87,12 @@ export interface SecurityNote {
     alsoPush?: string[];
 }
 
+/** Who acted, for the per-actor bound only (never told): a key session's member, else the admin password. */
+export function actingAs(state: unknown, role = 'owner'): { actor: string; actorRole: string } {
+    const s = state as { isKeySession?: boolean; actor?: unknown } | undefined;
+    return s?.isKeySession && s.actor ? { actor: String(s.actor), actorRole: role } : { actor: 'owner:password', actorRole: 'admin password' };
+}
+
 type Handler = (note: SecurityNote) => void;
 let handler: Handler | null = null;
 

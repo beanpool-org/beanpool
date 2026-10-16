@@ -203,6 +203,7 @@ export const SUITES = [
     'test-owner-lock-open-check',
     'test-backup-topology',
     'test-standby-token-only',
+    'test-standby-pin',
     'test-standby-envelopes',
     'test-takeover-by-code',
     'test-takeover-crash-resume',

@@ -1370,7 +1370,7 @@ function standbyCondition(): Condition {
 }
 
 /** A standby's own two (design case 19): paired with no main server, or its copy source answers with another key. */
-function standbyPinConditions(): Condition[] {
+export function standbyPinConditions(): Condition[] {
     const off = (key: AlertKey, detail: string): Condition => ({ key, active: false, detail });
     const paired = off('standby.unpaired', 'This standby is paired with its main server.');
     const fromMain = off('standby.source-not-main', 'This standby copies from its main server again.');

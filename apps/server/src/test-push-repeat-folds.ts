@@ -127,6 +127,14 @@ async function main(): Promise<void> {
         assert(pushesTo(sam, 'event.update').length === 1, `five take-backs and let-ins push him nothing more (${pushesTo(sam, 'event.update').length} pushes in all)`);
         assert(heldEachTime, 'and each let-in still lets him in');
         sent.length = 0;
+        // L2. A member who said Not going then Going is told when let in again
+        const ng = await call('POST', sam, `/api/marketplace/posts/${ev.id}/rsvp`, { status: null });
+        const g2 = await call('POST', sam, `/api/marketplace/posts/${ev.id}/rsvp`, { status: 'going' });
+        const l2 = await letIn(sam, true);
+        await flush();
+        assert(ng.status === 200 && g2.status === 200 && l2.status === 200 && pushesTo(sam, 'event.update').length === 1,
+            `a member who said Not going then Going is told when let in again (1) (${pushesTo(sam, 'event.update').length})`);
+        sent.length = 0;
         await letIn(tia);
         await flush();
         assert(pushesTo(tia, 'event.update').length === 1, `Tia, let in once, is told (${pushesTo(tia).length})`);
@@ -159,13 +167,21 @@ async function main(): Promise<void> {
         assert(allOk && pushesTo(sid, 'market.request').length === 1, `five more, each after cancelling the last, push him nothing more (${pushesTo(sid, 'market.request').length} in all)`);
         const live = db.prepare("SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? AND status = 'requested'").get(eggs.id, bea.pk) as any;
         assert(live.n === 1, `her live request waits in his deals (${live.n})`);
+
+        // A. An approved deal's cancel after a folded request tells the seller (1 trade.update)
+        sent.length = 0;
+        const apA = await call('POST', sid, '/api/marketplace/transactions/approve', { transactionId: rq.body?.transaction?.id, authorPublicKey: sid.pk });
+        sent.length = 0;
+        const cA = await call('POST', bea, '/api/marketplace/transactions/cancel', { transactionId: rq.body?.transaction?.id, cancellerPublicKey: bea.pk });
+        await flush();
+        assert(apA.status === 200 && cA.status === 200 && pushesTo(sid, 'trade.update').length === 1,
+            `an approved deal's cancel after a folded request tells the seller (1 trade.update) (${pushesTo(sid, 'trade.update').length})`);
         sent.length = 0;
         const calRq = await request(cal);
         await flush();
         assert(calRq.status === 200 && pushesTo(sid, 'market.request').length === 1, `Cal's request pushes Sid (${pushesTo(sid).length})`);
         sent.length = 0;
         Date.now = () => realNow() + later;
-        await cancel(bea, rq.body?.transaction?.id);
         rq = await request(bea);
         await flush();
         Date.now = realNow;
@@ -174,6 +190,48 @@ async function main(): Promise<void> {
         const ok = await call('POST', sid, '/api/marketplace/transactions/approve', { transactionId: rq.body?.transaction?.id, authorPublicKey: sid.pk });
         await flush();
         assert(ok.status === 200 && pushesTo(bea, 'market.answer').length === 1, `Sid's approval tells Bea (${ok.status}, ${pushesTo(bea).length})`);
+
+        // E. A decline of a folded request tells the requester (1)
+        const tea = se.createPost('offer', 'goods', 'Tea', 'A tin', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        await flush(); sent.length = 0;
+        const t1 = await call('POST', bea, '/api/marketplace/posts/request', { postId: tea.id, buyerPublicKey: bea.pk });
+        await call('POST', bea, '/api/marketplace/transactions/cancel-request', { transactionId: t1.body?.transaction?.id, buyerPublicKey: bea.pk });
+        const t2 = await call('POST', bea, '/api/marketplace/posts/request', { postId: tea.id, buyerPublicKey: bea.pk });
+        await flush(); sent.length = 0;
+        const rj = await call('POST', sid, '/api/marketplace/transactions/reject', { transactionId: t2.body?.transaction?.id, authorPublicKey: sid.pk });
+        await flush();
+        assert(rj.status === 200 && pushesTo(bea, 'market.answer').length === 1,
+            `a decline of a folded request tells the requester (1) (${pushesTo(bea, 'market.answer').length})`);
+
+        // B. On a Need the author's cancel tells the helper (1)
+        const ana = member('Ana', 20), hal = member('Hal', 0);
+        for (const b of [ana, hal]) se.createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
+        const fence = se.createPost('need', 'services', 'Fix my fence', 'Two posts down', 2, 'fixed', ana.pk, -28.55, 153.5, [], true)!;
+        await flush(); sent.length = 0;
+        const h1 = await call('POST', hal, '/api/marketplace/posts/request', { postId: fence.id, buyerPublicKey: hal.pk });
+        await call('POST', hal, '/api/marketplace/transactions/cancel-request', { transactionId: h1.body?.transaction?.id, buyerPublicKey: hal.pk });
+        const h2 = await call('POST', hal, '/api/marketplace/posts/request', { postId: fence.id, buyerPublicKey: hal.pk });
+        await flush(); sent.length = 0;
+        const apB = await call('POST', ana, '/api/marketplace/transactions/approve', { transactionId: h2.body?.transaction?.id, authorPublicKey: ana.pk });
+        await flush(); sent.length = 0;
+        const cB = await call('POST', ana, '/api/marketplace/transactions/cancel', { transactionId: h2.body?.transaction?.id, cancellerPublicKey: ana.pk });
+        await flush();
+        assert(apB.status === 200 && cB.status === 200 && pushesTo(hal, 'trade.update').length === 1,
+            `on a Need the author's cancel tells the helper (1) (${pushesTo(hal, 'trade.update').length})`);
+
+        // C. An honest second request after a completed deal pushes the author (1)
+        const cara = member('Cara', 20);
+        se.createPost('offer', 'goods', "Cara's seeds", 'A packet', 1, 'fixed', cara.pk, -28.55, 153.5, [], false);
+        const honey = se.createPost('offer', 'goods', 'Honey', 'A jar', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        await flush(); sent.length = 0;
+        const c1 = await call('POST', cara, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: cara.pk });
+        await call('POST', sid, '/api/marketplace/transactions/approve', { transactionId: c1.body?.transaction?.id, authorPublicKey: sid.pk });
+        const doneC = await call('POST', cara, '/api/marketplace/transactions/complete', { transactionId: c1.body?.transaction?.id, confirmerPublicKey: cara.pk });
+        await flush(); sent.length = 0;
+        const c2 = await call('POST', cara, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: cara.pk });
+        await flush();
+        assert(c1.status === 200 && doneC.status === 200 && c2.status === 200 && pushesTo(sid, 'market.request').length === 1,
+            `an honest second request after a completed deal pushes the author (1) (${pushesTo(sid, 'market.request').length})`);
 
         // ── 3. 1-step accept and cancel ────────────────────────────────────────────────────────────────────
         console.log('\n--- 3. A 1-step accept and its cancel, over and over ---');
@@ -201,6 +259,19 @@ async function main(): Promise<void> {
         await flush();
         assert(acc.status === 200 && sueCancels.status === 200 && pushesTo(bix, 'trade.update').length === 1 && pushesTo(sue).length === 0,
             `Sue's cancel of a quiet deal still tells Bix (${sueCancels.status}, Bix ${pushesTo(bix).length}, Sue ${pushesTo(sue).length})`);
+
+        // D. A second one-step buy pushes (1)
+        const dan = member('Dan', 20);
+        se.createPost('offer', 'goods', "Dan's seeds", 'A packet', 1, 'fixed', dan.pk, -28.55, 153.5, [], false);
+        const bread = se.createPost('offer', 'goods', 'Bread', 'A loaf', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        await flush(); sent.length = 0;
+        const a1 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
+        const d1 = await call('POST', dan, '/api/marketplace/transactions/complete', { transactionId: a1.body?.transaction?.id, confirmerPublicKey: dan.pk });
+        await flush(); sent.length = 0;
+        const a2 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
+        await flush();
+        assert(a1.status === 200 && d1.status === 200 && a2.status === 200 && pushesTo(sid, 'market.request').length === 1,
+            `a second one-step buy pushes (1) (${pushesTo(sid, 'market.request').length})`);
     } finally {
         Date.now = realNow;
         (globalThis as any).fetch = realFetch;

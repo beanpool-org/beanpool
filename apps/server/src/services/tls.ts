@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import tls from 'node:tls';
 import * as acme from 'acme-client';
 import selfsigned from 'selfsigned';
 
@@ -330,21 +331,81 @@ async function cfDeleteTxtRecord(recordId: string): Promise<void> {
 
 // --- Self-Signed Certs (LAN / Fallback) ---
 
+/**
+ * Why OpenSSL refuses this CA certificate, or this server certificate and key as the pair https.createServer loads
+ * (the same tls.createSecureContext call); null when they are good. selfsigned 2.x (node-forge) makes a certificate
+ * OpenSSL 3 cannot parse about once in 10,000: its random 9-byte serial can start 00 00 and node-forge then writes a
+ * non-minimal INTEGER ("asn1 illegal padding"), which failed a fresh boot on CI on 15 Oct.
+ */
+export function selfSignedProblem(caCert: string, serverCert: string, serverKey: string): string | null {
+    try {
+        new crypto.X509Certificate(caCert);
+        tls.createSecureContext({ cert: serverCert, key: serverKey });
+        return null;
+    } catch (err) {
+        return (err as Error).message || String(err);
+    }
+}
+
+let generate: typeof selfsigned.generate = selfsigned.generate;
+/** Tests only: make the certificates with this instead of selfsigned.generate (null puts it back). */
+export function _setSelfSignedGenerateForTests(fn: typeof selfsigned.generate | null): void { generate = fn ?? selfsigned.generate; }
+
+/** Fresh tries before a boot gives up: a bad set is about one in 10,000, so a second try all but always does. */
+const SELF_SIGNED_TRIES = 5;
+
 function generateSelfSigned(): void {
-    // Check if self-signed certs already exist
+    // Certificates already on disk are used when OpenSSL takes them. A set it refuses (a bad serial written by an
+    // older version, a certificate and key from two different runs, a missing file) is made again rather than
+    // failing every boot after this one.
     if (fs.existsSync(CA_CERT_PATH) && fs.existsSync(SERVER_CERT_PATH)) {
-        caCertPem = fs.readFileSync(CA_CERT_PATH, 'utf-8');
-        serverCertPem = fs.readFileSync(SERVER_CERT_PATH, 'utf-8');
-        serverKeyPem = fs.readFileSync(SERVER_KEY_PATH, 'utf-8');
-        console.log('🔐 Self-signed certificates loaded from disk');
-        return;
+        let problem: string | null;
+        try {
+            const ca = fs.readFileSync(CA_CERT_PATH, 'utf-8');
+            const cert = fs.readFileSync(SERVER_CERT_PATH, 'utf-8');
+            const key = fs.readFileSync(SERVER_KEY_PATH, 'utf-8');
+            problem = selfSignedProblem(ca, cert, key);
+            if (!problem) {
+                caCertPem = ca;
+                serverCertPem = cert;
+                serverKeyPem = key;
+                console.log('🔐 Self-signed certificates loaded from disk');
+                return;
+            }
+        } catch (err) {
+            problem = (err as Error).message;
+        }
+        console.log(`⚠️  Self-signed certificates on disk cannot be used (${problem}) — making new ones`);
     }
 
     console.log('🔐 Generating local CA + server certificates...');
 
+    let lastProblem = '';
+    for (let attempt = 1; attempt <= SELF_SIGNED_TRIES; attempt++) {
+        const made = makeSelfSignedSet();
+        const problem = selfSignedProblem(made.caCert, made.serverCert, made.serverKey);
+        if (!problem) {
+            caCertPem = made.caCert;
+            serverCertPem = made.serverCert;
+            serverKeyPem = made.serverKey;
+            // Persist
+            writeFileAtomic(CA_CERT_PATH, caCertPem);
+            writeFileAtomic(CA_KEY_PATH, made.caKey, { mode: 0o600 });
+            writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
+            writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
+            console.log('🔐 Certificates generated and saved to data/tls/');
+            return;
+        }
+        lastProblem = problem;
+        console.log(`⚠️  A new self-signed certificate did not parse (${problem}) — making another (try ${attempt} of ${SELF_SIGNED_TRIES})`);
+    }
+    throw new Error(`TLS: ${SELF_SIGNED_TRIES} self-signed certificates in a row did not parse: ${lastProblem}`);
+}
+
+function makeSelfSignedSet(): { caCert: string; caKey: string; serverCert: string; serverKey: string } {
     // Generate the Root CA
     const caAttrs = [{ name: 'commonName', value: 'BeanPool Local CA' }];
-    const caResult = selfsigned.generate(caAttrs, {
+    const caResult = generate(caAttrs, {
         keySize: 2048,
         days: 3650,
         algorithm: 'sha256',
@@ -359,12 +420,9 @@ function generateSelfSigned(): void {
         ],
     });
 
-    caCertPem = caResult.cert;
-    const caKeyPem = caResult.private;
-
     // Generate the server certificate
     const serverAttrs = [{ name: 'commonName', value: 'beanpool.local' }];
-    const serverResult = selfsigned.generate(serverAttrs, {
+    const serverResult = generate(serverAttrs, {
         keySize: 2048,
         days: 825,
         algorithm: 'sha256',
@@ -380,16 +438,7 @@ function generateSelfSigned(): void {
         ],
     });
 
-    serverCertPem = serverResult.cert;
-    serverKeyPem = serverResult.private;
-
-    // Persist
-    writeFileAtomic(CA_CERT_PATH, caCertPem);
-    writeFileAtomic(CA_KEY_PATH, caKeyPem, { mode: 0o600 });
-    writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
-    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
-
-    console.log('🔐 Certificates generated and saved to data/tls/');
+    return { caCert: caResult.cert, caKey: caResult.private, serverCert: serverResult.cert, serverKey: serverResult.private };
 }
 
 // --- Cert Helpers ---

@@ -86,12 +86,13 @@ describe('RestoreLockedBackup', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open with the code and restore' }));
         await waitFor(() => expect(onDone).toHaveBeenCalled());
         expect(calls.find((c) => c.path === '/api/local/admin/restore')!.headers).toMatchObject({ 'X-Recovery-Code': 'BPRC-1 ABCD' });
-        // After (design case 18 §3.4): the restore point it kept, the restart, and the backup's password.
+        // After (design case 18 §3.4): the restore point it kept, the restart, and the backup's sign-in settings.
         const said = onDone.mock.calls[0][0] as string;
         expect(said).toMatch(/^Backup restored\./);
         expect(said).toContain('Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23.');
         expect(said).toContain('The server restarts now; sign in again.');
-        expect(said).toMatch(/admin password and two-factor sign-in it had when it was made/);
+        expect(said).toContain('its sign-in settings as they were when it was made: its admin password and two-factor sign-in, if it had them');
+        expect(said).not.toMatch(/sign in with (those|the|its) .*password/i);
     });
 
     // The confirmation (design case 18 §3.4; the shell's prompt does the same, #2017): the file's community and the key that

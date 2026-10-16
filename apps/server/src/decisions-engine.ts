@@ -798,13 +798,14 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
-    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
     // While the pot is unknown there is no cap to measure against: NaN or Infinity made both tests below false, and a
     // grant of any size was opened for a vote (#1465 re-review, NB-1). Refused in the pause words, and nothing is written.
     if (potIsUnknown()) throw new CommonsPotUnknownError();
     const cap = commonsGrantCap();
     // Fails closed: a cap that isn't a finite number refuses, never lets through.
     if (!Number.isFinite(cap.capCents) || cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+    // After the cap: a sliver of a Bean against a cap of 0 keeps the cap's answer, which says what the most is.
+    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────

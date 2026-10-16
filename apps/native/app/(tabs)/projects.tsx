@@ -427,8 +427,9 @@ export default function ProjectsScreen() {
                         {/* In preview, Example Valley's Commons first, its strip across the top, so a newcomer meets the
                             marker on arrival; the real groups follow (design §1 row 6, §2; review of #1852, finding 5). The
                             preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp
-                            they line up with the groups below rather than sitting 32 dp in. */}
-                        {enterprisesPreview && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
+                            they line up with the groups below rather than sitting 32 dp in. Drawn only on Groups (where
+                            enterprises live on a local node), so Decide opens at its own content. */}
+                        {enterprisesPreview && activeSection === 'groups' && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
 
                         {/* Commons Pool + My Governance Credits */}
                         {showsBeans && (
@@ -463,7 +464,10 @@ export default function ProjectsScreen() {
                                 accessibilityRole="button"
                                 accessibilityLabel="Decide Section"
                                 style={[styles.sectionTabBtn, activeSection === 'decide' && styles.sectionTabBtnActive]}
-                                onPress={() => setActiveSection('decide')}
+                                onPress={() => {
+                                    setActiveSection('decide');
+                                    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+                                }}
                             >
                                 <MaterialCommunityIcons
                                     name="vote"
@@ -491,7 +495,10 @@ export default function ProjectsScreen() {
                                 accessibilityRole="button"
                                 accessibilityLabel="Groups Section"
                                 style={[styles.sectionTabBtn, activeSection === 'groups' && styles.sectionTabBtnActive]}
-                                onPress={() => setActiveSection('groups')}
+                                onPress={() => {
+                                    setActiveSection('groups');
+                                    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+                                }}
                             >
                                 <MaterialCommunityIcons
                                     name="account-group"

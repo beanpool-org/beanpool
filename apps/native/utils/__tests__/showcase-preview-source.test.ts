@@ -49,7 +49,7 @@ describe('the preview sources', () => {
         expect(ledger).not.toMatch(/SAMPLE_COMMUNITY/);
         const commons = read('app/(tabs)/projects.tsx');
         // In preview, first under the title, so the strip greets the newcomer (review of #1852, finding 5); never the footer.
-        expect(commons).toMatch(/\{heading\.description\}<\/Text>\s*<\/View>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?\{enterprisesPreview && <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View>\}/);
+        expect(commons).toMatch(/\{heading\.description\}<\/Text>\s*<\/View>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?\{enterprisesPreview && activeSection === 'groups' && <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View>\}/);
         expect(commons).not.toMatch(/ListFooterComponent=\{enterprisesPreview/);
         expect(commons.split('<CommonsPreview').length - 1).toBe(1);
         expect(commons).not.toMatch(/SAMPLE_COMMUNITY/);

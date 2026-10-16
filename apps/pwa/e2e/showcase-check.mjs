@@ -379,6 +379,8 @@ async function globalMember(browser, root, dark) {
         const tDecide = Date.now();
         await page.getByTestId('commons-section-tabs').getByRole('button', { name: /Decide/ }).click();
         await page.getByTestId('decide-preview').waitFor({ timeout: 10_000 });
+        const decideBox = await page.getByTestId('decide-preview').boundingBox();
+        check(decideBox && decideBox.y > 0 && decideBox.y < VIEW.height, `Decide preview at 320: starts within first viewport height (${decideBox?.y?.toFixed(1)} px < ${VIEW.height} px)`);
         const decideActs = page.getByTestId('decide-preview').getByTestId('local-community-action');
         const nDecide = await decideActs.count();
         check(nDecide === 3, `Decide preview: 3 marker actions in Decide (${nDecide})`);

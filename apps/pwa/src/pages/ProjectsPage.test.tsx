@@ -844,6 +844,26 @@ describe('the Commons on global: Example Valley\'s cards are the real ones, once
         expect(screen.queryAllByTestId('local-community-pill')).toEqual([]);
         expect(container.textContent).not.toContain(bakery.name);
     });
+
+    it('on the global node the Decide tab has no enterprise preview card and its first content is the Decide screen\'s own; the Groups tab still has it', async () => {
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        const { container } = render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('commons-preview')).toBeInTheDocument();
+        expect(screen.getAllByTestId('sample-enterprise-card')).toHaveLength(2);
+        expect(container.textContent).toContain(bakery.name);
+
+        fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
+        const decide = await screen.findByTestId('decide-preview');
+        expect(screen.queryByTestId('commons-preview')).toBeNull();
+        expect(screen.queryAllByTestId('sample-enterprise-card')).toHaveLength(0);
+        expect(container.textContent).not.toContain(bakery.name);
+        expect(decide).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
+        expect(await screen.findByTestId('commons-preview')).toBeInTheDocument();
+        expect(screen.getAllByTestId('sample-enterprise-card')).toHaveLength(2);
+        expect(container.textContent).toContain(bakery.name);
+    });
 });
 
 describe('the Commons reads nothing of the reader\'s where its features are in preview (global previews audit, P3)', () => {

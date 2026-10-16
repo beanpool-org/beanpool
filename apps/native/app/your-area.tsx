@@ -95,6 +95,8 @@ export default function YourAreaScreen() {
                             onPress={clear}
                             accessibilityRole="button"
                             accessibilityLabel={t('Clear your area')}
+                            accessibilityHint={t('Clears your set area from the community')}
+                            accessibilityState={{ disabled: clearing, busy: clearing }}
                             testID="your-area-clear"
                         >
                             {clearing ? <ActivityIndicator color={colors.feedback.danger.fg} /> : <Text style={styles.clearText}>{t('Clear')}</Text>}

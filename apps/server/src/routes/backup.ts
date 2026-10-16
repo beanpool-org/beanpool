@@ -1751,7 +1751,17 @@ router.post('/api/local/admin/restore', async (ctx) => {
         const backup = describeSealedHeader(sealedHeader);
         // Restore-by-code checks the header signature wherever this server holds a pin (966 follow-up #2).
         const signer = signerCheck(sealedHeader);
-        if (!signer.ok) return refuse(signer.status, { ...signer.body, backup });
+        if (!signer.ok) {
+            // On a standby, a file locked by a key that is not its main server's (design case 19 D5): counted for the owners,
+            // a day's refusals, never whose file or from where.
+            if (signer.body.mainServer) {
+                noteSecurityEvent({
+                    key: 'sec.restore', detail: '', perDay: OWNER_ALERT_WORDS.notMainServerRefused, foldAs: OWNER_ALERT_WORDS.notMainServerRefusedMore,
+                    actor: 'restore:not-main-server', actorRole: 'uploader',
+                });
+            }
+            return refuse(signer.status, { ...signer.body, backup });
+        }
         // A file no pin here vouches for is the uploader's own work: its code and owner stanzas are whoever sealed it, so
         // opening it proves nothing about this community (S2b, D1). It replaces a community only where nobody but the
         // owners has joined; elsewhere the shell's. Before the phone branch, so both ways in are held.

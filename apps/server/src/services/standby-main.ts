@@ -334,19 +334,32 @@ export async function answerPairRequest(req: PairRequest, dir = dataDir()): Prom
         }
         const outcome: PairAnswer['outcome'] = !current ? 'paired' : current.peerId === code.peerId ? 'same' : 'replaced';
         const probe = await probeMainServerKey(code.url, code.peerId);
-        const { updateLocalConfig } = await import('../config/local-config.js');
+        const { updateLocalConfig, getLocalConfig } = await import('../config/local-config.js');
         const { logger } = await import('../logger.js');
+        const { noteSecurityEvent, OWNER_ALERT_WORDS } = await import('./security-signal.js');
+        const copiedFrom = getLocalConfig().backupPrimaryUrl || null;
         if (outcome === 'same') {
             if (current!.url !== code.url) writeStandbyMain({ ...current!, url: code.url }, dir);
         } else {
             writeStandbyMain({ v: 1, peerId: code.peerId, communityId: code.communityId, url: code.url, pairedAt: Date.now(), how: 'shell' }, dir);
         }
         updateLocalConfig({ backupPrimaryUrl: code.url, backupReplicationToken: code.token, backupAdminPassword: null });
+        if (outcome === 'replaced') {
+            // A whole copy of the old main server being built now stops (#2037 NB2): its pages verify against the pin the
+            // stager took when it started, so it could still be made ready and swapped in at the next restart.
+            const { abortStagedCopy } = await import('./stager.js');
+            abortStagedCopy('this standby follows a different main server');
+        }
         if (outcome !== 'same') {
             // The next pull is a whole copy, built from nothing in the stager; the copy held now is kept until it is accepted.
             const { forgetPullCursor } = await import('./backup-puller.js');
             forgetPullCursor();
         }
+        // The owners are told (design case 19 D2, D5; S5's sec.backups): a first pairing, a different main server (high), or
+        // the same one at another address as Live Backup Server tells it.
+        if (outcome === 'paired') noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.pairedFromShell });
+        else if (outcome === 'replaced') noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.followsNewServer, high: true, priority: 4 });
+        else if (code.url !== copiedFrom) noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.copyFromChanged });
         const lines = outcome === 'same'
             ? [`This standby already follows ${keyEnd(code.peerId)}: its main server's address and token are updated (${code.url}). No copy starts again.`]
             : outcome === 'replaced'

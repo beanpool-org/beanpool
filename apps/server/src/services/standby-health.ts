@@ -33,6 +33,7 @@ import { getReplacedInfo } from './identity-epoch.js';
 import { readNodeIdentity } from './takeover-envelope.js';
 import { errorMessage } from '../error-message.js';
 import { withoutOldAddresses } from './address-retention.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from './security-signal.js';
 import { differsInWords, parseStandbyReport, pronounOf, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
@@ -163,6 +164,7 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             logger.info('P2P', `[StandbyHealth] Watching a new standby (${r.id.slice(0, 8)}) for this community's owners.`);
         }
         const at = (ago: number | null) => (ago === null ? null : t - ago);
+        const wasPaired = pairedOf(seen) === 'this';
         Object.assign(seen, {
             address: typeof address === 'string' && address.length <= 64 ? address : null,
             lastPullAt: t,
@@ -181,6 +183,11 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             pin: r.pin,
         });
         if (r.pin === undefined) delete seen.pin;
+        // The owners are told once per standby (design case 19 D5): from its first report that names this server's key.
+        // Bounded as one actor, so a token holder flipping its pin cannot push the owners more than the hour allows.
+        if (!wasPaired && pairedOf(seen) === 'this') {
+            noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.standbyPaired, actor: 'standby-report', actorRole: 'standby', foldAs: OWNER_ALERT_WORDS.standbyPairedMore });
+        }
         evaluate(s, t);
         return true;
     } catch (e) {

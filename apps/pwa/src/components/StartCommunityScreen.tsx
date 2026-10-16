@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from './dialog-focus';
 import { startCommunityUrl, useCommunityInfo } from '../lib/features';
 import { useCoversScreen } from '../lib/screen-cover';
 import {
@@ -16,20 +17,28 @@ import {
 
 const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 px-3 py-2.5 text-[15px] text-nature-900 dark:text-nature-50 placeholder:text-nature-400 dark:placeholder:text-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-500';
 
-export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => void; onNearYou?: () => void }) {
+export function StartCommunityScreen({
+    onClose,
+    onNearYou,
+    returnFocus,
+}: {
+    onClose: () => void;
+    onNearYou?: () => void;
+    returnFocus?: () => HTMLElement | null | undefined;
+}) {
     const info = useCommunityInfo();
     useCoversScreen();
+    const dialog = useRef<HTMLDivElement>(null);
     const backRef = useRef<HTMLButtonElement>(null);
     const [name, setName] = useState('');
     const [place, setPlace] = useState('');
     const [contact, setContact] = useState('');
     const [copied, setCopied] = useState<'yes' | 'no' | null>(null);
-    useEffect(() => {
-        backRef.current?.focus();
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
+
+    useDialogFocus(dialog, onClose, {
+        initialFocus: () => backRef.current,
+        fallback: returnFocus,
+    });
 
     const details = { name, place, contact };
     async function copy() {
@@ -43,6 +52,7 @@ export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => vo
 
     return (
         <div
+            ref={dialog}
             role="dialog"
             aria-modal="true"
             aria-labelledby="start-community-title"

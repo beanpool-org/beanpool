@@ -228,7 +228,7 @@ export function MyDealsModal({
 
     return (
         <>
-            <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
+            <div className={`fixed inset-0 ${preview ? 'z-[150]' : 'z-[100]'} flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200`} role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
                 <div
                     ref={modalRef}
                     data-testid={preview ? 'deals-preview' : undefined}
@@ -489,27 +489,27 @@ export function MyDealsModal({
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                    <div className="flex justify-between items-start gap-2 mb-1">
+                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 whitespace-nowrap ${
                                                                 isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                 : isRequested ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                                                 : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             }`}>
                                                                 {isRequested ? t('Action Required') : isPending ? t('Held in trust') : t('Completed')}
                                                             </span>
-                                                            <span className="text-[10px] text-nature-400 font-bold">
+                                                            <span className="text-[10px] text-nature-400 font-bold shrink-0 whitespace-nowrap">
                                                                 {new Date(item.createdAt).toLocaleDateString()}
                                                             </span>
                                                         </div>
-                                                        <div className="flex items-center shrink-0 whitespace-nowrap">
-                                                            <span className={`font-black text-sm whitespace-nowrap ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
+                                                        <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
+                                                            <span className={`font-black text-sm whitespace-nowrap shrink-0 ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                                 {isBuyer ? '- ' : '+ '}{item.credits}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt="B" />
                                                         </div>
                                                     </div>
-                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
+                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug">
                                                         {item.postTitle}
                                                     </h4>
                                                 </div>
@@ -647,7 +647,7 @@ export function MyDealsModal({
                                         data-testid={`sample-deal-${item.id}`}
                                         role="button"
                                         tabIndex={0}
-                                        aria-label={`View post: ${item.title}`}
+                                        aria-label={item.title}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' || e.key === ' ') {
                                                 e.preventDefault();
@@ -677,21 +677,21 @@ export function MyDealsModal({
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                <div className="flex justify-between items-start gap-2 mb-1">
+                                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 whitespace-nowrap ${
                                                         item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                         : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                                     }`}>
                                                         {item.type}
                                                     </span>
-                                                    <div className="flex items-center">
-                                                        <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
+                                                    <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
+                                                        <span className="font-black text-sm text-indigo-500 dark:text-indigo-300 whitespace-nowrap shrink-0">
                                                             {item.credits ?? '?'}
                                                         </span>
-                                                        <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                        <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt="B" />
                                                     </div>
                                                 </div>
-                                                <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
+                                                <h4 className="font-bold text-nature-950 dark:text-white text-[15px] line-clamp-2 leading-snug mb-1">
                                                     {item.title}
                                                 </h4>
                                                 <p className="text-[11px] font-bold uppercase tracking-wide text-bp-ink-warning">

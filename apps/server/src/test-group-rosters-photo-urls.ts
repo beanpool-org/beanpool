@@ -89,7 +89,8 @@ async function call(base: string, method: 'GET' | 'POST', route: string, key: Ke
 const carriesPhoto = (text: string) => /data:image\//i.test(text) || /[A-Za-z0-9+/]{2000}/.test(text);
 /** What a keyed node (the global profile) hands out for a member with a photo: the member list's URL, with its key. */
 const KEYED_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$`);
-const PLAIN_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}$`);
+// With its key: faces are keyed on every node (public-routes audit SEC-PUB-02).
+const PLAIN_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$`);
 
 // ── The children ──────────────────────────────────────────────────────────────────────────────────────────────────────
 

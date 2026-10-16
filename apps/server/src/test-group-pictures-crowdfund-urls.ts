@@ -97,7 +97,8 @@ async function call(base: string, method: 'GET' | 'POST' | 'PATCH', route: strin
 const carriesPicture = (text: string) => /data:image\//i.test(text) || /[A-Za-z0-9+/]{2000}/.test(text);
 /** A group's own picture as every group read hands it out: its route, its version and its key (keyed on every node). */
 const GROUP_URL = (id: string) => new RegExp(`^/api/groups/${id}/picture\\?v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$`);
-const PLAIN_AVATAR_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}$`);
+// With its key: faces are keyed on every node (public-routes audit SEC-PUB-02).
+const PLAIN_AVATAR_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$`);
 /** When every member here joined: a month before the run. */
 const JOINED = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
 
@@ -352,6 +353,7 @@ async function rulesOnGlobal(): Promise<void> {
 /** 3. The local profile's crowdfunds, made as the apps make them. */
 async function crowdfundsOnLocal(): Promise<void> {
     const { base, db } = await inProcessServer();
+    const { withAvatarKey } = await import('./avatar-test-url.js');
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status) VALUES (?, ?, ?, ?, 'active')`);
     const K = newKey(), R = newKey(), visitor = newKey();
     insert.run(K.pk, 'Kit', JOINED, 'INV-K');
@@ -374,7 +376,7 @@ async function crowdfundsOnLocal(): Promise<void> {
 
     const urlOf = (pk: string) => {
         const ref = (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pk) as any)?.avatar_ref;
-        return ref ? `/api/avatar/${pk}?size=thumb&v=${ref}` : null;
+        return ref ? withAvatarKey(`/api/avatar/${pk}?size=thumb&v=${ref}`) : null;
     };
     for (const [who, key] of [['its maker', K], ['another member', R]] as const) {
         const list = await call(base, 'GET', '/api/crowdfund/projects', key);

@@ -561,6 +561,9 @@ export const VARIANTS = [
     { name: 'test-dm-former-keys-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's own balance answer carries tierCredit (the apps' trust figure) with read auth opted out too (#1644 r4183873149).
     { name: 'test-balance-tier-credit-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A chat photo goes to the people in its conversation on an open node too: unsigned and outsiders get the 404 for an id
+    // with no photo, not the read gate's 401 (#2079 review NB4). The suite reads READ_AUTH, as it clears ENFORCE_READ_AUTH.
+    { name: 'test-photo-pixel-cap-attachment-read', tag: 'readauth-off', label: 'read auth opted out', env: { READ_AUTH: 'off' } },
 
     // Messaging IDOR (A2-2/A2-3/A2-15): one member cannot read another member's conversations. Refuses to run without
     // ENFORCE_READ_AUTH rather than passing vacuously, which is why it sat unregistered.

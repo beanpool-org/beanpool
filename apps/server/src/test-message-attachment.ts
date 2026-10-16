@@ -98,6 +98,11 @@ async function main() {
     assert(!!msgId1, 'Message ID returned in response');
 
     // Verify row in DB directly.
+    //
+    // The ciphertext no longer lives in the row — it is in the image store (storage design §7) and the row
+    // names it. So this checks what still has to be true, and more of it than it used to: the row keeps the
+    // nonce and the mime, the store holds the ciphertext EXACTLY as it was sent, and the database does not
+    // hold a second copy of it.
     const dbRow1 = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msgId1) as any;
     assert(!!dbRow1 && dbRow1.mime === 'image/png' && dbRow1.nonce === attachmentData1.nonce,
         'Attachment row keeps its nonce and mime');

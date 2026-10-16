@@ -2,9 +2,13 @@
  * Failing-first checks for the PHOTOS fixes:
  *   - P1: a chat photo goes to the people in its conversation only, for stored and withheld lines alike
  *   - P2: pixel cap at ingestion (MAX_STORED_PIXELS 2048x2048) for listing photos and avatars
+ *   - the #2079 review: a visitor's row gets the photos in its DMs, the route deciding (B2); four bytes after a JPEG's SOI
+ *     and a GIF's images bigger than its screen hide nothing (B3, B4); the pixel refusal has its own sentence on every
+ *     route that applies the cap, and the format refusal keeps its own (B5)
  *
  * Extracted from the photos review verification (zz-ff.ts). Fails on origin/main, passes with the fixes.
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-photo-pixel-cap-attachment-read.ts
+ * and again with READ_AUTH=off (scripts/server-suites.mjs runs both).
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH', 'ENFORCE_LEDGER_AUTH', 'NODE_PROFILE', 'PRIVATE_PREVIEW']) delete process.env[k];

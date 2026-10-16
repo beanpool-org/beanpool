@@ -32,6 +32,8 @@ if (process.env.BLOCKS_GLOBAL_NODE) process.env.NODE_PROFILE = 'global'; else de
 delete process.env.ENFORCE_WS_AUTH;
 // The child run (BLOCKS_OPEN_NODE) is a node with read auth off: a second account is not needed there to tell a withheld
 // conversation from a real one, an unsigned read does.
+// Read before it is set or cleared: https-server.ts, imported above, has already read it, so this is the node's own mode.
+const READ_AUTH_OFF = process.env.ENFORCE_READ_AUTH === 'false';
 if (process.env.BLOCKS_OPEN_NODE) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 const PW = 'BlocksOnMessagingPass123!';
 process.env.ADMIN_PASSWORD = PW;
@@ -314,9 +316,13 @@ async function main(): Promise<void> {
     const ctrlAnonPhoto = await call('GET', null, `/api/messages/${ctrlStoredId}/attachment`);
     assert(boPhoto.status === 200 && cyPhoto.status === 200
         && boPhoto.body?.data === photo.ciphertext && cyPhoto.body?.data === photo.ciphertext
-        && annPhoto.status === ctrlAnnPhoto.status && annPhoto.status === 404
-        && anonPhoto.status === ctrlAnonPhoto.status && anonPhoto.status === (process.env.ENFORCE_READ_AUTH === 'false' ? 404 : 401),
+        && annPhoto.status === ctrlAnnPhoto.status && annPhoto.status === 404 && JSON.stringify(annPhoto.body) === JSON.stringify(ctrlAnnPhoto.body)
+        && anonPhoto.status === ctrlAnonPhoto.status && anonPhoto.status === (READ_AUTH_OFF ? 404 : 401),
         `refused alike: the sender gets 200 for both, anyone else the same refusal for both (${annPhoto.status}, ${anonPhoto.status})`);
+    // And the sender cannot tell them apart: the same keys, Cache-Control and Content-Type as for a stored photo.
+    assert(keysOf(boPhoto.body) === keysOf(cyPhoto.body)
+        && boPhoto.headers['cache-control'] === cyPhoto.headers['cache-control'] && boPhoto.headers['content-type'] === cyPhoto.headers['content-type'],
+        `the sender's withheld photo has a stored one's shape (${keysOf(boPhoto.body)}, ${boPhoto.headers['cache-control']}, ${boPhoto.headers['content-type']})`);
     // Kept in the image store as a chat photo is, never whole in the database's row (#1403 review, NON-BLOCKING).
     const photoRow = attempt(() => db.prepare('SELECT attachment_data, storage_key FROM withheld_lines WHERE id = ?').get(boIds[2]) as any);
     const photoKey: string | undefined = photoRow?.storage_key ?? undefined;

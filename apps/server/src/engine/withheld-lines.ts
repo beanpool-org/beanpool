@@ -185,9 +185,10 @@ export function withheldLineMessage(r: WithheldLine): Message {
 
 /**
  * A withheld line's photo as an attachment row (routes/marketplace.ts reads its ciphertext from the row or the image
- * store, as for a chat photo). Served by its id to whoever asks, unsigned too, exactly as a stored chat photo is
- * (/api/messages/:id/attachment is a public read): only its sender ever has the id, and a 404 for anyone else would
- * tell them they are blocked (#1403 re-review). The ciphertext is E2E; the node can't read it.
+ * store, as for a chat photo). Served to its sender alone (ownWithheldLine), with the keys and headers a stored chat
+ * photo has; anyone else, the blocker included, gets what a stored photo outside their conversation gets, the answer
+ * for an id with no photo (#2079). So the sender learns nothing from it, and the blocker never has the id. The
+ * ciphertext is E2E; the node can't read it.
  */
 export function withheldAttachmentFor(id: unknown): (AttachmentRow & { nonce: string; mime: string }) | undefined {
     const row = withheldLine(id);

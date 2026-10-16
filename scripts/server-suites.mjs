@@ -484,6 +484,7 @@ export const SUITES = [
     'test-dm-never-plaintext',
     'test-group-keys-http',
     'test-group-keys-over-time',
+    'test-tls-first-boot',
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',

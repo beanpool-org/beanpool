@@ -12,6 +12,7 @@
  *      then gone, so it is never announced twice.
  *   5. Running it again for the same owner makes a new code; the code it printed before no longer works.
  *   6. A member named by @callsign; an unknown callsign is refused.
+ *   9. A hostile restore-point name prints through shown(): no escape sequence, and no tail of one, reaches the terminal.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-beanpool-recover.ts
  */
@@ -163,6 +164,16 @@ async function main() {
     assert(busy.code === 0 && roleRow(DEV)?.role === 'owner', `beside a writer holding the lock, recover waits and succeeds (exit ${busy.code}, ${waited} ms${busy.code ? ': ' + busy.out.split('\\n')[0] : ''})`);
     await new Promise((r) => holder.once('exit', r));
     deliverRecoverNotices(deps);
+
+    // 9. Hostile text through this command's own writer (#2031): restore and restore-point print through shown(), so a
+    //    DCS, an APC, an 8-bit DCS or a charset designation goes whole, with no "P1$r0m\" or "(0" left as text.
+    const name = 'point\x1bP1$r0m\x1b\\\x1b(0-\x1b_apc\x1b\\\x90q\x9c\x1b)B1';
+    const hostile = cli('restore-point', 'roll-back', name);
+    // eslint-disable-next-line no-control-regex -- the characters it looks for
+    const C0_C1 = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/;
+    assert(hostile.code === 1 && hostile.out === 'There is no restore point point-1. beanpool restore-point list shows them. Nothing was changed.\n',
+        `9. a restore-point name with a DCS, an APC and charset designations prints as point-1, nothing else (${JSON.stringify(hostile.out)})`);
+    assert(!C0_C1.test(hostile.out), '9. …and no control character reaches the terminal');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

@@ -1,10 +1,15 @@
 /**
- * Pair Device Screen — QR-based Device Linking (#89). Settings → "Use your account on another device" (older apps:
- * "Link Another Device"): the member's own account goes to that browser, unlike "Manage this community from a computer".
+ * Pair Device Screen — QR-based Device Linking (#89). Settings → "Link a device" (older apps: "Use your account on
+ * another device", before it "Link Another Device"): the member's own account goes to that browser, unlike "Manage this
+ * community from a computer".
  *
  * Scans an ephemeral QR code displayed on a desktop PWA or another client,
  * derives an E2E shared secret via X25519 ECDH + HKDF, encrypts the sovereign identity,
  * and transfers it via the local node's in-memory pairing relay.
+ *
+ * Opened with `qr` (`/pair-device?qr=<link as hex>`): the web app's QR scanned with the phone's camera app, routed here by
+ * app/+native-intent.ts (utils/pair-link.ts). The link is read exactly as a scan is (readCode), and reaches the same
+ * sheet: nothing is sent before the member's tap, the phone's unlock and the two digits.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,13 +20,14 @@ import {
     Pressable,
     ActivityIndicator,
     SafeAreaView,
+    ScrollView,
     Platform,
     Modal,
     Linking,
     Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router, ErrorBoundary } from 'expo-router';
+import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { claimRouteFor, parseClaimLink } from '../utils/claim-link';
 import * as Haptics from 'expo-haptics';
 
@@ -32,13 +38,16 @@ import { palette } from '../constants/colors';
 import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
-import { isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
+import { pairLinkFromRoute } from '../utils/pair-link';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ParsedPairingData extends PairingQr {
     /** Where the account may go: only a server this phone already uses (utils/pair-device-target.ts). Set at scan. */
     target?: TransferTarget;
+    /** 'link': opened from outside the app, not scanned here; the sheet says so (the deciding review of #2025, N1). */
+    source: 'camera' | 'link';
 }
 
 export default function PairDeviceScreen() {
@@ -54,8 +63,30 @@ export default function PairDeviceScreen() {
     const isScanningLocked = useRef(false);
     const scannedDataRef = useRef(scannedData);
     scannedDataRef.current = scannedData;
+    /** The scanned code was refused (another server, or not readable): its sentence goes first in the sheet. */
+    const refusedFirst = !!scannedData?.target && scannedData.target.kind !== 'ok';
     const lockBusyRef = useRef(false);
     const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { qr } = useLocalSearchParams<{ qr?: string | string[] }>();
+    // This screen's own route: setParams on it needs no root-ready check (router.setParams throws before the root
+    // navigator mounts, which a cold start from a link could hit; PR #2025 confirm-1 NB2).
+    const navigation = useNavigation();
+    // The link as hex (utils/pair-link.ts says why), turned back into exactly the link; no `qr`: no link.
+    const qrParam = typeof qr === 'string' ? qr : Array.isArray(qr) ? qr[0] : undefined;
+    const linkCode = qrParam === undefined ? undefined : pairLinkFromRoute(qrParam);
+    const isTransferringRef = useRef(isTransferring);
+    isTransferringRef.current = isTransferring;
+    const confirmCodeRef = useRef(confirmCode);
+    confirmCodeRef.current = confirmCode;
+
+    // A link opened from outside the app: read like a scan. Not while any sheet is open (a camera scan can't replace one
+    // either): a second link never swaps the session under the member's thumb; they close the sheet first. Then the
+    // link is cleared from the route, so the same link opened again (after Cancel, or "scan again") is read again.
+    useEffect(() => {
+        if (linkCode === undefined) return;
+        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');
+        navigation.setParams({ qr: undefined } as never);
+    }, [linkCode]);
 
     useEffect(() => {
         return () => {
@@ -226,6 +257,9 @@ export default function PairDeviceScreen() {
                 backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff',
                 borderTopLeftRadius: 24,
                 borderTopRightRadius: 24,
+                maxHeight: '90%',
+            },
+            sheetContent: {
                 padding: 24,
                 paddingBottom: Platform.OS === 'ios' ? 44 : 24,
             },
@@ -290,33 +324,39 @@ export default function PairDeviceScreen() {
 
     async function handleBarcodeScanned(result: BarcodeScanningResult) {
         if (isScanningLocked.current || isTransferring || scannedData) return;
+        await readCode(result.data, 'camera');
+    }
+
+    /** One code, from the camera or from a link (readPairingCode): the same checks, the same sheet. Sends nothing. */
+    async function readCode(data: string, source: 'camera' | 'link') {
         // A server's claim QR (`beanpool claim`): the claim screen, which offers the claim only while that server has no owner.
-        const claim = parseClaimLink(result.data);
+        const claim = source === 'camera' ? parseClaimLink(data) : null;
         if (claim) {
             isScanningLocked.current = true;
             router.replace(claimRouteFor(claim) as any);
             return;
         }
         // Read by a strict grammar (utils/pair-device-target.ts): any other spelling is refused here, nothing sent.
-        const parsed = parsePairingQr(result.data);
-        if (!parsed) {
+        const read = readPairingCode(data, source);
+        if (read.kind !== 'pairing') {
             // A pairing code it refuses is said so, in one sentence, and the camera waits for OK. Any other QR: ignored.
-            if (isUnreadablePairingQr(result.data)) {
+            if (read.kind === 'unreadable') {
                 isScanningLocked.current = true;
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
                 Alert.alert('', t('This code can\'t be read safely, so nothing was sent: make a new code on the other device and scan that one.'), [{ text: t('OK'), onPress: resumeScanning }], { cancelable: false });
             }
             return;
         }
+        const parsed = read.qr;
         isScanningLocked.current = true;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         // The key and the 12 words go only to a server this phone already uses: a QR naming any other could come from
         // a server that skips the digits. Said at once, and nothing is sent.
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
         const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
         const target = transferTarget(parsed.nodeUrl, anchor, saved);
         setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
-        setScannedData({ ...parsed, target });
+        setScannedData({ ...parsed, target, source });
     }
 
     /** After the refusal's OK: a moment first, so the same code still in view isn't read again at once. */
@@ -328,9 +368,25 @@ export default function PairDeviceScreen() {
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
         if (target.kind === 'no-node') return t('Connect to your community first.');
-        return target.appHost
-            ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.', { host: target.scannedHost, own: target.appHost })
-            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. To use your account there, restore it with your 12 words.', { host: target.scannedHost });
+        // The way through: the other device at this phone's own community. For global's code only, also this phone
+        // joining global first (refusalJoin, the button below). Never "join {host}" for any other server: that join would
+        // make the next scan of the same code send the account to it (the deciding review of #2025, B1). Never the
+        // 12 words either: typed on whatever device showed the code, they would reach the same server.
+        const global = refusalJoin(target) !== null;
+        if (target.appHost) {
+            return global
+                ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })
+                : t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.', { host: target.scannedHost, own: target.appHost });
+        }
+        return global
+            ? t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })
+            : t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent.', { host: target.scannedHost });
+    }
+
+    /** "Join the global community" under a refusal: the sheet closes (nothing was sent, nothing is kept), then its door. */
+    function joinFromRefusal(join: NonNullable<ReturnType<typeof refusalJoin>>) {
+        handleDismissSheet();
+        router.push(join.href as any);
     }
 
     async function handleConfirmLink() {
@@ -407,6 +463,9 @@ export default function PairDeviceScreen() {
                     mobilePubHex: encrypted.mobilePubHex,
                     nonceHex: encrypted.nonceHex,
                     ciphertextHex: encrypted.ciphertextHex,
+                    // This app shows the two digits: a server with #1983 refuses a transfer that doesn't say so (an
+                    // older app, which never shows them). An older server ignores it.
+                    confirm: 'digits',
                 }),
             });
 
@@ -448,10 +507,140 @@ export default function PairDeviceScreen() {
         }, 500);
     }
 
+    // The confirmation sheet, over whichever screen is showing: a link from the camera app reaches it even before
+    // BeanPool may use the camera, which the link doesn't need.
+    const sheet = (
+        <Modal
+            visible={!!scannedData}
+            transparent
+            animationType="slide"
+            onRequestClose={handleDismissSheet}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.sheet}>
+                    {/* Scrolls when taller than the screen (320 dp at 1.3x text): it starts at the title and the warning, never hides them. */}
+                    <ScrollView bounces={false} contentContainerStyle={styles.sheetContent}>
+                    {confirmCode ? (
+                        <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                            <Text style={styles.sheetTitle}>{t('Type these two digits on the other device')}</Text>
+                            <Text
+                                style={[styles.sheetTitle, { fontSize: 40, letterSpacing: 8, marginVertical: 12 }]}
+                                accessibilityLabel={t('The two digits are {digits}', { digits: confirmCode.split('').join(' ') })}
+                            >
+                                {confirmCode}
+                            </Text>
+                            <Text style={styles.sheetSubtitle}>
+                                {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.')}
+                            </Text>
+                            <Pressable style={styles.cancelBtn} onPress={() => router.back()} accessibilityRole="button">
+                                <Text style={styles.cancelBtnText}>{t('Done')}</Text>
+                            </Pressable>
+                            <Pressable style={styles.cancelBtn} onPress={handleDismissSheet} accessibilityRole="button">
+                                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <>
+                            <Text style={styles.sheetTitle}>{t('Send your whole account to another device?')}</Text>
+                            {/* A refused code: the refusal first, so at 320 dp and 1.3x text it is on the first screen (confirm-1 NB4). */}
+                            {refusedFirst && errorMessage && (
+                                <Text
+                                    style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
+                                    accessibilityRole="alert"
+                                >
+                                    {errorMessage}
+                                </Text>
+                            )}
+                            <Text style={styles.sheetSubtitle}>
+                                {t('The other device receives this account\'s key AND your 12 words: whoever has them is you, in every community.')}
+                            </Text>
+                            <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
+                                {t('Only scan a code on a screen in front of you that you just opened yourself. Never one someone sent you or put on a sign.')}
+                            </Text>
+                            {scannedData?.source === 'link' && (
+                                <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
+                                    {t('This opened from a link. Go on only if you just pointed your camera at a code on your own screen.')}
+                                </Text>
+                            )}
+    
+                            <View style={styles.infoBox}>
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoLabel}>Account</Text>
+                                    <Text style={styles.infoValue}>{identity?.callsign}</Text>
+                                </View>
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoLabel}>Target Host</Text>
+                                    <Text style={styles.infoValue}>
+                                        {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target?.kind === 'foreign' ? scannedData.target.scannedHost : ''}
+                                    </Text>
+                                </View>
+                                <View style={[styles.infoRow, { marginBottom: 0 }]}>
+                                    <Text style={styles.infoLabel}>Public Key</Text>
+                                    <Text style={styles.infoValue}>
+                                        {identity?.publicKey ? `${identity.publicKey.slice(0, 10)}...${identity.publicKey.slice(-6)}` : 'Unknown'}
+                                    </Text>
+                                </View>
+                            </View>
+    
+                            {!refusedFirst && errorMessage && (
+                                <Text
+                                    style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
+                                    accessibilityRole="alert"
+                                >
+                                    {errorMessage}
+                                </Text>
+                            )}
+    
+                            {(() => {
+                                // Only for global's code (refusalJoin): never a button to join the server a code names.
+                                const join = refusalJoin(scannedData?.target);
+                                if (!join) return null;
+                                const label = t('🌍 Join the global community');
+                                return (
+                                    <Pressable style={styles.confirmBtn} onPress={() => joinFromRefusal(join)} accessibilityRole="button" accessibilityLabel={label}>
+                                        <Text style={styles.confirmBtnText}>{label}</Text>
+                                    </Pressable>
+                                );
+                            })()}
+
+                            {scannedData?.target?.kind === 'ok' && (
+                            <Pressable
+                                style={[styles.confirmBtn, isTransferring && { opacity: 0.7 }]}
+                                onPress={handleConfirmLink}
+                                disabled={isTransferring}
+                                accessibilityRole="button"
+                                accessibilityLabel={isTransferring ? 'Linking device, please wait...' : 'Confirm & Link Device'}
+                                accessibilityState={{ busy: isTransferring, disabled: isTransferring }}
+                            >
+                                {isTransferring ? (
+                                    <ActivityIndicator color="#ffffff" />
+                                ) : (
+                                    <Text style={styles.confirmBtnText}>Confirm & Link Device</Text>
+                                )}
+                            </Pressable>
+                            )}
+    
+                            <Pressable
+                                style={styles.cancelBtn}
+                                onPress={handleDismissSheet}
+                                disabled={isTransferring}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </Pressable>
+                        </>
+                    )}
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+
     if (!permission) {
         return (
             <SafeAreaView style={styles.permissionCard}>
                 <ActivityIndicator size="large" color={colors.brand.primary} />
+                {sheet}
             </SafeAreaView>
         );
     }
@@ -480,6 +669,7 @@ export default function PairDeviceScreen() {
                         <Text style={styles.permissionBtnText}>Open Device Settings</Text>
                     </Pressable>
                 )}
+                {sheet}
             </SafeAreaView>
         );
     }
@@ -495,7 +685,7 @@ export default function PairDeviceScreen() {
                 >
                     <Text style={styles.closeBtnText}>✕</Text>
                 </Pressable>
-                <Text style={styles.headerTitle}>Your account on another device</Text>
+                <Text style={styles.headerTitle}>{t('Link a device')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -522,102 +712,7 @@ export default function PairDeviceScreen() {
                 </Text>
             </View>
 
-            {/* Confirmation Modal Sheet */}
-            <Modal
-                visible={!!scannedData}
-                transparent
-                animationType="slide"
-                onRequestClose={handleDismissSheet}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.sheet}>
-                        {confirmCode ? (
-                            <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                                <Text style={styles.sheetTitle}>{t('Type these two digits on the other device')}</Text>
-                                <Text
-                                    style={[styles.sheetTitle, { fontSize: 40, letterSpacing: 8, marginVertical: 12 }]}
-                                    accessibilityLabel={t('The two digits are {digits}', { digits: confirmCode.split('').join(' ') })}
-                                >
-                                    {confirmCode}
-                                </Text>
-                                <Text style={styles.sheetSubtitle}>
-                                    {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.')}
-                                </Text>
-                                <Pressable style={styles.cancelBtn} onPress={() => router.back()} accessibilityRole="button">
-                                    <Text style={styles.cancelBtnText}>{t('Done')}</Text>
-                                </Pressable>
-                                <Pressable style={styles.cancelBtn} onPress={handleDismissSheet} accessibilityRole="button">
-                                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
-                                </Pressable>
-                            </View>
-                        ) : (
-                            <>
-                                <Text style={styles.sheetTitle}>{t('Send your whole account to another device?')}</Text>
-                                <Text style={styles.sheetSubtitle}>
-                                    {t('The other device receives this account\'s key AND your 12 words: whoever has them is you, in every community.')}
-                                </Text>
-                                <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
-                                    {t('Only scan a code on a screen in front of you that you just opened yourself. Never one someone sent you or put on a sign.')}
-                                </Text>
-
-                                <View style={styles.infoBox}>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>Account</Text>
-                                        <Text style={styles.infoValue}>{identity?.callsign}</Text>
-                                    </View>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>Target Host</Text>
-                                        <Text style={styles.infoValue}>
-                                            {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target?.kind === 'foreign' ? scannedData.target.scannedHost : ''}
-                                        </Text>
-                                    </View>
-                                    <View style={[styles.infoRow, { marginBottom: 0 }]}>
-                                        <Text style={styles.infoLabel}>Public Key</Text>
-                                        <Text style={styles.infoValue}>
-                                            {identity?.publicKey ? `${identity.publicKey.slice(0, 10)}...${identity.publicKey.slice(-6)}` : 'Unknown'}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {errorMessage && (
-                                    <Text
-                                        style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
-                                        accessibilityRole="alert"
-                                    >
-                                        {errorMessage}
-                                    </Text>
-                                )}
-
-                                {scannedData?.target?.kind === 'ok' && (
-                                <Pressable
-                                    style={[styles.confirmBtn, isTransferring && { opacity: 0.7 }]}
-                                    onPress={handleConfirmLink}
-                                    disabled={isTransferring}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={isTransferring ? 'Linking device, please wait...' : 'Confirm & Link Device'}
-                                    accessibilityState={{ busy: isTransferring, disabled: isTransferring }}
-                                >
-                                    {isTransferring ? (
-                                        <ActivityIndicator color="#ffffff" />
-                                    ) : (
-                                        <Text style={styles.confirmBtnText}>Confirm & Link Device</Text>
-                                    )}
-                                </Pressable>
-                                )}
-
-                                <Pressable
-                                    style={styles.cancelBtn}
-                                    onPress={handleDismissSheet}
-                                    disabled={isTransferring}
-                                    accessibilityRole="button"
-                                >
-                                    <Text style={styles.cancelBtnText}>Cancel</Text>
-                                </Pressable>
-                            </>
-                        )}
-                    </View>
-                </View>
-            </Modal>
+            {sheet}
         </View>
     );
 }

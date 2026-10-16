@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "このコードを安全に読み取れなかったため、何も送信されませんでした。もう一方の端末で新しいコードを生成し、それをスキャンしてください。",
   "OK": "OK",
   "Connect to your community first.": "まずコミュニティに接続してください。",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "このコードは、この端末が使用していないサーバー（{host}）のものです（使用中: {own}）。何も送信されませんでした。もう一方の端末で{own}が表示するコードをスキャンするか、12個の単語を使ってアカウントを復元してください。",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "このコードは、この端末が使用していないサーバー（{host}）のものです。何も送信されませんでした。そちらでアカウントを使用するには、12個の単語で復元してください。",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "このコードは、この端末が使用していないサーバー（{host}）のものです（使用中: {own}）。何も送信されませんでした。もう一方の端末で{own}のBeanPoolを開いてそこでコードをスキャンするか、先にこの端末でグローバルコミュニティに参加してから、もう一度スキャンしてください。",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "このコードは、この端末が使用していないサーバー（{host}）のものです（使用中: {own}）。何も送信されませんでした。もう一方の端末で{own}のBeanPoolを開いて、そこでコードをスキャンしてください。",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "このコードは、この端末が使用していないサーバー（{host}）のものです。何も送信されませんでした。先にこの端末でグローバルコミュニティに参加してから、もう一度スキャンしてください。",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "このコードは、この端末が使用していないサーバー（{host}）のものです。何も送信されませんでした。",
   "Confirm it is you to send your account to another device.": "別端末にアカウントを送信するために、本人確認を行ってください。",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "端末の画面ロックが設定されていないため、BeanPoolはアカウントを送信できません。端末の「設定」の「セキュリティ」でPIN、パターン、またはパスワードを設定してから、もう一度お試しください。",
   "The phone's unlock did not pass, so nothing was sent.": "端末のロック解除が行われなかったため、何も送信されませんでした。",
@@ -281,5 +283,9 @@
   "The people who run this community's server are alerted even without your words.": "メッセージ本文がなくても、コミュニティのサーバー管理者に通報が届きます。",
   "If a child is in danger right now, call your local emergency number first.": "子どもが今まさに危険にさらされている場合は、直ちに緊急通報窓口（警察など）に連絡してください。",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "アカウントを保持している端末から、または別の端末でより新しい復元が開始されたため、この復元は停止されました。心当たりがない場合は、12個の単語を使用してください。",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "その復元はすでに完了し、もう一方の端末にアカウントが移行しました。心当たりがない場合は、第三者があなたのアカウントを所持している可能性があります。使用されたサインインアカウントがあなた専用のものであることを確認し、コミュニティの管理者に相談してください。"
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "その復元はすでに完了し、もう一方の端末にアカウントが移行しました。心当たりがない場合は、第三者があなたのアカウントを所持している可能性があります。使用されたサインインアカウントがあなた専用のものであることを確認し、コミュニティの管理者に相談してください。",
+  "Link a device": "端末をリンク",
+  "🌍 Join the global community": "🌍 グローバルコミュニティに参加",
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "これはリンクから開かれました。自分の画面に表示されたコードにたった今カメラを向けた場合にのみ、先に進んでください。",
+  "Copies your own account to a browser, to use BeanPool there as you": "あなた自身のアカウントをブラウザにコピーし、そこであなたとしてBeanPoolを使えるようにします"
 }

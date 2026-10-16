@@ -105,7 +105,7 @@ If you joined the global community with 12 words, they are your only way back. A
 ## Using your phone account on a computer
 
 - In the web app on the computer, choose to link with the mobile app. It shows a QR code.
-- On the phone, open **Settings** and tap **Use your account on another device** (older apps: **Link Another Device**).
+- On the phone, open **Settings** and tap **Link a device** (older apps: **Use your account on another device**).
 - Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that.
 
 ## Installing it

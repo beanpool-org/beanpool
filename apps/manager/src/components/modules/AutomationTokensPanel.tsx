@@ -5,6 +5,7 @@ import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { proofField, t } from '../../lib/fresh-proof';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
  * "Automation tokens" (node sign-in design step 7, D8; the server is apps/server routes/automation-tokens.ts). An owner makes
@@ -60,6 +61,8 @@ function scopeLabel(scope: string): string {
 }
 
 export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' } }: AutomationTokensPanelProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
     const canMake = viewer.kind === 'key' && viewer.role === 'owner';
 
@@ -186,7 +189,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
     };
 
     const handleRevoke = async (t: AutomationTokenRecord) => {
-        if (!confirm(`Revoke the token "${t.name}"? Anything using it stops working at once.`)) return;
+        if (!(await ask({ title: `Revoke the token "${t.name}"?`, body: 'Anything using it stops working at once.', confirmLabel: 'Revoke' }))) return;
         setMessage('');
         try {
             const res = await fetch(
@@ -203,6 +206,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="automation-tokens-card">
+            {confirmation}
             <div className="min-w-0">
                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                     <span>🤖</span>

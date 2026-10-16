@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Bu kod güvenli bir şekilde okunamıyor, bu nedenle hiçbir şey gönderilmedi: diğer cihazda yeni bir kod oluşturun ve onu tarayın.",
   "OK": "Tamam",
   "Connect to your community first.": "Önce topluluğunuza bağlanın.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Bu kod telefonunuzun kullanmadığı bir sunucu olan {host} sunucusundan geldi: telefonunuz {own} kullanıyor. Hiçbir şey gönderilmedi. Diğer cihazda {own} tarafından gösterilen kodu tarayın veya hesabınızı orada 12 kelimenizle geri yükleyin.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Bu kod telefonunuzun kullanmadığı {host} sunucusundan geldi. Hiçbir şey gönderilmedi. Hesabınızı orada kullanmak için 12 kelimenizle geri yükleyin.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Bu kod telefonunuzun kullanmadığı bir sunucu olan {host} sunucusundan geldi: telefonunuz {own} kullanıyor. Hiçbir şey gönderilmedi. Diğer cihazda BeanPool'u {own} adresinde açıp kodu orada tarayın veya önce bu telefonda küresel topluluğa katılın, sonra yeniden tarayın.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Bu kod telefonunuzun kullanmadığı bir sunucu olan {host} sunucusundan geldi: telefonunuz {own} kullanıyor. Hiçbir şey gönderilmedi. Diğer cihazda BeanPool'u {own} adresinde açıp kodu orada tarayın.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Bu kod telefonunuzun kullanmadığı {host} sunucusundan geldi. Hiçbir şey gönderilmedi. Önce bu telefonda küresel topluluğa katılın, sonra yeniden tarayın.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Bu kod telefonunuzun kullanmadığı {host} sunucusundan geldi. Hiçbir şey gönderilmedi.",
   "Confirm it is you to send your account to another device.": "Hesabınızı başka bir cihaza göndermek için siz olduğunuzu onaylayın.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Telefonunuzda ekran kilidi yok, bu nedenle BeanPool hesabınızı göndermez. Telefonunuzun Ayarlar bölümünde Güvenlik altında bir PIN, desen veya şifre belirleyin, ardından tekrar deneyin.",
   "The phone's unlock did not pass, so nothing was sent.": "Telefon kilidi açılamadı, bu nedenle hiçbir şey gönderilmedi.",
@@ -285,5 +287,9 @@
   "The people who run this community's server are alerted even without your words.": "Mesajınız olmasa bile bu topluluğun sunucusunu yöneten kişiler uyarılır.",
   "If a child is in danger right now, call your local emergency number first.": "Şu anda bir çocuk tehlikedeyse önce yerel acil durum numaranızı arayın.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Bu geri yükleme hesabınızın bulunduğu bir telefondan veya başka bir cihazda başlatılan daha yeni bir geri yüklemeyle durduruldu, bu nedenle hiçbir şey gelmedi. Bu siz değildiyseniz 12 kelimenizi kullanın.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Bu geri yükleme zaten tamamlandı: diğer telefon artık hesabınıza sahip. Bu siz değildiyseniz hesabınız başka birindedir: kullanılan giriş hesabının yalnızca size ait olduğundan emin olun ve topluluğunuzun yöneticilerinden yardım isteyin."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Bu geri yükleme zaten tamamlandı: diğer telefon artık hesabınıza sahip. Bu siz değildiyseniz hesabınız başka birindedir: kullanılan giriş hesabının yalnızca size ait olduğundan emin olun ve topluluğunuzun yöneticilerinden yardım isteyin.",
+  "Link a device": "Cihaz bağla",
+  "🌍 Join the global community": "🌍 Küresel topluluğa katıl",
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Bu bir bağlantıdan açıldı. Yalnızca kameranızı az önce kendi ekranınızdaki bir koda tuttuysanız devam edin.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Kendi hesabınızı bir tarayıcıya kopyalar; böylece BeanPool'u orada kendiniz olarak kullanırsınız"
 }

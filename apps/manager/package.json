@@ -13,6 +13,7 @@
     "test:phone-width": "node e2e/phone-width.mjs",
     "test:connected-assistants": "node e2e/connected-assistants.mjs",
     "test:agent-suggestions": "node e2e/agent-suggestions.mjs",
+    "test:in-page-confirm": "node e2e/in-page-confirm.mjs",
     "screenshots": "node e2e/screenshots.mjs",
     "manual-shots": "node e2e/manual-shots.mjs"
   },

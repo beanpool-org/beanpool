@@ -1,5 +1,5 @@
 /* ======================== DESIGN SYSTEM TOKENS ======================== */
-/* The site's colours, in two sets: DARK below (the site as it has always looked) and LIGHT in the
+/* The site's colours, in two sets: DARK below (the site's long-standing look) and LIGHT in the
    prefers-color-scheme block after it. The page follows the visitor's setting (Marty, 15 Oct 2026).
    Every colour on the site is one of these variables; no rule, page or script names a colour of its own
    (scripts/website-colours.test.mjs fails on one).
@@ -8,7 +8,8 @@
    the comment after each names its role there (`ink.warning`, `chip.need.ink`) or `ground` for one of the
    web's light grounds (INK_GROUNDS), and the test fails when a value drifts from the library. A dark value
    tagged the same way is one the library and the site already share; the untagged ones are the site's own
-   dark look, kept as it was.
+   dark look. Dark words read 4.5:1 too (scripts/website-contrast.mjs): the nine places that did not were lifted
+   to a lighter shade of their own hue on 16 Oct 2026, light untouched.
 
    --rgb-* are bare "r, g, b" triplets, for washes, borders and shadows drawn at an alpha:
    rgba(var(--rgb-accent), 0.2). */
@@ -21,7 +22,7 @@
 
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
-    --text-muted: #8190a6;   /* 4.5:1 or better on a panel and on the doodle's ground (was #64748b: 3.5:1 on the doodle ground) */
+    --text-muted: #9eabbe;   /* 4.8:1 or better on every panel it sits on (the footer, a guide page's panel, post-extraction's worked example); was #8190a6, 3.5:1 there (16 Oct 2026) */
     --text-muted-on-doodle: #b4bfcc;   /* muted text with no panel under it: 4.7:1 on the doodle's brightest stroke (#454c49) */
     --text-heading: #ffffff;
     --text-dim: #94a3b8;     /* "Last updated" lines, the map popup's facts */
@@ -29,15 +30,15 @@
     --accent: #f59e0b;      /* gold.fill: Ambient Amber */
     --accent-glow: rgba(245, 158, 11, 0.15);
     --accent-glow-strong: rgba(245, 158, 11, 0.45);
-    --accent-ink: #f59e0b;  /* the amber as words: links, labels, code */
-    --accent-ink-hover: #fbbf24;  /* gold.hover */
+    --accent-ink: #fbbf24;  /* ink.warning: the amber as words (links, labels, code); 4.6:1 on the doodle's brightest stroke and the hero badge's tint, where gold.fill #f59e0b read 3.6 */
+    --accent-ink-hover: #fcd34d;  /* chip.warn.ink: a step lighter than the words */
     --on-accent: #030712;   /* words on the amber fill */
 
     --accent-success: #10b981; /* Emerald */
     --accent-success-glow: rgba(16, 185, 129, 0.2);
-    --success-ink: #10b981;
+    --success-ink: #6ee7b7;   /* chip.ok.ink: 5.1:1 on the organisers' tag (#10b981 read 3.1) */
     --green-ink: #34d399;   /* ink.brand.dark */
-    --danger-ink: #f87171;
+    --danger-ink: #fca5a5;   /* ink.danger: 6.1:1 on the ✕ marks' red tint (#f87171 read 4.2) */
     --error-ink: #ef4444;
     --red: #ef4444;
 
@@ -48,7 +49,7 @@
     --youtube: #FF0000;
     --reddit: #FF4500;
     --on-brand-fill: #FFFFFF;
-    --youtube-ink: #FF5252;
+    --youtube-ink: #FF5C5C;   /* 4.6:1 on the Video Guides badge's tint (#FF5252 read 4.4) */
     --youtube-ink-strong: #FF6666;
     --reddit-ink: #FF7043;
     --reddit-ink-strong: #FF8555;
@@ -57,10 +58,10 @@
     --logo-gradient-end: #fb923c;
     --btn-primary-end: #d97706;
     --rainbow-1: #f59e0b;
-    --rainbow-2: #ef4444;
-    --rainbow-3: #ec4899;
-    --rainbow-4: #8b5cf6;
-    --rainbow-5: #3b82f6;
+    --rainbow-2: #f87171;   /* the hero word's stops, each 3:1 or better on the doodle's brightest stroke (#454c49); */
+    --rainbow-3: #f472b6;   /* the 500s they replace read 2.1 (violet) to 2.5 */
+    --rainbow-4: #a78bfa;
+    --rainbow-5: #60a5fa;
     --rainbow-6: #10b981;
     --map-ground: #f3f4f6;
     --scrollbar-thumb: #1e293b;
@@ -1242,6 +1243,9 @@ a.logo { min-height: 44px; }
     gap: 1.5rem;
     padding: 2rem 2.25rem;
 }
+/* A card across the whole grid, under its set: the detail one card of the set leads to (the safety section's key copy) */
+.feature-wide { grid-column: 1 / -1; }
+.feature-wide p { max-width: 75ch; }
 .feature-highlight .feature-content {
     flex: 1;
 }
@@ -1825,6 +1829,9 @@ footer {
 .section-more { text-align: center; margin-top: 1.25rem; font-weight: 600; }
 .section-more a { display: inline-flex; align-items: center; min-height: 48px; }
 .card-links { margin-top: 0.75rem; line-height: 2.2; }
+/* Each link stays whole ("Deleting your data" broke after its first word at 1280); the lines break at the dots,
+   and each dot is held to the link before it, so no line starts with one */
+.card-links a { white-space: nowrap; }
 .audience-tag {
     display: inline-block;
     margin-bottom: 0.6rem;

@@ -84,6 +84,7 @@ import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
+import { useInPageConfirm } from './components/common/InPageConfirm';
 
 /**
  * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
@@ -149,6 +150,8 @@ export function App(props: { isFleetMode?: boolean } = {}) {
 }
 
 function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}) {
+    // Removing a saved node (its address and admin password in this browser) is confirmed in the page (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => {
         const savedId = loadActiveProfileId();
@@ -1156,12 +1159,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setRefreshToken((n) => n + 1);
     };
 
-    const handleRemoveNode = (id: string) => {
+    const handleRemoveNode = async (id: string) => {
         if (profiles.length <= 1) {
             alert('Cannot delete the last node profile.');
             return;
         }
-        if (confirm('Are you sure you want to remove this node profile from Fleet Manager?')) {
+        if (await ask({ title: 'Remove this node from Fleet Manager?', body: 'Its address and the admin password saved for it leave this browser. Nothing on the node changes; add it again to undo.', confirmLabel: 'Remove it' })) {
             removeNodeProfile(id);
             delete authBlockedRef.current[id];
             const remaining = loadNodeProfiles();
@@ -1380,6 +1383,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     return (
         <div className={`min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased ${isFleetMode ? '' : 'bp-settings'}`}>
+            {confirmation}
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
             <FleetSidebar
                 profiles={profiles}

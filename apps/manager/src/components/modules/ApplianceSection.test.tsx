@@ -5,6 +5,7 @@ import { ApplianceSection } from './ApplianceSection';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig } from '../../lib/node-client';
 import * as nodeClient from '../../lib/node-client';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -560,8 +561,8 @@ describe('ApplianceSection Component', () => {
         );
     });
 
-    it('sends raw binary body instead of FormData when restoring database archive', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    it('sends raw binary body instead of FormData when restoring, with no window confirm(): the first upload only reads the header', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
         await act(async () => {
             render(
@@ -585,7 +586,7 @@ describe('ApplianceSection Component', () => {
             );
         });
 
-        const dummyFile = new File(['fake-tarball-data'], 'backup.tar.gz', { type: 'application/gzip' });
+        const dummyFile = new File(['fake-sealed-data'], 'beanpool-backup.bpsealed');
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
         expect(fileInput).toBeInTheDocument();
 
@@ -606,14 +607,64 @@ describe('ApplianceSection Component', () => {
                 body: dummyFile,
             })
         );
+        expect(confirmSpy).not.toHaveBeenCalled();
     });
 
-    it('a plain restore that came back SHORT of photos says so, instead of a flat success (round 4)', async () => {
+    it('sealed backups only: the file picker asks for .bpsealed, and a plain archive gets the server\'s words and its shell command', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/restore')) {
+                return Promise.resolve({
+                    ok: false, status: 400,
+                    json: () => Promise.resolve({
+                        error: 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is '
+                            + 'locked. An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
+                        notLocked: true, command: 'beanpool restore --unlocked FILE',
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+        }));
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput.accept).toBe('.bpsealed');
+        expect(screen.getByText(/Restore this server from a locked backup \(\.bpsealed\)/)).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.change(fileInput, { target: { files: [new File(['tar'], 'backup.tar.gz', { type: 'application/gzip' })] } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
+        });
+        const status = await screen.findByTestId('restore-status');
+        expect(status.textContent).toContain('Backups that are not locked no longer restore from Settings');
+        expect(status.textContent).toContain('On the server: beanpool restore --unlocked FILE');
+        expect(screen.queryByTestId('restore-locked-backup')).toBeNull();
+    });
+
+    it('a restore that came back SHORT of photos says so, instead of a flat success (round 4)', async () => {
         // This path answers 200 directly — no locked-backup hand-off — and used to set
         // 'Database successfully restored!' without reading the body at all. A harvested short backup
         // restored through the fleet manager therefore showed a clean success over a node whose photos
         // would 503. Same `shortfall` helper as RestoreLockedBackup, one more call site.
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -661,13 +712,12 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
         });
 
-        expect(await screen.findByText(/Restored, but not complete/)).toBeInTheDocument();
-        expect(screen.getByText(/1 of the 412 photo\(s\) or attachment\(s\)/)).toBeInTheDocument();
-        expect(screen.queryByText('Database successfully restored! State engine refreshed.')).not.toBeInTheDocument();
+        const status = await screen.findByTestId('restore-status');
+        expect(status.textContent).toMatch(/1 of the 412 photo\(s\) or attachment\(s\)/);
+        expect(status.textContent).toContain('The server restarts now; sign in again.');
     });
 
-    it('a plain restore that came back whole still reports a clean success', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    it('a restore that came back whole says so, with the restore point it kept and the restart (design case 18 §3.4)', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -675,6 +725,8 @@ describe('ApplianceSection Component', () => {
                     json: () => Promise.resolve({
                         success: true, complete: true,
                         images: { restored: 412, error: null, referenced: 412, missing: 0, missingKeys: [], labelledShort: false },
+                        restorePointNote: 'Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23.',
+                        restartNote: 'The server restarts now; sign in again.',
                     }),
                 });
             }
@@ -711,11 +763,11 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
         });
 
-        expect(await screen.findByText('Database successfully restored! State engine refreshed.')).toBeInTheDocument();
+        expect(await screen.findByText('Backup restored. Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23. The server restarts now; sign in again.')).toBeInTheDocument();
     });
 
     it('a locked backup (.bpsealed) turns the wizard to "open it": the recovery code or an owner\'s phone (slice 6)', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -762,7 +814,9 @@ describe('ApplianceSection Component', () => {
         });
 
         expect(await screen.findByTestId('restore-locked-backup')).toBeInTheDocument();
-        expect(screen.getByText(/It opens with: @anna, recovery code #1/)).toBeInTheDocument();
+        expect(screen.getByText('Restore this backup?')).toBeInTheDocument();
+        expect(screen.getByText('@anna, recovery code #1')).toBeInTheDocument();
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: "Open with an owner's phone" })).toBeInTheDocument();
         expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
     });
@@ -952,7 +1006,7 @@ describe('ApplianceSection Component', () => {
     });
 
     it('Disable 2FA sends the code with the 2FA session, and shows the node\'s refusal', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         const { disableCalls } = await renderAccessWith2faOn({ ok: false, status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } });
 
         await act(async () => {
@@ -961,6 +1015,8 @@ describe('ApplianceSection Component', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
         });
+        await answerInPageConfirm('Turn it off');
+        expect(confirmSpy).not.toHaveBeenCalled();
 
         expect(disableCalls()).toHaveLength(1);
         const [, init] = disableCalls()[0];
@@ -973,7 +1029,7 @@ describe('ApplianceSection Component', () => {
     });
 
     it('Disable 2FA takes a backup code: no number-only keypad, and the code is sent as typed', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
         const input = screen.getByLabelText('Current 2FA or backup code');
         // Backup codes are 8 hex characters (a–f): a phone's numeric keypad could not type them.
@@ -985,6 +1041,8 @@ describe('ApplianceSection Component', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
         });
+        await answerInPageConfirm('Turn it off');
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(disableCalls()).toHaveLength(1);
         expect(JSON.parse(disableCalls()[0][1].body)).toEqual({ code: 'a1b2c3d4' });
     });
@@ -1034,52 +1092,47 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByText(/✓ Up to date/i)).not.toBeInTheDocument();
     });
 
-    it('alerts error and does not reload window when factory reset fails', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    it('has no way to wipe the node or delete a snapshot: the server removed both routes (owner-delete S1, design case 18 A1/A3)', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm');
+        const fetchSpy = vi.fn().mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) }));
+        vi.stubGlobal('fetch', fetchSpy);
+        vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue([{ name: 'snapshot-2026-10-16.db', sizeBytes: 2048, createdAt: '2026-10-16T01:00:00Z' }]);
 
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/reset')) {
-                return Promise.resolve({
-                    ok: false,
-                    status: 401,
-                    json: () => Promise.resolve({ error: 'Unauthorized reset attempt' }),
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ connectors: [] }),
+        for (const tab of ['access', 'backups'] as const) {
+            let view!: ReturnType<typeof render>;
+            await act(async () => {
+                view = render(
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab={tab}
+                    />
+                );
             });
-        }));
-
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-
-        const resetBtn = screen.getByRole('button', { name: /wipe & reset node/i });
-        await act(async () => {
-            fireEvent.click(resetBtn);
-        });
-
-        expect(alertSpy).toHaveBeenCalledWith('Node reset failed: Unauthorized reset attempt');
+            expect(screen.queryByText(/Danger Zone/i)).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /wipe|reset node|factory reset/i })).not.toBeInTheDocument();
+            if (tab === 'backups') {
+                expect(await screen.findByText('snapshot-2026-10-16.db')).toBeInTheDocument();
+                expect(screen.getByRole('button', { name: /^verify$/i })).toBeInTheDocument();
+                expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument();
+            }
+            view.unmount();
+        }
+        const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+        expect(urls.filter((u) => /\/api\/local\/reset|snapshots\/delete/.test(u))).toEqual([]);
+        expect(confirmSpy).not.toHaveBeenCalled();
     });
 
     it('stores issued 2FA session token upon successful 2FA verification to prevent lockout', async () => {

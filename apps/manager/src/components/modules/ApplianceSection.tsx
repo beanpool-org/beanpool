@@ -7,7 +7,6 @@ import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotSchedule
 import {
     fetchNodeSnapshots,
     createNodeSnapshot,
-    deleteNodeSnapshot,
     fetchNodeSnapshotSchedule,
     updateNodeSnapshotSchedule,
     verifyNodeBackup,
@@ -19,7 +18,7 @@ import {
     fetchStorageCleanPreview,
     cleanStorageAndCompressLogs,
 } from '../../lib/node-client';
-import { restoreShortfall } from '../../lib/backup-shortfall';
+import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { AppAddressesPanel } from './AppAddressesPanel';
@@ -34,6 +33,7 @@ import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
+import { RestorePointsPanel } from './RestorePointsPanel';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { proofField, t } from '../../lib/fresh-proof';
@@ -45,6 +45,7 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -89,6 +90,8 @@ export function ApplianceSection({
     isStandby: propIsStandby,
     rolesViewer = { kind: 'password' },
 }: ApplianceSectionProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
 
@@ -127,6 +130,7 @@ export function ApplianceSection({
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
     const [restoring, setRestoring] = useState(false);
     const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+    const [restoreCommand, setRestoreCommand] = useState<string | null>(null);
     // A locked backup (.bpsealed): who can open it, from its public header; the wizard then asks for one of them.
     const [lockedRestore, setLockedRestore] = useState<{ file: File; backup: LockedBackupInfo; canUseCode: boolean; canUsePhone: boolean } | null>(null);
 
@@ -330,20 +334,6 @@ export function ApplianceSection({
         }
     };
 
-    const handleDeleteSnapshot = async (name: string) => {
-        if (!confirm(`Delete snapshot "${name}"?`)) return;
-        try {
-            await deleteNodeSnapshot(
-                activeNode.url,
-                name,
-                nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id)
-            );
-            await loadSnapshots();
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : 'Failed to delete snapshot');
-        }
-    };
 
     // Keeping fewer snapshots, or turning them off, asks an owner's fresh proof (server snapshotsLessened decides which).
     const scheduleProof = useFreshProof();
@@ -405,13 +395,17 @@ export function ApplianceSection({
         }
     };
 
+    // The first upload carries no code: the server reads the file's public header and changes nothing (sealed only; a plain
+    // archive is refused before a byte of it is read, naming the shell command). A locked file turns the wizard into the
+    // confirmation (RestoreLockedBackup): the file's community and signer beside this server's, then the code or a phone.
+    // No window confirm(): the proof is the confirmation (design case 18 §3.4).
     const handleRestoreSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!restoreFile) return;
-        if (!confirm('Warning: Restoring will overwrite the active node database and restart the state engine. Continue?')) return;
 
         setRestoring(true);
         setRestoreStatus(null);
+        setRestoreCommand(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
             const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
@@ -423,25 +417,20 @@ export function ApplianceSection({
                 body: restoreFile,
             });
 
+            const body = await res.json().catch(() => ({}));
             if (res.ok) {
-                // The body, not just the status. This is the path a plain `.tar.gz` takes when the server
-                // answers 200 directly, and it used to report a flat success over an archive that came back
-                // short of photos — the same hole `RestoreLockedBackup` closed for the locked path, through
-                // the same helper.
-                const body = await res.json().catch(() => ({}));
-                const short = restoreShortfall(body);
-                setRestoreStatus(short
-                    ? `⚠️ Restored, but not complete. ${short} The state engine has been refreshed.`
-                    : 'Database successfully restored! State engine refreshed.');
+                setRestoreStatus(restoreDoneWords(body));
                 setRestoreFile(null);
                 onRefreshDiag();
             } else {
-                const err = await res.json().catch(() => ({}));
-                if (res.status === 400 && err.backup && (err.needsRecoveryCode || err.ownerPhoneCanOpen)) {
-                    setLockedRestore({ file: restoreFile, backup: err.backup, canUseCode: !!err.needsRecoveryCode, canUsePhone: !!err.ownerPhoneCanOpen });
+                if (res.status === 400 && body.backup && (body.needsRecoveryCode || body.ownerPhoneCanOpen)) {
+                    setLockedRestore({ file: restoreFile, backup: body.backup, canUseCode: !!body.needsRecoveryCode, canUsePhone: !!body.ownerPhoneCanOpen });
                     return;
                 }
-                setRestoreStatus(`Restore failed: ${err.error || 'Server rejected backup file'}`);
+                // A plain archive, another community's file on a lived-in server, a signer this server does not pin: the
+                // server's own words, and the command it names for the server's shell.
+                setRestoreStatus(typeof body.error === 'string' ? body.error : `Restore failed: the server answered HTTP ${res.status}.`);
+                if (typeof body.command === 'string') setRestoreCommand(body.command);
             }
         } catch (e: unknown) {
             setRestoreStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -568,7 +557,7 @@ export function ApplianceSection({
             setTfaMessage('Enter a current code from your authenticator app (or a backup code) to turn 2FA off.');
             return;
         }
-        if (!confirm('Disable 2FA protection for this node admin account?')) return;
+        if (!(await ask({ title: 'Turn off two-factor sign-in?', body: 'The admin password alone will open Settings until it is turned on again.', confirmLabel: 'Turn it off' }))) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
@@ -653,29 +642,6 @@ export function ApplianceSection({
         }
     };
 
-    const handleResetNode = async () => {
-        if (!confirm('CRITICAL DANGER: Are you sure you want to reset this node? All identity and local configs will be erased.')) return;
-        if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
-                }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                alert(`Node reset failed: ${err.error || `HTTP ${res.status}`}`);
-                return;
-            }
-            alert('Node has been reset. Refreshing page.');
-            window.location.reload();
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        }
-    };
 
     // Calculate latest backup time
     const latestSnapshot = snapshots.length > 0 ? snapshots[0] : null;
@@ -687,6 +653,7 @@ export function ApplianceSection({
 
     return (
         <div className="space-y-6 font-sans animate-fade-in">
+            {confirmation}
             {/* Header & Subtabs */}
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
@@ -1116,15 +1083,20 @@ export function ApplianceSection({
                         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                             <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                 <span>🔄</span>
-                                <span>Restore Database Wizard</span>
+                                <span>Restore from a locked backup</span>
                             </h3>
                             <p className="text-xs text-nature-400 m-0">
-                                Restore this node from a backup: a locked .bpsealed file (opened with the recovery code or an owner's phone), or an older .tar.gz. Overwrites existing database tables.
+                                Restore this server from a locked backup (.bpsealed), opened with the recovery code or an owner's phone. It replaces the
+                                community's database with the backup's; a restore point is taken first, so you can roll back. An older unlocked
+                                (.tar.gz) backup restores on the server itself: <code className="font-mono">beanpool restore --unlocked FILE</code>.
                             </p>
 
                             {restoreStatus && (
-                                <div className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra font-mono">
-                                    {restoreStatus}
+                                <div role="status" data-testid="restore-status" className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra space-y-2" style={{ overflowWrap: 'anywhere' }}>
+                                    <p className="m-0">{restoreStatus}</p>
+                                    {restoreCommand && (
+                                        <p className="m-0">On the server: <code className="font-mono text-white">{restoreCommand}</code></p>
+                                    )}
                                 </div>
                             )}
 
@@ -1145,8 +1117,9 @@ export function ApplianceSection({
                             >
                                 <input
                                     type="file"
-                                    accept=".bpsealed,.sqlite,.db,.tar.gz"
-                                    onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                                    accept=".bpsealed"
+                                    aria-label="Locked backup file (.bpsealed)"
+                                    onChange={(e) => { setRestoreFile(e.target.files?.[0] || null); setRestoreStatus(null); setRestoreCommand(null); }}
                                     className="block w-full text-xs text-nature-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-nature-800 file:text-white hover:file:bg-nature-700"
                                 />
                                 <button
@@ -1154,12 +1127,17 @@ export function ApplianceSection({
                                     disabled={!restoreFile || restoring}
                                     className="w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all disabled:opacity-50"
                                 >
-                                    {restoring ? 'Restoring Database...' : 'Restore from Backup'}
+                                    {restoring ? 'Reading the backup…' : 'Restore from Backup'}
                                 </button>
                             </form>
                             )}
                         </div>
                     </div>
+
+                    {/* Restore points (design case 18 §3.3): read-only list and Roll back, owners only (draws nothing for an admin) */}
+                    <SectionErrorBoundary sectionName="Restore points" resetKey={activeNode.id}>
+                        <RestorePointsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
 
                     {/* Automated Backup Schedule Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
@@ -1350,12 +1328,6 @@ export function ApplianceSection({
                                                 className="px-2.5 py-1 rounded bg-nature-800 hover:bg-nature-700 text-xs text-nature-300 font-bold border border-nature-700 transition-all"
                                             >
                                                 {verifying && verifyTarget === s.name ? 'Verifying...' : 'Verify'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteSnapshot(s.name)}
-                                                className="px-2.5 py-1 rounded bg-nature-800 hover:bg-nature-700 text-xs text-red-400 font-bold border border-nature-700"
-                                            >
-                                                Delete
                                             </button>
                                         </div>
                                     </div>
@@ -1768,24 +1740,6 @@ export function ApplianceSection({
                     <SectionErrorBoundary sectionName="Connected assistants" resetKey={activeNode.id}>
                         <ConnectedAssistantsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
-
-                    {/* Factory Reset Danger Zone */}
-                    <div className="p-6 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-xl space-y-3">
-                        <h3 className="text-base font-bold text-red-400 m-0 flex items-center gap-2">
-                            <span>⚠️</span>
-                            <span>Danger Zone: Factory Reset Node</span>
-                        </h3>
-                        <p className="text-xs text-nature-400 m-0">
-                            Wipes identity and local state. Does not delete blockchain ledger files.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={handleResetNode}
-                            className="px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all shadow-md"
-                        >
-                            Wipe &amp; Reset Node
-                        </button>
-                    </div>
                 </div>
             )}
 

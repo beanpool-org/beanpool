@@ -5,7 +5,7 @@
  * Its own file so the post list beside it can be stubbed: PostModerationPanel renders every post it is given, and
  * 950 rows in jsdom take seconds, which is not what these tests are about.
  */
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -54,8 +54,11 @@ const okBatch = (init: any) => ({
     },
 });
 
-const prune = async () => {
+/** Press Prune, then answer the in-page confirmation (never window.confirm(): owner-delete S4b item 6) when it asks. */
+const prune = async (answer: 'Delete them' | 'Cancel' = 'Delete them') => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Prune Stale Posts' })); });
+    const dialog = screen.queryByRole('alertdialog');
+    if (dialog) await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: answer })); });
 };
 
 describe('Prune Stale Posts sends batches of at most 200, one after another', () => {
@@ -64,7 +67,6 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
     it('0 stale posts: no request, says none were found, no refresh', async () => {
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => true));
         const onRefresh = renderPrune([{ id: 'new', createdAt: new Date().toISOString() }]);
         await prune();
         expect(bulkCalls(fetchMock)).toHaveLength(0);
@@ -86,7 +88,6 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
             return okBatch(init);
         });
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => true));
         const onRefresh = renderPrune(stale(n));
         await prune();
         await waitFor(() => expect(screen.getByText(`Deleted ${n} post(s).`)).toBeInTheDocument());
@@ -109,7 +110,6 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
             return okBatch(init);
         });
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => true));
         const onRefresh = renderPrune(stale(950));
         await prune();
         await waitFor(() => expect(screen.getByText('Deleted 400 of 950, then: The Commons pot is unknown')).toBeInTheDocument());
@@ -120,7 +120,6 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
     it('a failing first batch reads "Failed: <reason>", sends nothing more and refreshes nothing', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) });
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => true));
         const onRefresh = renderPrune(stale(950));
         await prune();
         await waitFor(() => expect(screen.getByText('Failed: Unauthorized')).toBeInTheDocument());
@@ -131,9 +130,11 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
     it('cancelling the confirm sends nothing', async () => {
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => false));
+        const confirmSpy = vi.fn(() => true);
+        vi.stubGlobal('confirm', confirmSpy);
         renderPrune(stale(950));
-        await prune();
+        await prune('Cancel');
         expect(bulkCalls(fetchMock)).toHaveLength(0);
+        expect(confirmSpy).not.toHaveBeenCalled();
     });
 });

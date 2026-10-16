@@ -88,6 +88,9 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
     const rate = marginalRate(balance);
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : colors.text.heading;
+    // The words on the bubble. The calm bubble is heading-coloured, so its words take the card's colour: the pair reads in
+    // both themes (white on charcoal in light, as before; charcoal on white in dark, where a white label was white on white).
+    const tagFg = nearLimit || overFeeFree ? colors.text.inverse : colors.surface.card;
     const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
 
     // Offer ladder — the negative side mirrors the fee ladder above zero. usableFloor is the depth
@@ -154,8 +157,8 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                 style={[s.you, { left: `${pct}%`, marginLeft: -tagW / 2 }]}
                 onLayout={(e) => setTagW(e.nativeEvent.layout.width)}
             >
-                <View style={[s.bubble, { backgroundColor: tagBg }]}>
-                    <Text style={s.youText}>{tagLabel}</Text>
+                <View style={[s.bubble, { backgroundColor: tagBg }]} testID="credit-bar-bubble">
+                    <Text style={[s.youText, { color: tagFg }]} testID="credit-bar-label">{tagLabel}</Text>
                 </View>
                 <View style={[s.pointer, { borderTopColor: tagBg }]} />
             </View>
@@ -238,7 +241,7 @@ const styles = (colors: any) => StyleSheet.create({
     cbar: { position: 'relative', paddingTop: 26 },
     you: { position: 'absolute', top: 0, alignItems: 'center', zIndex: 10 },
     bubble: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7 },
-    youText: { color: '#fff', fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    youText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
     pointer: {
         width: 0, height: 0,
         borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5,

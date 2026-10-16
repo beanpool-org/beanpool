@@ -7472,15 +7472,18 @@ export async function getPledgeHistory(pubkey: string) {
 }
 
 /**
- * Return total beans the user currently has locked in active marketplace escrow.
- * Escrow is created when a buyer requests a post (status = 'pending' or 'requested').
+ * The Beans the node holds in escrow for this member: their 'pending' deals as the buyer, and nothing else.
+ * The node moves a deal's Beans into escrow only when it is approved, or accepted in one step (both make it 'pending');
+ * a 'requested' deal holds nothing (apps/server/src/engine/escrow.ts). Release, cancel and a dispute ruling take a deal
+ * out of 'pending' to 'completed' or 'cancelled', and a request turned down or left to expire never held any. The same
+ * rule as the node's own ledger export (engine/audit.ts exportLedgerFor, its Pending_Trade rows).
  */
 export async function getEscrowTotal(pubkey: string): Promise<number> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
         `SELECT COALESCE(SUM(credits), 0) as total
          FROM marketplace_transactions
-         WHERE buyer_pubkey = ? AND status IN ('pending', 'requested')`,
+         WHERE buyer_pubkey = ? AND status = 'pending'`,
         [pubkey]
     );
     return rows[0]?.total ?? 0;

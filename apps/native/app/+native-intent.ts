@@ -4,6 +4,7 @@ import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
 import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
+import { pairRouteFromSystemPath } from '../utils/pair-link';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
@@ -33,6 +34,12 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
         // them home rather than leaving the stack with nothing.
         return initial ? '/' : null;
     }
+
+    // The web app's pairing QR, scanned with the phone's camera app (utils/pair-link.ts): the pairing screen, given the
+    // whole link to read as a scan would. Before the sign-in checks below, so a pair link is never taken for a
+    // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it.
+    const pairRoute = pairRouteFromSystemPath(path);
+    if (pairRoute) return pairRoute;
 
     const isAuthCallback =
         path.includes('auth/facebook') ||

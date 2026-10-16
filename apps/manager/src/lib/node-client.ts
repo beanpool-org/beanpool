@@ -1874,18 +1874,6 @@ export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string
     return data.snapshot;
 }
 
-export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string, tfaToken?: string): Promise<void> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/delete');
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ name, ...passwordField(adminPassword) }),
-    });
-    if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    }
-}
-
 export interface SnapshotScheduleConfig {
     enabled: boolean;
     intervalHours: number;

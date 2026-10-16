@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "തീ",
   "Free\u0004price": "സൗജന്യം",
   "Gallery": "ഗാലറി",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "**ക്രമീകരണങ്ങൾ → നിങ്ങളുടെ അക്കൗണ്ട് മറ്റൊരു ഉപകരണത്തിൽ ഉപയോഗിക്കുക** എന്നതിലേക്ക് പോകുക (പഴയ ആപ്പുകളിൽ: **മറ്റൊരു ഉപകരണം ബന്ധിപ്പിക്കുക**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "**ക്രമീകരണങ്ങൾ → ഉപകരണം ബന്ധിപ്പിക്കുക** എന്നതിലേക്ക് പോകുക (പഴയ ആപ്പുകളിൽ: **Use your account on another device**)",
   "Going": "പോകുന്നു",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "ക്ഷണ കോഡോ സ്കാൻ ചെയ്ത QR-ഓ ഉണ്ടോ? ചേരാൻ നിങ്ങൾ തിരഞ്ഞെടുത്ത കോൾസൈനിനൊപ്പം അത് താഴെ നൽകുക.",
   "Green Bean": "പച്ച ബീൻ",
@@ -460,5 +460,6 @@
   "That did not go through. Try again.": "അത് വിജയകരമായി പൂർത്തിയായില്ല. വീണ്ടും ശ്രമിക്കുക.",
   "Type the two digits your phone shows": "നിങ്ങളുടെ ഫോൺ കാണിക്കുന്ന രണ്ട് അക്കങ്ങൾ ടൈപ്പ് ചെയ്യുക",
   "Confirm": "സ്ഥിരീകരിക്കുക",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "ശരിയായ അക്കങ്ങൾ നൽകിയാൽ മാത്രമേ നിങ്ങളുടെ അക്കൗണ്ട് ഇവിടെ തുറക്കൂ. മൂന്ന് തവണ തെറ്റിയാൽ ഒന്നും അയക്കില്ല."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "ശരിയായ അക്കങ്ങൾ നൽകിയാൽ മാത്രമേ നിങ്ങളുടെ അക്കൗണ്ട് ഇവിടെ തുറക്കൂ. മൂന്ന് തവണ തെറ്റിയാൽ ഒന്നും അയക്കില്ല.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "നിങ്ങളുടെ ഫോണിൽ നിന്ന് ഇതുവരെ ഒന്നും വന്നിട്ടില്ല. ഈ കോഡ് {host}ൽ നിന്നുള്ളതാണ്. ഫോൺ ഉപയോഗിക്കാത്ത സെർവറിൽ നിന്നുള്ളതാണെന്ന് ഫോൺ പറയുന്നുണ്ടെങ്കിൽ, നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയുടെ വിലാസത്തിൽ BeanPool തുറക്കുക, അല്ലെങ്കിൽ ആദ്യം ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക. ഫോണിൽ അക്കങ്ങളൊന്നും കാണിക്കുന്നില്ലെങ്കിൽ, അതിലെ BeanPool ആപ്പ് അപ്ഡേറ്റ് ചെയ്യുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "Apoy",
   "Free\u0004price": "Libre",
   "Gallery": "Gallery",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "Pumunta sa **Mga Setting → Gamitin ang account mo sa ibang device** (mas lumang app: **Mag-link ng Ibang Device**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "Pumunta sa **Mga Setting → Mag-link ng device** (mas lumang app: **Use your account on another device**)",
   "Going": "Pupunta",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "May invite code ka ba o nag-scan ng QR? Ilagay ito sa ibaba kasama ang napili mong palayaw para sumali.",
   "Green Bean": "Berdeng Bean",
@@ -460,5 +460,6 @@
   "That did not go through. Try again.": "Hindi iyon tumuloy. Subukang muli.",
   "Type the two digits your phone shows": "I-type ang dalawang digit na ipinapakita ng telepono mo",
   "Confirm": "Kumpirmahin",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Magbubukas lamang dito ang account mo pagkatapos ng tamang mga digit. Tatlong maling pagsubok at walang ipapadala."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Magbubukas lamang dito ang account mo pagkatapos ng tamang mga digit. Tatlong maling pagsubok at walang ipapadala.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Wala pang dumarating mula sa telepono mo. Ang code na ito ay mula sa {host}. Kung sinasabi ng telepono mo na mula ito sa server na hindi nito ginagamit, buksan ang BeanPool sa address ng sarili mong komunidad, o sumali muna sa {host} sa telepono mo, saka mag-scan ulit. Kung walang ipinapakitang digit ang telepono mo, i-update ang BeanPool app dito, saka mag-scan ulit."
 }

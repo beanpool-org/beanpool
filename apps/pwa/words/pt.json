@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "Fogo",
   "Free\u0004price": "Grátis",
   "Gallery": "Galeria",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "Vá em **Configurações → Usar sua conta em outro dispositivo** (apps antigos: **Vincular outro dispositivo**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "Vá em **Configurações → Vincular um aparelho** (apps antigos: **Use your account on another device**)",
   "Going": "Vou",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "Tem um código de convite ou escaneou um QR? Digite abaixo, com o apelido que escolheu, para entrar.",
   "Green Bean": "Feijão verde",
@@ -461,5 +461,6 @@
   "That did not go through. Try again.": "Não foi possível concluir. Tente novamente.",
   "Type the two digits your phone shows": "Digite os dois dígitos exibidos no seu celular",
   "Confirm": "Confirmar",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Sua conta só abrirá aqui após os dígitos corretos. Três tentativas erradas e nada será enviado."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Sua conta só abrirá aqui após os dígitos corretos. Três tentativas erradas e nada será enviado.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Ainda não chegou nada do seu celular. Este código é de {host}. Se o seu celular disser que ele é de um servidor que não usa, abra o BeanPool no endereço da sua própria comunidade, ou entre primeiro em {host} no seu celular e depois escaneie de novo. Se o seu celular não mostrar dígitos, atualize o app BeanPool nele e depois escaneie de novo."
 }

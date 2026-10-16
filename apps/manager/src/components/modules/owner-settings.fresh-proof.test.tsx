@@ -7,6 +7,7 @@ import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { ApplianceSection } from './ApplianceSection';
 import { updateGatewayConfig, type GatewayConfig, type OffboxStatus } from '../../lib/node-client';
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 import type { NodeProfile } from '../../lib/profiles';
 
 /**
@@ -102,6 +103,7 @@ describe('Off-box destination removed (S4a)', () => {
             { '/offbox-backups/status': status([dest]) });
         render(<OffboxBackupsPanel activeNode={node} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+        await answerInPageConfirm('Stop sending'); // S4b (#2029): Remove asks in the page first
         await enterCode('offbox-proof', '135790');
         expect(await screen.findByText('Destination removed. What it holds stays there.')).toBeInTheDocument();
         expect(sent.map((s) => [s.body.removeId, s.body.code])).toEqual([['d-1', undefined], ['d-1', '135790']]);
@@ -112,6 +114,7 @@ describe('Off-box destination removed (S4a)', () => {
         const sent = mockNode('/offbox-backups/settings', [[403, STEP_UP]], { '/offbox-backups/status': status([dest]) });
         render(<OffboxBackupsPanel activeNode={node} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+        await answerInPageConfirm('Stop sending'); // S4b (#2029): Remove asks in the page first
         expect(await screen.findByTestId('offbox-proof-step-up')).toBeInTheDocument();
         expect(sent).toHaveLength(1);
     });

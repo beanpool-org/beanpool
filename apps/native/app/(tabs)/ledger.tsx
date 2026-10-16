@@ -53,6 +53,9 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
+// The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
+const INVITE_PERK = 'Invite others to join';
+
 export default function LedgerScreen() {
     // Large "Ledger" title above the page's one list; folds away once the list scrolls. The
     // profile/balance bar, cards and Levels/Wallet switch are the top of that list (#1633).
@@ -80,10 +83,10 @@ export default function LedgerScreen() {
         const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: string; perks: string[] }> = {
             Newcomer: { tone: colors.trust.newcomer,
                 blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-                perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
+                perks: ['Browse & trade the marketplace', 'Receive credits', INVITE_PERK, 'Send credits after first trade (needs positive balance)'] },
             Resident: { tone: colors.trust.resident,
                 blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-                perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
+                perks: ['Credit floor deepens with the value you trade', INVITE_PERK] },
             Steward: { tone: colors.trust.steward,
                 blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
                 perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
@@ -290,6 +293,7 @@ export default function LedgerScreen() {
         txnHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 4 },
         exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         exportBtnText: { fontSize: 11, color: colors.text.secondary, fontWeight: '700' },
+        exportPreviewRow: { marginBottom: 8 },
         circBox: { backgroundColor: colors.feedback.success.bg, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.success.border },
         circBoxAmber: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
         circLabel: { fontSize: 13, fontWeight: '700', color: colors.feedback.success.fg } as any,
@@ -557,15 +561,16 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? t('Send Beans') : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>}
-                    <View style={[styles.perkPill, {
+                    {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites screen says so. */}
+                    {!preview && <View style={[styles.perkPill, {
                         borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,
                         backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
                     }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
                         <Text style={[styles.perkText, { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }]}>Invite Members</Text>
-                    </View>
+                    </View>}
                 </View>
             </View>
 
@@ -630,7 +635,7 @@ export default function LedgerScreen() {
                     </Text>
                 </View>
 
-                {sel.perks.map((p: string) => (
+                {sel.perks.filter((p: string) => !(preview && p === INVITE_PERK)).map((p: string) => (
                     <View key={p} style={styles.detailPerkRow}>
                         <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : sel.color} />
                         <Text style={styles.detailPerkText}>{p}</Text>
@@ -640,7 +645,9 @@ export default function LedgerScreen() {
                 {!selReached && selNeeded > 0 && (
                     <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
                 )}
-                <Text style={styles.detailNote}>Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.</Text>
+                <Text style={styles.detailNote}>{preview
+                    ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
+                    : t("Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")}</Text>
             </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}
@@ -833,10 +840,11 @@ export default function LedgerScreen() {
                     </View>
                 )}
 
-                {/* ── Send Credits ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
+                {/* ── Send Beans ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
                 {preview ? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" /> : <Pressable
                     style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
+                    accessibilityLabel={!canSend ? undefined : showSend ? t('Cancel') : t('Send Beans')}
                     onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -847,8 +855,8 @@ export default function LedgerScreen() {
                         />
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
                             {!canSend
-                                ? (earned <= 0 ? 'Send Credits (needs 1 completed trade)' : 'Send Credits (needs positive balance)')
-                                : showSend ? 'Cancel' : 'Send Credits'}
+                                ? (earned <= 0 ? 'Send Beans (needs 1 completed trade)' : 'Send Beans (needs positive balance)')
+                                : showSend ? t('Cancel') : t('Send Beans')}
                         </Text>
                     </View>
                 </Pressable>}
@@ -901,12 +909,15 @@ export default function LedgerScreen() {
 
                 <View style={styles.txnHeaderRow}>
                     <Text style={styles.sectionLabel}>RECENT TRANSACTIONS</Text>
-                    {preview ? <LocalCommunityMark variant="action" feature="beans" label="Export CSV" /> : (
+                    {!preview && (
                     <Pressable style={styles.exportBtn} accessibilityRole="button" accessibilityLabel="Export CSV" onPress={handleExport} disabled={exporting}>
                         <MaterialCommunityIcons name="download" size={14} color={colors.text.secondary} />
                         <Text style={styles.exportBtnText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
                     </Pressable>)}
                 </View>
+                {/* In preview Export is the marker's action on a full-width row of its own, like Send Beans: button and pill
+                    don't fit beside the heading at 320 dp and 1.3× text. The pill stays, so it never reads as a live export. */}
+                {preview && <View style={styles.exportPreviewRow} testID="ledger-export-row"><LocalCommunityMark variant="action" feature="beans" label="Export CSV" /></View>}
             </View>
         );
     };

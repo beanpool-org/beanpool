@@ -17,6 +17,7 @@ import {
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
+import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 
 interface Props {
     decisions: DecisionWithTally[];
@@ -30,6 +31,7 @@ interface Props {
     hasOpenDecision: boolean;
     activeView: 'open' | 'history';
     onChangeView: (view: 'open' | 'history') => void;
+    preview?: boolean;
 }
 
 export function DecideSection({
@@ -43,6 +45,7 @@ export function DecideSection({
     hasOpenDecision,
     activeView,
     onChangeView,
+    preview = false,
 }: Props) {
     const { theme, colors } = useTheme();
     const [votingId, setVotingId] = useState<string | null>(null);
@@ -546,7 +549,13 @@ export function DecideSection({
     }));
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} testID={preview ? 'decide-preview' : undefined}>
+            {preview && (
+                <View style={{ marginHorizontal: -16, marginBottom: 16 }}>
+                    <LocalCommunityMark variant="strip" feature="decisions" />
+                    <ExampleHeader text="Example Valley · an example member" />
+                </View>
+            )}
             {/* View Switcher: Open Decisions vs History */}
             <View style={styles.viewSelector} accessibilityRole="tablist" accessibilityLabel="Decisions view">
                 <Pressable
@@ -601,32 +610,36 @@ export function DecideSection({
                         <Text style={styles.proposeDesc}>
                             Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
                         </Text>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Propose a Community Decision"
-                            style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
-                            onPress={() => {
-                                if (!canPropose) {
-                                    Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
-                                    return;
-                                }
-                                if (hasOpenDecision) {
-                                    Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
-                                    return;
-                                }
-                                onOpenPropose();
-                            }}
-                        >
-                            <Text style={[styles.proposeBtnText, (!canPropose || hasOpenDecision) && styles.proposeBtnTextDisabled]}>
-                                + Propose a Decision
-                            </Text>
-                        </Pressable>
-                        {!canPropose && (
+                        {preview ? (
+                            <LocalCommunityMark variant="action" feature="decisions" label="+ Propose a Decision" />
+                        ) : (
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Propose a Community Decision"
+                                style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
+                                onPress={() => {
+                                    if (!canPropose) {
+                                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
+                                        return;
+                                    }
+                                    if (hasOpenDecision) {
+                                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+                                        return;
+                                    }
+                                    onOpenPropose();
+                                }}
+                            >
+                                <Text style={[styles.proposeBtnText, (!canPropose || hasOpenDecision) && styles.proposeBtnTextDisabled]}>
+                                    + Propose a Decision
+                                </Text>
+                            </Pressable>
+                        )}
+                        {!preview && !canPropose && (
                             <Text style={styles.gateWarning}>
                                 ⚠️ You can propose once you have completed a trade.
                             </Text>
                         )}
-                        {canPropose && hasOpenDecision && (
+                        {!preview && canPropose && hasOpenDecision && (
                             <Text style={styles.gateWarning}>
                                 ℹ️ You have an open decision. Wait for it to conclude before opening another.
                             </Text>
@@ -671,7 +684,7 @@ export function DecideSection({
                                     : `${targetName} has no debt. Removing them charges nothing to the Commons pool, which currently holds ${poolAmount}.`;
 
                             return (
-                                <View key={item.id} style={styles.card}>
+                                <View key={item.id} style={styles.card} testID={preview ? 'sample-decision' : undefined}>
                                     {/* Header tags: Touches, Effect, Franchise, Time Left */}
                                     <View style={styles.cardHeader}>
                                         <View style={styles.tagRow}>
@@ -827,45 +840,56 @@ export function DecideSection({
                                             </View>
                                         )}
 
-                                        <View style={styles.voteButtonsRow}>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                accessibilityLabel={buttons.yes.label}
-                                                accessibilityState={{ disabled: yesDisabled }}
-                                                style={[styles.voteBtn, styles.voteBtnYes, (buttons.yes.disabled || !!blocker) && styles.voteBtnCurrent]}
-                                                disabled={yesDisabled}
-                                                onPress={() => handleVote(item, true)}
-                                            >
-                                                {votingId === item.id ? (
-                                                    <ActivityIndicator color="#fff" size="small" />
-                                                ) : (
-                                                    <>
-                                                        <MaterialCommunityIcons name="thumb-up" size={16} color="#fff" />
-                                                        <Text style={styles.voteBtnText}>{buttons.yes.label}</Text>
-                                                    </>
-                                                )}
-                                            </Pressable>
+                                        {preview ? (
+                                            <View style={styles.voteButtonsRow}>
+                                                <View style={{ flex: 1 }}>
+                                                    <LocalCommunityMark variant="action" feature="decisions" label="👍 Vote YES" />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <LocalCommunityMark variant="action" feature="decisions" label="👎 Vote NO" />
+                                                </View>
+                                            </View>
+                                        ) : (
+                                            <View style={styles.voteButtonsRow}>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={buttons.yes.label}
+                                                    accessibilityState={{ disabled: yesDisabled }}
+                                                    style={[styles.voteBtn, styles.voteBtnYes, (buttons.yes.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                                    disabled={yesDisabled}
+                                                    onPress={() => handleVote(item, true)}
+                                                >
+                                                    {votingId === item.id ? (
+                                                        <ActivityIndicator color="#fff" size="small" />
+                                                    ) : (
+                                                        <>
+                                                            <MaterialCommunityIcons name="thumb-up" size={16} color="#fff" />
+                                                            <Text style={styles.voteBtnText}>{buttons.yes.label}</Text>
+                                                        </>
+                                                    )}
+                                                </Pressable>
 
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                accessibilityLabel={buttons.no.label}
-                                                accessibilityState={{ disabled: noDisabled }}
-                                                style={[styles.voteBtn, styles.voteBtnNo, (buttons.no.disabled || !!blocker) && styles.voteBtnCurrent]}
-                                                disabled={noDisabled}
-                                                onPress={() => handleVote(item, false)}
-                                            >
-                                                {votingId === item.id ? (
-                                                    <ActivityIndicator color="#fff" size="small" />
-                                                ) : (
-                                                    <>
-                                                        <MaterialCommunityIcons name="thumb-down" size={16} color="#fff" />
-                                                        <Text style={styles.voteBtnText}>{buttons.no.label}</Text>
-                                                    </>
-                                                )}
-                                            </Pressable>
-                                        </View>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={buttons.no.label}
+                                                    accessibilityState={{ disabled: noDisabled }}
+                                                    style={[styles.voteBtn, styles.voteBtnNo, (buttons.no.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                                    disabled={noDisabled}
+                                                    onPress={() => handleVote(item, false)}
+                                                >
+                                                    {votingId === item.id ? (
+                                                        <ActivityIndicator color="#fff" size="small" />
+                                                    ) : (
+                                                        <>
+                                                            <MaterialCommunityIcons name="thumb-down" size={16} color="#fff" />
+                                                            <Text style={styles.voteBtnText}>{buttons.no.label}</Text>
+                                                        </>
+                                                    )}
+                                                </Pressable>
+                                            </View>
+                                        )}
                                         <Text style={styles.secretNote} testID="secret-ballot-note">
-                                            🔒 Secret ballot: members see the totals, never who voted how.
+                                            {preview ? '' : '🔒 '}Secret ballot: members see the totals, never who voted how.
                                         </Text>
                                     </View>
                                 </View>

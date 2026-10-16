@@ -33,7 +33,8 @@ export function sameHomeUrl(a: string, b: string): boolean {
 
 /**
  * What our members table says about a key a peer claims as one of its own members:
- * - `local`: one of OUR members (not a visitor's row). Never a remote sender or buyer.
+ * - `local`: one of OUR members: a row with no home that is not a visitor's. Never a remote sender or buyer. (A row with
+ *   a home reads as remote whatever its is_visitor says: the first boot's visitor marking can leave one at 0.)
  * - `elsewhere`: a visitor whose row already names a different home than this peer's.
  * - `ok`: no row yet, or a visitor with no home (M5: a row a local DM made) or with this peer's home.
  */
@@ -41,7 +42,7 @@ export function remoteMemberStanding(publicKey: string, peerHome: string | null)
     const row = db.prepare('SELECT is_visitor, home_node_url FROM members WHERE public_key = ?').get(publicKey) as
         { is_visitor: number; home_node_url: string | null } | undefined;
     if (!row) return 'ok';
-    if (!row.is_visitor) return 'local';
+    if (!row.is_visitor && !row.home_node_url) return 'local';
     if (row.home_node_url && (!peerHome || !sameHomeUrl(row.home_node_url, peerHome))) return 'elsewhere';
     return 'ok';
 }

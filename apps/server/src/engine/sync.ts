@@ -1525,10 +1525,30 @@ function mergeEnterprisePledges(rows: unknown[], whole: boolean): { changes: num
 }
 
 /**
- * A payload's signature, over its JSON without `signature` and `publicKey`, and its signer, which must be a `mirror`
- * connector this standby trusts (its main server). Returns the signer's PeerId; throws otherwise. Each page of a copy
- * served in pages is checked on its own, as a payload is (importRemoteState; services/backup-puller.ts before it writes a
- * page for the stager).
+ * A copy whose signer is not the main server this standby is pinned to (services/standby-main.ts), or a standby with no
+ * pin at all: nothing is imported. The puller reports it as `signer-not-pinned` (services/standby-copy-record.ts whyOf).
+ */
+export class SignerNotPinnedError extends Error {
+    readonly signer: string;
+    readonly pin: string | null;
+    constructor(signer: string, pin: string | null) {
+        super(pin
+            ? `Sync payload signer ${signer.slice(-8)} is not this standby's main server (pinned ${pin.slice(-8)}): nothing imported`
+            : `Sync payload signer ${signer.slice(-8)} refused: this standby is not paired with a main server (beanpool pair)`);
+        this.name = 'SignerNotPinnedError';
+        this.signer = signer;
+        this.pin = pin;
+    }
+}
+
+let lastNotPinnedLogAt = 0;
+
+/**
+ * A payload's signature, over its JSON without `signature` and `publicKey`, and its signer, which must be the main
+ * server this standby is pinned to (data/standby-main.json, set only from its shell: services/standby-main.ts). Returns
+ * the signer's PeerId; throws otherwise (a SignerNotPinnedError for a good signature by another key, or none pinned).
+ * Each page of a copy served in pages is checked on its own, as a payload is (importRemoteState;
+ * services/backup-puller.ts before it writes a page for the stager).
  */
 export async function verifySyncPayload(cb: Pick<SyncCallbacks, 'publicKeyFromProtobuf'>, remote: SyncPayload): Promise<string> {
     if (!remote.signature || !remote.publicKey) {
@@ -1554,21 +1574,22 @@ export async function verifySyncPayload(cb: Pick<SyncCallbacks, 'publicKeyFromPr
 
         const { peerIdFromPublicKey } = await import('@libp2p/peer-id');
         signerPeerId = peerIdFromPublicKey(pubKey as any).toString();
-        const { isPeerTrusted } = await import('../connector-manager.js');
-        const signerTrust = isPeerTrusted(signerPeerId);
-        if (!signerTrust.trusted || signerTrust.trustLevel === 'blocked') {
-            throw new Error(`Sync payload signing key maps to untrusted peer ${signerPeerId.slice(-8)}`);
-        }
-
-        if (signerTrust.trustLevel !== 'mirror') {
-            throw new Error(`Sync payload signer ${signerPeerId.slice(-8)} is a '${signerTrust.trustLevel}' connector; only 'mirror' connectors may import state`);
-        }
-
-        console.log(`[Sync] ✓ Cryptographically validated sync payload from trusted mirror: ${signerPeerId.slice(-8)} (nodeId: ${remote.nodeId})`);
     } catch (e: any) {
         console.error(`[Sync] ❌ SyncPayload signature validation failed:`, e.message || e);
         throw new Error(`Cryptographic sync payload verification failed: ${e.message}`);
     }
+    const { standbyMainPeerId } = await import('../services/standby-main.js');
+    const pin = standbyMainPeerId();
+    if (pin !== signerPeerId) {
+        const refused = new SignerNotPinnedError(signerPeerId, pin);
+        // Once an hour: a standby pointed at the wrong server is refused at every pull.
+        if (Date.now() - lastNotPinnedLogAt > 60 * 60_000) {
+            lastNotPinnedLogAt = Date.now();
+            console.error(`[Sync] ❌ ${refused.message}`);
+        }
+        throw refused;
+    }
+    console.log(`[Sync] ✓ Cryptographically validated sync payload from this standby's main server: ${signerPeerId.slice(-8)} (nodeId: ${remote.nodeId})`);
     return signerPeerId;
 }
 

@@ -90,6 +90,7 @@ import { writeFileAtomic } from '../write-file-atomic.js';
 import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
 import { getNodeRole } from '../config/node-role.js';
+import { keyEnd, standbyMainPeerId } from './standby-main.js';
 import { db } from '../db/db.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
@@ -764,11 +765,12 @@ export async function sealFileVerified(
 
 /**
  * The keys this server can hold a restore to (966 follow-up #2): its own node key when the file is from its own
- * community, and, on a standby only, its pinned main server (the `mirror` connector). A fresh server restoring
- * someone's community has none, and then opening is the whole proof, as §2.2 allows for an owner.
+ * community, and, on a standby only, its pinned main server (data/standby-main.json, set only from its shell:
+ * services/standby-main.ts). A fresh server restoring someone's community has none, and then opening is the whole proof,
+ * as §2.2 allows for an owner.
  *
- * On a main server a `mirror` link is not a pin (design case 18 §3.1, standby review F2): a mirror link there is a key
- * someone added, and its key must not become one a restore trusts for the keys and passwords inside a file.
+ * On a main server nothing but its own key is a pin (design case 18 §3.1, standby review F2): no link anyone adds there
+ * may become a key a restore trusts for the keys and passwords inside a file.
  */
 export function restorePins(header: SealedEnvelopeHeader): string[] {
     const pins = new Set<string>();
@@ -780,14 +782,8 @@ export function restorePins(header: SealedEnvelopeHeader): string[] {
         }
     } catch { /* no genesis: no own pin */ }
     if (getNodeRole() !== 'backup') return [...pins];
-    try {
-        const connectors = JSON.parse(fs.readFileSync(path.join(dataDir(), 'connectors.json'), 'utf-8'));
-        for (const c of Array.isArray(connectors) ? connectors : []) {
-            if (c?.trustLevel !== 'mirror' || typeof c.address !== 'string') continue;
-            const m = c.address.match(/\/p2p\/([^/]+)$/);
-            if (m) pins.add(m[1]);
-        }
-    } catch { /* no connectors */ }
+    const main = standbyMainPeerId(dataDir());
+    if (main) pins.add(main);
     return [...pins];
 }
 
@@ -858,6 +854,23 @@ export function signerCheck(header: SealedEnvelopeHeader): SignerCheck {
     const pins = restorePins(header);
     if (pins.length === 0) return { ok: true, pinned: false };
     if (pins.includes(header.nodePeerId)) return { ok: true, pinned: true };
+    const main = getNodeRole() === 'backup' ? standbyMainPeerId(dataDir()) : null;
+    if (main) {
+        // A standby restores only its main server's backups (design case 19 D3): the pin named, and the shell's way.
+        return {
+            ok: false, status: 409,
+            body: {
+                error: `This backup was locked by a server ending ${keyEnd(header.nodePeerId)}, not by this standby's main server `
+                    + `(${keyEnd(main)}). A standby restores only its main server's backups; on the server itself, `
+                    + '`beanpool restore --accept-signer` restores another machine\'s file, database only. Nothing was changed.',
+                command: `beanpool restore --accept-signer ${header.nodePeerId} FILE`,
+                signerNotPinned: true,
+                signer: header.nodePeerId,
+                mainServer: main,
+                pins,
+            },
+        };
+    }
     return {
         ok: false, status: 409,
         body: {

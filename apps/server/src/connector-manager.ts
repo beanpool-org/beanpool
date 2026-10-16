@@ -5,9 +5,12 @@
  * No automatic discovery, no bootstrap lists, no central coordination.
  *
  * Trust Levels:
- *   - mirror: Full state replication (backup/disaster recovery)
  *   - peer:   Cross-community federation (CORS + API access, no sync)
  *   - blocked: Deny API access from this node
+ *
+ * There is no replication level: a standby's main server is pinned in data/standby-main.json from the standby's shell
+ * (services/standby-main.ts), never from this file, which routes write. A `mirror` (or older `full_sync`) entry is
+ * dropped at load, once, with a log line (design case 19 D4).
  *
  * Connectors are stored in data/connectors.json and persist across restarts.
  */
@@ -34,7 +37,7 @@ const HANDSHAKE_INTERVAL_MS = 10_000; // 10 seconds
 const RETRY_INTERVAL_MS = 30_000;     // 30 seconds
 const MAX_RETRY_DELAY_MS = 5 * 60_000; // 5 minutes max backoff
 
-export type TrustLevel = 'mirror' | 'peer' | 'blocked';
+export type TrustLevel = 'peer' | 'blocked';
 
 export interface ConnectorConfig {
     address: string;         // multiaddr or hostname:port (e.g. "us.beanpool.org:4001")
@@ -151,11 +154,13 @@ function derivePublicUrl(address: string): string | undefined {
     return port && port !== '4001' ? `https://${host}:${port}` : `https://${host}`;
 }
 
+/** Levels a link no longer has: removed at load (design case 19 D4). */
+const DROPPED_LEVELS = new Set(['mirror', 'full_sync']);
+
 /** Migrate legacy trust levels to new federation model */
 function migrateConnector(c: any): ConnectorConfig {
     // Migrate trust levels
     const trustMap: Record<string, TrustLevel> = {
-        full_sync: 'mirror',
         credit_verification: 'peer',
         read_only: 'peer',
     };
@@ -213,8 +218,15 @@ export function loadConnectors(): void {
             // malformed value that CAN be derived saves once and is then settled; one that cannot derive saves
             // never. Note this deliberately does not simply drop the missing-publicUrl case, which would stop
             // persisting the repair this PR exists for.
-            const needsMigration = raw.some((c: any) => {
-                if (['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel)) return true;
+            // A replication link (`mirror`, or the older `full_sync`) is no level any more: dropped, once, said once.
+            const dropped = raw.filter((c: any) => c && DROPPED_LEVELS.has(c.trustLevel));
+            const kept = raw.filter((c: any) => c && !DROPPED_LEVELS.has(c.trustLevel));
+            for (const c of dropped) {
+                logger.info('P2P', `[Connectors] Removed the ${c.trustLevel} link ${c.callsign || c.address}: a standby's main server is `
+                    + `pinned from its shell now (data/standby-main.json, beanpool pair), and a main server imports from nobody`);
+            }
+            const needsMigration = dropped.length > 0 || kept.some((c: any) => {
+                if (['credit_verification', 'read_only'].includes(c.trustLevel)) return true;
                 if (c.address && c.address.includes(',')) return true;
                 const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
                 if (!current || current.startsWith('https:///')) {
@@ -222,7 +234,7 @@ export function loadConnectors(): void {
                 }
                 return false;
             });
-            connectors = raw.map(migrateConnector);
+            connectors = kept.map(migrateConnector);
             logger.info('P2P', `[Connectors] Loaded ${connectors.length} connector(s) from disk.`);
             if (needsMigration) {
                 saveConnectors();

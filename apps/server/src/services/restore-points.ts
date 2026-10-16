@@ -42,10 +42,13 @@ export {
     type RestorePointInfo, type RestorePointWhy,
 } from './restore-point-names.js';
 
-/** The per-server files a sealed restore can replace (sealed-backup.ts applyBundle), plus node_config.json. */
+/**
+ * The per-server files a sealed restore can replace (sealed-backup.ts applyBundle), plus node_config.json and a standby's
+ * pin (services/standby-main.ts), so a roll-back puts back which server it copied.
+ */
 export const RESTORE_POINT_SERVER_FILES = [
     'libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'recovery-seal.key', 'open-join.key',
-    'local-config.json', 'node_config.json',
+    'local-config.json', 'node_config.json', 'standby-main.json',
 ] as const;
 const RESTORE_POINT_META = 'point.json';
 

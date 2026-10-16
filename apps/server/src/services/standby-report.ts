@@ -26,13 +26,15 @@ export type PullOutcome = 'ok' | 'refused' | 'fetch-failed';
 
 /**
  * Why, as a code (never the error's own text): refused by the ledger's conservation check, a signature or signer that
- * isn't the main server's, a table the ledger needs whole with more rows than one copy carries (`oversized`, the tables in
+ * isn't the main server's (`signer-not-pinned`: signed well, by a key that is not the one the standby is pinned to, or by
+ * any key on a standby paired with none: services/standby-main.ts), a table the ledger needs whole with more rows than one copy carries (`oversized`, the tables in
  * the report's `oversized`), any other failure to import; and for a copy that never came, a timeout, an unreachable main
  * server, an answer that wasn't a copy, or an HTTP status.
  */
 export type WhyCode =
     | 'conservation'
     | 'signature'
+    | 'signer-not-pinned'
     | 'oversized'
     | 'import-error'
     | 'timeout'
@@ -41,7 +43,7 @@ export type WhyCode =
     | `http-${number}`
     | 'redirect'
     | `redirect:${string}`;
-const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d|redirect(:[a-zA-Z0-9.:_\[\]-]{1,260})?)$/;
+const WHY = /^(conservation|signature|signer-not-pinned|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d|redirect(:[a-zA-Z0-9.:_\[\]-]{1,260})?)$/;
 
 /** This, as a code from the list, or null when it is none. */
 export function whyCode(v: unknown): WhyCode | null {
@@ -107,7 +109,15 @@ export interface StandbyReport {
      * whole copy (deltas may still land) and keeps the last one it took. At most MAX_TABLES_NAMED.
      */
     oversized: string[];
+    /**
+     * The main server's key this standby is pinned to (public), or null: not paired. Absent: a standby from before the
+     * pin. A display for Replication Access ("paired to this server" / "paired to another key"), never the alarm: a
+     * standby pointed at an impostor reports to the impostor.
+     */
+    pin?: string | null;
 }
+
+const PEER_ID = /^[1-9A-HJ-NP-Za-km-z]{40,64}$/;
 
 const age = (v: unknown): v is number | null => v === null || (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_AGE_MS);
 
@@ -134,18 +144,23 @@ export function parseStandbyReport(raw: unknown): StandbyReport | null {
     const leftOut = tablesOf(r.leftOut);
     const oversized = tablesOf(r.oversized);
     if (!leftOut || !oversized) return null;
+    if (!(r.pin === undefined || r.pin === null || (typeof r.pin === 'string' && PEER_ID.test(r.pin)))) return null;
     return {
         v: 1, id: r.id, last, why, fails, okAgo, wholeAgo,
         exact, exactAgo, differs: [...new Set<string>(differs)], hashed, healing: exact === false && healing, leftOut, oversized,
+        ...(r.pin === undefined ? {} : { pin: r.pin as string | null }),
     };
 }
 
 /**
  * The report as the header carries it. A main server from before the redirect codes ignores, whole, a report whose `why`
  * it doesn't know: a refused redirect goes to it as `network` (what it was told of one before), and the code with the
- * host in `whyDetail`, a field it never reads. Left out rather than let the report pass STANDBY_REPORT_MAX_CHARS.
+ * host in `whyDetail`, a field it never reads. Left out rather than let the report pass STANDBY_REPORT_MAX_CHARS. A refused
+ * signer goes as `signature`, with `signer-not-pinned` in `whyDetail`.
  */
 export function standbyReportHeader(r: StandbyReport): string {
+    // A main server from before the pin knows a refused signer as `signature`.
+    if (r.why === 'signer-not-pinned') return JSON.stringify({ ...r, why: 'signature', whyDetail: r.why });
     if (r.why !== 'redirect' && !r.why?.startsWith('redirect:')) return JSON.stringify(r);
     const detailed = JSON.stringify({ ...r, why: 'network', whyDetail: r.why });
     return detailed.length <= STANDBY_REPORT_MAX_CHARS ? detailed : JSON.stringify({ ...r, why: 'network' });
@@ -211,6 +226,7 @@ export function whyInWords(why: string | null): string {
     if (!why) return 'for a reason it did not record';
     if (why === 'conservation') return "the copy would have changed the ledger's total, so the ledger check refused it";
     if (why === 'signature') return "the copy's signature was not the main server's";
+    if (why === 'signer-not-pinned') return 'the server it copies from is not its main server, or it is not paired with one';
     if (why === 'oversized') return 'the main server holds more rows of a table the ledger needs whole than one copy carries';
     if (why === 'import-error') return 'the copy could not be written';
     if (why === 'timeout') return 'the main server did not answer in time';

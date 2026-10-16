@@ -6827,8 +6827,8 @@ export function importCopyPart(page: SyncPayload, part: CopyPart): Promise<Impor
 }
 
 /**
- * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer this standby
- * trusts as its mirror (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
+ * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer that is the
+ * main server this standby is pinned to (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
  */
 export function verifyCopyPage(page: SyncPayload): Promise<string> {
     if (!isCopyPage(page)) return Promise.reject(new Error('[Sync] Not a page of a copy'));

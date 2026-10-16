@@ -3064,7 +3064,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         // Record tx — SRV-20: this is the member-authored leg (backer → escrow),
         // so persist the caller's request signature for re-verification on import.
         // The escrow sweep/refund legs below are node-authoritative (from escrow_)
-        // and accepted via the payload-level mirror-trust gate.
+        // and accepted via the payload-level pin gate (verifySyncPayload).
         db.prepare(`
             INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id, auth_signer, auth_signature, auth_payload)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

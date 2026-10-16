@@ -58,9 +58,10 @@
  *
  * The old scripts/restore-primary.mjs (deleted in slice 8) deleted libp2p_key and connectors.json "for a fresh
  * PeerId". A promoted standby with a fresh PeerId loses its web address (the registrar binds the name to the key),
- * every federation link (peers key trust and the bridge on our PeerId), and every other standby (their mirror pin
- * is the old PeerId). So the node key and the connectors are WRITTEN here, never deleted. The passive mirror connector (this standby's pin on the
- * old main server) goes with the standby's old connectors.json: after the take-over this server imports from nobody.
+ * every federation link (peers key trust and the bridge on our PeerId), and every other standby (their pin, data/
+ * standby-main.json, is that PeerId: services/standby-main.ts). So the node key and the connectors are WRITTEN here,
+ * never deleted. This standby's own pin on the old main server is retired by `pull-config`: after the take-over this
+ * server imports from nobody.
  *
  * ## Two servers with one identity (slice 8)
  *
@@ -93,7 +94,8 @@ import { logger } from '../logger.js';
 import {
     getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement, becomeMainServerInPlace,
 } from '../state-engine.js';
-import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMirror, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
+import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMainServer, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
+import { retireStandbyMain, STANDBY_MAIN_FILE } from './standby-main.js';
 import {
     BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
@@ -408,7 +410,7 @@ function verifiedHeld(): Candidate[] {
     for (const h of held) {
         const bytes = readHeldEnvelope(h.envelopeId);
         if (!bytes) continue;
-        const check = checkEnvelopeFromMirror(bytes);
+        const check = checkEnvelopeFromMainServer(bytes);
         if (!check.ok) {
             unverified++;
             logger.security('SYS', `[Takeover] Skipped a held take-over envelope: ${check.why}`);
@@ -811,13 +813,13 @@ export async function confirmTakeoverAfterCheck(sessionId: unknown): Promise<{ p
 
 // ── The promotion ──────────────────────────────────────────────────────────────────────────
 
-/** The bundle's connectors without any mirror pin: after a take-over this server imports from nobody. */
+/** The bundle's links with other communities (`peer` and `blocked`, the only levels there are): nothing else is kept. */
 function connectorsFrom(bundle: TakeoverBundle): any[] | null {
     const b64 = bundle.files['connectors.json'];
     if (!b64) return null;
     try {
         const list = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'));
-        return Array.isArray(list) ? list.filter((c) => c && c.trustLevel !== 'mirror') : null;
+        return Array.isArray(list) ? list.filter((c) => c && (c.trustLevel === 'peer' || c.trustLevel === 'blocked')) : null;
     } catch {
         return null;
     }
@@ -831,7 +833,8 @@ function bundleEpoch(bundle: TakeoverBundle): number {
 // recovery-seal.key and open-join.key: a standby holds neither of its own unless it was once a main server; then each is
 // kept here too, byte for byte (and beside the carried one, installCarried…Key), so undoing puts back exactly what was there.
 // No tunnel-token: the tunnel runs from publicAddress in node_config (services/tunnel-connector.ts), which is kept below.
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE];
+// standby-main.json: the standby's pin (services/standby-main.ts), retired by `pull-config` and put back by a roll-back.
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, STANDBY_MAIN_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
@@ -863,8 +866,8 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             }
             const connectors = connectorsFrom(bundle) ?? [];
             writeAtomic(dataPath('connectors.json'), JSON.stringify(connectors, null, 2), 0o644);
-            // The standby's own list (its mirror pin) is gone from disk; drop it from memory too, so no later save
-            // in this process writes it back.
+            // The standby's own list is gone from disk; drop it from memory too, so no later save in this process
+            // writes it back.
             loadConnectors();
             j.result.connectors = connectors.length;
             return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities; ${installSealKey(bundle)}`;
@@ -978,7 +981,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null, backupAdminPassword: null });
             // And where its copies had reached: no pull follows that cursor (design §6.3 T6).
             forgetPullCursor();
-            return 'no longer copies from the old main server';
+            // And which server it copied (case 19 D1): this server imports from nobody now. The undo copy holds the pin.
+            const retired = retireStandbyMain();
+            return `no longer copies from the old main server${retired ? ` (its pin kept as data/${retired})` : ''}`;
         }
         default:
             return undefined;

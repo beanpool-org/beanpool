@@ -296,7 +296,7 @@ async function main(): Promise<void> {
     const notices = () => (db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>);
     let n0 = notices().length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
-    const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'direct' });
+    const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
     let n = lines('sec.address');
     const told2a = notices().slice(n0);
     assert(claimed.status === 200 && n.length === 1 && /address was changed, by an owner/.test(n[0].detail) && (n[0].high === true || n[0].priority >= 4),

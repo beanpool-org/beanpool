@@ -7,8 +7,10 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../lib/decision-card';
+import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
+import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
 
-interface Props {
+interface Props extends LocalCommunityWays {
     decisions: DecisionWithTally[];
     /** The signer's voice credits for money votes; null for a guest or before it loads. */
     myPoolVoting?: MyPoolVoting | null;
@@ -20,6 +22,8 @@ interface Props {
     hasOpenDecision: boolean;
     activeView: 'open' | 'history';
     onChangeView: (view: 'open' | 'history') => void;
+    /** In preview mode (the global node): actions open the sheet, sample data is shown. */
+    preview?: boolean;
 }
 
 export function DecideSection({
@@ -33,7 +37,11 @@ export function DecideSection({
     hasOpenDecision,
     activeView,
     onChangeView,
+    preview = false,
+    onNearYou,
+    onGuide,
 }: Props) {
+    const ways: LocalCommunityWays = { onNearYou, onGuide };
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
@@ -99,8 +107,23 @@ export function DecideSection({
     };
 
     return (
-        <div className="space-y-4">
-            {voteError && (
+        <div className="space-y-4" data-testid={preview ? 'decide-preview' : undefined}>
+            {preview && <LocalCommunityStrip feature="decisions" {...ways} />}
+            {preview && <SampleHeader />}
+            {preview && (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                        Voice credits for money votes
+                    </div>
+                    <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
+                        {Math.floor(samplePoolVoting().voiceCredits)}
+                    </div>
+                    <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
+                        From completed trades · N votes cost N×N
+                    </div>
+                </div>
+            )}
+            {voteError && !preview && (
                 <div className="bg-red-50 dark:bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-sm p-3 rounded-xl flex items-center justify-between">
                     <span>{voteError}</span>
                     <button type="button" onClick={() => setVoteError(null)} aria-label="Dismiss error" className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-white p-1 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-lg">✕</button>
@@ -160,30 +183,34 @@ export function DecideSection({
                             <p className="text-nature-400 text-xs sm:text-sm mt-1 max-w-xl">
                                 Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
                             </p>
-                            {!canPropose && (
+                            {!preview && !canPropose && (
                                 <p className="text-amber-400 text-xs font-semibold mt-1">
                                     <span aria-hidden="true">⚠️ </span>You can propose once you have completed a trade.
                                 </p>
                             )}
-                            {canPropose && hasOpenDecision && (
+                            {!preview && canPropose && hasOpenDecision && (
                                 <p className="text-sky-400 text-xs font-semibold mt-1">
                                     <span aria-hidden="true">ℹ️ </span>You already have an open decision (limit 1 open per author).
                                 </p>
                             )}
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={onOpenPropose}
-                            disabled={!canPropose || hasOpenDecision}
-                            className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                                canPropose && !hasOpenDecision
-                                    ? 'bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on'
-                                    : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
-                            }`}
-                        >
-                            + Propose Decision
-                        </button>
+                        {preview ? (
+                            <LocalCommunityAction feature="decisions" label="+ Propose Decision" className="w-full sm:w-auto" {...ways} />
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onOpenPropose}
+                                disabled={!canPropose || hasOpenDecision}
+                                className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                                    canPropose && !hasOpenDecision
+                                        ? 'bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on'
+                                        : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
+                                }`}
+                            >
+                                + Propose Decision
+                            </button>
+                        )}
                     </div>
 
                     {/* Decisions List */}
@@ -226,6 +253,7 @@ export function DecideSection({
                                     <div
                                         key={item.id}
                                         className="bg-nature-900 border border-nature-800 rounded-2xl p-5 shadow-sm space-y-3"
+                                        data-testid={preview ? 'sample-decision' : undefined}
                                     >
                                         {/* Card Header: Touches, Effect, Franchise, Time Left */}
                                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -388,29 +416,36 @@ export function DecideSection({
                                                 </p>
                                             )}
 
-                                            <div className="flex gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleVote(item, true)}
-                                                    disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                                                >
-                                                    <span aria-hidden="true">👍</span>
-                                                    <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>
-                                                </button>
+                                            {preview ? (
+                                                <div className="flex flex-col sm:flex-row gap-3">
+                                                    <LocalCommunityAction feature="decisions" label="👍 Vote YES" className="flex-1" {...ways} />
+                                                    <LocalCommunityAction feature="decisions" label="👎 Vote NO" className="flex-1" {...ways} />
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleVote(item, true)}
+                                                        disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
+                                                        className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                                    >
+                                                        <span aria-hidden="true">👍</span>
+                                                        <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>
+                                                    </button>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleVote(item, false)}
-                                                    disabled={votingId === item.id || buttons.no.disabled || !!blocker}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                                                >
-                                                    <span aria-hidden="true">👎</span>
-                                                    <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
-                                                </button>
-                                            </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleVote(item, false)}
+                                                        disabled={votingId === item.id || buttons.no.disabled || !!blocker}
+                                                        className="flex-1 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                    >
+                                                        <span aria-hidden="true">👎</span>
+                                                        <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
+                                                    </button>
+                                                </div>
+                                            )}
                                             <p className="text-[11px] text-nature-500" data-testid="secret-ballot-note">
-                                                🔒 Secret ballot: members see the totals, never who voted how.
+                                                {preview ? '' : '🔒 '}Secret ballot: members see the totals, never who voted how.
                                             </p>
                                         </div>
                                     </div>

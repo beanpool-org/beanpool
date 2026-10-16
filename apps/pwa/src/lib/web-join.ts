@@ -696,22 +696,22 @@ export type CallsignCheck = 'available' | 'taken' | 'unknown';
 export const NAME_CHECK_DEBOUNCE_MS = 700;
 
 /**
- * Is `callsign` free here? UX only: the door lands a taken name on a free variant, and never blocks on it. `exclude`: a
- * member's own key, whose own name is never taken for a rename (engine/members.ts isCallsignAvailable).
+ * Is `callsign` free here? UX only: the door lands a taken name on a free variant, and never blocks on it.
  *
- * `joining`: the key joining through the open door, which signs the check (two-doors design §4.4): the node then counts
- * it against the door's limiter, 20 a minute for that key, instead of the 15 a minute that every check from one
- * address shares, which a hall on one Wi-Fi would spend on names alone. The join screens ask it debounced
+ * `signer`: the key that signs the check. A member's own name is never taken for its rename: the node reads whose name
+ * that is from the signature alone (engine/members.ts isCallsignAvailable), never from a parameter, which told anyone the
+ * name behind any key (public-routes audit NEW-2). A key joining through the open door signs too (two-doors design §4.4):
+ * the node then counts it against the door's limiter, 20 a minute for that key, instead of the 15 a minute that every
+ * check from one address shares, which a hall on one Wi-Fi would spend on names alone. The join screens ask it debounced
  * (NAME_CHECK_DEBOUNCE_MS) and once per name.
  */
-export async function checkCallsign(callsign: string, exclude?: string, joining?: BeanPoolIdentity | null): Promise<CallsignCheck> {
+export async function checkCallsign(callsign: string, signer?: BeanPoolIdentity | null): Promise<CallsignCheck> {
     const c = callsign.trim();
     if (c.length < 2) return 'unknown';
     try {
-        const qs = exclude ? `?exclude=${encodeURIComponent(exclude)}` : '';
-        const path = `/api/members/callsign-available/${encodeURIComponent(c)}${qs}`;
-        const res = joining
-            ? await signedFetchWithKey('GET', path, undefined, joining.privateKey, joining.publicKey)
+        const path = `/api/members/callsign-available/${encodeURIComponent(c)}`;
+        const res = signer
+            ? await signedFetchWithKey('GET', path, undefined, signer.privateKey, signer.publicKey)
             : await fetch(`${getNodeApiUrl()}${path}`, { cache: 'no-store' });
         if (!res.ok) return 'unknown';
         const data = await res.json();
@@ -740,11 +740,11 @@ export function nameSuggestionFor(base: string, word: string, maxLength = 32): s
 }
 
 /**
- * Up to `count` names for a taken `base` that the node says are free, `exclude` as for checkCallsign. Asked three at a
+ * Up to `count` names for a taken `base` that the node says are free, `signer` as for checkCallsign. Asked three at a
  * time, stopping once there are enough, so a burst doesn't meet the node's rate limit. [] when none could be checked:
  * the name field is the way on either way, and the node has the last word when the name is sent.
  */
-export async function suggestCallsigns(base: string, exclude?: string, count = 3, maxLength = 32): Promise<string[]> {
+export async function suggestCallsigns(base: string, signer?: BeanPoolIdentity | null, count = 3, maxLength = 32): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (!clean) return [];
     const words = [...NAME_WORDS];
@@ -756,7 +756,7 @@ export async function suggestCallsigns(base: string, exclude?: string, count = 3
     const free: string[] = [];
     for (let i = 0; i < candidates.length && free.length < count; i += 3) {
         const chunk = candidates.slice(i, i + 3);
-        const checks = await Promise.all(chunk.map((c) => checkCallsign(c, exclude)));
+        const checks = await Promise.all(chunk.map((c) => checkCallsign(c, signer)));
         chunk.forEach((c, k) => { if (checks[k] === 'available') free.push(c); });
     }
     return free.slice(0, count);

@@ -103,7 +103,7 @@ export async function ensureGenesis(): Promise<GenesisState> {
  */
 const NOT_NEW_INSTALL_FILES = [
     'libp2p_key', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'takeover-journal.json',
-    'local-config.json', 'shutdown-sentinel.json', 'state.json',
+    'local-config.json', 'shutdown-sentinel.json', 'state.json', 'standby-main.json',
 ];
 
 /**

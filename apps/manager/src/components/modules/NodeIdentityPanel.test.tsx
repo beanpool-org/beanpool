@@ -592,6 +592,41 @@ describe('NodeIdentityPanel Component', () => {
         });
     });
 
+    it("loads the pin with the admin credential, so a save that doesn't move it posts the exact pin back, never the public ~1 km one (NEW-1)", async () => {
+        // The node as it answers now: the exact centre to an owner or admin, two decimals to anyone else.
+        const base = (global.fetch as any).getMockImplementation();
+        const configReads: Array<Record<string, string>> = [];
+        (global.fetch as any).mockImplementation((url: string, init?: RequestInit) => {
+            if (url.includes('/api/node/config') && !url.includes('/admin/')) {
+                const headers = (init?.headers ?? {}) as Record<string, string>;
+                configReads.push(headers);
+                const admin = headers['X-Admin-Password'] === mockProfile.adminPassword;
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        publishLocation: false, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
+                        publishHealth: true, directoryPushIntervalHours: 12, lastDirectoryPush: null,
+                        serviceRadius: admin ? { lat: -28.55555, lng: 153.49999, radiusKm: 25 } : { lat: -28.56, lng: 153.5, radiusKm: 25 },
+                    }),
+                });
+            }
+            return base(url, init);
+        });
+
+        await act(async () => {
+            render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+        });
+        await waitFor(() => expect(configReads).toHaveLength(1));
+        expect(configReads[0]['X-Admin-Password']).toBe(mockProfile.adminPassword);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+        });
+        const posted = (path: string) => JSON.parse((global.fetch as any).mock.calls.find((c: any[]) => c[0].includes(path))[1].body);
+        expect(posted('/api/local/admin/node/config').serviceRadius).toEqual({ lat: -28.55555, lng: 153.49999, radiusKm: 25 });
+        expect(posted('/api/local/update-identity')).toMatchObject({ lat: -28.55555, lng: 153.49999 });
+    });
+
     it('omits lat and lng from update-identity payload when coordinates are unset', async () => {
         // Mock node config without coordinates
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {

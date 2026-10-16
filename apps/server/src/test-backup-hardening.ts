@@ -19,6 +19,7 @@ import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 import { isAllowedPrimaryUrl } from './services/backup-puller.js';
 import { db } from './db/db.js';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0, testsPassed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -54,9 +55,9 @@ async function run() {
         assert(typeof snap.generatedAt === 'string' && !!snap.generatedAt, 'A2-17: exportSyncState includes generatedAt');
         assert(!!snap.signature && !!snap.publicKey, 'A2-17: snapshot is signed (generatedAt is inside the signed base)');
 
-        // Act as a backup whose only trusted mirror is this node.
+        // Act as a backup whose pinned main server is this node.
         setNodeRole('backup');
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
 
         // Seed >1 account (COMMONS_POOL + A + B) so the conservation guard is armed
         // (bootstrapping nodes with ≤1 account are exempt).
@@ -84,7 +85,7 @@ async function run() {
         const bal = (db.prepare(`SELECT balance FROM accounts WHERE public_key='mintA'`).get() as { balance: number }).balance;
         assert(bal === 50, 'A2-8: forged balance rolled back (mintA still 50, not 9999)');
 
-        removeConnector(trustedAddr);
+        unpinMainServerForTests();
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
         if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);
         console.log('⭐️ Backup-hardening checks PASSED (A2-8/A2-9/A2-17).');

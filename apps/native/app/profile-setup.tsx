@@ -126,11 +126,13 @@ export default function ProfileSetupScreen() {
         let cancelled = false;
         setNameStatus('checking');
         const t = setTimeout(async () => {
-            const status = await checkCallsignAvailable(c, identity?.publicKey);
+            // Signed by the member's key, so their own current name reads as theirs (the node takes it from the signature).
+            const signer = identity ?? undefined;
+            const status = await checkCallsignAvailable(c, undefined, { signer });
             if (cancelled) return;
             setNameStatus(status);
             if (status === 'taken') {
-                const sugg = await suggestCallsigns(c, identity?.publicKey);
+                const sugg = await suggestCallsigns(c, 3, undefined, undefined, { signer });
                 if (!cancelled) setSuggestions(sugg);
             } else {
                 setSuggestions([]);

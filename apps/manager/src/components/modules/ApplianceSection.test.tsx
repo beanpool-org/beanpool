@@ -541,7 +541,7 @@ describe('ApplianceSection Component', () => {
             );
         });
 
-        const peerInput = screen.getByPlaceholderText(/wss:\/\/peer\.beanpool\.org/i);
+        const peerInput = screen.getByLabelText(/Peer Address/i);
         fireEvent.change(peerInput, { target: { value: 'wss://peer.example.org:8443' } });
 
         const connectBtn = screen.getByRole('button', { name: /add peer/i });

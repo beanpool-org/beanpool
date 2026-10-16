@@ -48,6 +48,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { setMemberPhoto, exactPlacesFor, neighbourhoodOf } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -504,7 +505,7 @@ async function main(): Promise<void> {
     const annAt = areaOf(ann)?.area_updated_at;
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4293/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4293/p2p/${nodeId}`);
     const payload: any = await exportSyncState(nodeId);
     const exAnn = (payload.members ?? []).find((m: any) => m.publicKey === ann.pk);
     const exDee = (payload.members ?? []).find((m: any) => m.publicKey === dee.pk);

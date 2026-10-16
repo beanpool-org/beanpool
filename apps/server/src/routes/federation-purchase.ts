@@ -158,8 +158,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
 
         // 5. THE PEER MUST BE A CONFIGURED TRADING PEER — resolved from the operator's own connector list,
         //    never from the request. The client names a node; which credit line that maps to, and whether we
-        //    trade with it at all, is ours to decide. `mirror` is admitted deliberately here and then refused:
-        //    a backup replica is not a trading partner, and the difference must be explicit.
+        //    trade with it at all, is ours to decide.
         //
         //    THE GATE IS `trustLevel`, NOT `enabled`. These are orthogonal and this route used to conflate
         //    them, refusing every purchase aimed at a Passive peer. `enabled` is a DIALLING setting and
@@ -199,11 +198,9 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 // Deliberately NOT "Trust Level is not set to peer" (the suggested wording, declined): trust
                 // level is operator vocabulary for an operator's screen. A member cannot act on it, and
                 // `blocked` is a decision their community made on purpose, not a misconfiguration to report.
-                error: connector.trustLevel === 'mirror'
-                    ? 'That connection is a backup replica, not a trading partner'
-                    : connector.callsign
-                        ? `This community does not trade with ${connector.callsign}`
-                        : 'This community does not trade with that one',
+                error: connector.callsign
+                    ? `This community does not trade with ${connector.callsign}`
+                    : 'This community does not trade with that one',
                 code: SETTLEMENT_REFUSED_CODE,
             };
             return;

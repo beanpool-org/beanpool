@@ -189,11 +189,12 @@ export function rowToProfile(row: any): MemberProfile {
 }
 
 /**
- * What anyone may be told about a member without knowing who is asking: the name, the join date and the photo
- * (the photo is public at /api/avatar/:publicKey anyway). For a response that can reach someone other than the
- * member, e.g. the unsigned invite-redeem routes, which answer for whatever publicKey is in the body, and the
- * member_joined broadcast. Never the whole Member: that carries their contact details whatever they chose, and
- * the invite code they joined with.
+ * What a join may say about a member: the name, the join date and the photo. For a response that can reach someone
+ * other than the member: the unsigned invite-redeem routes, which answer for the publicKey in the body (a new join's
+ * own card; an existing member's only to a request signed by that key, apps/server routes/community.ts redeemedCard),
+ * and the member_joined broadcast, which goes to members. A face is members' only on every node (public-routes audit
+ * SEC-PUB-02), so neither hands one to a stranger. Never the whole Member: that carries their contact details whatever
+ * they chose, and the invite code they joined with.
  */
 export interface PublicMemberCard {
     publicKey: string;

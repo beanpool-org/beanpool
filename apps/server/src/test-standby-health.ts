@@ -12,7 +12,10 @@
  *
  *  1. A healthy standby: its first copy, a delta, a whole copy. The main server sends its table hashes with the whole copy
  *     (signed with the rest), the standby finds every table and every account equal, and reports it. No incident, no push,
- *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>".
+ *     nothing in the admin queue; the take-over preview says "Last exact copy of the main server: <time>". The one push
+ *     besides the watch's is the owners' sec.backups line "A standby was paired with this main server." (design case 19
+ *     D5), at its first report naming M's key, to the owner only, never again (M's restart neither); the push counts below
+ *     are the watch's.
  *     A whole copy whose every account entry has no key a server can hold (#1268's case): no force-resync, no verdict.
  *     A listing photo the main server can't read from its own storage: left out of both servers' hashes and said as such,
  *     never a difference and never a force-resync; and still so when the standby holds its own row for it (review 4119011972).
@@ -56,6 +59,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -136,7 +140,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },
@@ -455,7 +459,11 @@ async function main(): Promise<void> {
         await standby.send('setup-standby', { primaryUrl: door.url, replicationToken, primaryPeerId: main.ready.peerId });
         // Every push M handed the push service, across its restarts (each process keeps its own).
         const pushesBefore: { to: string[]; title: string; body: string }[] = [];
-        const pushesSoFar = async () => [...pushesBefore, ...(await main.send('fetches')).pushes];
+        const allPushesSoFar = async () => [...pushesBefore, ...(await main.send('fetches')).pushes];
+        // The owners' line for the standby's pairing (design case 19 D5) is told once, below; every count here is the watch's.
+        const PAIRED_PUSH = 'A standby was paired with this main server.';
+        const pushesSoFar = async () => (await allPushesSoFar()).filter((p) => p.body !== PAIRED_PUSH);
+        const pairedPushes = async () => (await allPushesSoFar()).filter((p) => p.body === PAIRED_PUSH);
         const pulls: { mode: string; ok: boolean }[] = [];
         const pull = async (whole = false) => {
             const p = await standby.send('pull', { whole });
@@ -489,6 +497,9 @@ async function main(): Promise<void> {
         assert(!kinds(queue.owner).includes('standby'), `nothing in the owner's admin queue (${brief(kinds(queue.owner))})`);
         let pushes = await pushesSoFar();
         assert(pushes.length === 0, `no push (${pushes.length})`);
+        let paired = await pairedPushes();
+        assert(paired.length === 1 && JSON.stringify(paired[0].to) === JSON.stringify([OWNER_TOKEN]),
+            `the owners are told once, to the owner only: "${PAIRED_PUSH}" (${brief(paired)})`);
         let words = await standby.send('preview-words', {});
         assert(words?.warning === false && /^Last exact copy of the main server: \d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/.test(words.lines[0] ?? '') && words.lines.length === 1,
             `the take-over preview says "${words?.lines?.[0]}", and nothing more`);
@@ -610,6 +621,8 @@ async function main(): Promise<void> {
             && restarted.incident?.id === incident1?.id && restarted.incident.problems.some((p: any) => p.kind === 'stopped') && pushes.length === 1,
             `M restarts: in its first hour up it keeps the open incident, and pushes nothing again (${brief(restarted?.incident?.problems)}; pushes ${pushes.length})`);
         const back = await pull();
+        paired = await pairedPushes();
+        assert(paired.length === 1, `S's next report, after M's restart, tells the owners of no second pairing (${paired.length})`);
         health = await main.send('health');
         queue = await main.send('queue');
         assert(back.ok && health?.state.incident === null && health.state.lastIncident?.id === incident1?.id && !kinds(queue.owner).includes('standby'),

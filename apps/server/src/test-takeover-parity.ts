@@ -48,8 +48,9 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
 import { makeGroupEpochRecord, makeGroupTopUp, makeKeySuccession, sealGroupLine } from '@beanpool/core';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import {
-    diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
+    diffDatabases, diffSettings, normaliseAnswer, idsIn, faceUrlsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
 } from './takeover-parity-compare.js';
 
@@ -88,6 +89,10 @@ const KNOWN_GAPS: KnownGap[] = [
     // copied on the plain-table path.
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
 ];
+// Not a gap but a difference the comparison leaves out: a face URL's key (SEC-PUB-02, #2049) is made from the server's own
+// avatarKeySecret, which a standby never copies, as listing photos' photoKeySecret, so a take-over changes every face URL
+// (accepted: review of #2049, B2, option 1). The keys are normalised (takeover-parity-compare.ts), and section 10 checks
+// that a phone's next sync gets every face at a URL that opens on the promoted server.
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -150,7 +155,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },
@@ -634,9 +639,12 @@ async function main(): Promise<void> {
         // ── 9. Behaviour parity ──
         console.log('\n— 9. behaviour parity —');
         const knownIds = idsIn(dumpT);
+        // Every face URL the promoted server hands out, opened on it in section 10 (its keys are its own: above KNOWN_GAPS).
+        const facesOnS = new Set<string>();
         const both = async (name: string, run: (base: string, node: NodeProc) => Promise<unknown>) => {
             const onT = await run(t, twin);
             const onS = await run(s, standby);
+            for (const u of faceUrlsIn(onS)) facesOnS.add(u);
             const a = normaliseAnswer(onT, knownIds);
             const b = normaliseAnswer(onS, knownIds);
             if (JSON.stringify(a) === JSON.stringify(b)) return;
@@ -705,6 +713,24 @@ async function main(): Promise<void> {
             console.log(`  ${known ? `[${known.gap}]` : '[NEW]'} ${key}`);
             for (const e of examples) console.log(`        ${e}`);
         }
+        // A take-over changes every face URL (above KNOWN_GAPS). A phone whose last sync was before it asks for the members
+        // changed since (its last sync less five minutes: apps/native services/pillar-sync.ts) and gets every face at the
+        // promoted server's URL, the same as a whole read; each URL it hands out must open there, unsigned, as an <img> asks.
+        const facesOf = (list: unknown) => JSON.stringify((Array.isArray(list) ? list : []).filter((x: any) => x?.avatarUrl)
+            .map((x: any) => [x.publicKey, x.avatarUrl]).sort());
+        const phoneCursor = new Date(Date.parse(cursorBefore) - 5 * 60_000).toISOString();
+        const membersS = (await api(s, 'GET', '/api/members', { as: dee })).body;
+        const phoneDeltaS = (await api(s, 'GET', `/api/members?updatedAfter=${encodeURIComponent(phoneCursor)}`, { as: dee })).body;
+        assert(JSON.parse(facesOf(membersS)).length >= 3 && facesOf(phoneDeltaS) === facesOf(membersS),
+            `a phone's members delta from before the take-over brings every face at the promoted server's URL (${JSON.parse(facesOf(phoneDeltaS)).length} of ${JSON.parse(facesOf(membersS)).length})`);
+        for (const u of faceUrlsIn(phoneDeltaS)) facesOnS.add(u);
+        const faceStatuses = await Promise.all([...facesOnS].map(async (u) => {
+            const r = await fetch(`${s}${u}`);
+            await r.arrayBuffer();
+            return r.status;
+        }));
+        assert(facesOnS.size >= 5 && [...facesOnS].every((u) => /[?&]k=[A-Za-z0-9_-]{22}/.test(u)) && faceStatuses.every((st) => st === 200),
+            `every face URL the promoted server hands out carries its key and opens on it, unsigned (${faceStatuses.filter((st) => st === 200).length} of ${facesOnS.size} answered 200)`);
         const check = checkKnownGaps(differences, KNOWN_GAPS);
         assert(check.unlisted.length === 0, `every difference is a known gap (unlisted: ${check.unlisted.join(' | ') || 'none'})`);
         assert(check.noLongerDiffer.length === 0,

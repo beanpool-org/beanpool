@@ -158,6 +158,21 @@ export function verifyEpochStatement(body: unknown, identity: NodeIdentity): Epo
     return { ok: true, statement };
 }
 
+/**
+ * Is this a statement signed by the node key `peerId` names, naming that key (services/standby-main.ts: a pairing code's
+ * address answering as the code's key)? Anything else is false.
+ */
+export function epochStatementSignedBy(body: unknown, peerId: string, publicKey: Uint8Array): boolean {
+    const b = body as Partial<SignedEpoch> | null;
+    const s = b?.statement as Partial<EpochStatement> | undefined;
+    if (!b || typeof b.sig !== 'string' || !s || s.v !== 1 || s.peerId !== peerId || !Number.isSafeInteger(s.epoch)) return false;
+    try {
+        return ed25519.verify(Buffer.from(b.sig, 'base64'), canonical(s as EpochStatement), publicKey, { zip215: false });
+    } catch {
+        return false;
+    }
+}
+
 // ── The check ─────────────────────────────────────────────────────────────────────────────
 
 /**

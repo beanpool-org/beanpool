@@ -89,6 +89,7 @@ The server watches itself every minute and tells its owners when it needs them:
 - the server stopped without shutting down and started again three times in 15 minutes (told at the third start; restarting it yourself, for example with docker compose up -d, does not count), or stopped without shutting down;
 - the host watchdog restarted it after a freeze, or the watchdog has gone quiet;
 - the standby needs attention;
+- on a standby: it is not paired with a main server, or the server it copies from answers with a key that is not its main server's (see Which server a standby trusts, in Backups and replicas);
 - the Let's Encrypt certificate could not be renewed and browsers see a self-signed one.
 
 It also tells them when someone gains power on the server, saying what happened and how, never who:

@@ -90,6 +90,8 @@ vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls)
 
 import { LocalCommunityMark, LocalCommunitySheet, markTone } from '../../components/showcase/LocalCommunityMark';
 import { CommonsPreview } from '../../components/showcase/Previews';
+import { DecideSection } from '../../components/DecideSection';
+import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import * as db from '../db';
@@ -253,20 +255,57 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(onClose).toHaveBeenCalledTimes(2);
         });
 
-        it('Commons in preview: the pool, the Bakery, the Decision; Pledge, Pause and Vote open the sheet', async () => {
+        it('Commons in preview: the pool and the Bakery; Pledge and Pause open the sheet', async () => {
             await render(createElement(CommonsPreview));
             expect(text()).toContain('Example Valley');
             expect(text()).toContain(SAMPLE_COMMUNITY.enterprises[0].name);
-            expect(text()).toContain(SAMPLE_COMMUNITY.decisions[0].question);
+            expect(text()).not.toContain(SAMPLE_COMMUNITY.decisions[0].question);
             expect(text()).toContain('640 Beans');
             expect(text()).not.toMatch(/Ʀ|🔒/);
-            for (const label of ['Pledge', 'Pause', 'Vote']) {
+            for (const label of ['Pledge', 'Pause']) {
                 const b = Array.from(host.querySelectorAll('[data-testid="local-community-action"]')).find(x => x.textContent?.startsWith(label))!;
                 await press(b);
                 expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
             }
             await press(host.querySelector('[aria-label="About the Commons"]')!);
             expect(host.querySelector('[data-testid="commons-info"]')).not.toBeNull();
+        });
+
+        it('DecideSection in preview: the sample Decision, tags, turnout, tally, Vote YES/NO and Propose open the sheet, no lock icon', async () => {
+            await render(createElement(DecideSection, {
+                preview: true,
+                decisions: sampleDecisions(),
+                myPoolVoting: samplePoolVoting(),
+                identity: { publicKey: 'a-real-member' } as any,
+                balanceState: { earnedCredit: 0, commons: 640 },
+                activeView: 'open',
+                onChangeView: () => {},
+                onRefresh: async () => {},
+                onOpenPropose: () => {},
+                canPropose: true,
+                hasOpenDecision: true,
+            }));
+
+            expect(text()).toContain('Example Valley');
+            expect(text()).toContain(SAMPLE_COMMUNITY.decisions[0].question);
+            expect(text()).toContain('Touches: pool');
+            expect(text()).toContain('Grant Enterprise');
+            expect(text()).toContain('Quadratic');
+            expect(text()).toContain('9 of 6 votes needed');
+            expect(text()).toContain('Met ✅');
+            expect(text()).toContain('Yes 12 (86%) · No 2');
+            expect(text()).toContain('Needs 60%');
+            expect(text()).toContain('582 voice credits');
+            expect(text()).not.toMatch(/Ʀ|🔒/);
+
+            for (const label of ['+ Propose a Decision', '👍 Vote YES', '👎 Vote NO']) {
+                const b = Array.from(host.querySelectorAll('[data-testid="local-community-action"]')).find(x => x.textContent?.includes(label))!;
+                expect(b).toBeDefined();
+                await press(b);
+                expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+            }
+            expect(host.querySelector('[data-testid="voice-credits-card"]')?.textContent).toContain('582');
+            expect(net.calls).toEqual([]);
         });
 
         it("My Deals in preview is the member's own sheet fed Example Valley: the deal waiting on you, the one held safely, the one sold; every press opens the sheet", async () => {

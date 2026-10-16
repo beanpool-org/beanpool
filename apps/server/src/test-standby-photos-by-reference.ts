@@ -63,6 +63,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -909,7 +910,7 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
     'setup-standby-pw': async (a: { primaryUrl: string; password: string; primaryPeerId: string }) => {
         const { addConnector } = await import('./connector-manager.js');
         const { updateLocalConfig } = await import('./config/local-config.js');
-        addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
         updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupAdminPassword: a.password, backupReplicationToken: null });
         return true;
     },

@@ -21,6 +21,8 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { EnterpriseCard, commonsCardStyles } from '../../components/EnterpriseCard';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
+import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -54,19 +56,24 @@ export default function ProjectsScreen() {
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
-    const sections = commonsSections(reader.effective);
+    const sections = commonsSections(reader.effective, { decisionsPreview });
     const showsDecide = sections.includes('decide');
     const heading = commonsHeading(reader.effective);
     const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
-    const [pickedSection, setActiveSection] = useState<CommonsSection>('decide');
+    const [pickedSection, setActiveSection] = useState<CommonsSection | null>(null);
     // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
-    const activeSection = commonsSectionFor(pickedSection, reader.effective);
+    const activeSection = commonsSectionFor(
+        pickedSection ?? (decisionsPreview ? 'groups' : undefined),
+        reader.effective,
+        { decisionsPreview },
+    );
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
     // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
     // clear the param so a later visit keeps its place.
@@ -212,8 +219,8 @@ export default function ProjectsScreen() {
         }
 
         if (decisionsPreview) {
-            setDecisions([]);
-            setMyPoolVoting(null);
+            setDecisions(sampleDecisions());
+            setMyPoolVoting(samplePoolVoting());
             setNodeSaysCanPropose(null);
             setMembersList([]);
         } else {
@@ -432,6 +439,7 @@ export default function ProjectsScreen() {
                                     <CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)} style={styles.statCardAmount} />
                                 </View>
                             </View>
+                            {showsDecide && !decisionsPreview && (
                             <View style={styles.statCard} testID="voice-credits-card">
                                 {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
                                     What the credits are for goes in the hint, which wraps freely. */}
@@ -443,6 +451,7 @@ export default function ProjectsScreen() {
                                         : 'For money votes · from completed trades · N votes cost N×N'}
                                 </Text>
                             </View>
+                            )}
                         </View>
                         )}
 
@@ -524,6 +533,7 @@ export default function ProjectsScreen() {
                                 hasOpenDecision={hasOpenDecision}
                                 activeView={activeDecideView}
                                 onChangeView={setActiveDecideView}
+                                preview={decisionsPreview}
                             />
                         ) : (
                             <View style={{ gap: 12 }}>
@@ -653,6 +663,10 @@ export default function ProjectsScreen() {
                         createGroup.open();
                         return;
                     }
+                    if (decisionsPreview && activeSection === 'decide') {
+                        setShowDecisionsSheet(true);
+                        return;
+                    }
                     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                     if (!anchorUrl) {
                         Alert.alert('Not Connected', 'Connect to a community before proposing a decision.', [
@@ -681,7 +695,7 @@ export default function ProjectsScreen() {
                 commonsBalance={balanceState.commons || 0}
             />
 
-            {showsDecide && (
+            {showsDecide && !decisionsPreview && (
                 <ProposeDecisionModal
                     isOpen={showProposeDecision}
                     onClose={() => setShowProposeDecision(false)}
@@ -690,6 +704,14 @@ export default function ProjectsScreen() {
                     commonsBalance={balanceState.commons || 0}
                     treasuries={treasuries}
                     members={membersList}
+                />
+            )}
+
+            {decisionsPreview && (
+                <LocalCommunitySheet
+                    feature="decisions"
+                    visible={showDecisionsSheet}
+                    onClose={() => setShowDecisionsSheet(false)}
                 />
             )}
 

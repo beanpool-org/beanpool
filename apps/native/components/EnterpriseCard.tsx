@@ -118,30 +118,30 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                         {sample && <LocalCommunityMark variant="pill" feature="enterprises" />}
                         {stateBadge === 'paused' && (
                             <View style={[styles.badge, styles.badgePaused]}>
-                                <Text style={styles.badgePausedText}>⏸️ PAUSED</Text>
+                                <Text style={styles.badgePausedText}>{t('⏸️ PAUSED')}</Text>
                             </View>
                         )}
                         {stateBadge === 'winding_up' && (
                             <View style={[styles.badge, styles.badgeWindingUp]}>
-                                <Text style={styles.badgeWindingUpText}>⏳ WINDING UP</Text>
+                                <Text style={styles.badgeWindingUpText}>{t('⏳ WINDING UP')}</Text>
                             </View>
                         )}
                         {stateBadge === 'closed' && (
                             <View style={[styles.badge, styles.badgeClosed]}>
-                                <Text style={styles.badgeClosedText}>CLOSED</Text>
+                                <Text style={styles.badgeClosedText}>{t('CLOSED')}</Text>
                             </View>
                         )}
                         {!showKindBadge ? null : kindBadge === 'funded' ? (
                             <View style={[styles.badge, styles.badgeFunded]}>
-                                <Text style={styles.badgeFundedText}>🎉 FUNDED</Text>
+                                <Text style={styles.badgeFundedText}>{t('🎉 FUNDED')}</Text>
                             </View>
                         ) : kindBadge === 'project' ? (
                             <View style={[styles.badge, styles.badgeProject]}>
-                                <Text style={styles.badgeProjectText}>🌱 PROJECT</Text>
+                                <Text style={styles.badgeProjectText}>{t('🌱 PROJECT')}</Text>
                             </View>
                         ) : (
                             <View style={[styles.badge, styles.badgeOngoing]}>
-                                <Text style={styles.badgeOngoingText}>🏛️ ENTERPRISE</Text>
+                                <Text style={styles.badgeOngoingText}>{t('🏛️ ENTERPRISE')}</Text>
                             </View>
                         )}
                     </View>

@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { SAMPLE_COMMUNITY } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { LocalCommunityMark, ExampleHeader } from './LocalCommunityMark';
@@ -30,14 +30,13 @@ export function beansText(amount: number, signed = false): string {
  * The Commons in preview: the pool, Example Valley's enterprise and project as the Commons list's own cards
  * (EnterpriseCard) fed the sample, each marked and here only, under the strip and the Example header (the list below
  * stays the node's own: review of #2063, B2); a tap opens the real enterprise page, which draws a sample id from the
- * sample. Then the Decision.
+ * sample. No Decision here: Decide in preview is the real Decide screen fed the sample (DecideSection, #2058).
  */
 export function CommonsPreview() {
     const { colors } = useTheme();
     const s = previewStyles(colors);
     const [info, setInfo] = useState(false);
     const c = SAMPLE_COMMUNITY;
-    const d = c.decisions[0];
     const [bakery, project] = sampleEnterprises();
     return (
         <View testID="commons-preview">
@@ -61,15 +60,6 @@ export function CommonsPreview() {
             </View>
             <View style={s.sampleCard} testID="sample-project">
                 <EnterpriseCard item={project} sample />
-            </View>
-            <View style={s.card}>
-                <Text style={s.heading} accessibilityRole="header">Decide</Text>
-                <Text style={s.body}>{d.question}</Text>
-                <Text style={s.muted}>{beansText(d.fromPool)} from the pool · closes in {d.closesInDays} days · {d.yesWeight} for, {d.noWeight} against</Text>
-                <LocalCommunityMark variant="action" feature="decisions" label="Vote" />
-            </View>
-            <View style={{ marginHorizontal: 16 }}>
-                <LocalCommunityMark variant="line" feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />
             </View>
             <CommonsInfoModal isOpen={info} onClose={() => setInfo(false)} />
         </View>

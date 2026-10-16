@@ -117,8 +117,9 @@ function restartSoon(ms: number, line: string): void {
 }
 
 /**
- * A 500's words (verified review M2): what went wrong, never the raw error, which names paths in the data folder; that
- * goes to the server log, where the caller has already written it. A refusal (RestoreRefused, or an error the code gave a
+ * A 500's words (verified review M2; the other backup routes' 500s and a restore's image warning, review of #2050 N2 + N3):
+ * what went wrong, never the raw error, which names paths in the data folder; that goes to the server log, where the
+ * caller has already written it. A refusal (RestoreRefused, or an error the code gave a
  * 4xx status) is already in words and passes as it is.
  */
 function failureWords(e: any): string {
@@ -127,6 +128,7 @@ function failureWords(e: any): string {
     if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'SQLITE_FULL') return "this server's disk is full. Free some space in the data folder and try again.";
     if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return 'this server could not write to its data folder. Check that it can be written to and try again.';
     if (code === 'ENOENT') return 'a file it was using went missing part way. The server log has the details.';
+    if (code === 'SQLITE_NOTADB' || code.startsWith('SQLITE_CORRUPT')) return 'a database file it read is damaged. The server log has the details.';
     return 'something went wrong part way. The server log has the details.';
 }
 
@@ -218,7 +220,7 @@ function restoreImagesFrom(src: string, dataDir: string): { restored: number; er
         // than none. The operator needs to know some photos may be missing — so this goes back to the
         // caller as well as to the log, and into the answer the person restoring is looking at.
         console.error('[Restore] ⚠️  Could not restore the image store; some photos may be missing:', e);
-        return { restored: copied, error: String(e?.message || e) };
+        return { restored: copied, error: failureWords(e) };
     }
     return { restored: copied, error: null };
 }
@@ -445,10 +447,14 @@ export async function restoreFromTar(
     fs.mkdirSync(candidateDir, { recursive: true, mode: 0o700 });
     const restoredDb = path.join(candidateDir, 'state.db');
     fs.renameSync(extractedDb, restoredDb);
-    const { remade } = checkRestoreDatabase(restoredDb, db);
+    const { remade, retired } = checkRestoreDatabase(restoredDb, db);
     if (remade.length > 0) {
         console.warn(`[Restore] The backup's database carried ${remade.length} trigger(s) or view(s) that differ from this server's; `
             + `dropped from it, and made again from this version's code at the restart: ${remade.join(', ')}`);
+    }
+    if (retired.length > 0) {
+        console.log(`[Restore] The backup's database carried ${retired.length} trigger(s) or view(s) an older release made, which `
+            + `this version does not; dropped from it: ${retired.join(', ')}`);
     }
     // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a file whose
     // signer passed signerCheck reaches here (pinned, or a fresh server's first restore), or one the shell's owner accepted
@@ -572,7 +578,7 @@ export async function restoreFromTar(
     // not be written; the backup itself was already short when it was taken (the manifest says so); or the
     // archive simply did not carry the objects this database names, which is what a stripped one looks like.
     const warning = inBucketWarning ?? (images.error
-        ? `The database was restored, but the image store was not put back in full: ${images.error}. `
+        ? `The database was restored, but the image store was not put back in full: ${images.error} `
           + `${images.restored} object(s) went back`
           + (lacking ? `, and ${lacking} of the ${shortfall!.referenced} the database references are still missing` : '')
           + '; some photos or attachments will be missing.'
@@ -744,6 +750,27 @@ export function createBackupRoutes(deps: RouteDeps): Router {
         return requireAdminRole(ctx, ['owner'], error);
     }
 
+    /**
+     * {@link ownerOnly} for the restore and the roll-back, which take the guard (review of #2050 B2). Once a restore or
+     * roll-back has closed the database for its restart, auth cannot be checked: a key session's reads node_roles and
+     * throws, and Koa answered that with a bare 500. So while one runs or its restart is pending the answer is the guard's
+     * 409, asked before auth (it tells a caller only that a restore is under way), and an auth already under way when the
+     * database closed is caught. Answers and returns false.
+     */
+    async function ownerOnlyOrBusy(ctx: any, error: string): Promise<boolean> {
+        if (restoreGuard !== 'idle') {
+            refuseBusy(ctx);
+            return false;
+        }
+        try {
+            return await ownerOnly(ctx, error);
+        } catch (e) {
+            if (restoreGuard === 'idle') throw e;
+            refuseBusy(ctx);
+            return false;
+        }
+    }
+
     // Helper: resolve the public URL for backup enrollment
     function resolvePrimaryUrl(ctx: any): string {
         if (process.env.CF_RECORD_NAME) return 'https://' + process.env.CF_RECORD_NAME;
@@ -890,7 +917,7 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
         // error — where a KNOWN shortfall is a 200 with the counts.
         console.error('Backup failed:', e);
         ctx.status = 500;
-        ctx.body = { error: 'Backup failed: ' + (e?.message || 'unknown error') };
+        ctx.body = { error: 'Backup failed: ' + failureWords(e) };
     }
 }
 
@@ -1132,8 +1159,9 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
         const info = createSnapshot('manual');
         ctx.body = { success: true, snapshot: info };
     } catch (e: any) {
+        console.error('[Snapshots] A snapshot asked for by hand failed:', e);
         ctx.status = 500;
-        ctx.body = { error: e?.message || 'Snapshot failed' };
+        ctx.body = { error: 'Snapshot failed: ' + failureWords(e) };
     }
 });
 
@@ -1270,8 +1298,9 @@ router.post('/api/local/admin/backup/verify', async (ctx) => {
             ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
         }
     } catch (e: any) {
+        console.error('[Backup] The integrity check did not run:', e);
         ctx.status = 500;
-        ctx.body = { error: e.message || 'Integrity check failed' };
+        ctx.body = { error: 'Integrity check failed: ' + failureWords(e) };
     }
 });
 
@@ -1667,7 +1696,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
     }
     // An owner's only: the file replaces the whole database, node_roles with it (Fable's backups review, HIGH). Refused
     // before a byte of the upload is read.
-    if (!(await ownerOnly(ctx, RESTORE_OWNER_ONLY))) return;
+    if (!(await ownerOnlyOrBusy(ctx, RESTORE_OWNER_ONLY))) return;
     // One at a time, before a byte of the upload is written: the upload's own name is shared (H1).
     if (!claimRestore()) return refuseBusy(ctx);
 
@@ -1924,7 +1953,7 @@ router.get('/api/local/admin/restore-points', async (ctx) => {
 // Roll back to a point: an owner's, with a fresh proof (a current code on the password path, Manage pressed within
 // 90 seconds on the phone), every time. It takes a restore point of its own first, so it can be undone the same way.
 router.post('/api/local/admin/restore-points/roll-back', async (ctx) => {
-    if (!(await ownerOnly(ctx, RESTORE_POINTS_OWNER_ONLY))) return;
+    if (!(await ownerOnlyOrBusy(ctx, RESTORE_POINTS_OWNER_ONLY))) return;
     const body = (ctx as any).requestBody || {};
     const pointDir = resolveRestorePoint(body.name);
     if (!pointDir) {

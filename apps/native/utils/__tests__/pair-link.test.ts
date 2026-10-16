@@ -205,13 +205,13 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         expect(effect).not.toContain('fetch(');
     });
 
-    it('only Confirm & Link Device sends, after the unlock; the transfer says this app shows the digits', () => {
+    it('only Confirm & Link Device sends, after the unlock; the transfer says this app shows four digits', () => {
         const src = pair();
         expect(src.split('handleConfirmLink').length - 1).toBe(2); // its definition and the button's onPress
         expect(src).toContain('onPress={handleConfirmLink}');
         const confirm = slice(src, 'async function handleConfirmLink() {', '\n    }\n');
         expect(confirm.indexOf("await requireDeviceUnlock(")).toBeLessThan(confirm.indexOf('await fetch(urls.transfer'));
-        expect(slice(confirm, 'await fetch(urls.transfer', '});')).toContain("confirm: 'digits'");
+        expect(slice(confirm, 'await fetch(urls.transfer', '});')).toContain("confirm: 'four-digits'");
     });
 
     it("a link never replaces an open sheet (as a camera scan can't): not while it asks, sends, shows the digits, or at all (review N2)", () => {

@@ -9,7 +9,7 @@
  *
  * Opened with `qr` (`/pair-device?qr=<link as hex>`): the web app's QR scanned with the phone's camera app, routed here by
  * app/+native-intent.ts (utils/pair-link.ts). The link is read exactly as a scan is (readCode), and reaches the same
- * sheet: nothing is sent before the member's tap, the phone's unlock and the two digits.
+ * sheet: nothing is sent before the member's tap, the phone's unlock and the four digits.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -50,6 +50,10 @@ interface ParsedPairingData extends PairingQr {
     source: 'camera' | 'link';
 }
 
+/** The four digits' size: one line at 320 dp and 1.3x text (pair-device-behind-lock.test.ts measures it). */
+const PAIR_DIGITS_FONT = 40;
+const PAIR_DIGITS_SPACING = 8;
+
 export default function PairDeviceScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
@@ -57,7 +61,7 @@ export default function PairDeviceScreen() {
 
     const [scannedData, setScannedData] = useState<ParsedPairingData | null>(null);
     const [isTransferring, setIsTransferring] = useState(false);
-    /** The two digits the relay gave back: the other device types them before it gets anything. */
+    /** The four digits the relay gave back: the other device types them before it gets anything. */
     const [confirmCode, setConfirmCode] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const isScanningLocked = useRef(false);
@@ -423,12 +427,15 @@ export default function PairDeviceScreen() {
             const urls = pairingRequestUrls(target, scanned.sessionId);
 
             // Before the words are read: a relay that can't hold the account for the digits answers a poll from a phone
-            // (no binding cookie) with the session itself; one that can answers wrong-browser. Ask first, so an older
-            // server is told so with nothing sent.
+            // (no binding cookie) with the session itself; one that can answers wrong-browser, and since SEC-INV-02 says
+            // it asks for four (`confirmDigits`). One that asks for two never says so. Ask first, so an older server is
+            // told so with nothing sent.
             const probe = await fetch(urls.probe, { headers: { Accept: 'application/json' } });
             const probeBody = await probe.json().catch(() => ({}));
-            if (probe.status === 200 && probeBody.status === 'waiting') {
-                throw new Error(t('Your community\'s server runs an older BeanPool that can\'t ask for the two digits, so nothing was sent. Ask its host to update it.'));
+            const olderRelay = (probe.status === 200 && probeBody.status === 'waiting')
+                || (probe.status === 403 && probeBody.status === 'wrong-browser' && probeBody.confirmDigits !== 4);
+            if (olderRelay) {
+                throw new Error(t('Your community\'s server runs an older BeanPool that can\'t ask for the four digits, so nothing was sent. Ask its host to update it.'));
             }
             if (probe.status === 200 && probeBody.status === 'expired') {
                 throw new Error(t('That code has expired, so nothing was sent. Make a new code on the other device and scan it again.'));
@@ -463,9 +470,10 @@ export default function PairDeviceScreen() {
                     mobilePubHex: encrypted.mobilePubHex,
                     nonceHex: encrypted.nonceHex,
                     ciphertextHex: encrypted.ciphertextHex,
-                    // This app shows the two digits: a server with #1983 refuses a transfer that doesn't say so (an
-                    // older app, which never shows them). An older server ignores it.
-                    confirm: 'digits',
+                    // This app shows four digits: a server with SEC-INV-02 refuses a transfer that doesn't say so (an
+                    // older app, which shows none or two), and a server from #1983 until then refuses this one. A server
+                    // before #1983 ignores it (the probe above stopped it).
+                    confirm: 'four-digits',
                 }),
             });
 
@@ -474,11 +482,17 @@ export default function PairDeviceScreen() {
                 throw new Error(errData.error || `Transfer failed with status ${res.status}`);
             }
 
-            // The relay holds the account until the other device types these two digits (number matching): someone who
-            // only sent a QR never sees this screen. A relay that gives none is too old to hold it: say so.
+            // The relay holds the account until the other device types these four digits (number matching): someone who
+            // only sent a QR never sees this screen. A relay that gives none, or not four, may still hold it: it is told to
+            // drop it at once, and the member is told why.
             const done = await res.json().catch(() => ({}));
-            const code = typeof done.confirmCode === 'string' && /^\d{2}$/.test(done.confirmCode) ? done.confirmCode : null;
-            if (!code) throw new Error(t('Your community\'s server did not ask for the two digits. Ask its host to update BeanPool before you try again.'));
+            const code = typeof done.confirmCode === 'string' && /^\d{4}$/.test(done.confirmCode) ? done.confirmCode : null;
+            if (!code) {
+                await fetch(urls.cancel, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: scanned.sessionId }),
+                }).catch(() => {});
+                throw new Error(t('Your community\'s server did not ask for the four digits. Ask its host to update BeanPool before you try again.'));
+            }
             setConfirmCode(code);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
@@ -522,10 +536,12 @@ export default function PairDeviceScreen() {
                     <ScrollView bounces={false} contentContainerStyle={styles.sheetContent}>
                     {confirmCode ? (
                         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                            <Text style={styles.sheetTitle}>{t('Type these two digits on the other device')}</Text>
+                            <Text style={styles.sheetTitle}>{t('Type these four digits on the other device')}</Text>
+                            {/* One line at 320 dp and 1.3x text: about 175 dp of the sheet's 272 (pair-device-behind-lock.test.ts). */}
                             <Text
-                                style={[styles.sheetTitle, { fontSize: 40, letterSpacing: 8, marginVertical: 12 }]}
-                                accessibilityLabel={t('The two digits are {digits}', { digits: confirmCode.split('').join(' ') })}
+                                style={[styles.sheetTitle, { fontSize: PAIR_DIGITS_FONT, letterSpacing: PAIR_DIGITS_SPACING, marginVertical: 12 }]}
+                                numberOfLines={1}
+                                accessibilityLabel={t('The four digits are {digits}', { digits: confirmCode.split('').join(' ') })}
                             >
                                 {confirmCode}
                             </Text>

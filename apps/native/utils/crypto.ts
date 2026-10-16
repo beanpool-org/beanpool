@@ -3,7 +3,7 @@ import { getPublicKey, sign, verify, etc, hashes } from '@noble/ed25519';
 import * as Crypto from 'expo-crypto';
 import { WORDLIST } from '../../pwa/src/lib/bip39-wordlist';
 import {
-    toEd25519Seed, lowercaseRecoveryWords, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
+    toEd25519Seed, lowercaseRecoveryWords, recoveryWordsFromEntropy, RECOVERY_ENTROPY_LEN, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
     type Signer,
 } from '@beanpool/core';
 import { requestSigningFormatFor } from './request-signing-version';
@@ -132,27 +132,9 @@ export function decodeUtf8(bytes: Uint8Array): string {
     return str;
 }
 
+/** A new account's 12 words: standard BIP-39 from 128 random bits, made by core as the web app makes them. */
 export function generateMnemonic(): string[] {
-    const entropy = Crypto.getRandomBytes(16);
-    const hash = sha256(entropy);
-    let h = 0;
-    for (let i = 0; i < 4; i++) {
-        h = (h << 8) | hash[i];
-    }
-    const checkBits = ((h >>> 28) & 0xf).toString(2).padStart(4, '0');
-
-    let bits = '';
-    for (const byte of entropy) {
-        bits += byte.toString(2).padStart(8, '0');
-    }
-    bits += checkBits;
-
-    const words: string[] = [];
-    for (let i = 0; i < 12; i++) {
-        const index = parseInt(bits.slice(i * 11, (i + 1) * 11), 2);
-        words.push(WORDLIST[index]);
-    }
-    return words;
+    return recoveryWordsFromEntropy(Crypto.getRandomBytes(RECOVERY_ENTROPY_LEN));
 }
 
 export function validateMnemonic(words: string[]): boolean {

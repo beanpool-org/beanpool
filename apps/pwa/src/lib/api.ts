@@ -1427,7 +1427,7 @@ export async function votePoll(postId: string, optionId: string): Promise<{ succ
 }
 
 /** RSVP to an event as the signed member: Going, Interested, or null for not going. */
-export async function rsvpEvent(postId: string, status: EventRsvpStatus | null): Promise<{ success: boolean; post: MarketplacePost }> {
+export async function rsvpEvent(postId: string, status: EventRsvpStatus | null): Promise<{ success: boolean; post: MarketplacePost | null }> {
     return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/rsvp`, { status });
 }
 

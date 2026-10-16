@@ -79,6 +79,7 @@ import { defaultSubTab } from './lib/sections';
 import { PhoneReturnLink } from './components/layout/ReturnLinks';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
+import { SecondFactorPromptContext } from './components/common/FreshProofBox';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
@@ -439,6 +440,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             };
         });
     };
+
+    /** The 2FA prompt for the node on screen, opened by a fresh-proof screen that met checkAdminAuth's own 2FA ask (fleet only). */
+    const secondFactorPrompt = useMemo(() => (isFleetMode && activeNode
+        ? () => { promptForTotp(activeNode.id, activeNode.name, activeNode.url).catch(() => { /* busy or cancelled: the poll asks again */ }); }
+        : undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ), [isFleetMode, activeNode?.id, activeNode?.name, activeNode?.url]);
 
     /**
      * Handle TOTP code submission from the modal.
@@ -1480,6 +1488,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 <IdlePausedBanner />
 
                 {/* Workspace Body */}
+                {/* Fleet mode: a 401 "2FA code required" (the 2FA session ended) opens the 2FA prompt, not a screen's code box. */}
+                <SecondFactorPromptContext.Provider value={secondFactorPrompt}>
                 <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
                     {/* The phone's link couldn't be used, so this is the same account's earlier sign-in, carried on. */}
                     {!isFleetMode && keySession && keySessionNotice && (
@@ -1820,6 +1830,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </>
                     )}
                 </main>
+                </SecondFactorPromptContext.Provider>
             </div>
 
             {/* Add Node Modal */}

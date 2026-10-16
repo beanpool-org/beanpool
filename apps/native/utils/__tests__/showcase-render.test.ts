@@ -38,9 +38,12 @@ vi.mock('react-native', () => {
         Platform: { OS: 'android' },
         Image: el('img'),
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
-        FlatList: ({ data, renderItem, keyExtractor, ListEmptyComponent }: Record<string, any>) => (data.length
-            ? createElement('div', null, data.map((item: unknown, index: number) => createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item, index }))))
-            : ListEmptyComponent),
+        // The list, its header first (what scrolls with it), as on the phone.
+        FlatList: ({ data, renderItem, keyExtractor, ListHeaderComponent, ListEmptyComponent }: Record<string, any>) => createElement('div', { 'data-list': 'true' },
+            ListHeaderComponent ?? null,
+            data.length
+                ? createElement('div', null, data.map((item: unknown, index: number) => createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item, index }))))
+                : ListEmptyComponent),
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
@@ -292,6 +295,31 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(review.opened).toBe(0);
             expect(routes.pushed).toEqual([]);
             expect(net.calls).toEqual([]);
+        });
+
+        it('My Deals in preview at 320 dp: the strip and Example head the scrolling list, so the tabs and a deal show on open', async () => {
+            await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: true }));
+            const head = host.querySelector('[data-testid="deals-preview-head"]')!;
+            expect(head.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
+            expect(head.textContent).toContain('Example Valley · an example member');
+            // The head is the list's header: inside the list, before its first deal, so it scrolls away with the deals.
+            const list = head.closest('[data-list]')!;
+            expect(list).not.toBeNull();
+            expect(list.firstElementChild).toBe(head);
+            const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
+            expect(list.textContent).toContain(waiting.what);
+            // The tabs stay in the fixed head above the list, outside what scrolls.
+            const inProgress = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.startsWith('In Progress'))!;
+            expect(list.contains(inProgress)).toBe(false);
+            expect(inProgress.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            // Nothing else holds the strip: one strip on the sheet.
+            expect(host.querySelectorAll('[data-testid="local-community-strip"]')).toHaveLength(1);
+        });
+
+        it('My Deals live: no preview head in the list', async () => {
+            await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: false }));
+            expect(host.querySelector('[data-testid="deals-preview-head"]')).toBeNull();
+            expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
         });
 
         it('My Deals in preview, then live while open (the node\'s switch, or the reader\'s own set): Example Valley is gone at once, and no press reaches a sample id', async () => {

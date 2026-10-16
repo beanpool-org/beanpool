@@ -222,6 +222,21 @@ function eventChatRefusal(row: EventRow, pubkey: string | undefined): Error {
 }
 
 /**
+ * An event chat as any route hands it out: its participants the people who may read it now (canReadEventThread), as
+ * getEventThread lists them (the #1939 review's N6). The mirror keeps the seat of someone removed from the event's group,
+ * and their key is not the other readers' to have, on the generic conversation reads either. Any other chat unchanged.
+ */
+export function withEventChatReaders<T extends { id: string; type: string; participants: string[] }>(conv: T): T {
+    if (conv.type !== 'event_thread') return conv;
+    try {
+        const row = loadEventForThread(conv.id);
+        return { ...conv, participants: conv.participants.filter(pk => canReadEventThread(row, pk)) };
+    } catch {
+        return conv;
+    }
+}
+
+/**
  * The event isn't there for this caller, so its chat answers as for an id nobody has: hidden by reports (eventHiddenFrom),
  * or a group's event they can't see (engine/post-sight.ts: not its author, not an active member of the group) and don't
  * host. "Only the host and people going…" told anyone holding an invite-only group's event id that the event was real.

@@ -603,6 +603,10 @@ function dropBadLabels(b, who) {
     return routeProblem(b);
 }
 const badField = (problem) => json({ error: problem }, 400);
+// A direct name is an A record at its node's address: with none known, nothing could be made, so the claim or heal is
+// refused before it writes anything (SEC-REG-01, verified 2026-10-16) rather than leave a pending row that fails at
+// Cloudflare (or at the admin's approve).
+const DIRECT_NEEDS_IP = 'direct mode needs public_ip (the server\'s public IPv4 address); without one, claim in tunnel mode';
 
 // --- Names per key (M1 of the 2026-10-01 review) ---
 // How many names one node key may hold at once (db.countHeldBy: live, pending, paused or blocked, and its own releases
@@ -657,6 +661,8 @@ async function routeIfOnlyOwner(env, res, ids, now) {
 async function heal(env, cur, b, now, tries = 3) {
     const fields = bodyFields(b);
     const a = { ...cur, ...fields };
+    // The address this heal routes to: the body's, or the one the row already has.
+    if (a.mode === 'direct' && !a.public_ip) return badField(DIRECT_NEEDS_IP);
     const reply = (extra) => ({ name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra });
     // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
@@ -737,6 +743,8 @@ async function heal(env, cur, b, now, tries = 3) {
 async function takeName(env, existing, pubkey, b, now) {
     const name = String(b.name).toLowerCase();
     const mode = b.mode === 'direct' ? 'direct' : 'tunnel';
+    // A new tenure keeps no address of the old one (public_ip below is the body's only), so the body must carry it.
+    if (mode === 'direct' && !bodyFields(b).public_ip) return badField(DIRECT_NEEDS_IP);
     const tier = await db.policyTier(env, name);
     const sameKey = isOwnRow(existing, pubkey);
     const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
@@ -894,7 +902,43 @@ async function handleClaim(request, env, bodyText) {
     const tier = await db.policyTier(env, name);
     if (tier === 'blocked') return json({ error: 'name reserved' }, 403);
     if (holdsName(env, existing, now)) return json({ error: 'name taken', owner: 'other' }, 409);
+    if (tier === 'auto') { const spent = await newNameBudgetSpent(env, now); if (spent) return spent; }
     return takeName(env, existing, pubkey, { ...b, name }, now);
+}
+
+// --- New names across all keys (SEC-REG-05, verified 2026-10-16) ---
+// Keys are free, so the per-key limit (claimLimit) does not stop many keys: each new auto name makes a tunnel and a DNS
+// record at Cloudflare, whose caps (~1,000 tunnels per account; 200 or 1,000 records per zone, our own hand records
+// included) one script could fill. So new auto names, across all keys, are budgeted per hour and per day:
+// NEW_NAMES_PER_HOUR (20 unless set) and NEW_NAMES_PER_DAY (50 unless set). Past either, a claim of a new auto name is a
+// 429 and the admin's phone is told once per hour (or day) — in counts, never a name or a key. Untouched: a gated claim
+// (it makes nothing at Cloudflare until the admin approves), and a key's own names (heals, take-backs). The count is
+// read, not reserved, so claims racing at the edge may pass it by a few.
+const NEW_NAME_DEFAULTS = { hour: 20, day: 50 };
+const NEW_NAME_WINDOWS = [
+    { key: 'hour', env: 'NEW_NAMES_PER_HOUR', s: 3600, words: 'the last hour' },
+    { key: 'day', env: 'NEW_NAMES_PER_DAY', s: 86400, words: 'the last 24 hours' },
+];
+export function newNameBudget(env) {
+    const out = {};
+    for (const w of NEW_NAME_WINDOWS) {
+        const n = parseInt(env[w.env], 10);
+        out[w.key] = Number.isFinite(n) && n >= 1 ? n : NEW_NAME_DEFAULTS[w.key];
+    }
+    return out;
+}
+// A 429 when a window's budget is spent, else null.
+async function newNameBudgetSpent(env, now) {
+    const budget = newNameBudget(env);
+    for (const w of NEW_NAME_WINDOWS) {
+        const made = await db.autoNamesSince(env, now - w.s);
+        if (made < budget[w.key]) continue;
+        console.warn('[NEW_NAME_BUDGET]', `${made} new auto names in ${w.words}; budget ${budget[w.key]} (${w.env}): claim refused`);
+        await tell(env, () => alerts.newNameBudgetSpent(env, { window: w.key, words: w.words, made, budget: budget[w.key], setting: w.env, bucket: Math.floor(now / w.s) }));
+        const retry = w.key === 'hour' ? 600 : 3600;
+        return json({ error: `too many new names were claimed in ${w.words}, across all nodes: try again later`, retry_after: retry }, 429);
+    }
+    return null;
 }
 
 // POST /api/registrar/heal — the owner re-asserts its name (design §2.2). Answers a fresh tunnelToken only when the
@@ -1078,11 +1122,18 @@ async function handleUpdate(request, env, bodyText) {
     const pubkey = await signer(request, env, bodyText);
     if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
-    const a = await db.getAllocationByPubkey(env, pubkey);
-    if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-    // An update of the key's own name: a bad label is dropped, not a reason to refuse (the rest still applies).
     if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    // `name`: the name the node stores (SEC-REG-02, verified 2026-10-16) — a key can hold more than one, and the newest
+    // is not always the one in use. Served only while it is this key's and held for use (pending, live, paused: the
+    // states getAllocationByPubkey reads); anything else is a 404, another key's row untouched. Without it (older nodes),
+    // the key's newest such row, as before.
+    const asked = typeof b.name === 'string' && b.name ? b.name.toLowerCase() : null;
+    const a = asked
+        ? (NAME_RE.test(asked) ? await db.getAllocation(env, asked) : null)
+        : await db.getAllocationByPubkey(env, pubkey);
+    if (!a || a.node_pubkey !== pubkey || !['pending', 'live', 'paused'].includes(a.status)) return json({ error: 'allocation not found' }, 404);
+    // An update of the key's own name: a bad label is dropped, not a reason to refuse (the rest still applies).
     const problem = dropBadLabels(b, `${a.name} ${key16(pubkey)}`);
     if (problem) return badField(problem);
     const updates = {};
@@ -1657,6 +1708,29 @@ const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
 // our servers, src/watch.js, so not while WATCH_TARGETS is unset).
 const alertPanel = async (env) => ({ ...await alerts.alertStatus(env), daily_line: watchTargets(env).length > 0 });
 
+// Every POST body, read with a budget (SEC-REG-03, verified 2026-10-16): a signed request's is a few hundred bytes, and
+// one over BODY_MAX is refused with a 413 as soon as it passes it, never read in full or hashed. Content-Length alone is
+// not enough: a chunked or HTTP/2 body may carry none. Returns the text, or null when it is too large.
+const BODY_MAX = 64 * 1024;
+async function readBody(request) {
+    if (Number(request.headers.get('content-length')) > BODY_MAX) return null;
+    if (!request.body) return '';
+    const reader = request.body.getReader();
+    const parts = [];
+    let n = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        n += value.byteLength;
+        if (n > BODY_MAX) { await reader.cancel().catch(() => {}); return null; }
+        parts.push(value);
+    }
+    const all = new Uint8Array(n);
+    let at = 0;
+    for (const part of parts) { all.set(part, at); at += part.byteLength; }
+    return new TextDecoder().decode(all);
+}
+
 export default {
     async fetch(request, workerEnv, ctx) {
         const env = withWaitUntil(workerEnv, ctx);
@@ -1664,20 +1738,25 @@ export default {
         const p = url.pathname;
         const method = request.method;
         try {
+            let bodyText = '';
+            if (method === 'POST') {
+                bodyText = await readBody(request);
+                if (bodyText === null) return json({ error: `request body too large (at most ${BODY_MAX} bytes)` }, 413);
+            }
             // commit: the git SHA this Worker was deployed from (`wrangler deploy --var GIT_SHA:…`, the deploy workflow);
             // null for a deploy that didn't say. The workflow fails unless it is the commit it deployed.
             if (method === 'GET' && p === '/api/registrar/health')
                 return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
-            if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
-            if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());
-            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, await request.text());
+            if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, bodyText);
+            if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, bodyText);
+            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, bodyText);
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
-            if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, await request.text());
-            if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, await request.text());
+            if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, bodyText);
+            if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, bodyText);
             // `/offline` is release's old name; today's nodes still call it (keep it for at least one release).
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
-                return await handleRelease(request, env, await request.text());
+                return await handleRelease(request, env, bodyText);
 
             if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
@@ -1696,7 +1775,7 @@ export default {
             }
             if (p === '/api/local/admin/registrar/alerts/settings' && method === 'POST') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                let b; try { b = JSON.parse((await request.text()) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                let b; try { b = JSON.parse((bodyText) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
                 if (!(await alerts.setCategoryMode(env, b?.category, b?.mode)))
                     return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
                 return json(await alertPanel(env));
@@ -1716,15 +1795,18 @@ export default {
                 // Release takes { "free_now": true }; nothing else (no body, any other value) is the default hold.
                 let freeNow = false;
                 if (m[2] === 'release') {
-                    const text = await request.text();
-                    let b; try { b = JSON.parse(text || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
                     freeNow = b?.free_now === true;
                 }
                 return await handleAdmin(env, m[1], m[2], { freeNow });
             }
 
+            // Never inside another site's frame (SEC-REG-06, verified 2026-10-16): the admin types the secret here.
             if (method === 'GET' && (p === '/admin' || p === '/admin/' || p === '/admin.html')) {
-                return new Response(ADMIN_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+                return new Response(ADMIN_HTML, { headers: {
+                    'content-type': 'text/html; charset=utf-8', 'x-frame-options': 'DENY', 'content-security-policy': "frame-ancestors 'none'",
+                    'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
+                } });
             }
 
             if (method === 'GET' && p.startsWith('/i/')) return await handleSwitchboard(url, env);

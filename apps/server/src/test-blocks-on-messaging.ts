@@ -32,6 +32,8 @@ if (process.env.BLOCKS_GLOBAL_NODE) process.env.NODE_PROFILE = 'global'; else de
 delete process.env.ENFORCE_WS_AUTH;
 // The child run (BLOCKS_OPEN_NODE) is a node with read auth off: a second account is not needed there to tell a withheld
 // conversation from a real one, an unsigned read does.
+// Read before it is set or cleared: https-server.ts, imported above, has already read it, so this is the node's own mode.
+const READ_AUTH_OFF = process.env.ENFORCE_READ_AUTH === 'false';
 if (process.env.BLOCKS_OPEN_NODE) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 const PW = 'BlocksOnMessagingPass123!';
 process.env.ADMIN_PASSWORD = PW;
@@ -303,16 +305,24 @@ async function main(): Promise<void> {
     const anonPhoto = await call('GET', null, `/api/messages/${boIds[2]}/attachment`);
     assert(boPhoto.status === 200 && boPhoto.body?.data === photo.ciphertext && boPhoto.body?.nonce === photo.nonce,
         `Bo's photo comes back to him (${show(boPhoto)})`);
-    // Served by its id as any stored chat photo is, to anyone, unsigned too: a 404 for others would tell its sender they
-    // are blocked (#1403 re-review). Only its sender ever has the id; the blocker never does.
+    // Refused alike: the sender gets 200 for both, anyone else the same refusal for both (404 for a member outside,
+    // 401 unsigned). A 404 for others tells its sender nothing: the blocker never has the id, and anyone else gets
+    // the same answer as for an id with no photo.
     const ctrlConvId: string = cc.body?.conversation?.id;
     const ctrlSend = await call('POST', cy, '/api/messages/send', dm(ctrlConvId, cy, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } }));
-    const ctrlPhoto = await call('GET', null, `/api/messages/${ctrlSend.body?.message?.id}/attachment`);
-    assert(annPhoto.status === 200 && anonPhoto.status === 200 && annPhoto.body?.data === photo.ciphertext && anonPhoto.body?.data === photo.ciphertext
-        && JSON.stringify(anonPhoto.body) === JSON.stringify(boPhoto.body)
-        && ctrlPhoto.status === 200 && keysOf(ctrlPhoto.body) === keysOf(anonPhoto.body)
-        && ctrlPhoto.headers['cache-control'] === anonPhoto.headers['cache-control'] && ctrlPhoto.headers['content-type'] === anonPhoto.headers['content-type'],
-        `served to anyone by its id as a stored photo is (${annPhoto.status}, ${anonPhoto.status})`);
+    const ctrlStoredId: string = ctrlSend.body?.message?.id;
+    const cyPhoto = await call('GET', cy, `/api/messages/${ctrlStoredId}/attachment`);
+    const ctrlAnnPhoto = await call('GET', ann, `/api/messages/${ctrlStoredId}/attachment`);
+    const ctrlAnonPhoto = await call('GET', null, `/api/messages/${ctrlStoredId}/attachment`);
+    assert(boPhoto.status === 200 && cyPhoto.status === 200
+        && boPhoto.body?.data === photo.ciphertext && cyPhoto.body?.data === photo.ciphertext
+        && annPhoto.status === ctrlAnnPhoto.status && annPhoto.status === 404 && JSON.stringify(annPhoto.body) === JSON.stringify(ctrlAnnPhoto.body)
+        && anonPhoto.status === ctrlAnonPhoto.status && anonPhoto.status === (READ_AUTH_OFF ? 404 : 401),
+        `refused alike: the sender gets 200 for both, anyone else the same refusal for both (${annPhoto.status}, ${anonPhoto.status})`);
+    // And the sender cannot tell them apart: the same keys, Cache-Control and Content-Type as for a stored photo.
+    assert(keysOf(boPhoto.body) === keysOf(cyPhoto.body)
+        && boPhoto.headers['cache-control'] === cyPhoto.headers['cache-control'] && boPhoto.headers['content-type'] === cyPhoto.headers['content-type'],
+        `the sender's withheld photo has a stored one's shape (${keysOf(boPhoto.body)}, ${boPhoto.headers['cache-control']}, ${boPhoto.headers['content-type']})`);
     // Kept in the image store as a chat photo is, never whole in the database's row (#1403 review, NON-BLOCKING).
     const photoRow = attempt(() => db.prepare('SELECT attachment_data, storage_key FROM withheld_lines WHERE id = ?').get(boIds[2]) as any);
     const photoKey: string | undefined = photoRow?.storage_key ?? undefined;

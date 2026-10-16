@@ -8,7 +8,7 @@ import { ledger } from './ledger.js';
 import { foldName, getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
-import { isAcceptablePhotoValue } from './avatar.js';
+import { PhotoTooBigError, photoValueRefusal } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
@@ -472,7 +472,9 @@ export function updateProfile(
     // The photo rule, bare base64 included (G9a-3): /api/avatar/<pk> sniffs, but the group, group-members and profile
     // routes hand a member's photo out exactly as stored, so a HEIC or any other format the strip does not know would
     // reach other members with its GPS. Both apps send a JPEG data URL or a bundled:// name, which pass.
-    if (update.avatar !== undefined && !isAcceptablePhotoValue(update.avatar)) throw new Error('AVATAR_INVALID');
+    // A picture with more pixels than a node stores is refused in its own words (PhotoTooBigError), not as a wrong format.
+    const avatarRefusal = update.avatar === undefined ? null : photoValueRefusal(update.avatar);
+    if (avatarRefusal) throw avatarRefusal.kind === 'pixels' ? new PhotoTooBigError(avatarRefusal) : new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     // The node never stores its OWN avatar URL as an avatar. Installed builds read
     // their avatar out of their synced local row — which since #725 holds this node's

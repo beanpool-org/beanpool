@@ -116,13 +116,18 @@ export function visitorWriteRefused(method: string, path: string, body: unknown,
  * What a visitor's row (isLiveVisitor) may read past the read gate: only what is its own and was sent to it, its messages
  * and its Beans (#1182), and its own listings. Each is held to the signer here, as the route holds it under read auth:
  * its own conversation list, a direct conversation it is in, its own balance and its own transactions, and the board
- * asked for its own listings only (`author` = the signer). Every other gated read it is refused, as a non-member is.
- * Compared as the path spells it, as above.
+ * asked for its own listings only (`author` = the signer). A chat photo is held to the signer by its route alone (below).
+ * Every other gated read it is refused, as a non-member is. Compared as the path spells it, as above.
  */
 export function visitorsOwnRead(path: string, query: Record<string, unknown>, signer: string): boolean {
     const routed = routedPath(path);
     const conversations = /^\/api\/messages\/conversations\/([^/]+)$/.exec(routed);
     if (conversations) return conversations[1] === signer;
+    // A photo in its messages: the route answers the people in the photo's conversation and a withheld line's sender
+    // (routes/marketplace.ts), and everyone else exactly as for an id with no photo, so it decides (#2079 review B2). Held
+    // here as well (isVisitorsDirectLine), a blocked visitor's own withheld photo would be refused where its stored one is
+    // served: the refusal would tell it it is blocked.
+    if (/^\/api\/messages\/[^/]+\/attachment$/.test(routed)) return true;
     const conversation = /^\/api\/messages\/([^/]+)$/.exec(routed);
     if (conversation) {
         const conv = getConversation(conversation[1]);

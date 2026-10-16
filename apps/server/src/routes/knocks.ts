@@ -49,7 +49,7 @@ import Router from '@koa/router';
 import { mayBringSomeoneIn, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { getConfiguredSwitches, getProfileSwitches } from '../config/node-profile.js';
-import { isAcceptableAvatarValue } from '../engine/avatar.js';
+import { avatarValueRefusal, photoRefusalText } from '../engine/avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import {
     KNOCK_RULES, submitKnock, knockStatusFor, listOpenKnocks, openKnockCount, approveKnock, declineKnock, knockerRefusal,
@@ -133,9 +133,8 @@ function parseAvatar(raw: unknown): Parsed<string | null> {
     const value = raw.trim();
     if (/^bundled:\/\/[A-Za-z0-9_-]{1,64}$/.test(value)) return { ok: true, value };
     if (value.length > KNOCK_RULES.avatarChars) return { ok: false, error: 'That picture is too large. Please choose a smaller one.' };
-    if (!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(value) || !isAcceptableAvatarValue(value)) {
-        return { ok: false, error: 'The picture must be a JPEG, PNG, WebP or GIF image.' };
-    }
+    const refusal = /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(value) ? avatarValueRefusal(value) : { kind: 'format' as const };
+    if (refusal) return { ok: false, error: photoRefusalText(refusal, 'The picture must be a JPEG, PNG, WebP or GIF image.') };
     return { ok: true, value: stripImageValue(value) };
 }
 

@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
+import zlib from 'node:zlib';
 import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';
 import { createPulseRoutes } from './routes/pulse.js';
@@ -167,7 +168,16 @@ async function main(): Promise<void> {
 
     // 1. Mock fetcher tracking call count
     let upstreamFetchCount = 0;
-    const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    const sampleJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64') // a real 1 x 1 JPEG: the node refuses bytes whose size it cannot read;
+    const pngChunk = (type: string, data: Buffer) => {
+        const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+        const td = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+        const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td) >>> 0);
+        return Buffer.concat([len, td, crc]);
+    };
+    const bombIhdr = Buffer.alloc(13); bombIhdr.writeUInt32BE(20000, 0); bombIhdr.writeUInt32BE(20000, 4); bombIhdr[8] = 1;
+    const pixelBomb = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', bombIhdr),
+        pngChunk('IDAT', zlib.deflateSync(Buffer.alloc((1 + 2500) * 20000), { level: 9 })), pngChunk('IEND', Buffer.alloc(0))]);
 
     let lastEmbedUserAgent: string | undefined;
     let tombstoneMidRecoveryId = '';
@@ -178,6 +188,19 @@ async function main(): Promise<void> {
         // Simulate over-size response
         if (url.includes('oversize.jpg')) {
             throw new PayloadTooLargeError('Response exceeded maximum size limit');
+        }
+
+        // A 20000 x 20000 PNG in 49 KB: a channel owner's thumbnail every member's phone would decode whole (#2079 review NB1)
+        if (url.includes('pixel-bomb.png')) {
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'image/png' },
+                url,
+                buffer: async () => pixelBomb,
+                text: async () => '',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
         }
 
         // Simulate non-image response
@@ -384,6 +407,32 @@ async function main(): Promise<void> {
     assert(thumbnailService.cache.get(oversizeItemId) === null, 'Over-size image is NOT stored in cache');
 
     // ──────────────────────────────────────────────────────────────────────────
+    // A picture with more pixels than a node stores is refused, and remembered (#2079 review NB1)
+    // ──────────────────────────────────────────────────────────────────────────
+    const bombItemId = makePulseItem(chan, alice, {
+        thumbnailUrl: 'https://images.example.org/pixel-bomb.png',
+    });
+    const fetchesBeforeBomb = upstreamFetchCount;
+    const resBomb = await callRouter(router, 'GET', `/api/pulse/items/${bombItemId}/thumbnail`);
+    assert(resBomb.status === 413 && thumbnailService.cache.get(bombItemId) === null,
+        `A 20000 x 20000 thumbnail is refused (413) and not cached (got ${resBomb.status})`);
+    assert(thumbnailService.cache.getNegative(bombItemId)?.status === 413, 'and the refusal is in the negative cache');
+    const resBombAgain = await callRouter(router, 'GET', `/api/pulse/items/${bombItemId}/thumbnail`);
+    assert(resBombAgain.status === 413 && upstreamFetchCount === fetchesBeforeBomb + 1, 'Asked again, it is refused without fetching it again');
+    const ingestedBomb = await thumbnailService.ingestThumbnail('item_ingest_bomb', 'https://images.example.org/pixel-bomb.png');
+    assert(ingestedBomb.status === 413 && thumbnailService.cache.get('item_ingest_bomb') === null, `Ingested, it is refused and not cached (got ${ingestedBomb.status})`);
+    const dataBombItemId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/png;base64,${pixelBomb.toString('base64')}` });
+    const resDataBomb = await callRouter(router, 'GET', `/api/pulse/items/${dataBombItemId}/thumbnail`);
+    assert(resDataBomb.status === 413 && thumbnailService.cache.get(dataBombItemId) === null, `As a data URI, it is refused and not cached (got ${resDataBomb.status})`);
+    // Bytes whose size the node cannot read are refused too: a browser draws a BMP sent as image/png, and an RLE BMP of
+    // 20000 x 20000 fits in a few hundred bytes (#2079 confirmation N1).
+    const bmpHeader = Buffer.alloc(54); bmpHeader.write('BM', 0); bmpHeader.writeUInt32LE(54, 10); bmpHeader.writeUInt32LE(40, 14);
+    bmpHeader.writeInt32LE(20000, 18); bmpHeader.writeInt32LE(20000, 22); bmpHeader.writeUInt16LE(1, 26); bmpHeader.writeUInt16LE(8, 28); bmpHeader.writeUInt32LE(1, 30);
+    const bmpItemId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/png;base64,${bmpHeader.toString('base64')}` });
+    const resBmp = await callRouter(router, 'GET', `/api/pulse/items/${bmpItemId}/thumbnail`);
+    assert(resBmp.status === 413 && thumbnailService.cache.get(bmpItemId) === null, `A BMP sent as image/png is refused and not cached (got ${resBmp.status})`);
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Strict Content-Type enforcement (refuses non-image types)
     // ──────────────────────────────────────────────────────────────────────────
     const htmlItemId = makePulseItem(chan, alice, {
@@ -588,7 +637,7 @@ async function main(): Promise<void> {
     // ──────────────────────────────────────────────────────────────────────────
     // Base64 Data URI handling
     // ──────────────────────────────────────────────────────────────────────────
-    const dataUriJpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const dataUriJpeg = `data:image/jpeg;base64,${sampleJpeg.toString('base64')}`;
     const dataUriItemId = makePulseItem(chan, alice, {
         thumbnailUrl: dataUriJpeg,
     });

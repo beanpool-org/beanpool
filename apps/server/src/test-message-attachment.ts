@@ -3,9 +3,11 @@
  *
  * Tests lazy-loading E2E encrypted message attachments (images/files):
  *   1. Sending a message with an attachment payload stores the attachment in `message_attachments`.
- *   2. GET /api/messages/:id/attachment fetches the ciphertext, nonce, and mime type.
- *   3. GET /api/messages/:id/attachment defaults mime type to 'image/jpeg' if omitted during creation.
- *   4. GET /api/messages/:id/attachment returns 404 for non-existent attachment IDs.
+ *   2. GET /api/messages/:id/attachment fetches the ciphertext, nonce, and mime type for conversation participants.
+ *      Unsigned requests and strangers (including signed non-members and members not in the DM) are refused.
+ *   3. Withheld lines' attachments are served only to their sender.
+ *   4. GET /api/messages/:id/attachment defaults mime type to 'image/jpeg' if omitted during creation.
+ *   5. GET /api/messages/:id/attachment returns 404 for non-existent attachment IDs.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-message-attachment.ts
  */
@@ -36,6 +38,12 @@ function makeIdentity(callsign: string) {
     return { pubKeyHex, privateKey };
 }
 
+function makeStranger() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    return { pubKeyHex, privateKey };
+}
+
 async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex: string; privateKey: crypto.KeyObject }, body?: any) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
@@ -60,8 +68,11 @@ async function main() {
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
+    const readAuthOn = process.env.ENFORCE_READ_AUTH !== 'false';
     const Alice = makeIdentity('Alice');
     const Bob = makeIdentity('Bob');
+    const Carol = makeIdentity('Carol');
+    const stranger = makeStranger();
 
     const conv = createConversation('dm', [Alice.pubKeyHex, Bob.pubKeyHex], Alice.pubKeyHex);
     if (!conv) throw new Error('setup: failed to create conversation');
@@ -100,13 +111,28 @@ async function main() {
     assert(getImageStore().get(dbRow1.storage_key)!.toString('base64') === attachmentData1.data,
         'and the stored object is exactly the ciphertext that was sent');
 
-    // 2. GET /api/messages/:id/attachment returns stored attachment (public unauthenticated route)
-    const getRes1 = await fetch(`${BASE}/api/messages/${msgId1}/attachment`);
-    assert(getRes1.status === 200, 'GET attachment returns 200 OK');
-    const getJson1 = await getRes1.json() as any;
-    assert(getJson1.data === attachmentData1.data, 'Attachment data matches');
-    assert(getJson1.nonce === attachmentData1.nonce, 'Attachment nonce matches');
-    assert(getJson1.mime === 'image/png', 'Attachment MIME matches');
+    // 2. GET /api/messages/:id/attachment access control (P1)
+    // Unsigned request is refused
+    const unsignedRes = await fetch(`${BASE}/api/messages/${msgId1}/attachment`);
+    assert(readAuthOn ? unsignedRes.status === 401 : unsignedRes.status === 404,
+        `unsigned → ${readAuthOn ? 401 : 404} (got ${unsignedRes.status})`);
+
+    // Signed non-member is refused
+    const strangerRes = await signedFetch('GET', `/api/messages/${msgId1}/attachment`, stranger);
+    assert(strangerRes.status === 403 || strangerRes.status === 404 || strangerRes.status === 401,
+        `signed non-member → refused (got ${strangerRes.status})`);
+
+    // Member outside the DM gets 404 (as for no photo)
+    const carolRes = await signedFetch('GET', `/api/messages/${msgId1}/attachment`, Carol);
+    assert(carolRes.status === 404, `Carol, a member not in the DM → 404 (got ${carolRes.status})`);
+
+    // Both participants in the DM get 200 with the attachment data
+    const bobRes = await signedFetch('GET', `/api/messages/${msgId1}/attachment`, Bob);
+    const aliceRes = await signedFetch('GET', `/api/messages/${msgId1}/attachment`, Alice);
+    assert(bobRes.status === 200 && bobRes.json?.data === attachmentData1.data && bobRes.json?.nonce === attachmentData1.nonce && bobRes.json?.mime === 'image/png',
+        'Bob (participant) → 200 with attachment data');
+    assert(aliceRes.status === 200 && aliceRes.json?.data === attachmentData1.data,
+        'Alice (sender) → 200 with attachment data');
 
     // 3. Send message with attachment lacking explicit MIME (should default to image/jpeg)
     const photo2 = lockedDm(64);
@@ -126,17 +152,36 @@ async function main() {
     assert(sendRes2.status === 200 && sendRes2.json?.success === true, 'Second message sent successfully');
     const msgId2 = sendRes2.json?.message?.id;
 
-    const getRes2 = await fetch(`${BASE}/api/messages/${msgId2}/attachment`);
+    const getRes2 = await signedFetch('GET', `/api/messages/${msgId2}/attachment`, Bob);
     assert(getRes2.status === 200, 'GET second attachment returns 200 OK');
-    const getJson2 = await getRes2.json() as any;
-    assert(getJson2.mime === 'image/jpeg', 'Attachment MIME defaults to image/jpeg when unsupplied');
+    assert(getRes2.json?.mime === 'image/jpeg', 'Attachment MIME defaults to image/jpeg when unsupplied');
 
     // 4. GET /api/messages/:id/attachment returns 404 for non-existent attachment
     const nonExistentId = crypto.randomUUID();
-    const getRes404 = await fetch(`${BASE}/api/messages/${nonExistentId}/attachment`);
+    const getRes404 = await signedFetch('GET', `/api/messages/${nonExistentId}/attachment`, Bob);
     assert(getRes404.status === 404, 'GET non-existent attachment returns 404 Not Found');
-    const getJson404 = await getRes404.json() as any;
-    assert(getJson404.error === 'Attachment not found', '404 error message matches');
+    assert(getRes404.error === 'Attachment not found', '404 error message matches');
+
+    // 5. Withheld line: served to its sender alone
+    await signedFetch('POST', '/api/blocks', Bob, { targetPubkey: Alice.pubKeyHex });
+    const photoWithheld = lockedDm(256);
+    const sendWithheld = await signedFetch('POST', '/api/messages/send', Alice, {
+        conversationId: conv.id,
+        authorPubkey: Alice.pubKeyHex,
+        ...lockedDm(),
+        type: 'image',
+        attachment: { data: photoWithheld.ciphertext, nonce: photoWithheld.nonce }
+    });
+    const withheldId = sendWithheld.json?.message?.id;
+    assert(!!withheldId, 'withheld message id created');
+
+    const wbRes = await signedFetch('GET', `/api/messages/${withheldId}/attachment`, Bob);
+    const wcRes = await signedFetch('GET', `/api/messages/${withheldId}/attachment`, Carol);
+    const waRes = await signedFetch('GET', `/api/messages/${withheldId}/attachment`, Alice);
+    assert(wbRes.status === 404 && wcRes.status === 404,
+        `withheld line's photo: Bob (who blocked her) and Carol → 404 (got ${wbRes.status}, ${wcRes.status})`);
+    assert(waRes.status === 200 && waRes.json?.data === photoWithheld.ciphertext,
+        `withheld line's photo: Alice (sender) still → 200 (got ${waRes.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

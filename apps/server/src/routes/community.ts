@@ -78,7 +78,7 @@ import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
-import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { AVATAR_FORMAT_ERROR, PhotoTooBigError } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
@@ -1385,6 +1385,11 @@ router.post('/api/profile/update', async (ctx) => {
         if (e?.message === 'AVATAR_INVALID') {
             ctx.status = 400;
             ctx.body = { error: 'avatar_invalid', message: AVATAR_FORMAT_ERROR };
+            return;
+        }
+        if (e instanceof PhotoTooBigError) {
+            ctx.status = 400;
+            ctx.body = { error: 'avatar_too_big', message: e.message };
             return;
         }
         if (e?.message === 'CALLSIGN_TOO_SHORT') {

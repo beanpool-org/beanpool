@@ -43,7 +43,7 @@ import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
-import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
+import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
@@ -7951,7 +7951,8 @@ export function createTreasury(
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
     // Bare base64 is judged by the photo rule in both routes that pass a sender's value (POST /api/treasury and
     // /api/enterprise, POST /api/local/admin/treasury); the other callers pass a bundled:// name or nothing.
-    if (!isAcceptableAvatarValue(avatar)) throw new Error(AVATAR_FORMAT_ERROR);
+    const avatarRefusal = avatarValueRefusal(avatar);
+    if (avatarRefusal) throw photoRefusalError(avatarRefusal, AVATAR_FORMAT_ERROR);
     // Served by /api/avatar/<enterprise key> to anyone who asks, so it is stored without its metadata (G9a-3).
     avatar = stripImageValue(avatar);
     // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
@@ -9959,7 +9960,8 @@ function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] 
  * (a URL, a `bundled://` name) is unchanged.
  */
 function storableGroupPicture(avatarUrl: string | undefined): string | undefined {
-    if (!isAcceptablePhotoValue(avatarUrl)) throw new Error(AVATAR_FORMAT_ERROR);
+    const refusal = photoValueRefusal(avatarUrl);
+    if (refusal) throw photoRefusalError(refusal, AVATAR_FORMAT_ERROR);
     return stripImageValue(avatarUrl);
 }
 

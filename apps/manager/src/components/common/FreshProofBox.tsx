@@ -110,8 +110,13 @@ function showOpened(box: HTMLElement, focus: HTMLElement) {
     focus.focus({ preventScroll: true });
 }
 
-export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshProof; testId?: string }) {
+/** `onCancel`: after the person cancels (the box is already closed), e.g. to put the node's values back in the form. */
+export function FreshProofBox({ proof, testId = 'fresh-proof', onCancel }: { proof: FreshProof; testId?: string; onCancel?: () => void }) {
     const { refusal, lastCode, busy, code, setCode, opened } = proof;
+    const cancel = () => {
+        proof.close();
+        onCancel?.();
+    };
     const boxRef = useRef<HTMLElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -132,7 +137,7 @@ export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshP
                 className="mt-3 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-sm text-bp-chip-warn-ink break-words scroll-mt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                 role="alert" data-testid={`${testId}-${refusal.kind}`}>
                 <p className="m-0">{sentence}</p>
-                <button type="button" onClick={proof.close} data-testid={`${testId}-dismiss`}
+                <button type="button" onClick={cancel} data-testid={`${testId}-dismiss`}
                     className="mt-1 min-h-[44px] inline-flex items-center text-xs text-nature-300 hover:text-nature-100 underline bg-transparent border-0 p-0 cursor-pointer">
                     {t(W.cancel)}
                 </button>
@@ -164,7 +169,7 @@ export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshP
                     className="min-h-[44px] px-4 py-2 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
                     {busy ? t(W.checking) : t(W.confirm)}
                 </button>
-                <button type="button" onClick={proof.close} data-testid={`${testId}-cancel`}
+                <button type="button" onClick={cancel} data-testid={`${testId}-cancel`}
                     className="min-h-[44px] px-3 py-2 rounded-lg border border-nature-700 text-nature-300 text-sm bg-transparent">
                     {t(W.cancel)}
                 </button>

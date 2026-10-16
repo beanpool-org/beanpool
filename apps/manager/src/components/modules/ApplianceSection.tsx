@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { SubTabStrip } from '../layout/SubTabStrip';
 import { useSectionSubTab } from '../../lib/sections';
@@ -36,7 +36,7 @@ import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
-import { proofField } from '../../lib/fresh-proof';
+import { proofField, t } from '../../lib/fresh-proof';
 import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
@@ -272,6 +272,7 @@ export function ApplianceSection({
                 nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
+            nodeScheduleRef.current = cfg;
             setScheduleConfig(cfg);
             setScheduleKnown(true);
             setScheduleReadFailed(false);
@@ -346,6 +347,12 @@ export function ApplianceSection({
 
     // Keeping fewer snapshots, or turning them off, asks an owner's fresh proof (server snapshotsLessened decides which).
     const scheduleProof = useFreshProof();
+    /** The schedule the node has (last read or saved): Cancel in the box puts it back in the form (opus-2028 N5). */
+    const nodeScheduleRef = useRef<SnapshotScheduleConfig | null>(null);
+    const cancelSchedule = () => {
+        if (nodeScheduleRef.current) setScheduleConfig(nodeScheduleRef.current);
+        setScheduleStatusMsg(t("Not saved. The form shows the node's schedule again."));
+    };
 
     /** Sends this schedule; after the node asked the proof, the same schedule again with the code. */
     const sendSchedule = async (config: SnapshotScheduleConfig, code?: string) => {
@@ -360,6 +367,7 @@ export function ApplianceSection({
                 ...(code ? [code] : [])
             );
             scheduleProof.close();
+            nodeScheduleRef.current = updated;
             setScheduleConfig(updated);
             setScheduleKnown(true);
             setScheduleStatusMsg('Backup schedule updated successfully.');
@@ -1245,7 +1253,7 @@ export function ApplianceSection({
                             </form>
                         )}
                         {scheduleKnown && scheduleConfig && (
-                            <FreshProofBox proof={scheduleProof} testId="schedule-proof" />
+                            <FreshProofBox proof={scheduleProof} testId="schedule-proof" onCancel={cancelSchedule} />
                         )}
                     </div>
 

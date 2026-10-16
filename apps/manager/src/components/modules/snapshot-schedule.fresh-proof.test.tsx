@@ -96,4 +96,20 @@ describe('Snapshot schedule: fewer kept or off asks the fresh proof (S4a)', () =
         expect(await screen.findByTestId('schedule-proof-phone')).toHaveTextContent('Do this from your phone');
         expect(sent).toHaveLength(1);
     });
+
+    it('Cancel in the box puts the node\'s schedule back in the form and says it was not saved (opus-2028 N5)', async () => {
+        const sent = mockNode([[403, STEP_UP]]);
+        await openBackups();
+        fireEvent.click(screen.getByRole('checkbox', { name: /enable automated snapshots/i }));
+        fireEvent.change(screen.getByDisplayValue('Keep last 7 snapshots (1 week)'), { target: { value: '3' } });
+        await save();
+        await screen.findByTestId('schedule-proof-step-up');
+        expect(screen.getByText('Disabled')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('schedule-proof-dismiss'));
+        expect(screen.getByDisplayValue('Keep last 7 snapshots (1 week)')).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: /enable automated snapshots/i })).toBeChecked();
+        expect(screen.getByText('Active (24h)')).toBeInTheDocument();
+        expect(screen.getByText("Not saved. The form shows the node's schedule again.")).toBeInTheDocument();
+        expect(sent).toHaveLength(1);
+    });
 });

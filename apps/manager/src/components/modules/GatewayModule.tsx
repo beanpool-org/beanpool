@@ -566,18 +566,19 @@ export function GatewayModule({
             </div>
 
             {/* Bottom Save Action Footer */}
-            <div className="flex items-center justify-between border-t border-nature-800 pt-5 text-xs">
-                <div className="text-nature-400 font-medium">
+            {/* At 320 @130% the label wraps inside its button, and the button drops under the sentence (opus-2028 N1). */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-nature-800 pt-5 text-xs">
+                <div className="text-nature-400 font-medium min-w-0 flex-1 basis-40">
                     Changes take effect immediately on target node after saving.
                 </div>
                 <button
                     onClick={() => void save()}
                     disabled={gatewaySaving}
                     aria-busy={gatewaySaving}
-                    className="px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-h-[44px] max-w-full min-w-0 px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 whitespace-normal text-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <span aria-hidden="true" className={gatewaySaving ? 'animate-spin' : ''}>{gatewaySaving ? '🔄' : '💾'}</span>
-                    <span>{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>
+                    <span className="min-w-0 break-words">{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>
                 </button>
             </div>
             <FreshProofBox proof={proof} testId="gateway-proof" />

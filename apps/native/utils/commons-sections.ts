@@ -20,9 +20,12 @@ import type { GroupItem } from './db';
 export type CommonsSection = 'decide' | 'groups';
 
 /** The sections this node shows, in the switcher's order. Groups always. A node that says nothing shows both. */
-export function commonsSections(features: NodeFeatures | null | undefined): CommonsSection[] {
+export function commonsSections(
+    features: NodeFeatures | null | undefined,
+    opts?: { decisionsPreview?: boolean },
+): CommonsSection[] {
     const shown: CommonsSection[] = [];
-    if (decisionsOn(features)) shown.push('decide');
+    if (decisionsOn(features) || opts?.decisionsPreview) shown.push('decide');
     shown.push('groups');
     return shown;
 }
@@ -37,8 +40,12 @@ export function enterprisesOn(features: NodeFeatures | null | undefined): boolea
  * arrived): itself where this node shows it, otherwise the first it does. Nothing asked is the first too. The old
  * Enterprises section is in Groups now, so a link asking for it opens Groups.
  */
-export function commonsSectionFor(wanted: string | null | undefined, features: NodeFeatures | null | undefined): CommonsSection {
-    const shown = commonsSections(features);
+export function commonsSectionFor(
+    wanted: string | null | undefined,
+    features: NodeFeatures | null | undefined,
+    opts?: { decisionsPreview?: boolean },
+): CommonsSection {
+    const shown = commonsSections(features, opts);
     const asked = wanted === 'enterprises' ? 'groups' : wanted;
     return shown.includes(asked as CommonsSection) ? (asked as CommonsSection) : shown[0];
 }

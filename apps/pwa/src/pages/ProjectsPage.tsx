@@ -20,7 +20,8 @@ import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import type { FeatureMode } from '@beanpool/core';
-import { CommonsPreview } from '../components/ShowcasePreviews';
+import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
+import { LocalCommunityAction } from '../components/LocalCommunityMark';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -59,8 +60,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // One Groups list holds projects, enterprises and chat groups (pick 7): a page asked for Enterprises opens on it.
     const [pickedSection, setActiveSection] = useState<'decide' | 'groups'>(initialSection === 'enterprises' ? 'groups' : initialSection);
     // Formal Decisions, where the node has them (lib/node-decisions.ts: off on the global node, which refuses every
-    // proposal and vote). Until the node has said, on, as on every node before the switch. Where they are off there is
-    // no Decide tab, and a page asked to open on Decide opens on Groups.
+    // proposal and vote, but shows Decide in preview mode). Until the node has said, on, as on every node before the switch.
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
@@ -68,6 +68,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // mode (lib/features.ts).
     const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
     const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
+    // The node did not answer, so the modes never landed: 'hidden' then means "not known", not "off".
+    const [modesUnknown, setModesUnknown] = useState(false);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
@@ -86,16 +88,26 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     setVotes(decisions === 'live');
                 });
             })
-            .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
+            .catch(() => {
+                // Not answered: keep what the page shows; the node refuses a vote itself.
+                if (!cancelled) setModesUnknown(true);
+            });
         return () => { cancelled = true; };
     }, []);
-    const activeSection = !votes && pickedSection === 'decide' ? 'groups' : pickedSection;
+    const hasDecide = votes || decisionsMode === 'preview';
+    // The reader's own voice credits: where Decisions are live for them, or, when the node never said, wherever Decide is (as before
+    // the modes). Never before the modes land on a node that answers: on the global node that card would be drawn and then go.
+    const showsOwnVoiceCredits = decisionsMode === 'live' || (modesUnknown && votes);
+    const activeSection = !hasDecide && pickedSection === 'decide' ? 'groups' : pickedSection;
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     // The signer's voice credits for votes on community money — the number the node checks (answer H).
     const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
     const [nodeSaysCanPropose, setNodeSaysCanPropose] = useState<boolean | null>(null);
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
+    const effectiveDecisions = decisionsMode === 'preview' ? sampleDecisions() : decisions;
+    const effectiveMyPoolVoting = decisionsMode === 'preview' ? samplePoolVoting() : myPoolVoting;
+    const effectiveCommonsBalance = decisionsMode === 'preview' ? sampleCommonsBalance() : commonsBalance;
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     // The directory (only the Decision form's name preview uses it) is read whole only where the node has said it reads
@@ -182,11 +194,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
-        return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
-    }, [decisions, identity]);
+        return effectiveDecisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
+    }, [effectiveDecisions, identity]);
     const openDecisionsCount = useMemo(() => {
-        return decisions.filter(d => d.status === 'open').length;
-    }, [decisions]);
+        return effectiveDecisions.filter(d => d.status === 'open').length;
+    }, [effectiveDecisions]);
 
     useEffect(() => {
         fetchEnterprises();
@@ -349,77 +361,89 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
                 like Home and the Market (index.css "Doodle wallpaper"); the cards keep their fills. */}
             <header className="px-4 pt-4 pb-3 flex flex-col gap-3">
-                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
-                    <div>
+                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
+                    <div className={decisionsMode === 'preview' && activeSection === 'decide' ? 'min-w-0' : undefined}>
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>
                         <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
                     </div>
                     {identity && (
-                        <button
-                            onClick={() => {
-                                if (activeSection === 'decide') {
-                                    if (!canProposeDecision) {
-                                        alert('You can propose a Decision once you have completed a trade.');
-                                        return;
+                        decisionsMode === 'preview' && activeSection === 'decide' ? (
+                            <LocalCommunityAction
+                                feature="decisions"
+                                label="+ Propose"
+                                onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                                onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined}
+                            />
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    if (activeSection === 'decide') {
+                                        if (!canProposeDecision) {
+                                            alert('You can propose a Decision once you have completed a trade.');
+                                            return;
+                                        }
+                                        if (hasOpenDecision) {
+                                            alert('You already have an open decision (limit 1 open decision per author).');
+                                            return;
+                                        }
+                                        setShowProposeDecision(true);
+                                    } else if (activeSection === 'groups') {
+                                        setShowCreateGroupModal(true);
+                                    } else {
+                                        setShowNewModal(true);
+                                        setCreateError(null);
                                     }
-                                    if (hasOpenDecision) {
-                                        alert('You already have an open decision (limit 1 open decision per author).');
-                                        return;
-                                    }
-                                    setShowProposeDecision(true);
-                                } else if (activeSection === 'groups') {
-                                    setShowCreateGroupModal(true);
-                                } else {
-                                    setShowNewModal(true);
-                                    setCreateError(null);
-                                }
-                            }}
-                            className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
-                        >
-                            {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
-                        </button>
+                                }}
+                                className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                            >
+                                {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
+                            </button>
+                        )
                     )}
                 </div>
 
-                {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
-                {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
+                {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {enterprisesMode === 'preview' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
-                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                        <CommonsPreview enterprises={true} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}
-                {enterprisesMode !== 'preview' && (<>
+                {(enterprisesMode !== 'preview' || showsOwnVoiceCredits) && (
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                            Commons Pool
+                    {enterprisesMode !== 'preview' && (
+                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${!showsOwnVoiceCredits ? 'col-span-2' : ''}`}>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                Commons Pool
+                            </div>
+                            <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
+                                {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
+                            </div>
                         </div>
-                        <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
-                            {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
+                    )}
+                    {showsOwnVoiceCredits && (
+                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                Voice credits for money votes
+                            </div>
+                            <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
+                                {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
+                            </div>
+                            <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
+                                {myPoolVoting && !myPoolVoting.hasCompletedTrade
+                                    ? 'Opens after your first completed trade'
+                                    : 'From completed trades · N votes cost N×N'}
+                            </div>
                         </div>
-                    </div>
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                            Voice credits for money votes
-                        </div>
-                        <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
-                            {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
-                        </div>
-                        <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
-                            {myPoolVoting && !myPoolVoting.hasCompletedTrade
-                                ? 'Opens after your first completed trade'
-                                : 'From completed trades · N votes cost N×N'}
-                        </div>
-                    </div>
+                    )}
                 </div>
-                </>)}
+                )}
             </header>
 
-            {/* Section Switcher: Decide vs Groups — the one sticky row. Only where there is a choice: with Decide off
-                (the global node) it would be one tab, Groups, which switches to nothing. */}
-            {votes && (
+            {/* Section Switcher: Decide vs Groups — the one sticky row, where Decide is available (live or preview). */}
+            {hasDecide && (
             <div className="sticky top-0 z-40 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
@@ -485,10 +509,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             {activeSection === 'decide' ? (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <DecideSection
-                        decisions={decisions}
-                        myPoolVoting={myPoolVoting}
+                        decisions={effectiveDecisions}
+                        myPoolVoting={effectiveMyPoolVoting}
                         identity={identity}
-                        commonsBalance={commonsBalance}
+                        commonsBalance={effectiveCommonsBalance}
                         onRefresh={fetchEnterprises}
                         onOpenPropose={() => {
                             if (!canProposeDecision) {
@@ -505,6 +529,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         hasOpenDecision={hasOpenDecision}
                         activeView={activeDecideView}
                         onChangeView={setActiveDecideView}
+                        preview={decisionsMode === 'preview'}
+                        onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                        onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined}
                     />
                 </div>
             ) : (

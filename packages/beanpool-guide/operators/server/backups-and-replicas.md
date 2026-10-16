@@ -224,7 +224,7 @@ Once a server's backups are locked, the fleet manager also locks the unlocked co
 
 - the latest backup from that server was locked;
 - that backup has a recovery code in it;
-- it is signed by the server's key as the fleet manager already knows it: either the key file it collected from that server before this update, or a "peerId" you add to that server's entry in manager-nodes.json in the fleet manager's data folder (the PeerId shown at the top of the older Settings page, /settings-legacy).
+- it is signed by the server's key as the fleet manager already knows it: either the key file it collected from that server before this update, or a "peerId" you add to that server's entry in manager-nodes.json in the fleet manager's data folder (the PeerId the server's log prints at every start, in the line "libp2p started — PeerId: …").
 
 Otherwise it deletes nothing, and writes which of the three is missing into harvester-state.json in its data folder (the dashboard does not show that yet). The old key files end up in one locked file named beanpool-identity-(date)-legacy.bpsealed. It only knows about its own folder.
 

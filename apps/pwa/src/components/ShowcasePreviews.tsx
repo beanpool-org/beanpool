@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
 import type { BalanceInfo, MarketplacePost, MarketplaceTransaction } from '../lib/api';
@@ -224,4 +224,17 @@ export function sampleDeals(now: number = Date.now()): SampleDealsResult {
         };
     });
     return { identity: SAMPLE_DEALS_ME, posts, transactions };
+}
+
+/** My Deals' chip in preview, one per sample state: a state added to SampleDeal fails tsc here until it has its own. */
+const SAMPLE_DEAL_CHIP: Record<SampleDeal['state'], { label: () => string; tone: string }> = {
+    requested: { label: () => t('Action Required'), tone: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' },
+    pending: { label: () => t('Held in trust'), tone: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' },
+    completed: { label: () => t('Completed'), tone: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' },
+};
+
+/** The chip for a sample deal's status, or null for any other: a deal is never drawn as a state it is not in. */
+export function sampleDealChip(status: string): { label: string; tone: string } | null {
+    const chip = Object.prototype.hasOwnProperty.call(SAMPLE_DEAL_CHIP, status) ? SAMPLE_DEAL_CHIP[status as SampleDeal['state']] : null;
+    return chip ? { label: chip.label(), tone: chip.tone } : null;
 }

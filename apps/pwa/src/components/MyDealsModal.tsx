@@ -1,6 +1,8 @@
 /**
  * My Deals modal: tabbed overview of in-progress (escrow) and completed deals.
- * Accessible: focus trap, Esc-key dismiss, full keyboard navigation for tabs and photos.
+ * Accessible: focus trap and Escape to close; the tabs, filters, photos, a deal card that opens something and its
+ * Leave Review all work from the keyboard. On a local node the modal is exactly as before the preview came
+ * (it still sits under the bottom nav at 320 px, an old bug kept out of this change).
  *
  * In preview (on a node where escrow is off, scratch/global-node/DESIGN-global-showcase-fable.md §1 row 3):
  * fed Example Valley (sampleDeals()), with In Progress / My Posts / History tabs.
@@ -14,7 +16,10 @@ import { ImageLightbox } from './ImageLightbox';
 import { listPhotoUrl, t } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
-import { SampleHeader, sampleDeals } from './ShowcasePreviews';
+import { SampleHeader, sampleDealChip, sampleDeals } from './ShowcasePreviews';
+
+/** A marker's own sheet or Start screen (LocalCommunityAction draws them inside the card): its Escape is its own. */
+const MARKER_SHEET = '[data-testid="local-community-sheet"], [data-testid="start-community-screen"]';
 
 interface Props extends LocalCommunityWays {
     visible: boolean;
@@ -51,9 +56,14 @@ export function MyDealsModal({
         triggerElement?: HTMLElement | null;
     } | null>(null);
 
+    // The card's sheet: read by the key handler through a ref, so opening it does not re-run the focus effect
+    // (which would pull focus back to Close My Deals behind the sheet). Closing it gives focus back to the card.
     const [sheetShown, setSheetShown] = useState<'sheet' | 'start' | null>(null);
-    const openMark = () => setSheetShown('sheet');
-    const closeMark = () => setSheetShown(null);
+    const sheetShownRef = useRef(sheetShown);
+    sheetShownRef.current = sheetShown;
+    const markFromRef = useRef<HTMLElement | null>(null);
+    const openMark = (from: HTMLElement) => { markFromRef.current = from; setSheetShown('sheet'); };
+    const closeMark = () => { setSheetShown(null); markFromRef.current?.focus(); };
 
     const sample = useMemo(() => (preview ? sampleDeals() : null), [preview]);
     const effectiveIdentity = preview ? sample?.identity ?? null : identity;
@@ -93,10 +103,11 @@ export function MyDealsModal({
         }, 30);
 
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-            // If the lightbox or marker sheet is open, its own trap and Escape listener take precedence
-            if (lightboxOpenRef.current || sheetShown) return;
+            // If the lightbox or the card's sheet is open, its own trap and Escape listener take precedence
+            if (lightboxOpenRef.current || sheetShownRef.current) return;
 
             if (e.key === 'Escape') {
+                if (document.querySelector(MARKER_SHEET)) return;
                 e.preventDefault();
                 e.stopPropagation();
                 onClose();
@@ -145,7 +156,7 @@ export function MyDealsModal({
                 prevActive.focus();
             }
         };
-    }, [visible, onClose, sheetShown]);
+    }, [visible, onClose]);
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
@@ -245,7 +256,7 @@ export function MyDealsModal({
                             ref={closeBtnRef}
                             onClick={onClose}
                             aria-label={t('Close My Deals')}
-                            className={`rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500 ${preview ? 'min-h-[44px] min-w-[44px]' : 'w-8 h-8'}`}
+                            className={`${preview ? 'min-h-[44px] min-w-[44px]' : 'w-8 h-8'} rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500`}
                         >
                             ✕
                         </button>
@@ -262,7 +273,7 @@ export function MyDealsModal({
                             <button
                                 key={tab.id}
                                 onClick={() => setDealsTab(tab.id)}
-                                className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${preview ? 'min-h-[44px]' : ''} ${
+                                className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${preview ? 'min-h-[44px] ' : ''}${
                                     dealsTab === tab.id
                                         ? 'bg-white dark:bg-nature-900 text-nature-900 dark:text-white shadow-sm'
                                         : 'text-nature-500 hover:text-nature-700 dark:text-nature-300 dark:hover:text-nature-300'
@@ -285,9 +296,9 @@ export function MyDealsModal({
                                 <button
                                     key={f.id}
                                     onClick={() => setHistoryFilter(f.id)}
-                                    className={`text-xs font-bold rounded-full border transition-colors ${
+                                    className={`${
                                         preview ? 'min-h-[44px] min-w-[44px] px-3.5 py-2 flex items-center justify-center' : 'px-3 py-1'
-                                    } ${
+                                    } text-xs font-bold rounded-full border transition-colors ${
                                         historyFilter === f.id
                                             ? 'bg-nature-800 dark:bg-nature-200 text-white dark:text-nature-900 border-nature-900 dark:border-nature-100'
                                             : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
@@ -328,9 +339,9 @@ export function MyDealsModal({
                             {dealsTab === 'active' && (
                                 <button
                                     onClick={() => { onClose(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                    className={preview ? "px-6 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-colors" : "px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm text-sm"}
+                                    className={preview ? "px-6 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-colors" : "px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md hover:bg-indigo-700 transition-colors"}
                                 >
-                                    {preview ? t('+ Create a Post') : 'Create a Post'}
+                                    {preview ? t('+ Create a Post') : '+ Create a Post'}
                                 </button>
                             )}
                         </div>
@@ -354,15 +365,15 @@ export function MyDealsModal({
                                                 role={isPending ? 'button' : undefined}
                                                 tabIndex={isPending ? 0 : undefined}
                                                 aria-label={isPending ? `View deal: ${item.postTitle}` : undefined}
-                                                onKeyDown={(e) => {
+                                                onKeyDown={isPending ? (e) => {
                                                     if (e.key === 'Enter' || e.key === ' ') {
                                                         e.preventDefault();
-                                                        if (isPending && onNavigateToPost) {
+                                                        if (onNavigateToPost) {
                                                             onClose();
                                                             onNavigateToPost(item.postId, item.id);
                                                         }
                                                     }
-                                                }}
+                                                } : undefined}
                                                 onClick={() => {
                                                     if (isPending && onNavigateToPost) {
                                                         onClose();
@@ -446,7 +457,9 @@ export function MyDealsModal({
                                         );
                                     }
 
-                                    // Preview rendering
+                                    // Preview rendering. The card's keys are the card's own: a key on its marker button (or
+                                    // inside the marker's sheet, drawn within the card) is left to that button.
+                                    const chip = sampleDealChip(item.status);
                                     return (
                                         <div
                                             key={item.id}
@@ -455,12 +468,13 @@ export function MyDealsModal({
                                             tabIndex={0}
                                             aria-label={`${item.postTitle}`}
                                             onKeyDown={(e) => {
+                                                if (e.target !== e.currentTarget) return;
                                                 if (e.key === 'Enter' || e.key === ' ') {
                                                     e.preventDefault();
-                                                    openMark();
+                                                    openMark(e.currentTarget);
                                                 }
                                             }}
-                                            onClick={() => openMark()}
+                                            onClick={(e) => openMark(e.currentTarget)}
                                             className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 isRequested
                                                     ? 'border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30'
@@ -489,15 +503,16 @@ export function MyDealsModal({
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-start gap-2 mb-1">
-                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 whitespace-nowrap ${
-                                                                isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                                : isRequested ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
-                                                                : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                            }`}>
-                                                                {isRequested ? t('Action Required') : isPending ? t('Held in trust') : t('Completed')}
-                                                            </span>
+                                                    {/* When the chip and the amount don't fit one line (320 px @130%), the chip wraps
+                                                        between its words; a chip word too wide for what is left drops the amount to the
+                                                        next line. Never on top of each other. */}
+                                                    <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
+                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 grow basis-0 min-w-min">
+                                                            {chip && (
+                                                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md max-w-full break-words ${chip.tone}`}>
+                                                                    {chip.label}
+                                                                </span>
+                                                            )}
                                                             <span className="text-[10px] text-nature-400 font-bold shrink-0 whitespace-nowrap">
                                                                 {new Date(item.createdAt).toLocaleDateString()}
                                                             </span>
@@ -649,12 +664,13 @@ export function MyDealsModal({
                                         tabIndex={0}
                                         aria-label={item.title}
                                         onKeyDown={(e) => {
+                                            if (e.target !== e.currentTarget) return;
                                             if (e.key === 'Enter' || e.key === ' ') {
                                                 e.preventDefault();
-                                                openMark();
+                                                openMark(e.currentTarget);
                                             }
                                         }}
-                                        onClick={() => openMark()}
+                                        onClick={(e) => openMark(e.currentTarget)}
                                         className="bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30"
                                     >
                                         <div className="flex gap-4">

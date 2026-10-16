@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MyDealsModal } from './MyDealsModal';
 import type { MarketplaceTransaction } from '../lib/api';
@@ -345,9 +345,13 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             // Requested deals do not show on In Progress
             expect(screen.queryByText('Help moving a couch')).not.toBeInTheDocument();
 
-            // Status chip says raw "pending" (not Action Required or Held in Trust)
+            // Status chip says raw "pending" (not Action Required or Held in Trust), in the warn colours
             const chips = screen.getAllByText('pending');
             expect(chips.length).toBe(2);
+            for (const chip of chips) expect(chip).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
+            // The buyer's amount is red, the seller's emerald
+            expect(screen.getByText('- 20')).toHaveClass('text-red-500', 'dark:text-red-300');
+            expect(screen.getByText('+ 10')).toHaveClass('text-emerald-500', 'dark:text-emerald-400');
 
             // Partner line is present on In Progress with bold callsign
             expect(screen.getByText(/Bought from/)).toBeInTheDocument();
@@ -372,8 +376,110 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             // Completed and cancelled show in History
             expect(screen.getByText('Mending jackets')).toBeInTheDocument();
             expect(screen.getByText('Rye bread')).toBeInTheDocument();
-            expect(screen.getByText('completed')).toBeInTheDocument();
-            expect(screen.getByText('cancelled')).toBeInTheDocument();
+            expect(screen.getByText('completed')).toHaveClass('bg-bp-chip-ok-tint', 'text-bp-chip-ok-ink');
+            expect(screen.getByText('cancelled')).toHaveClass('bg-nature-200', 'text-nature-700');
+            // A cancelled deal is greyed, as before the preview came
+            expect(screen.getByText('cancelled').closest('[data-testid^="deal-card-"]')).toHaveClass('opacity-60', 'grayscale-[50%]');
+            expect(screen.getByText('- 8')).toHaveClass('text-red-500');
+            expect(screen.getByText('+ 15')).toHaveClass('text-emerald-500');
+        });
+
+        it('local mode, a member with nothing yet: each tab\'s empty state as before, My Posts\' "+ Create a Post" button too', () => {
+            const onClose = vi.fn();
+            render(<MyDealsModal visible identity={mockIdentity} onClose={onClose} posts={[]} transactions={[]} />);
+            expect(screen.getByText('No deals in progress')).toBeInTheDocument();
+            expect(screen.getByText('Accepted deals will appear here while they are held in trust.')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: /^My Posts/ }));
+            expect(screen.getByText('No active posts')).toBeInTheDocument();
+            const create = screen.getByRole('button', { name: '+ Create a Post' });
+            expect(create.className).toBe('px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md hover:bg-indigo-700 transition-colors');
+            fireEvent.click(screen.getByRole('button', { name: /^History/ }));
+            expect(screen.getByText('No history yet')).toBeInTheDocument();
+            expect(screen.getByText('Completed or cancelled deals will show up here.')).toBeInTheDocument();
+        });
+
+        it('local mode: Leave Review works from the keyboard (its card leaves the key alone); a pending card still opens its post', () => {
+            const onPromptReview = vi.fn();
+            const onNavigateToPost = vi.fn();
+            const onClose = vi.fn();
+            const done = { ...mockTransactions[0], id: 'tx-done', status: 'completed' as const, ratedByBuyer: false };
+            render(
+                <MyDealsModal visible identity={mockIdentity} onClose={onClose} posts={[]} transactions={[mockTransactions[0], done]}
+                    initialTab="history" onPromptReview={onPromptReview} onNavigateToPost={onNavigateToPost} />
+            );
+            const leaveReview = screen.getByRole('button', { name: 'Leave Review' });
+            for (const key of ['Enter', ' ']) {
+                const ev = createEvent.keyDown(leaveReview, { key });
+                fireEvent(leaveReview, ev);
+                expect(ev.defaultPrevented, key).toBe(false);
+            }
+            fireEvent.click(leaveReview);
+            expect(onPromptReview).toHaveBeenCalledWith({ txId: 'tx-done', targetPubkey: 'seller-pubkey-456', targetCallsign: 'seed-keeper', targetRole: 'provider' });
+
+            fireEvent.click(screen.getByRole('button', { name: /^In Progress/ }));
+            const pending = screen.getByRole('button', { name: 'View deal: Heirloom Tomato Seeds' });
+            const ev = createEvent.keyDown(pending, { key: 'Enter' });
+            fireEvent(pending, ev);
+            expect(ev.defaultPrevented).toBe(true);
+            expect(onNavigateToPost).toHaveBeenCalledWith('post-2', 'tx-1');
+        });
+
+        it('preview: a card tap leaves focus in its sheet, and closing the sheet gives focus back to the card', async () => {
+            render(<MyDealsModal visible identity={mockIdentity} preview onClose={vi.fn()} />);
+            await new Promise(r => setTimeout(r, 50));
+            const card = screen.getByTestId('sample-deal-sample-deal-shelves');
+            fireEvent.click(card);
+            const sheet = await screen.findByTestId('local-community-sheet');
+            await new Promise(r => setTimeout(r, 50));
+            expect(sheet.contains(document.activeElement)).toBe(true);
+            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+            expect(document.activeElement).toBe(card);
+        });
+
+        it('preview: Escape on a marker\'s own sheet or Start screen closes only that; My Deals stays open', async () => {
+            const onClose = vi.fn();
+            render(<MyDealsModal visible identity={mockIdentity} preview onClose={onClose} />);
+            const bike = screen.getByTestId('sample-deal-sample-deal-bike');
+            fireEvent.click(within(bike).getByTestId('local-community-action'));
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            expect(onClose).not.toHaveBeenCalled();
+
+            fireEvent.click(within(bike).getByTestId('local-community-action'));
+            fireEvent.click(await screen.findByTestId('local-community-start'));
+            expect(await screen.findByTestId('start-community-screen')).toBeInTheDocument();
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(screen.queryByTestId('start-community-screen')).toBeNull();
+            expect(onClose).not.toHaveBeenCalled();
+
+            // With no sheet open, Escape closes My Deals as before
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(onClose).toHaveBeenCalledTimes(1);
+        });
+
+        it('preview: keys on a marker, or inside its sheet, are that button\'s, never swallowed by the card', async () => {
+            render(<MyDealsModal visible identity={mockIdentity} preview onClose={vi.fn()} />);
+            const bike = screen.getByTestId('sample-deal-sample-deal-bike');
+            const action = within(bike).getByTestId('local-community-action');
+            for (const key of ['Enter', ' ']) {
+                const ev = createEvent.keyDown(action, { key });
+                fireEvent(action, ev);
+                expect(ev.defaultPrevented, key).toBe(false);
+                expect(screen.queryByTestId('local-community-sheet'), key).toBeNull();
+            }
+            fireEvent.click(action);
+            const start = await screen.findByTestId('local-community-start');
+            const ev = createEvent.keyDown(start, { key: 'Enter' });
+            fireEvent(start, ev);
+            expect(ev.defaultPrevented).toBe(false);
+            expect(screen.getAllByTestId('local-community-sheet')).toHaveLength(1);
+            // The card itself still opens its sheet from the keyboard
+            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+            const cardEv = createEvent.keyDown(bike, { key: 'Enter' });
+            fireEvent(bike, cardEv);
+            expect(cardEv.defaultPrevented).toBe(true);
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
         });
     });
 });

@@ -11,7 +11,7 @@ import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
-import { CommonsPreview } from './ShowcasePreviews';
+import { CommonsPreview, sampleDealChip } from './ShowcasePreviews';
 import { MyDealsModal } from './MyDealsModal';
 import { LedgerPage } from '../pages/LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -147,6 +147,23 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(screen.getByTestId('deals-preview-head')).toBeInTheDocument();
         expect(screen.getByTestId('sample-header')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.header);
 
+        // Each sample deal, found by its name on its tab, says its own state: a deal in any other state would say none
+        // of these, and a status outside the sample's three gets no chip at all (never drawn as Completed).
+        const CHIPS: Record<string, { state: string; tab: RegExp; chip: string }> = {
+            'Putting up two shelves': { state: 'requested', tab: /^In Progress/, chip: 'Action Required' },
+            'Fixing a bike puncture': { state: 'pending', tab: /^In Progress/, chip: 'Held in trust' },
+            'Mending a jacket': { state: 'completed', tab: /^History/, chip: 'Completed' },
+        };
+        expect(S.deals.map(d => d.what).sort()).toEqual(Object.keys(CHIPS).sort());
+        for (const d of S.deals) {
+            const want = CHIPS[d.what];
+            expect(d.state, d.what).toBe(want.state);
+            fireEvent.click(screen.getByRole('button', { name: want.tab }));
+            expect(screen.getByTestId(`sample-deal-${d.id}`).querySelector('span.uppercase')?.textContent, d.what).toBe(want.chip);
+        }
+        for (const other of ['cancelled', 'rejected', '']) expect(sampleDealChip(other), other).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^In Progress/ }));
+
         // Initial tab is "In Progress"
         // Requested deal (shelves): shows Action Required, explainer, and Approve and hold in trust
         const shelves = screen.getByTestId('sample-deal-sample-deal-shelves');
@@ -261,14 +278,19 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
 describe('the marker never looks locked', () => {
     it('no lock, no greying, no reduced opacity, no tier colour, and Beans never Ʀ', () => {
         const { container } = render(<><CommonsPreview /><MyDealsModal visible identity={MEMBER} preview onClose={() => {}} /></>);
-        const html = container.innerHTML;
-        expect(html).not.toMatch(/🔒|Locked|locked|Ʀ/);
-        const markers = Array.from(container.querySelectorAll('[data-testid^="local-community-"]'));
-        expect(markers.length).toBeGreaterThan(0);
-        for (const m of markers) {
-            expect(m.outerHTML).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
-            if (m instanceof HTMLButtonElement) {
-                expect(m).not.toBeDisabled();
+        // All of it, on each of My Deals' three tabs; and each marker on its own.
+        for (const tab of [/^In Progress/, /^My Posts/, /^History/]) {
+            fireEvent.click(screen.getByRole('button', { name: tab }));
+            const html = container.innerHTML;
+            expect(html, String(tab)).not.toMatch(/🔒|Locked|locked|Ʀ/);
+            expect(html, String(tab)).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
+            const markers = Array.from(container.querySelectorAll('[data-testid^="local-community-"]'));
+            expect(markers.length).toBeGreaterThan(0);
+            for (const m of markers) {
+                expect(m.outerHTML).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
+                if (m instanceof HTMLButtonElement) {
+                    expect(m).not.toBeDisabled();
+                }
             }
         }
     });

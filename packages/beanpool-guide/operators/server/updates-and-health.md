@@ -101,6 +101,14 @@ It also tells them when someone gains power on the server, saying what happened 
 - the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until every address it watches is this community's again. The server reads this from its list of addresses every minute, so a database restored from a backup says what that backup's list says;
 - another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card;
 - an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off).
+- the community was restored from a backup or rolled back to a restore point (high), told at the next start: "A backup made 2026-10-01 was restored, by an owner. A restore point was kept." A restore with beanpool restore or beanpool restore-point says "from the server's shell" instead. Uploads of another community's backup that Settings refused are counted: "2 backups from another community were refused today.";
+- an owner takes the community's address offline, or claims a new name in place of the live one (high), and every member is told "This community's address changed. Open the app to follow it."; an owner releases a name the community held unused, or gives the tunnel a new key;
+- an owner replaces the recovery code (high): "The recovery code was replaced, by an owner. Backups made before still open with the old one.";
+- a backup setting changes, one line each: a replication token made or cleared, a standby forgotten, the server a standby copies from changed, an off-box destination removed or changed, or fewer snapshots kept. Past three changes by the same person in an hour, the rest come as one line when the hour is over: "2 more changes by the same owner";
+- members are removed by an admin, or a branch of invites is pruned by an owner, as a count for the day: "2 members were removed today, by an admin." (A removed owner, admin or moderator is also told as a role taken away, and pushed once.);
+- an admin changes the community's name, its callsign or its contact details (low).
+
+When an owner changes the alert channel or removes it, the old channel gets one last message: "the alert channel was changed, by an owner. This is the last alert sent here."
 
 And when members report something, so a report never waits unseen in the reports queue (People & Safety, then Triage & Moderation):
 

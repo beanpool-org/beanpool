@@ -37,11 +37,15 @@ export function markTone(colors: AppColors) {
 /** Where each of the sheet's ways forward goes. */
 export const SHEET_ROUTES = Object.freeze({ start: '/start-community', nearYou: '/find-community' });
 
-export function LocalCommunitySheet({ feature, visible, onClose }: { feature: ShowcaseFeature; visible: boolean; onClose: () => void }) {
+/**
+ * `onLeave`: what a way forward does before it routes away, for a marker drawn inside a screen that is itself a Modal
+ * (My Deals): that screen closes first, so the next screen never opens under it (global previews audit, item 4).
+ */
+export function LocalCommunitySheet({ feature, visible, onClose, onLeave }: { feature: ShowcaseFeature; visible: boolean; onClose: () => void; onLeave?: () => void }) {
     const { colors } = useTheme();
     const tone = markTone(colors);
     const s = sheetStyles(colors);
-    const go = (to: () => void) => { onClose(); to(); };
+    const go = (to: () => void) => { onClose(); onLeave?.(); to(); };
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <Pressable style={s.scrim} onPress={onClose} accessibilityLabel="Close" />
@@ -94,11 +98,12 @@ function useStripCollapsed(feature: ShowcaseFeature): [boolean, (v: boolean) => 
     return [collapsed, set];
 }
 
-type MarkProps =
+/** `onLeave`, on any variant: as LocalCommunitySheet's, for the sheet's ways forward and the strip's two buttons. */
+type MarkProps = { onLeave?: () => void } & (
     | { variant: 'pill'; feature: ShowcaseFeature }
     | { variant: 'strip'; feature: ShowcaseFeature }
     | { variant: 'action'; feature: ShowcaseFeature; label: string }
-    | { variant: 'line'; feature: ShowcaseFeature; text: string };
+    | { variant: 'line'; feature: ShowcaseFeature; text: string });
 
 export function LocalCommunityMark(props: MarkProps) {
     const { colors } = useTheme();
@@ -106,7 +111,8 @@ export function LocalCommunityMark(props: MarkProps) {
     const s = markStyles(colors);
     const [open, setOpen] = useState(false);
     const [collapsed, setCollapsed] = useStripCollapsed(props.feature);
-    const sheet = <LocalCommunitySheet feature={props.feature} visible={open} onClose={() => setOpen(false)} />;
+    const sheet = <LocalCommunitySheet feature={props.feature} visible={open} onClose={() => setOpen(false)} onLeave={props.onLeave} />;
+    const leaveTo = (to: (typeof SHEET_ROUTES)['start' | 'nearYou']) => { props.onLeave?.(); router.push(to); };
     const pill = (
         <View style={[s.pill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
             <Text style={[s.pillText, { color: tone.fg }]} numberOfLines={1}>{LOCAL_COMMUNITY_EMOJI} {LOCAL_COMMUNITY_MARK}</Text>
@@ -173,11 +179,11 @@ export function LocalCommunityMark(props: MarkProps) {
                 <Text style={[s.stripText, { color: colors.text.body }]}>
                     <Text style={{ fontWeight: '800' }}>{LOCAL_COMMUNITY_STRIP.lead[props.feature]}</Text> {LOCAL_COMMUNITY_STRIP.body[props.feature]}
                 </Text>
-                <Pressable onPress={() => router.push(SHEET_ROUTES.start)} accessibilityRole="button"
+                <Pressable onPress={() => leaveTo(SHEET_ROUTES.start)} accessibilityRole="button"
                     style={[s.stripButton, { backgroundColor: tone.fg, borderColor: tone.fg }]}>
                     <Text style={[s.buttonText, { color: colors.surface.card }]}>{LOCAL_COMMUNITY_SHEET.start}</Text>
                 </Pressable>
-                <Pressable onPress={() => router.push(SHEET_ROUTES.nearYou)} accessibilityRole="button"
+                <Pressable onPress={() => leaveTo(SHEET_ROUTES.nearYou)} accessibilityRole="button"
                     style={[s.stripButton, { borderColor: tone.border }]}>
                     <Text style={[s.buttonText, { color: tone.fg }]}>{LOCAL_COMMUNITY_SHEET.nearYou}</Text>
                 </Pressable>

@@ -120,6 +120,7 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
     const participantsByConv = new Map<string, string[]>();
     const peerLastReadByConv = new Map<string, string | null>();
     const myLastReadByConv = new Map<string, string | null>();
+    const peerPubkeyByConv = new Map<string, string>();
     const allPeerPubkeys = new Set<string>();
 
     if (conversationIds.length > 0) {
@@ -133,6 +134,7 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             if (part.public_key !== pubkey) {
                 allPeerPubkeys.add(part.public_key);
                 peerLastReadByConv.set(part.conversation_id, part.last_read_at || null);
+                peerPubkeyByConv.set(part.conversation_id, part.public_key);
             } else {
                 myLastReadByConv.set(part.conversation_id, part.last_read_at || null);
             }
@@ -177,7 +179,8 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
 
     return rows.map(r => {
         const parts = participantsByConv.get(r.id) || [];
-        const peerPubkey = parts.find(p => p !== pubkey);
+        // ⚡ Bolt: O(1) Map lookup for peer pubkey instead of O(P) .find() scan
+        const peerPubkey = peerPubkeyByConv.get(r.id);
         let peerCallsign: string | undefined;
         let peerAvatar: string | null = null;
         if (peerPubkey) {

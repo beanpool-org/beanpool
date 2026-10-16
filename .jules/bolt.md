@@ -266,3 +266,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-15 - O(1) User Group Lookups in Native Market Screen Filter Summary
 **Learning:** In `apps/native/app/(tabs)/market.tsx`, evaluating `filterSummary` invoked `groupName: id => userGroups.find(g => g.id === id)?.name`, resulting in linear $O(G)$ array scans on render cycles.
 **Action:** Pre-computed `userGroupsById` Map indexed by `g.id` via `React.useMemo` at component scope, converting group name resolution in active filter summaries to constant-time $O(1)$ retrievals.
+
+## 2026-10-16 - O(1) Peer Pubkey Lookup in getConversationsByMember
+**Learning:** In `packages/beanpool-engine/src/messaging.ts`, `getConversationsByMember` previously ran `parts.find(p => p !== pubkey)` on every mapped conversation row. In accounts with many conversations, this caused repeated linear array scans across participants.
+**Action:** Indexed peer public keys by conversation ID (`peerPubkeyByConv = new Map<string, string>()`) during the chunked participant query pass, replacing $O(P)$ array `.find()` scans with constant-time $O(1)$ Map lookups.

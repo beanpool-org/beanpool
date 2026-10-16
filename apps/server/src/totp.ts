@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 
 /**
  * Clean, zero-dependency TOTP (RFC 6238) implementation using Node.js built-in `crypto`.
@@ -127,14 +128,37 @@ export function useTotpCode(token: string, secretBase32: string, window = 1): To
     const step = totpStepOf(token, secretBase32, window);
     if (step === null) return 'wrong';
     const id = crypto.createHash('sha256').update(base32Decode(secretBase32)).digest('hex');
-    const last = lastAcceptedStep.get(id);
+    let last = lastAcceptedStep.get(id);
+    // The node's own secret's last step is kept in local-config too, the step number only, so a restart cannot reopen a
+    // code used just before it (AUTH-07, 2026-10-16). Sign-ins are rare, so the write costs nothing.
+    const nodeSecret = isNodeTotpSecret(secretBase32);
+    if (nodeSecret) {
+        const kept = getLocalConfig().totpLastAcceptedStep;
+        if (typeof kept === 'number' && Number.isFinite(kept) && (last === undefined || kept > last)) last = kept;
+    }
     if (last !== undefined && step <= last) return 'reused';
     lastAcceptedStep.set(id, step);
+    if (nodeSecret) updateLocalConfig({ totpLastAcceptedStep: step });
     return 'ok';
+}
+
+/** Whether `secretBase32` is the node's 2FA secret (not a half-made one being set up). */
+function isNodeTotpSecret(secretBase32: string): boolean {
+    try {
+        return !!secretBase32 && getLocalConfig().totpSecret === secretBase32;
+    } catch {
+        return false;
+    }
 }
 
 /** Tests only: forget the codes accepted so far, so a suite can sign in again inside one 30-second step. */
 export function forgetUsedTotpCodesForTests(): void {
+    lastAcceptedStep.clear();
+    if (getLocalConfig().totpLastAcceptedStep !== undefined) updateLocalConfig({ totpLastAcceptedStep: undefined });
+}
+
+/** Tests only: what a restart forgets (the in-memory steps), keeping what local-config holds. */
+export function forgetTotpStepsInMemoryForTests(): void {
     lastAcceptedStep.clear();
 }
 

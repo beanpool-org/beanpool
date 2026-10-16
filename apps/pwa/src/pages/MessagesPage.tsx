@@ -2532,7 +2532,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 <span aria-hidden="true">🔍 </span>{t('Find groups')}
                             </button>
                             <button onClick={() => setShowCreateGroup(true)} style={headerButtonStyle}>
-                                <span aria-hidden="true">➕ </span>{t('New group')}
+                                <span aria-hidden="true">+ </span>{t('New group')}
                             </button>
                         </>
                     )}
@@ -2589,7 +2589,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             )}
 
             {activeTab === 'groups' && !hasGroups ? (
-                <div data-testid="groups-empty" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+                // On a card as the list is, so the words never sit on the page's doodles.
+                <div data-testid="groups-empty" style={{ textAlign: 'center', padding: '2rem 1.25rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '1rem' }}>
                     <p aria-hidden="true" style={{ fontSize: '2.75rem', margin: 0 }}>🌻</p>
                     <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.6rem 0 0' }}>{t('No groups yet')}</p>
                     <p style={{ fontSize: '0.9rem', lineHeight: 1.45, color: 'var(--text-secondary)', margin: '0.4rem auto 0', maxWidth: '28rem' }}>
@@ -2603,7 +2604,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             cursor: 'pointer', fontFamily: 'inherit',
                         }}
                     >
-                        <span aria-hidden="true">➕ </span>{t('New group')}
+                        <span aria-hidden="true">+ </span>{t('New group')}
                     </button>
                     <div>
                         <button
@@ -2735,7 +2736,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     )}
                                     {!conv.postTitle && (
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {conv.type === 'group_thread' ? `${conv.participants.length} members` : new Date(conv.createdAt).toLocaleDateString()}
+                                            {conv.type === 'group_thread' ? tn(conv.participants.length, '{n} member', '{n} members') : new Date(conv.createdAt).toLocaleDateString()}
                                         </div>
                                     )}
                                     

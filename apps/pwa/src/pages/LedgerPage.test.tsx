@@ -30,7 +30,16 @@ vi.mock('../lib/api', () => ({
     getMembers: vi.fn(async () => []),
     getMemberCards: vi.fn(async () => []),
     sendTransfer: vi.fn(),
+    // The reader's own set (GET /api/community/me): none unless a test says (BeanID's verified member: Beans live).
+    getCommunityMe: vi.fn(async () => ({ features: reader.value })),
 }));
+const reader = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('../lib/identity', async (orig) => ({
+    ...(await orig<typeof import('../lib/identity')>()),
+    loadIdentity: vi.fn(async () => ({ publicKey: 'viewer-pubkey', privateKey: 'viewer-private-key', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' })),
+}));
+import { resetReaderFeaturesOnce } from '../lib/features';
+beforeEach(() => { resetReaderFeaturesOnce(); reader.value = null; });
 
 // The node's /api/community/info, read once per page load: a local community (no members on demand) unless a test says.
 const info = vi.hoisted(() => ({ value: { profile: 'local', features: {} } as Record<string, unknown> }));
@@ -277,7 +286,10 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
     };
 
     it('global: no whole-directory read at open or on refresh; the Send picker asks the node by name', async () => {
+        // Beans live for this reader (BeanID's verified member), so the refreshes below read their balance: App renders
+        // this page without `preview` only so (a node whose Beans are a preview for the reader is the describe below).
         info.value = { profile: 'global', features: { membersOnDemand: true, beans: false } };
+        reader.value = { membersOnDemand: true, beans: true };
         vi.mocked(getMemberCards).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana', joinedAt: '2026-01-01' }]);
         render(<LedgerPage identity={identity} isMember={true} />);
         await waitFor(() => expect(getBalance).toHaveBeenCalled());
@@ -369,11 +381,12 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
     });
 
     it("turns live (BeanID's flip): the sample goes at once, and the member's own balance and rows are read and shown", async () => {
+        reader.value = { beans: true };
         const { rerender } = render(<LedgerPage identity={identity} isMember={true} preview />);
         expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
         rerender(<LedgerPage identity={identity} isMember={true} />);
         // Before the member's own land: never Example Valley's 85 Beans or name as theirs.
-        expect(screen.getByTestId('ledger-balance')).not.toHaveTextContent('85.0');
+        expect(screen.queryByTestId('ledger-balance')?.textContent ?? '').not.toContain('85.0');
         expect(screen.queryByText('an example member')).toBeNull();
         await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
         expect(getBalance).toHaveBeenCalledWith('viewer-pubkey');
@@ -384,6 +397,7 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
     });
 
     it("turns to preview while the member's own are on screen: Example Valley's at once, never the member's own under the marker", async () => {
+        reader.value = { beans: true };
         const { rerender } = render(<LedgerPage identity={identity} isMember={true} />);
         await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
         rerender(<LedgerPage identity={identity} isMember={true} preview />);
@@ -474,5 +488,51 @@ describe('the Levels words: true on global, and Send Beans on both', () => {
         const avatar = screen.getByAltText('Identity').parentElement!;
         expect(avatar).toHaveClass('w-14', 'h-14', 'shrink-0', 'rounded-full');
         expect(avatar.nextElementSibling).toHaveClass('min-w-0');
+    });
+});
+
+// Review of #2035, N2: before the node's info answers, App renders this page with no `preview` (Beans' mode is not
+// known yet). Nothing of the member's is asked until the node has said Beans are not a preview, as on the phone, and
+// the page draws a neutral wait, never a live 0.
+describe('the Ledger before the node has said what Beans are here', () => {
+    let answer: (v: Record<string, unknown>) => void = () => {};
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 4321, floor: -50, commonsBalance: 7, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        // One answer for every caller, as the real communityInfoOnce gives: held back until the test sends it.
+        const held = new Promise<Record<string, unknown>>((r) => { answer = r; });
+        vi.mocked(communityInfoOnce).mockImplementation(() => held as any);
+    });
+    afterEach(() => {
+        vi.mocked(communityInfoOnce).mockImplementation(async () => info.value as any);
+        info.value = { profile: 'local', features: {} };
+    });
+
+    it('global: reads no balance or ledger while the info is on its way, draws no live 0, and none once it says preview', async () => {
+        const { rerender } = render(<LedgerPage identity={identity} isMember={true} />);
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(getBalance).not.toHaveBeenCalled();
+        expect(getTransactions).not.toHaveBeenCalled();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading your ledger…');
+        expect(screen.queryByTestId('ledger-balance')).toBeNull();
+        expect(screen.queryByText(/Pay the Commons/)).toBeNull();
+        await act(async () => { answer({ profile: 'global', features: { beans: false, showcase: true } }); await new Promise(r => setTimeout(r, 20)); });
+        // App now knows: Beans are a preview.
+        rerender(<LedgerPage identity={identity} isMember={true} preview />);
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        expect(getBalance).not.toHaveBeenCalled();
+        expect(getTransactions).not.toHaveBeenCalled();
+    });
+
+    it('local: waits for the info, then reads the balance and ledger once, as before', async () => {
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(getBalance).not.toHaveBeenCalled();
+        await act(async () => { answer({ profile: 'local', features: {} }); });
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        expect(getBalance).toHaveBeenCalledTimes(1);
+        expect(getTransactions).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('status')?.textContent ?? '').not.toContain('Loading your ledger');
     });
 });

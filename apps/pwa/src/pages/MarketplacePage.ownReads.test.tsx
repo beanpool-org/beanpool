@@ -68,3 +68,34 @@ describe("the Market and a listing: the member's own balance and deals", () => {
         await waitFor(() => expect(api.getMyMarketplaceTransactions).toHaveBeenCalledWith('viewer-pubkey'));
     });
 });
+
+// Review of #2035, N1: where the light statuses read fails, the Market read the whole enterprise list instead. On the
+// global node (enterprises a preview) that read is refused too, and there is no enterprise to hide: never asked. A local
+// community whose node is older (no statuses route): asked, as before.
+describe("the Market's enterprise list where the statuses read fails (review of #2035, N1)", () => {
+    const refusal = (code?: string) => Object.assign(new Error('Not found'), { status: 404, ...(code ? { code } : {}) });
+    const openMarket = async (statusesError: Error) => {
+        vi.spyOn(api, 'getEnterpriseStatuses').mockRejectedValue(statusesError);
+        render(<MarketplacePage identity={identity} isMember />);
+        await screen.findByText('Help moving a sofa');
+        await settle();
+    };
+
+    it('global, the statuses refused as feature_off: the list is not asked', async () => {
+        info.value = { profile: 'global', features: WORLDWIDE };
+        await openMarket(refusal('feature_off'));
+        expect(api.getEnterpriseStatuses).toHaveBeenCalled();
+        expect(api.getTreasuries).not.toHaveBeenCalled();
+    });
+
+    it('global, the statuses read failing any other way: not asked either (enterprises are a preview)', async () => {
+        info.value = { profile: 'global', features: WORLDWIDE };
+        await openMarket(new TypeError('Failed to fetch'));
+        expect(api.getTreasuries).not.toHaveBeenCalled();
+    });
+
+    it('local, an older node with no statuses route: the list is asked, as before', async () => {
+        await openMarket(refusal());
+        await waitFor(() => expect(api.getTreasuries).toHaveBeenCalled());
+    });
+});

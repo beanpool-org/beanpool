@@ -13,6 +13,7 @@ import {
     type OffboxListedBackup,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
  * Off-box backups (apps/server services/offbox-backups.ts): where the main server sends its locked backups, how often
@@ -61,6 +62,8 @@ const HEALTH_LABEL: Record<OffboxDestinationStatus['health'], { text: string; cl
 };
 
 export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [status, setStatus] = useState<OffboxStatus | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
@@ -130,8 +133,11 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
     };
 
     const remove = async (d: OffboxDestinationStatus) => {
-        if (!confirm(`Stop sending backups to "${d.name}"? The backups already there stay there, and this server no longer removes them: `
-            + 'delete them in that store, or give the bucket a lifecycle rule that deletes old files.')) return;
+        if (!(await ask({
+            title: `Stop sending backups to "${d.name}"?`,
+            body: 'The backups already there stay there, and this server no longer removes them: delete them in that store, or give the bucket a lifecycle rule that deletes old files.',
+            confirmLabel: 'Stop sending',
+        }))) return;
         await save({ removeId: d.id }, 'Destination removed. What it holds stays there.');
     };
 
@@ -186,6 +192,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="offbox-backups">
+            {confirmation}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
                 <div className="min-w-0">
                     <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">

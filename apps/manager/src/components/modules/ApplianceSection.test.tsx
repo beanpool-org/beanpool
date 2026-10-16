@@ -5,6 +5,7 @@ import { ApplianceSection } from './ApplianceSection';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig } from '../../lib/node-client';
 import * as nodeClient from '../../lib/node-client';
+import { answerInPageConfirm } from '../common/InPageConfirm.testing';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -1005,7 +1006,7 @@ describe('ApplianceSection Component', () => {
     });
 
     it('Disable 2FA sends the code with the 2FA session, and shows the node\'s refusal', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         const { disableCalls } = await renderAccessWith2faOn({ ok: false, status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } });
 
         await act(async () => {
@@ -1014,6 +1015,8 @@ describe('ApplianceSection Component', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
         });
+        await answerInPageConfirm('Turn it off');
+        expect(confirmSpy).not.toHaveBeenCalled();
 
         expect(disableCalls()).toHaveLength(1);
         const [, init] = disableCalls()[0];
@@ -1026,7 +1029,7 @@ describe('ApplianceSection Component', () => {
     });
 
     it('Disable 2FA takes a backup code: no number-only keypad, and the code is sent as typed', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
         const input = screen.getByLabelText('Current 2FA or backup code');
         // Backup codes are 8 hex characters (a–f): a phone's numeric keypad could not type them.
@@ -1038,6 +1041,8 @@ describe('ApplianceSection Component', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
         });
+        await answerInPageConfirm('Turn it off');
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(disableCalls()).toHaveLength(1);
         expect(JSON.parse(disableCalls()[0][1].body)).toEqual({ code: 'a1b2c3d4' });
     });

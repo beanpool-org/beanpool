@@ -43,6 +43,7 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -87,6 +88,8 @@ export function ApplianceSection({
     isStandby: propIsStandby,
     rolesViewer = { kind: 'password' },
 }: ApplianceSectionProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
 
@@ -533,7 +536,7 @@ export function ApplianceSection({
             setTfaMessage('Enter a current code from your authenticator app (or a backup code) to turn 2FA off.');
             return;
         }
-        if (!confirm('Disable 2FA protection for this node admin account?')) return;
+        if (!(await ask({ title: 'Turn off two-factor sign-in?', body: 'The admin password alone will open Settings until it is turned on again.', confirmLabel: 'Turn it off' }))) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
@@ -620,6 +623,7 @@ export function ApplianceSection({
 
     return (
         <div className="space-y-6 font-sans animate-fade-in">
+            {confirmation}
             {/* Header & Subtabs */}
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>

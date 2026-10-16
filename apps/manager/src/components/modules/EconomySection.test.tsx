@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
+import { answerInPageConfirm } from '../common/InPageConfirm.testing';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -327,7 +328,7 @@ describe('EconomySection Component', () => {
     });
 
     it('revokes a keeper with confirmation', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
 
         await act(async () => {
             render(
@@ -348,6 +349,8 @@ describe('EconomySection Component', () => {
         await act(async () => {
             fireEvent.click(revokeButton);
         });
+        await answerInPageConfirm('Revoke');
+        expect(confirmSpy).not.toHaveBeenCalled();
 
         expect(nodeClient.revokeTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,
@@ -501,7 +504,7 @@ describe('EconomySection Component', () => {
     });
 
     it('revokes a keeper whose public key is stored on pubkey property', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
 
         const keeperWithPubkey = [
             {
@@ -553,6 +556,8 @@ describe('EconomySection Component', () => {
         await act(async () => {
             fireEvent.click(revokeButton);
         });
+        await answerInPageConfirm('Revoke');
+        expect(confirmSpy).not.toHaveBeenCalled();
 
         expect(nodeClient.revokeTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,
@@ -701,7 +706,7 @@ describe('EconomySection Component', () => {
     });
 
     it('forwards tfaToken prop to assignTreasuryKeeper and revokeTreasuryKeeper', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
 
         await act(async () => {
             render(
@@ -748,6 +753,8 @@ describe('EconomySection Component', () => {
         await act(async () => {
             fireEvent.click(revokeButton);
         });
+        await answerInPageConfirm('Revoke');
+        expect(confirmSpy).not.toHaveBeenCalled();
 
         expect(nodeClient.revokeTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,

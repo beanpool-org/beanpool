@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BulletinSection } from './BulletinSection';
 import type { NodeProfile } from '../../lib/profiles';
+import { answerInPageConfirm } from '../common/InPageConfirm.testing';
 
 describe('BulletinSection', () => {
     const mockActiveNode: NodeProfile = {
@@ -268,8 +269,11 @@ describe('BulletinSection', () => {
             );
 
         await userEvent.click(removeBtns[0]);
+        // Asked in the page, never with window.confirm().
+        expect(screen.getByRole('alertdialog')).toHaveTextContent('Remove this Pulse feed channel?');
+        await answerInPageConfirm('Remove it');
 
-        expect(globalThis.confirm).toHaveBeenCalledWith('Remove this Pulse feed channel?');
+        expect(globalThis.confirm).not.toHaveBeenCalled();
         expect(globalThis.fetch).toHaveBeenCalledWith(
             '/proxy/https/alpha.beanpool.org/api/local/admin/pulse/channels/remove',
             expect.objectContaining({

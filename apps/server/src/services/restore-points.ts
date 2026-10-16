@@ -27,7 +27,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
-import { OWNER_ALERT_WORDS } from './security-signal.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from './security-signal.js';
 import { bucketOf, getImageStore } from '../storage/image-store.js';
 import { captureSnapshotImages, snapshotImagesDir, writeDbSnapshot } from './snapshot-scheduler.js';
 import {
@@ -254,8 +254,6 @@ function day(iso: string | null): string {
 export interface RestoreNoticeDeps {
     announce: (title: string, body: string, severity: 'critical') => void;
     log: (message: string) => void;
-    /** The owners' alert (sec.restore, high), in the server's words: a date, by whom, never a member. */
-    alert?: (detail: string) => void;
 }
 
 /** Each notice a restore or roll-back left: the announcement and the log line, once. Returns how many. Never throws. */
@@ -289,7 +287,9 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
         } catch { /* the log line below still records it */ }
         try {
             const by = notice.by === 'shell' ? 'shell' : 'owner';
-            deps.alert?.(notice.kind === 'restore' ? OWNER_ALERT_WORDS.restored(day(notice.madeAt), by) : OWNER_ALERT_WORDS.rolledBack(day(notice.madeAt), by));
+            // The owners' alert (sec.restore, high; design case 18 §7), in the server's words: a date, by whom, never a member.
+            const detail = (notice.kind === 'restore' ? OWNER_ALERT_WORDS.restored(day(notice.madeAt), by) : OWNER_ALERT_WORDS.rolledBack(day(notice.madeAt), by));
+            noteSecurityEvent({ key: 'sec.restore', detail, high: true, priority: 4 });
         } catch { /* an alert never blocks the boot */ }
         deps.log(`[RESTORE] ${body} Restore point kept before it: ${notice.point} (at ${notice.at}).`);
         delivered++;

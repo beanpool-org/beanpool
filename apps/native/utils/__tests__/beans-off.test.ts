@@ -160,7 +160,10 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(card).toContain("router.push('/(tabs)/ledger')");
         expect(card).toContain('styles.trustBalance');
         expect(src.split("router.push('/(tabs)/ledger')").length - 1).toBe(1);
-        const listing = block(src, '{showsBeans && (');
+        // The listing's figure sits in the showsBeans block that holds it (the Trust & safety panel has its own above it).
+        const figure = src.indexOf("{p.credits ?? '?'}");
+        expect(figure).toBeGreaterThan(-1);
+        const listing = block(src.slice(src.lastIndexOf('\n', src.lastIndexOf('{showsBeans && (', figure)) + 1), '{showsBeans && (');
         expect(listing).toContain("{p.credits ?? '?'}");
         expect(listing).toContain('bean.png');
         expect(src.split('bean.png').length - 1).toBe(1);

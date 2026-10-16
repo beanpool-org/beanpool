@@ -48,12 +48,13 @@ export function useInPageConfirm(): [(ask: InPageConfirmAsk) => Promise<boolean>
                 style={{ overflowWrap: 'anywhere' }}>
                 <p id="in-page-confirm-title" className="m-0 text-base font-bold text-white">{open.title}</p>
                 {open.body && <p id="in-page-confirm-body" className="m-0 text-sm text-nature-200">{open.body}</p>}
-                <div className="flex flex-wrap gap-2">
+                {/* Stacked on a phone: side by side, at 320 px and 130 % text a word breaks inside a button. */}
+                <div className="flex flex-col sm:flex-row gap-2">
                     <button type="button" onClick={() => answer(true)} autoFocus
-                        className={`${BTN} flex-1 bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
+                        className={`${BTN} w-full sm:flex-1 bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
                         {open.confirmLabel}
                     </button>
-                    <button type="button" onClick={() => answer(false)} className={`${BTN} flex-1 bg-nature-800 hover:bg-nature-700 text-white`}>
+                    <button type="button" onClick={() => answer(false)} className={`${BTN} w-full sm:flex-1 bg-nature-800 hover:bg-nature-700 text-white`}>
                         {open.cancelLabel || 'Cancel'}
                     </button>
                 </div>

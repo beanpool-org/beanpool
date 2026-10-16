@@ -184,12 +184,13 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
                                         <p className="m-0 text-nature-200">From your phone: press Manage again, then roll back within 90 seconds.</p>
                                     )}
                                     {error && <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-200">{error}</div>}
-                                    <div className="flex flex-wrap gap-2">
+                                    {/* Stacked on a phone: side by side, at 320 px and 130 % text a word breaks inside a button. */}
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                         <button type="submit" disabled={busy || (viewer.kind === 'password' && !code.trim())}
-                                            className={`${BTN} flex-1 bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
+                                            className={`${BTN} w-full sm:flex-1 bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
                                             {busy ? 'Rolling back…' : 'Roll back'}
                                         </button>
-                                        <button type="button" onClick={() => setChosen(null)} disabled={busy} className={`${BTN} flex-1 bg-nature-800 hover:bg-nature-700 text-white`}>
+                                        <button type="button" onClick={() => setChosen(null)} disabled={busy} className={`${BTN} w-full sm:flex-1 bg-nature-800 hover:bg-nature-700 text-white`}>
                                             Cancel
                                         </button>
                                     </div>

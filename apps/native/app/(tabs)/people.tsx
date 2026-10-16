@@ -25,7 +25,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
     guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -1201,7 +1201,7 @@ export default function PeopleScreen() {
                                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <View style={{ flex: 1 }}>
                                                     {inv.intendedFor ? (
-                                                        <Text style={styles.pendingFor}>For: {inv.intendedFor}</Text>
+                                                        <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
                                                     ) : null}
                                                     <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
                                                         {inv.code}
@@ -1387,7 +1387,7 @@ function TreeMemberView({ node, depth, myKey, colors }: { node: any; depth: numb
                     </View>
                     <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
                         {hasChildren
-                            ? t('Joined {date} · {count} invites', { date: joinDate, count: node.children.length })
+                            ? tn(node.children.length, 'Joined {date} · {n} invite', 'Joined {date} · {n} invites', { date: joinDate })
                             : t('Joined {date}', { date: joinDate })}
                     </Text>
                 </View>

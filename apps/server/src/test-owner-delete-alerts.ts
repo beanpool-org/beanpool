@@ -6,8 +6,8 @@
  *  1. sec.restore: a restore from the server's shell and an owner's roll-back each raise it once at the next boot, high,
  *     saying how ("from the server's shell" / "by an owner") and when the backup was made (an unlocked one, with no date:
  *     said without one); the restore and roll-back paths leave that "who" in their notice; a refused upload of another
- *     community's backup is counted, one line for the last 24 hours ("2 backups … in the last day"), its hour's fold line
- *     says refusals.
+ *     community's backup is counted, one line for the 24 hours from the first ("2 backups … in the last day"), its hour's
+ *     fold line says refusals; a later day's refusals are a line of their own, and the days' lines add up to them all.
  *  2. sec.address (#2033 B1): an owner takes the address offline, or claims a new name over the live one: told once, high,
  *     on its own row, never "not its own"; the members are told, in words for how it went, only when it was live; a real
  *     hijack inside the same day still pushes the owners.
@@ -16,11 +16,13 @@
  *     one line each. A fourth change by the same owner in the hour folds into one "1 more change" line when the hour ends.
  *  4. (also) every lessening the proof is asked for: snapshots off, covering less time, off-box kept fewer days, a
  *     standby's own token cleared.
- *  5. The alert channel changed, then removed: the last message goes to the OLD channel each time; a new token for the
- *     same channel says nothing.
+ *  5. The alert channel changed, then removed: the last message goes to the OLD channel each time; a new or cleared token
+ *     for the same channel sends the old token's holder one line saying so, not "the last alert sent here".
  *  6. sec.members: an admin's removals are one counted line ("2 members were removed in the last day"), an offboard too;
  *     a repeat, a non-member or an owner's or the password's removal is not counted; a branch pruned by an owner is; one
- *     admin removing 30 moderators is one line, and 60 with the channel down leave the admin's earlier rename in place.
+ *     admin removing 30 moderators is one line that says 30, and 60 with the channel down leave the admin's earlier rename in
+ *     place; removed role holders never use the admin's pushes (a grant after them is pushed, a rename and a callsign
+ *     after one are both told); a count's day opens at its first removal, and a later day's line never replaces it.
  *  7. sec.settings: an admin renaming the community, its callsign or its contacts is told, low; the owner's own is not.
  *  8. No alert, in the book or on the channel, says a member's callsign or key, the address, the new callsign or a contact.
  *  9. The community's name in a title: a hostile callsign standing in for it is cleaned (#2033 N6).
@@ -119,12 +121,12 @@ async function main(): Promise<void> {
     process.env.REGISTRAR_URL = `http://127.0.0.1:${(registrar.address() as any).port}`;
 
     // The owners' channel: an ntfy on loopback, one topic per path.
-    const received: Array<{ topic: string; title: string; body: string }> = [];
+    const received: Array<{ topic: string; title: string; body: string; auth: string }> = [];
     const channel = http.createServer((req, res) => {
         let raw = '';
         req.on('data', (c) => { raw += c; });
         req.on('end', () => {
-            received.push({ topic: req.url ?? '', title: String(req.headers.title ?? ''), body: raw });
+            received.push({ topic: req.url ?? '', title: String(req.headers.title ?? ''), body: raw, auth: String(req.headers.authorization ?? '') });
             res.end('{}');
         });
     });
@@ -262,7 +264,8 @@ async function main(): Promise<void> {
     const more1 = lines('sec.more');
     assert(lines('sec.restore').length === 1 && more1.length === 1 && /^2 more backups from another community were refused/.test(more1[0].detail) && !/see who|change/.test(more1[0].detail),
         `1e. past the bound the hour's line says refusals, not changes, and no "see who" (${JSON.stringify([...lines('sec.restore'), ...more1].map((e) => e.detail))})`);
-    // A rolling day (#2033 N8): 23 h on the count goes on; 25 h after the first ones it starts again.
+    // Not the UTC day (#2033 N8): a count's day opens at its first refusal and runs 24 hours (C1-N1). At 23 h the line
+    // counts them all; 25 h after the first, a new day's line starts and the first day's stays: the days add up.
     alerts.setAlertsClockForTests(23 * 60 * 60_000);
     refusal();
     await sleep(50);
@@ -272,8 +275,11 @@ async function main(): Promise<void> {
     await sleep(50);
     const at25 = lines('sec.restore').map((e) => e.detail);
     alerts.setAlertsClockForTests(0);
-    assert(at23.some((d) => d === '6 backups from another community were refused in the last day.') && at25.length === 1 && at25[0] === '2 backups from another community were refused in the last day.',
-        `1f. "in the last day" is the last 24 hours, not the UTC day (${JSON.stringify({ at23, at25 })})`);
+    const SIX = '6 backups from another community were refused in the last day.';
+    const countIn = (d: string) => (/^A /.test(d) ? 1 : Number(/^(\d+) /.exec(d)?.[1] ?? NaN));
+    assert(at23.length === 1 && at23[0] === SIX && at25.length === 2 && at25.includes(SIX)
+        && at25.includes('A backup from another community was refused in the last day.') && at25.reduce((a, d) => a + countIn(d), 0) === 7,
+        `1f. one line per day, each from its first refusal: 6 at 23 h, then a new day's line, the days adding up to all 7 (${JSON.stringify({ at23, at25 })})`);
     fresh();
     alerts.resetAlertsForTests();
     leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: null, point: 'point-c', by: 'shell' } as any);
@@ -426,15 +432,40 @@ async function main(): Promise<void> {
     assert(toNew.status === 200 && await until(() => received.some((m) => m.topic === '/owners' && /alert channel was changed/.test(m.body))),
         `5a. changed: the old channel gets "the alert channel was changed … the last alert sent here" (${toNew.status})`);
     assert(!received.some((m) => m.topic === '/newtopic' && /alert channel was changed/.test(m.body)), '5a. the new channel does not get that line');
+    const last5a = received.filter((m) => m.topic === '/owners' && /alert channel was changed/.test(m.body));
+    assert(last5a.length === 1 && /This is the last alert sent here\./.test(last5a[0].body) && !received.some((m) => /token for this alert channel/.test(m.body)),
+        `5a. a new address: the last message as before, not the token's line (${JSON.stringify(last5a.map((m) => m.body))})`);
     const removed = await call('/api/local/admin/alerts/settings', asOwner, { remove: true });
     assert(removed.status === 200 && await until(() => received.some((m) => m.topic === '/newtopic' && /alert channel was removed/.test(m.body))),
         `5b. removed: the channel that was set gets the last message (${removed.status})`);
     assert((setChannel('owners') as any).ok === true, '5c. the owners\' channel set again for the rest');
+    // A new or cleared token on the same address can cut a protected topic off (#2033 C1-N2): its holder is told, with
+    // the old token, in one line that says what changed; never "the last alert sent here".
+    const TOKEN_LINE = 'The token for this alert channel was changed in Settings.';
+    // Setting the first token is a token change too: its line goes out (with no token) before the step starts.
+    const r5s = received.length;
+    alerts.updateAlertChannel({ url: `${channelBase}/owners`, format: 'ntfy', token: 'tk_owner_alerts_old' });
+    await until(() => received.length > r5s, 2000);
+    await sleep(200);
     const r5 = received.length;
     const tok = await call('/api/local/admin/alerts/settings', asOwner, { url: `${channelBase}/owners`, format: 'ntfy', token: 'tk_owner_alerts_5d' });
+    await until(() => received.length > r5, 2000);
+    await sleep(200);
+    const tokMsgs = received.slice(r5);
+    assert(tok.status === 200 && tokMsgs.length === 1 && tokMsgs[0].topic === '/owners' && tokMsgs[0].body.trim() === TOKEN_LINE
+        && tokMsgs[0].auth === 'Bearer tk_owner_alerts_old' && !/last alert sent here/.test(tokMsgs[0].title + tokMsgs[0].body),
+        `5d. a new token for the same channel: one line to the old token, "${TOKEN_LINE}" (${tok.status} ${JSON.stringify(tokMsgs.map((m) => [m.topic, m.auth.slice(0, 12), m.body]))})`);
+    const r5e = received.length;
+    const kept = await call('/api/local/admin/alerts/settings', asOwner, { url: `${channelBase}/owners`, format: 'ntfy' });
     await sleep(300);
-    assert(tok.status === 200 && !received.slice(r5).some((m) => /last alert sent here/.test(m.body)),
-        `5d. a new token for the same channel: no "last alert sent here" (${tok.status}, ${received.slice(r5).length} messages)`);
+    const r5f = received.length;
+    const clear = await call('/api/local/admin/alerts/settings', asOwner, { url: `${channelBase}/owners`, format: 'ntfy', token: '' });
+    await until(() => received.length > r5f, 2000);
+    await sleep(200);
+    const clearMsgs = received.slice(r5f);
+    assert(kept.status === 200 && r5f === r5e && clear.status === 200 && clearMsgs.length === 1 && clearMsgs[0].body.trim() === TOKEN_LINE
+        && clearMsgs[0].auth === 'Bearer tk_owner_alerts_5d',
+        `5e. the same address with the token left out keeps it and says nothing; the token cleared: the line, to the old token (${r5f - r5e} ${JSON.stringify(clearMsgs.map((m) => [m.auth.slice(0, 12), m.body]))})`);
     assert((setChannel('owners') as any).ok === true, '5d. the owners\' channel set again, no token');
     fresh();
 
@@ -485,10 +516,21 @@ async function main(): Promise<void> {
     const mods = Array.from({ length: 30 }, () => pubkey());
     mods.forEach((pk, i) => { join(pk, `Modqz${i}`, owner); grantNodeRole(pk, 'moderator', owner); });
     alerts.resetAlertsForTests();
+    const p6g = ownerPushes();
+    const c6g = received.length;
     for (const pk of mods) await call(`/api/local/admin/users/${pk}/prune`, asAdmin);
     await sleep(500);
     m = lines('sec.members');
     assert(m.length === 1, `6g. 30 moderators removed by one admin: one sec.members line (${m.length}: ${JSON.stringify(m.map((e) => e.detail))})`);
+    // Past the bound the count's line still says the count, in place (#2033 C1-N3): not sent again, not pushed.
+    const THIRTY = '30 members were removed in the last day, by an admin.';
+    const card6g = (book().recent as Array<{ key: string; detail: string }>).filter((e) => e.key === 'sec.members').map((e) => e.detail);
+    await until(() => ownerPushes() - p6g >= 3, 2000);
+    await sleep(300);
+    assert(m[0]?.detail === THIRTY && card6g.length === 1 && card6g[0] === THIRTY,
+        `6g. the line says 30 in the history and the Alerts card (${JSON.stringify({ history: m.map((e) => e.detail), card: card6g })})`);
+    assert(ownerPushes() - p6g === 3 && !received.slice(c6g).some((x) => /\b30 members\b/.test(x.body)),
+        `6g. the owners pushed 3 times (the first roles taken away), and the count's own update sent and pushed nothing (${ownerPushes() - p6g} pushes)`);
     fresh();
     // The channel down, all held: an admin renames the community, then removes 60 role holders. The rename stays in the
     // history and in the channel's queue, and nothing is dropped (#2033 B2, the review's P10).
@@ -505,6 +547,68 @@ async function main(): Promise<void> {
         `6h. the channel down, an admin's rename then 60 role holders removed: the rename still there, nothing dropped, one count line (${lines('sec.settings').length} ${held.dropped} ${lines('sec.members').length} waiting ${held.waiting})`);
     await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY });
     assert((setChannel('owners') as any).ok === true, '6h. the owners\' channel set again');
+    fresh();
+    // Removed role holders never use the admin's pushes (#2033 C1-B1): their sec.members lines are quiet, with tellings of
+    // their own. Two moderators removed, then a member made a moderator by the same admin: the grant is told and pushed.
+    const f1Mods = [pubkey(), pubkey()];
+    const f1New = pubkey();
+    f1Mods.forEach((pk, i) => { join(pk, `Modfa${i}`, owner); grantNodeRole(pk, 'moderator', owner); });
+    join(f1New, 'Modfnew', owner);
+    alerts.resetAlertsForTests();
+    // What a push said is kept on this server as its notice (Expo carries only generic words): read there.
+    const ownerNotices = () => (db.prepare(`SELECT body FROM push_notices WHERE kind = 'owner.alert' AND recipient = ? ORDER BY rowid`).all(owner) as Array<{ body: string }>);
+    const p6i = ownerNotices().length;
+    for (const pk of f1Mods) await call(`/api/local/admin/users/${pk}/prune`, asAdmin);
+    const grant6i = await call('/api/local/admin/node-roles', asAdmin, { pubkey: f1New, role: 'moderator' });
+    const grantPushed = await until(() => ownerNotices().slice(p6i).some((p) => /made a moderator/.test(p.body)), 2000);
+    const role6i = lines('sec.role').map((e) => e.detail);
+    assert(grant6i.status === 200 && role6i.some((d) => /made a moderator/.test(d)) && grantPushed,
+        `6i. two moderators removed, then a grant by the same admin: the grant told and pushed (${grant6i.status} ${JSON.stringify(role6i)} pushed ${grantPushed})`);
+    fresh();
+    // One moderator removed, then a rename and a callsign by the same admin: both told.
+    const f1bMod = pubkey();
+    join(f1bMod, 'Modfb', owner);
+    grantNodeRole(f1bMod, 'moderator', owner);
+    alerts.resetAlertsForTests();
+    await call(`/api/local/admin/users/${f1bMod}/prune`, asAdmin);
+    const rn6j = await call('/api/local/update-identity', asAdmin, { communityName: 'Riverbend Again' });
+    const cs6j = await call('/api/local/update-identity', asAdmin, { callsign: 'RIVAGN' });
+    await sleep(300);
+    const st6j = lines('sec.settings').map((e) => e.detail);
+    assert(rn6j.status === 200 && cs6j.status === 200 && st6j.length === 2,
+        `6j. one moderator removed, then a rename and a callsign by the same admin: two sec.settings lines (${rn6j.status} ${cs6j.status} ${JSON.stringify(st6j)})`);
+    await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY, callsign: 'RIVBND' });
+    fresh();
+    // A count's day opens at its first removal (#2033 C1-N1). The channel down: an admin removes 5 members at HH:50 and one
+    // more 23 h 20 m later, one line saying all 6; one more 25 h after the first is a new day's line, and the first day's
+    // stays, in the history and in the channel's queue.
+    alerts.updateAlertChannel({ url: 'http://127.0.0.1:9/down', format: 'ntfy' });
+    alerts.resetAlertsForTests();
+    const HOUR = 60 * 60_000;
+    const h50 = Math.floor(Date.now() / HOUR) * HOUR + HOUR + 50 * 60_000;
+    const at = (ms: number) => alerts.setAlertsClockForTests(h50 + ms - Date.now());
+    const drip = Array.from({ length: 7 }, () => pubkey());
+    drip.forEach((pk, i) => join(pk, `Dripq${i}`, owner));
+    at(0);
+    for (const pk of drip.slice(0, 5)) await call(`/api/local/admin/users/${pk}/prune`, asAdmin);
+    await sleep(200);
+    at(23 * HOUR + 20 * 60_000);
+    await call(`/api/local/admin/users/${drip[5]}/prune`, asAdmin);
+    await sleep(200);
+    const day1 = lines('sec.members').map((e) => e.detail);
+    at(25 * HOUR);
+    await call(`/api/local/admin/users/${drip[6]}/prune`, asAdmin);
+    await sleep(200);
+    const day2 = lines('sec.members').map((e) => e.detail);
+    const queued = (JSON.parse(fs.readFileSync(path.join(dataDir!, alerts.ALERTS_STATE_FILE), 'utf8')).waiting as Array<{ key: string; detail: string }>)
+        .filter((e) => e.key === 'sec.members').map((e) => e.detail);
+    alerts.setAlertsClockForTests(0);
+    const SIX_M = '6 members were removed in the last day, by an admin.';
+    const ONE_M = 'A member was removed in the last day, by an admin.';
+    assert(day1.length === 1 && day1[0] === SIX_M, `6k. 5 removals at HH:50 and one 23 h 20 m later: one line, all 6 (${JSON.stringify(day1)})`);
+    assert(day2.length === 2 && day2.includes(SIX_M) && day2.includes(ONE_M) && queued.length === 2 && queued.includes(SIX_M) && queued.includes(ONE_M),
+        `6k. one more 25 h after the first: a new day's line; the first day's 6 stays in the history and the channel's queue (${JSON.stringify({ day2, queued })})`);
+    assert((setChannel('owners') as any).ok === true, '6k. the owners\' channel set again');
     fresh();
 
     // ── 7. sec.settings ────────────────────────────────────────────────────────────────────────────────────────────

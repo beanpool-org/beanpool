@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, t, tn } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
 import type { BalanceInfo } from '../lib/api';
@@ -148,6 +148,38 @@ export function CommonsPreview({ enterprises = true, decisions = true, ...ways }
     );
 }
 
+/**
+ * Where one sample deal stands, by its state as a node records it and the member's side, as the phone's My Deals reads
+ * the same three (Action Required, Held in Trust, the sold + 30): `requested` holds nothing yet, and the member's Approve
+ * is what holds the Beans; `pending` holds them until the job is done; `completed` and sold earned them, the Ledger's +30
+ * row. Each state has its own branch, so a deal in a new state is never drawn as done.
+ */
+function DealLine({ deal: d, ...ways }: { deal: SampleDeal } & LocalCommunityWays) {
+    const line = 'mb-2 text-sm text-nature-600 dark:text-nature-300';
+    switch (d.state) {
+        case 'requested':
+            return (
+                <div className="mt-3" data-testid="sample-deal-line">
+                    <p className={line}>{t('A neighbour offered to do this. Approve to hold the Beans safely.')}</p>
+                    <LocalCommunityAction feature="escrow" label={t('Approve and hold in trust')} className="w-full" {...ways} />
+                </div>
+            );
+        case 'pending':
+            return (
+                <div className="mt-3" data-testid="sample-deal-line">
+                    <p className={line}>{t('Held in trust until the job is done.')}</p>
+                    <LocalCommunityAction feature="escrow" label={t('Approve and release')} className="w-full" {...ways} />
+                </div>
+            );
+        case 'completed':
+            return (
+                <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" data-testid="sample-deal-line">
+                    {d.side === 'sold' ? t('Done: you earned {beans}.', { beans: beans(d.amount) }) : t('Done: the Beans were released.')}
+                </p>
+            );
+    }
+}
+
 export function DealsPreview(ways: LocalCommunityWays) {
     return (
         <div data-testid="deals-preview">
@@ -155,22 +187,15 @@ export function DealsPreview(ways: LocalCommunityWays) {
             <SampleHeader />
             <ul className="flex flex-col gap-3">
                 {S.deals.map((d) => (
-                    <li key={d.id} className={CARD}>
+                    <li key={d.id} className={CARD} data-testid={`sample-deal-${d.id}`}>
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <p className="font-bold text-nature-900 dark:text-nature-50">{d.what}</p>
                                 <p className="text-xs text-nature-500 dark:text-nature-400">with {d.who} · {ago(d.daysAgo)}</p>
                             </div>
-                            <span className="shrink-0 font-bold tabular-nums text-nature-800 dark:text-nature-100">{d.amount} Beans</span>
+                            <span className="shrink-0 font-bold tabular-nums text-nature-800 dark:text-nature-100">{d.state === 'completed' && d.side === 'sold' ? beans(d.amount) : `${d.amount} Beans`}</span>
                         </div>
-                        {d.status === 'waiting-on-you' ? (
-                            <div className="mt-3">
-                                <p className="mb-2 text-sm text-nature-600 dark:text-nature-300">The work is done: the Beans are held safely until you say so.</p>
-                                <LocalCommunityAction feature="escrow" label="Approve and release" className="w-full" {...ways} />
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Done: the Beans were released.</p>
-                        )}
+                        <DealLine deal={d} {...ways} />
                     </li>
                 ))}
             </ul>

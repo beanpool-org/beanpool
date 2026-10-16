@@ -135,11 +135,38 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('My Deals: two sample deals; Approve and release opens the sheet', async () => {
+    it('My Deals: each sample deal says where it stands by name (waiting on you holds nothing yet, held in trust, sold +30); both Approves open the sheet', async () => {
         render(<DealsPreviewDialog onClose={() => {}} />);
-        expect(screen.getAllByText(/Beans$/).length).toBeGreaterThanOrEqual(SAMPLE_COMMUNITY.deals.length);
-        fireEvent.click(screen.getByRole('button', { name: /Approve and release/ }));
-        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        // Each deal, found by its name, says its own line: a deal in any other state would say none of these.
+        const LINES: Record<string, { line: string; amount: string; action?: RegExp }> = {
+            'Putting up two shelves': { line: 'A neighbour offered to do this. Approve to hold the Beans safely.', amount: '40 Beans', action: /^Approve and hold in trust/ },
+            'Fixing a bike puncture': { line: 'Held in trust until the job is done.', amount: '20 Beans', action: /^Approve and release/ },
+            'Mending a jacket': { line: 'Done: you earned +30 Beans.', amount: '+30 Beans' },
+        };
+        expect(S.deals.map(d => d.what).sort()).toEqual(Object.keys(LINES).sort());
+        for (const d of S.deals) {
+            const want = LINES[d.what];
+            const card = screen.getByTestId(`sample-deal-${d.id}`);
+            expect(within(card).getByText(d.what)).toBeInTheDocument();
+            expect(within(card).getByTestId('sample-deal-line').textContent, d.what).toContain(want.line);
+            expect(within(card).getByText(want.amount)).toBeInTheDocument();
+            expect(card.textContent, d.what).not.toMatch(/the Beans were released|The work is done/);
+            const actions = within(card).queryAllByTestId('local-community-action');
+            if (want.action) {
+                expect(actions, d.what).toHaveLength(1);
+                expect(actions[0].textContent).toMatch(want.action);
+            } else {
+                expect(actions, d.what).toHaveLength(0);
+            }
+        }
+        // The sold deal's +30 is the Ledger's row for it.
+        const sold = S.deals.find(d => d.what === 'Mending a jacket')!;
+        expect(S.transactions.find(x => x.what === sold.what)?.amount).toBe(30);
+        for (const name of [/^Approve and hold in trust/, /^Approve and release/]) {
+            fireEvent.click(screen.getByRole('button', { name }));
+            expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        }
         onlyInfo();
     });
 });

@@ -6,6 +6,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, reportSubject, type NodeTreasury, fetchKnownFloorMarks } from '../../lib/node-client';
+import { FreshProofRequiredError } from '../../lib/fresh-proof';
 import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
@@ -93,13 +94,14 @@ interface MembersModuleProps {
     tfaToken?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
-    onPruneUser?: (pubkey: string) => Promise<void>;
-    onPruneBranch?: (pubkey: string) => Promise<void>;
+    /** `code`: an owner's fresh proof, when removing an owner asks it (server ownerRemovalProof). */
+    onPruneUser?: (pubkey: string, code?: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
 }
 
 export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
@@ -277,13 +279,15 @@ export function MembersModule({
         reloadTreasuries();
     }, [reloadTreasuries]);
 
-    const handlePruneMember = async (pubkey: string) => {
+    const handlePruneMember = async (pubkey: string, code?: string) => {
         if (!onPruneUser) return;
         try {
-            await onPruneUser(pubkey);
+            await onPruneUser(pubkey, ...(code ? [code] : []));
             onRefresh();
             setSelectedMember(null);
         } catch (e: unknown) {
+            // The member's screen opens the fresh-proof box for this one.
+            if (e instanceof FreshProofRequiredError) throw e;
             const msg = e instanceof Error ? e.message : String(e);
             alert(`Failed to prune member: ${msg}`);
         }
@@ -1053,7 +1057,7 @@ export function MembersModule({
                     }}
                     onSuspensionChanged={() => onRefresh?.()}
                     onKnownFloorChanged={onKnownFloorChanged}
-                    onPrune={(pk) => handlePruneMember(pk)}
+                    onPrune={(pk, code) => handlePruneMember(pk, code)}
                     onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}
                 />

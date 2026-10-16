@@ -13,6 +13,7 @@ import {
 } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import type { RolesViewer } from './NodeRolesPanel';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { nodeCredential } from '../../lib/profiles';
 
 /**
@@ -161,13 +162,17 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
     const nodeIdRef = useRef(activeNode.id);
     nodeIdRef.current = activeNode.id;
 
-    const make = async (replace: boolean) => {
+    // Replacing the recovery code asks an owner's fresh proof each time (server A11).
+    const proof = useFreshProof();
+
+    const make = async (replace: boolean, code?: string) => {
         const forNode = activeNode.id;
         setMaking(true);
         setActionError(null);
         try {
-            const made = await makeRecoveryCode(activeNode.url, replace, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const made = await makeRecoveryCode(activeNode.url, replace, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
             if (nodeIdRef.current !== forNode) return;
+            proof.close();
             setConfirmReplace(false);
             setShown(made);
             setWrittenDown(false);
@@ -179,6 +184,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         } catch (e) {
             if (nodeIdRef.current !== forNode) return;
             setConfirmReplace(false);
+            if (proof.checkError(e, (c) => make(replace, c), code)) return;
             setActionError(e instanceof Error ? e.message : 'The recovery code could not be made.');
             void load();
         } finally {
@@ -322,6 +328,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                             : <>📄 <strong className="text-white">No printed recovery code.</strong> If every owner loses their phone and their 12 words, the take-over keys can&apos;t be opened, and backups aren&apos;t locked.</>}
                     </p>
 
+                    <FreshProofBox proof={proof} testId="recovery-proof" />
                     {actionError && (
                         <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs text-red-200">❌ {actionError}</div>
                     )}

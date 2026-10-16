@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { MemberItem } from './MembersModule';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 export interface PruneBranchModalProps {
     rootMember: MemberItem | null | undefined;
     members?: MemberItem[] | null;
     accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
-    onConfirm: (pubkey: string) => Promise<void>;
+    /** Rejects with FreshProofRequiredError when the branch holds an owner and the node asks an owner's fresh proof. */
+    onConfirm: (pubkey: string, code?: string) => Promise<void>;
     onClose: () => void;
 }
 
@@ -131,14 +133,22 @@ export function PruneBranchModal({
 
     const isMatch = confirmText.trim() === rootName.trim() && rootName.trim().length > 0;
 
-    const handlePrune = async () => {
+    // Removing a branch with an owner in it asks an owner's fresh proof each time (server ownerRemovalProof).
+    const proof = useFreshProof();
+
+    const handlePrune = async (code?: string) => {
         if (!isMatch || isPruning || !rootPubkey) return;
         setIsPruning(true);
         setErrorMessage(null);
         try {
-            await onConfirm(rootPubkey);
+            await onConfirm(rootPubkey, ...(code ? [code] : []));
+            proof.close();
             onClose();
         } catch (err: unknown) {
+            if (proof.checkError(err, (c) => handlePrune(c), code)) {
+                setIsPruning(false);
+                return;
+            }
             setErrorMessage(err instanceof Error ? err.message : 'Failed to prune branch');
             setIsPruning(false);
         }
@@ -239,6 +249,7 @@ export function PruneBranchModal({
                     </div>
                 </div>
 
+                <FreshProofBox proof={proof} testId="prune-branch-proof" />
                 {errorMessage && (
                     <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-300">
                         ❌ {errorMessage}
@@ -276,7 +287,7 @@ export function PruneBranchModal({
                     <button
                         type="button"
                         id="confirm-prune-branch-btn"
-                        onClick={handlePrune}
+                        onClick={() => handlePrune()}
                         disabled={!isMatch || isPruning || !rootPubkey}
                         className="min-h-[44px] px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover active:scale-[0.99] text-xs font-bold text-bp-danger-on border border-bp-danger-fill shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >

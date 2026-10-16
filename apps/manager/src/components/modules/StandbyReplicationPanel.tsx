@@ -4,6 +4,8 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { proofField } from '../../lib/fresh-proof';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 export interface StandbyReplicationPanelProps {
     activeNode: NodeProfile;
@@ -47,6 +49,8 @@ export function StandbyReplicationPanel({
     const [clearExistingToken, setClearExistingToken] = useState(false);
     const [savingConfig, setSavingConfig] = useState(false);
     const [configMsg, setConfigMsg] = useState<{ text: string; isError: boolean } | null>(null);
+    // The server this standby copies from asks an owner's fresh proof each time (server backup.ts, S2b D2).
+    const proof = useFreshProof();
 
     // Resync confirmation modal state
     const [showResyncConfirm, setShowResyncConfirm] = useState(false);
@@ -115,8 +119,8 @@ export function StandbyReplicationPanel({
         loadData();
     }, [loadData]);
 
-    const handleSaveConfig = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSaveConfig = async (e: React.FormEvent | null, code?: string) => {
+        e?.preventDefault();
         setSavingConfig(true);
         setConfigMsg(null);
         try {
@@ -130,12 +134,14 @@ export function StandbyReplicationPanel({
             } else if (clearExistingToken) {
                 body.primaryToken = '';
             }
+            Object.assign(body, proofField(code));
 
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(body),
             });
+            if (await proof.check(res, (c) => handleSaveConfig(null, c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
                 setConfigMsg({ text: 'Replication configuration saved successfully.', isError: false });
@@ -303,7 +309,7 @@ export function StandbyReplicationPanel({
             )}
 
             {/* Connection Configuration Form */}
-            <form onSubmit={handleSaveConfig} className="bg-nature-950/70 p-4 sm:p-5 rounded-xl border border-nature-800 space-y-4">
+            <form onSubmit={(e) => handleSaveConfig(e)} className="bg-nature-950/70 p-4 sm:p-5 rounded-xl border border-nature-800 space-y-4">
                 <div className="border-b border-nature-800/80 pb-2">
                     <h4 className="text-sm font-bold text-white m-0">Replication Connection Configuration</h4>
                     <p className="text-[11px] text-nature-400 m-0 mt-0.5">
@@ -417,6 +423,7 @@ export function StandbyReplicationPanel({
                     )}
                 </div>
             </form>
+            <FreshProofBox proof={proof} testId="standby-proof" />
 
             {/* Resync Confirmation Modal */}
             {isStandby && showResyncConfirm && (

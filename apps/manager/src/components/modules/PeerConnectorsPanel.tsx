@@ -23,7 +23,6 @@ export interface PeerConnector {
     peerId?: string;
     pinnedPeerId?: string;
     error?: string | null;
-    lastError?: string | null;
     url?: string;
     id?: string;
     [key: string]: unknown;
@@ -530,10 +529,10 @@ export function PeerConnectorsPanel({
                                 </div>
 
                                 {/* Status Error Alert */}
-                                {!isConnected && Boolean(c?.lastError || c?.error) && (
+                                {!isConnected && Boolean(c?.error) && (
                                     <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-800/60 text-xs text-red-200 flex items-center gap-2">
                                         <span aria-hidden="true">⚠️</span>
-                                        <span className="font-mono text-[11px] break-all">{String(c.lastError || c.error)}</span>
+                                        <span className="font-mono text-[11px] break-all">{String(c.error)}</span>
                                     </div>
                                 )}
 

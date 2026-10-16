@@ -81,7 +81,6 @@ export interface ConnectorStatus extends ConnectorConfig {
     lastVerified: number | null;
     peerId: string | null;
     error: string | null;
-    lastError: string | null;
 }
 
 interface StatusEntry {
@@ -93,7 +92,6 @@ interface StatusEntry {
     lastVerified: number | null;
     peerId: string | null;
     error: string | null;
-    lastError: string | null;
 }
 
 let connectors: ConnectorConfig[] = [];
@@ -287,7 +285,6 @@ function newStatus(): StatusEntry {
         lastVerified: null,
         peerId: null,
         error: null,
-        lastError: null,
     };
 }
 
@@ -326,7 +323,6 @@ export function initConnectorManager(node: Libp2p): void {
                 status.peerId = peerId;
                 status.connected = true;
                 status.error = null;
-                status.lastError = null;
                 retryState.delete(connector.address);
             }
         }
@@ -335,7 +331,6 @@ export function initConnectorManager(node: Libp2p): void {
             if (status.peerId === peerId) {
                 status.connected = true;
                 status.error = null;
-                status.lastError = null;
                 // Reset retry state on successful connection
                 retryState.delete(addr);
             }
@@ -552,7 +547,6 @@ export async function connectToAddress(address: string): Promise<boolean> {
             await p2pNode.hangUp(conn.remotePeer).catch(() => {});
             status.connected = false;
             status.error = 'A different node answered at this address';
-            status.lastError = status.error;
             logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
             return false;
         }
@@ -561,7 +555,6 @@ export async function connectToAddress(address: string): Promise<boolean> {
         status.peerId = remotePeerId;
         status.lastVerified = Date.now();
         status.error = null;
-        status.lastError = null;
 
         // The FIRST successful dial of a host:port connector records which node answered in its own field
         if (!hasPeerInAddress && currentConnector && currentConnector.address === address && !currentConnector.pinnedPeerId) {
@@ -604,7 +597,6 @@ export async function connectToAddress(address: string): Promise<boolean> {
         } else {
             status.error = errorMessage(e, 'Connection failed');
         }
-        status.lastError = status.error;
         logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
         return false;
     }
@@ -630,7 +622,6 @@ export async function disconnectFromAddress(address: string): Promise<void> {
         status.remoteActive = null;
         status.latencyMs = null;
         status.error = null;
-        status.lastError = null;
     }
     logger.info('P2P', `[Connectors] Disconnected from ${address}`);
 }
@@ -789,7 +780,6 @@ function materialise(c: ConnectorConfig): ConnectorStatus {
         ...status,
         peerId: status.peerId ?? c.pinnedPeerId ?? peerIdFromAddress(c.address),
         error: status.error,
-        lastError: status.lastError ?? status.error,
     };
 }
 
@@ -913,7 +903,6 @@ export function updateInboundHandshakeStatus(
             status.peerId = peerId;
             status.connected = true;
             status.error = null;
-            status.lastError = null;
             
             // Mutual trust is true if both we trust them and they trust us
             const ourTrust = isPeerTrusted(peerId);

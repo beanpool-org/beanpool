@@ -12,7 +12,7 @@
  *   The connector's address string is NEVER rewritten.
  * - Every subsequent dial uses address + /p2p/<pinnedPeerId>, so libp2p itself (Noise protocol)
  *   refuses a different node identity.
- * - Refusal is recorded in the connector's status with lastError = "A different node answered at this address".
+ * - Refusal is recorded in the connector's status with error = "A different node answered at this address".
  * - A different node answering is NEVER trusted (isPeerTrusted returns false).
  * - Editing the connector's address clears `pinnedPeerId`, allowing deliberate re-linking.
  * - Connectors whose address already specifies /p2p/ remain unchanged.
@@ -212,8 +212,8 @@ async function main() {
     const loaded = cm.getConnectorByAddress(legacyHostPort);
     assert(loaded !== null && loaded.pinnedPeerId === undefined,
         `1a. legacy connectors file loads cleanly with pinnedPeerId undefined (got ${loaded?.pinnedPeerId})`);
-    assert(loaded?.lastError === null && loaded?.error === null,
-        `1b. legacy connector initializes with lastError null`);
+    assert(loaded?.error === null,
+        `1b. legacy connector initializes with error null`);
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -286,14 +286,12 @@ async function main() {
         `3b. dialing node Y at same host:port is refused (dial returned false)`);
 
     const afterDial2 = cm.getConnectorByAddress(hostPortAddr);
-    assert(afterDial2?.lastError === 'A different node answered at this address',
-        `3c. connector lastError shows refusal: "${afterDial2?.lastError}"`);
     assert(afterDial2?.error === 'A different node answered at this address',
-        `3d. connector error shows refusal: "${afterDial2?.error}"`);
+        `3c. connector error shows refusal: "${afterDial2?.error}"`);
     assert(cm.isPeerTrusted(peerIdY).trusted === false,
-        `3e. node Y is NOT linked or trusted (isPeerTrusted is false)`);
+        `3d. node Y is NOT linked or trusted (isPeerTrusted is false)`);
     assert(afterDial2?.pinnedPeerId === peerIdX,
-        `3f. node X is STILL the recorded pinnedPeerId`);
+        `3e. node X is STILL the recorded pinnedPeerId`);
 
     // ── 3b. Inbound dials (Y dials in; X dials in from a new address) ──
     const localAddr = localNode.getMultiaddrs()[0];

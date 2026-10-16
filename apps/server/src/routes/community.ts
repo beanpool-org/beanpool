@@ -674,7 +674,7 @@ router.post('/api/local/connectors/credit-cap', async (ctx) => {
             }
         }
 
-        const peerId = connector.pinnedPeerId ?? peerIdFromAddress(connector.address);
+        const peerId = peerIdFromAddress(connector.address);
         ctx.body = {
             success: true, address, creditCap: connector.creditCap ?? null,
             link: peerId ? getFederationLink(peerId) : null,

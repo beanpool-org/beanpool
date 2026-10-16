@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Ce code ne peut être lu en sécurité, rien n'a été envoyé : générez un nouveau code sur l'autre appareil et scannez-le.",
   "OK": "OK",
   "Connect to your community first.": "Connectez-vous d'abord à votre communauté.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas : il utilise {own}. Rien n'a été envoyé. Ouvrez BeanPool sur {own} sur l'autre appareil et scannez-y le code, ou rejoignez d'abord {host} sur ce téléphone, puis scannez à nouveau.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas. Rien n'a été envoyé. Rejoignez d'abord {host} sur ce téléphone, puis scannez à nouveau, ou restaurez-y votre compte avec vos 12 mots.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas : il utilise {own}. Rien n'a été envoyé. Ouvrez BeanPool sur {own} sur l'autre appareil et scannez-y le code, ou rejoignez d'abord la communauté mondiale sur ce téléphone, puis scannez à nouveau.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas : il utilise {own}. Rien n'a été envoyé. Ouvrez BeanPool sur {own} sur l'autre appareil et scannez-y le code.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas. Rien n'a été envoyé. Rejoignez d'abord la communauté mondiale sur ce téléphone, puis scannez à nouveau.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Ce code provient de {host}, un serveur que votre téléphone n'utilise pas. Rien n'a été envoyé.",
   "Confirm it is you to send your account to another device.": "Confirmez votre identité pour envoyer votre compte vers un autre appareil.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Votre téléphone n'a pas de verrouillage d'écran, BeanPool ne peut donc pas envoyer votre compte. Définissez un code PIN, un schéma ou un mot de passe dans les Paramètres de sécurité de votre téléphone, puis réessayez.",
   "The phone's unlock did not pass, so nothing was sent.": "Le déverrouillage du téléphone a échoué, rien n'a été envoyé.",
@@ -288,5 +290,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Cette restauration a déjà abouti : l'autre téléphone détient désormais votre compte. Si ce n'était pas vous, assurez-vous d'être le seul utilisateur du compte de connexion et contactez les administrateurs.",
   "Link a device": "Lier un appareil",
   "🌍 Join the global community": "🌍 Rejoindre la communauté mondiale",
-  "Join {host}": "Rejoindre {host}"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Ceci s'est ouvert depuis un lien. Ne continuez que si vous venez de pointer votre appareil photo vers un code sur votre propre écran.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Copie votre propre compte dans un navigateur, pour y utiliser BeanPool en votre nom"
 }

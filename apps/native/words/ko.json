@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "이 코드를 안전하게 읽을 수 없어 아무것도 전송되지 않았어요. 다른 기기에서 새 코드를 만들어 스캔하세요.",
   "OK": "확인",
   "Connect to your community first.": "먼저 커뮤니티에 연결해 주세요.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요(사용 중인 서버: {own}). 아무것도 전송되지 않았어요. 다른 기기에서 {own}의 BeanPool을 열어 그곳의 코드를 스캔하거나, 먼저 이 휴대폰에서 {host}에 가입한 뒤 다시 스캔하세요.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요. 아무것도 전송되지 않았어요. 먼저 이 휴대폰에서 {host}에 가입한 뒤 다시 스캔하거나, 12개의 단어로 그곳에서 계정을 복원하세요.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요(사용 중인 서버: {own}). 아무것도 전송되지 않았어요. 다른 기기에서 {own}의 BeanPool을 열어 그곳의 코드를 스캔하거나, 먼저 이 휴대폰에서 글로벌 커뮤니티에 가입한 뒤 다시 스캔하세요.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요(사용 중인 서버: {own}). 아무것도 전송되지 않았어요. 다른 기기에서 {own}의 BeanPool을 열어 그곳의 코드를 스캔하세요.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요. 아무것도 전송되지 않았어요. 먼저 이 휴대폰에서 글로벌 커뮤니티에 가입한 뒤 다시 스캔하세요.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요. 아무것도 전송되지 않았어요.",
   "Confirm it is you to send your account to another device.": "다른 기기로 계정을 전송하려면 본인임을 확인해 주세요.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "휴대폰에 화면 잠금이 없어 BeanPool에서 계정을 전송할 수 없어요. 휴대폰 '설정'의 '보안'에서 PIN, 패턴 또는 비밀번호를 설정한 후 다시 시도해 주세요.",
   "The phone's unlock did not pass, so nothing was sent.": "휴대폰 잠금 해제가 완료되지 않아 아무것도 전송되지 않았어요.",
@@ -284,5 +286,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "그 복원은 이미 완료되어 다른 휴대폰이 내 계정을 사용 중이에요. 본인이 한 것이 아니라면 다른 사람이 계정을 보유하고 있는 것이니, 사용된 로그인 계정이 본인 전용인지 확인하고 커뮤니티 관리자에게 도움을 요청하세요.",
   "Link a device": "기기 연결",
   "🌍 Join the global community": "🌍 글로벌 커뮤니티 가입",
-  "Join {host}": "{host} 가입"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "링크에서 열렸어요. 방금 내 화면에 있는 코드에 카메라를 직접 비췄을 때만 계속하세요.",
+  "Copies your own account to a browser, to use BeanPool there as you": "내 계정을 브라우저로 복사해, 그곳에서 나로서 BeanPool을 사용해요"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "无法安全读取此代码，因此未发送任何内容：请在另一台设备上生成新代码并扫描该代码。",
   "OK": "确定",
   "Connect to your community first.": "请先连接到你的社区。",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "此代码来自 {host}，这是你的手机当前未使用的服务器（手机正在使用的是 {own}）。未发送任何内容。请在另一台设备上打开 {own} 的 BeanPool 并在那里扫描代码，或先在这部手机上加入 {host}，然后重新扫描。",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "此代码来自你的手机未使用的服务器 {host}。未发送任何内容。请先在这部手机上加入 {host}，然后重新扫描，或用你的 12 个词在那里恢复账户。",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "此代码来自 {host}，这是你的手机当前未使用的服务器（手机正在使用的是 {own}）。未发送任何内容。请在另一台设备上打开 {own} 的 BeanPool 并在那里扫描代码，或先在这部手机上加入全球社区，然后重新扫描。",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "此代码来自 {host}，这是你的手机当前未使用的服务器（手机正在使用的是 {own}）。未发送任何内容。请在另一台设备上打开 {own} 的 BeanPool 并在那里扫描代码。",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "此代码来自你的手机未使用的服务器 {host}。未发送任何内容。请先在这部手机上加入全球社区，然后重新扫描。",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "此代码来自你的手机未使用的服务器 {host}。未发送任何内容。",
   "Confirm it is you to send your account to another device.": "确认是你本人，以将你的账户发送到另一台设备。",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "你的手机未设置屏幕锁，因此 BeanPool 不会发送你的账户。请在手机的“设置 → 安全”中设置 PIN 码、图案或密码，然后重试。",
   "The phone's unlock did not pass, so nothing was sent.": "手机解锁未通过，因此未发送任何内容。",
@@ -284,5 +286,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "该恢复已完成：另一部手机现在拥有你的账户。如果这不是你本人的操作，说明有人盗用了你的账户：请确保所用的登录账户完全归你个人所有，并向社区管理员寻求帮助。",
   "Link a device": "关联设备",
   "🌍 Join the global community": "🌍 加入全球社区",
-  "Join {host}": "加入 {host}"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "这是从链接打开的。只有当你刚刚用相机对准自己屏幕上的代码时，才继续。",
+  "Copies your own account to a browser, to use BeanPool there as you": "将你自己的账户复制到浏览器，以便在那里以你的身份使用 BeanPool"
 }

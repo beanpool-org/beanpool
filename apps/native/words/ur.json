@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "یہ کوڈ محفوظ طریقے سے نہیں پڑھا جا سکتا، اس لیے کچھ نہیں بھیجا گیا: دوسری ڈیوائس پر نیا کوڈ بنائیں اور اسے اسکین کریں۔",
   "OK": "ٹھیک ہے",
   "Connect to your community first.": "پہلے اپنی کمیونٹی سے جڑیں۔",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا: یہ {own} استعمال کرتا ہے۔ کچھ نہیں بھیجا گیا۔ دوسری ڈیوائس پر {own} پر BeanPool کھولیں اور وہاں کوڈ اسکین کریں، یا پہلے اس فون پر {host} میں شامل ہوں، پھر دوبارہ اسکین کریں۔",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا۔ کچھ نہیں بھیجا گیا۔ پہلے اس فون پر {host} میں شامل ہوں، پھر دوبارہ اسکین کریں، یا اپنے 12 الفاظ سے اپنا اکاؤنٹ وہاں بحال کریں۔",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا: یہ {own} استعمال کرتا ہے۔ کچھ نہیں بھیجا گیا۔ دوسری ڈیوائس پر {own} پر BeanPool کھولیں اور وہاں کوڈ اسکین کریں، یا پہلے اس فون پر عالمی کمیونٹی میں شامل ہوں، پھر دوبارہ اسکین کریں۔",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا: یہ {own} استعمال کرتا ہے۔ کچھ نہیں بھیجا گیا۔ دوسری ڈیوائس پر {own} پر BeanPool کھولیں اور وہاں کوڈ اسکین کریں۔",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا۔ کچھ نہیں بھیجا گیا۔ پہلے اس فون پر عالمی کمیونٹی میں شامل ہوں، پھر دوبارہ اسکین کریں۔",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "یہ کوڈ {host} سے ہے، ایسا سرور جو آپ کا فون استعمال نہیں کرتا۔ کچھ نہیں بھیجا گیا۔",
   "Confirm it is you to send your account to another device.": "اپنا اکاؤنٹ دوسری ڈیوائس پر بھیجنے کے لیے تصدیق کریں کہ یہ آپ ہی ہیں۔",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "آپ کے فون پر کوئی اسکرین لاک نہیں ہے، اس لیے BeanPool آپ کا اکاؤنٹ نہیں بھیجے گا۔ سیکیورٹی کے تحت اپنے فون کی سیٹنگز میں ایک پن، پیٹرن یا پاس ورڈ سیٹ کریں، پھر دوبارہ کوشش کریں۔",
   "The phone's unlock did not pass, so nothing was sent.": "فون کا انلاک کامیاب نہیں ہوا، اس لیے کچھ نہیں بھیجا گیا۔",
@@ -288,5 +290,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "وہ بحالی پہلے ہی مکمل ہو چکی ہے: اب دوسرے فون کے پاس آپ کا اکاؤنٹ ہے۔ اگر وہ آپ نہیں تھے، تو کسی اور کے پاس آپ کا اکاؤنٹ ہے: یقینی بنائیں کہ استعمال شدہ سائن ان اکاؤنٹ صرف آپ کا ہے، اور اپنی کمیونٹی کے ایڈمنز سے مدد مانگیں۔",
   "Link a device": "ڈیوائس جوڑیں",
   "🌍 Join the global community": "🌍 عالمی کمیونٹی میں شامل ہوں",
-  "Join {host}": "{host} میں شامل ہوں"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "یہ ایک لنک سے کھلا ہے۔ آگے صرف تب بڑھیں جب آپ نے ابھی ابھی اپنا کیمرہ اپنی ہی اسکرین پر کسی کوڈ کی طرف کیا ہو۔",
+  "Copies your own account to a browser, to use BeanPool there as you": "آپ کا اپنا اکاؤنٹ ایک براؤزر میں کاپی کرتا ہے، تاکہ آپ وہاں خود کے طور پر BeanPool استعمال کریں"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Không thể đọc mã này một cách an toàn nên không có gì được gửi: hãy tạo mã mới trên thiết bị kia và quét mã đó.",
   "OK": "OK",
   "Connect to your community first.": "Hãy kết nối với cộng đồng của bạn trước.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Mã này đến từ {host}, một máy chủ mà điện thoại của bạn không dùng: máy chủ đang dùng là {own}. Không có gì được gửi. Hãy mở BeanPool tại {own} trên thiết bị kia và quét mã ở đó, hoặc tham gia {host} trên điện thoại này trước, rồi quét lại.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Mã này đến từ {host}, máy chủ mà điện thoại của bạn không dùng. Không có gì được gửi. Hãy tham gia {host} trên điện thoại này trước, rồi quét lại, hoặc khôi phục tài khoản ở đó bằng 12 từ của bạn.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Mã này đến từ {host}, một máy chủ mà điện thoại của bạn không dùng: máy chủ đang dùng là {own}. Không có gì được gửi. Hãy mở BeanPool tại {own} trên thiết bị kia và quét mã ở đó, hoặc tham gia cộng đồng toàn cầu trên điện thoại này trước, rồi quét lại.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Mã này đến từ {host}, một máy chủ mà điện thoại của bạn không dùng: máy chủ đang dùng là {own}. Không có gì được gửi. Hãy mở BeanPool tại {own} trên thiết bị kia và quét mã ở đó.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Mã này đến từ {host}, máy chủ mà điện thoại của bạn không dùng. Không có gì được gửi. Hãy tham gia cộng đồng toàn cầu trên điện thoại này trước, rồi quét lại.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Mã này đến từ {host}, máy chủ mà điện thoại của bạn không dùng. Không có gì được gửi.",
   "Confirm it is you to send your account to another device.": "Xác nhận đó là bạn để gửi tài khoản sang thiết bị khác.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Điện thoại của bạn chưa có khóa màn hình, vì vậy BeanPool sẽ không gửi tài khoản của bạn. Hãy đặt mã PIN, hình mở khóa hoặc mật khẩu trong Cài đặt của điện thoại (mục Bảo mật), rồi thử lại.",
   "The phone's unlock did not pass, so nothing was sent.": "Mở khóa điện thoại không thành công nên không có gì được gửi.",
@@ -284,5 +286,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Lần khôi phục đó đã hoàn tất: điện thoại kia hiện đang giữ tài khoản của bạn. Nếu đó không phải là bạn, ai đó đang giữ tài khoản của bạn: hãy đảm bảo tài khoản đăng nhập được dùng là của riêng bạn, và nhờ quản trị viên cộng đồng giúp đỡ.",
   "Link a device": "Liên kết thiết bị",
   "🌍 Join the global community": "🌍 Tham gia cộng đồng toàn cầu",
-  "Join {host}": "Tham gia {host}"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Mục này được mở từ một liên kết. Chỉ tiếp tục nếu bạn vừa hướng máy ảnh vào một mã trên màn hình của chính bạn.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Sao chép tài khoản của chính bạn sang trình duyệt, để dùng BeanPool ở đó với tư cách là bạn"
 }

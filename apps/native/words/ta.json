@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "இந்தக் குறியீட்டைப் பாதுகாப்பாகப் படிக்க முடியவில்லை, எனவே எதுவும் அனுப்பப்படவில்லை: மற்றொரு சாதனத்தில் புதிய குறியீட்டை உருவாக்கி அதை ஸ்கேன் செய்யவும்.",
   "OK": "சரி",
   "Connect to your community first.": "முதலில் உங்கள் சமூகத்துடன் இணையுங்கள்.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர்: இது {own}-ஐப் பயன்படுத்துகிறது. எதுவும் அனுப்பப்படவில்லை. மற்றொரு சாதனத்தில் {own}-இல் BeanPool-ஐத் திறந்து அங்கே குறியீட்டை ஸ்கேன் செய்யவும், அல்லது முதலில் இந்தத் தொலைபேசியில் {host}-இல் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும்.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர். எதுவும் அனுப்பப்படவில்லை. முதலில் இந்தத் தொலைபேசியில் {host}-இல் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும், அல்லது உங்கள் 12 சொற்களைக் கொண்டு அங்கே உங்கள் கணக்கை மீட்டெடுக்கவும்.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர்: இது {own}-ஐப் பயன்படுத்துகிறது. எதுவும் அனுப்பப்படவில்லை. மற்றொரு சாதனத்தில் {own}-இல் BeanPool-ஐத் திறந்து அங்கே குறியீட்டை ஸ்கேன் செய்யவும், அல்லது முதலில் இந்தத் தொலைபேசியில் உலகளாவிய சமூகத்தில் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும்.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர்: இது {own}-ஐப் பயன்படுத்துகிறது. எதுவும் அனுப்பப்படவில்லை. மற்றொரு சாதனத்தில் {own}-இல் BeanPool-ஐத் திறந்து அங்கே குறியீட்டை ஸ்கேன் செய்யவும்.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர். எதுவும் அனுப்பப்படவில்லை. முதலில் இந்தத் தொலைபேசியில் உலகளாவிய சமூகத்தில் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும்.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "இந்தக் குறியீடு {host}-இலிருந்து வந்தது, உங்கள் தொலைபேசி பயன்படுத்தாத சர்வர். எதுவும் அனுப்பப்படவில்லை.",
   "Confirm it is you to send your account to another device.": "உங்கள் கணக்கை மற்றொரு சாதனத்திற்கு அனுப்ப இது நீங்கள்தான் என்பதை உறுதிப்படுத்தவும்.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "உங்கள் தொலைபேசியில் திரை பூட்டு இல்லை, எனவே BeanPool உங்கள் கணக்கை அனுப்பாது. உங்கள் தொலைபேசியின் அமைப்புகளில், பாதுகாப்பு என்பதன் கீழ் பின், பேட்டர்ன் அல்லது கடவுச்சொல்லை அமைத்துவிட்டு மீண்டும் முயற்சிக்கவும்.",
   "The phone's unlock did not pass, so nothing was sent.": "தொலைபேசித் திறத்தல் தோல்வியடைந்தது, எனவே எதுவும் அனுப்பப்படவில்லை.",
@@ -288,5 +290,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "அந்த மீட்டெடுப்பு ஏற்கெனவே முடிந்துவிட்டது: மற்றொரு தொலைபேசியில் இப்போது உங்கள் கணக்கு உள்ளது. அது நீங்களாக இல்லாவிட்டால், வேறு யாரோ உங்கள் கணக்கை வைத்திருக்கிறார்கள்: பயன்படுத்தப்பட்ட உள்நுழைவுக் கணக்கு உங்களுடையது மட்டுமே என்பதை உறுதிசெய்து, உதவிக்கு உங்கள் சமூக நிர்வாகிகளிடம் கேளுங்கள்.",
   "Link a device": "சாதனத்தை இணைக்கவும்",
   "🌍 Join the global community": "🌍 உலகளாவிய சமூகத்தில் சேரவும்",
-  "Join {host}": "{host}-இல் சேரவும்"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "இது ஒரு இணைப்பிலிருந்து திறந்தது. உங்கள் சொந்தத் திரையில் உள்ள ஒரு குறியீட்டை நோக்கி இப்போதுதான் கேமராவைக் காட்டியிருந்தால் மட்டுமே தொடரவும்.",
+  "Copies your own account to a browser, to use BeanPool there as you": "உங்கள் சொந்தக் கணக்கை ஒரு உலாவிக்கு நகலெடுக்கிறது, அங்கே நீங்களாகவே BeanPool-ஐப் பயன்படுத்த"
 }

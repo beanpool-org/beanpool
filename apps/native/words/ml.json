@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "ഈ കോഡ് സുരക്ഷിതമായി വായിക്കാൻ കഴിഞ്ഞില്ല, അതിനാൽ ഒന്നും അയച്ചില്ല: മറ്റേ ഉപകരണത്തിൽ ഒരു പുതിയ കോഡ് ഉണ്ടാക്കി അത് സ്കാൻ ചെയ്യുക.",
   "OK": "ശരി",
   "Connect to your community first.": "ആദ്യം നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുമായി ബന്ധിപ്പിക്കുക.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്: ഫോൺ {own} ആണ് ഉപയോഗിക്കുന്നത്. ഒന്നും അയച്ചില്ല. മറ്റേ ഉപകരണത്തിൽ {own}ൽ BeanPool തുറന്ന് അവിടെയുള്ള കോഡ് സ്കാൻ ചെയ്യുക, അല്ലെങ്കിൽ ആദ്യം ഈ ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്. ഒന്നും അയച്ചില്ല. ആദ്യം ഈ ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിച്ച് അവിടെ അക്കൗണ്ട് പുനഃസ്ഥാപിക്കുക.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്: ഫോൺ {own} ആണ് ഉപയോഗിക്കുന്നത്. ഒന്നും അയച്ചില്ല. മറ്റേ ഉപകരണത്തിൽ {own}ൽ BeanPool തുറന്ന് അവിടെയുള്ള കോഡ് സ്കാൻ ചെയ്യുക, അല്ലെങ്കിൽ ആദ്യം ഈ ഫോണിൽ ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്: ഫോൺ {own} ആണ് ഉപയോഗിക്കുന്നത്. ഒന്നും അയച്ചില്ല. മറ്റേ ഉപകരണത്തിൽ {own}ൽ BeanPool തുറന്ന് അവിടെയുള്ള കോഡ് സ്കാൻ ചെയ്യുക.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്. ഒന്നും അയച്ചില്ല. ആദ്യം ഈ ഫോണിൽ ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്. ഒന്നും അയച്ചില്ല.",
   "Confirm it is you to send your account to another device.": "മറ്റൊരു ഉപകരണത്തിലേക്ക് നിങ്ങളുടെ അക്കൗണ്ട് അയക്കാൻ നിങ്ങളാണെന്ന് സ്ഥിരീകരിക്കുക.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "നിങ്ങളുടെ ഫോണിന് സ്‌ക്രീൻ ലോക്ക് ഇല്ല, അതിനാൽ BeanPool നിങ്ങളുടെ അക്കൗണ്ട് അയക്കില്ല. ഫോണിന്റെ സെറ്റിങ്സിൽ 'സെക്യൂരിറ്റി'യിൽ പിൻ, പാറ്റേൺ അല്ലെങ്കിൽ പാസ്‌വേഡ് സജ്ജമാക്കി വീണ്ടും ശ്രമിക്കുക.",
   "The phone's unlock did not pass, so nothing was sent.": "ഫോൺ അൺലോക്ക് ചെയ്യുന്നത് വിജയിച്ചില്ല, അതിനാൽ ഒന്നും അയച്ചില്ല.",
@@ -288,5 +290,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "ആ വീണ്ടെടുക്കൽ പൂർത്തിയായി: മറ്റേ ഫോണിൽ ഇപ്പോൾ നിങ്ങളുടെ അക്കൗണ്ട് ഉണ്ട്. അത് നിങ്ങളല്ലെങ്കിൽ, മറ്റാരോ നിങ്ങളുടെ അക്കൗണ്ട് ഉപയോഗിക്കുന്നു: ഉപയോഗിച്ച സൈൻ-ഇൻ അക്കൗണ്ട് നിങ്ങളുടേത് മാത്രമാണെന്ന് ഉറപ്പാക്കുക, കമ്മ്യൂണിറ്റി അഡ്മിൻമാരുടെ സഹായം തേടുക.",
   "Link a device": "ഉപകരണം ബന്ധിപ്പിക്കുക",
   "🌍 Join the global community": "🌍 ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക",
-  "Join {host}": "{host}ൽ ചേരുക"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "ഇത് ഒരു ലിങ്കിൽ നിന്നാണ് തുറന്നത്. നിങ്ങളുടെ സ്വന്തം സ്ക്രീനിലെ ഒരു കോഡിലേക്ക് ഇപ്പോൾ ക്യാമറ തിരിച്ചെങ്കിൽ മാത്രം തുടരുക.",
+  "Copies your own account to a browser, to use BeanPool there as you": "നിങ്ങളുടെ സ്വന്തം അക്കൗണ്ട് ഒരു ബ്രൗസറിലേക്ക് പകർത്തുന്നു, അവിടെ നിങ്ങളായി BeanPool ഉപയോഗിക്കാൻ"
 }

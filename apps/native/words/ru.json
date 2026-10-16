@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Этот код не удалось безопасно прочесть, поэтому ничего не отправлено: создайте новый код на другом устройстве и отсканируйте его.",
   "OK": "ОК",
   "Connect to your community first.": "Сначала подключитесь к своему сообществу.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join {host} on this phone first, then scan again.": "Этот код от {host} — сервера, который ваш телефон не использует (он использует {own}). Ничего не отправлено. Откройте BeanPool на {own} на другом устройстве и отсканируйте код там или сначала вступите в {host} на этом телефоне, а затем отсканируйте снова.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join {host} on this phone first, then scan again, or restore your account there with your 12 words.": "Этот код от {host} — сервера, который ваш телефон не использует. Ничего не отправлено. Сначала вступите в {host} на этом телефоне, а затем отсканируйте снова, или восстановите аккаунт там с помощью 12 слов.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Этот код от {host} — сервера, который ваш телефон не использует (он использует {own}). Ничего не отправлено. Откройте BeanPool на {own} на другом устройстве и отсканируйте код там или сначала вступите в глобальное сообщество на этом телефоне, а затем отсканируйте снова.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Этот код от {host} — сервера, который ваш телефон не использует (он использует {own}). Ничего не отправлено. Откройте BeanPool на {own} на другом устройстве и отсканируйте код там.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Этот код от {host} — сервера, который ваш телефон не использует. Ничего не отправлено. Сначала вступите в глобальное сообщество на этом телефоне, а затем отсканируйте снова.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Этот код от {host} — сервера, который ваш телефон не использует. Ничего не отправлено.",
   "Confirm it is you to send your account to another device.": "Подтвердите свою личность, чтобы отправить аккаунт на другое устройство.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "На вашем телефоне нет блокировки экрана, поэтому BeanPool не отправит аккаунт. Установите PIN-код, графический ключ или пароль в Настройках телефона (раздел «Безопасность») и попробуйте снова.",
   "The phone's unlock did not pass, so nothing was sent.": "Разблокировка телефона не пройдена, поэтому ничего не отправлено.",
@@ -296,5 +298,6 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "То восстановление уже завершено: аккаунт теперь на другом телефоне. Если это были не вы, ваш аккаунт у кого-то другого: убедитесь, что учётная запись для входа принадлежит только вам, и обратитесь к администраторам сообщества.",
   "Link a device": "Привязать устройство",
   "🌍 Join the global community": "🌍 Вступить в глобальное сообщество",
-  "Join {host}": "Вступить в {host}"
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Это открылось по ссылке. Продолжайте, только если вы только что навели камеру на код на своём собственном экране.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Копирует ваш собственный аккаунт в браузер, чтобы пользоваться BeanPool там от своего имени"
 }

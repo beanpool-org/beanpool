@@ -40,7 +40,6 @@ import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/show
 import { LocalCommunityMark, ExampleHeader } from '../components/showcase/LocalCommunityMark';
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
-import { enterprisesOn } from '../utils/commons-sections';
 
 function decodeThreadMessage(ciphertext: string, type: string, keeper = 'keeper'): string {
     if (type === 'removed') return `removed by a ${keeper}`;
@@ -61,18 +60,21 @@ const LEDGER_PAGE = 20;
 // A member holding the keepership of THIS enterprise additionally gets the keeper controls: post its
 // Offer/Need and sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
-    const params = useLocalSearchParams<{ publicKey?: string | string[]; id?: string | string[]; name?: string | string[]; avatar?: string | string[]; preview?: string | string[] }>();
+    const params = useLocalSearchParams<{ publicKey?: string | string[]; id?: string | string[]; name?: string | string[]; avatar?: string | string[] }>();
     const rawKey = params.publicKey || params.id;
     const treasuryKey = typeof rawKey === 'string' ? rawKey : Array.isArray(rawKey) ? rawKey[0] : undefined;
     const nameParam = typeof params.name === 'string' ? params.name : Array.isArray(params.name) ? params.name[0] : undefined;
     const avatarParam = typeof params.avatar === 'string' ? params.avatar : Array.isArray(params.avatar) ? params.avatar[0] : undefined;
-    const isPreviewParam = params.preview === 'true' || params.preview === '1';
 
+    // Example Valley's enterprise or project (a sample id: the Commons preview's cards): drawn from the sample, every
+    // control a marker, nothing asked of the node. Only a sample id: any other key is a real one, read as before.
+    const isEffectivePreview = isSampleId(treasuryKey);
+    // Enterprises in preview for this reader (the worldwide community): no real one exists here, so a real key (a stale
+    // link) is not asked for and the page says why. Only preview: a local node with enterprises switched off, or a
+    // reader who may only read them, asks as before (review of #2063, B5).
     const reader = useReaderFeatures();
     const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
-    const isSampleKey = isSampleId(treasuryKey);
-    const isEffectivePreview = isPreviewParam || isSampleKey || (enterprisesPreview && !treasuryKey);
-    const hasEnterprises = enterprisesOn(reader.effective);
+    const elsewhere = !isEffectivePreview && enterprisesPreview;
 
     const { theme, colors } = useTheme();
 
@@ -355,8 +357,9 @@ export default function TreasuryDetailScreen() {
             setLoading(false);
             return () => { active = false; };
         }
+        // Not until the phone has read its copy of the node's profile (a moment, no network): a preview asks nothing.
         if (!reader.known) return () => { active = false; };
-        if (!hasEnterprises) {
+        if (elsewhere) {
             setDetail(null);
             setLoading(false);
             return () => { active = false; };
@@ -387,10 +390,10 @@ export default function TreasuryDetailScreen() {
         })();
         loadThread();
         return () => { active = false; };
-    }, [treasuryKey, isEffectivePreview, hasEnterprises, reader.known]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     const loadThread = useCallback(async () => {
-        if (!treasuryKey || isEffectivePreview || !reader.known || !hasEnterprises) return;
+        if (!treasuryKey || isEffectivePreview || !reader.known || elsewhere) return;
         try {
             const res = await getEnterpriseThread(treasuryKey);
             if (res) {
@@ -400,7 +403,7 @@ export default function TreasuryDetailScreen() {
         } catch {
             // ignore
         }
-    }, [treasuryKey, isEffectivePreview, hasEnterprises, reader.known]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     const handlePostThreadMessage = async () => {
         if (!treasuryKey || threadPosting || !threadInput.trim()) return;
@@ -449,7 +452,7 @@ export default function TreasuryDetailScreen() {
     };
 
     useFocusEffect(load);
-    useFocusEffect(useCallback(() => { if (!isEffectivePreview) setDecisionsRefresh(n => n + 1); }, [isEffectivePreview]));
+    useFocusEffect(useCallback(() => { setDecisionsRefresh(n => n + 1); }, []));
 
     const loadLedger = useCallback(async (period: LedgerPeriod) => {
         if (isEffectivePreview) {
@@ -460,7 +463,7 @@ export default function TreasuryDetailScreen() {
             setLedgerLoading(false);
             return;
         }
-        if (!treasuryKey || !reader.known || !hasEnterprises) return;
+        if (!treasuryKey || !reader.known || elsewhere) return;
         // Only the latest request may land: switching period quickly must not let a slower, older reply win.
         const request = ++ledgerRequest.current;
         setLedgerLoading(true);
@@ -476,7 +479,7 @@ export default function TreasuryDetailScreen() {
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
-    }, [treasuryKey, isEffectivePreview, hasEnterprises, reader.known]);
+    }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
     // On focus, and again whenever the period changes.
     useFocusEffect(useCallback(() => { loadLedger(ledgerPeriod); }, [loadLedger, ledgerPeriod]));
@@ -890,11 +893,13 @@ export default function TreasuryDetailScreen() {
 
             {loading ? (
                 <View style={styles.centerFill}><ActivityIndicator color={colors.brand.primary} /></View>
+            ) : !detail && elsewhere ? (
+                <View style={styles.centerFill} testID="enterprise-elsewhere">
+                    <LocalCommunityMark variant="line" feature="enterprises" text={t('🏘️ Enterprises live in a local community ›')} />
+                </View>
             ) : !detail ? (
                 <View style={styles.centerFill}>
-                    <Text style={styles.emptyNote}>
-                        {!hasEnterprises ? t('Enterprises live in a local community.') : t("Couldn't load this group. Check your connection.")}
-                    </Text>
+                    <Text style={styles.emptyNote}>Couldn't load this group. Check your connection.</Text>
                 </View>
             ) : (
                 <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -994,14 +999,16 @@ export default function TreasuryDetailScreen() {
                                     </Text>
 
                                     {/* Inline Pledge Beans Input */}
+                                    {/* In preview (Example Valley's): the marker, never the box. */}
                                     {isEffectivePreview ? (
-                                        <View style={styles.pledgeBox}>
+                                        <View style={styles.pledgeBox} testID="pledge-preview">
                                             <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>
                                                 {t('Back this initiative')}
                                             </Text>
                                             <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
                                         </View>
-                                    ) : pledgesClosed ? (
+                                    ) : (<>
+                                    {pledgesClosed ? (
                                         <View style={styles.pledgeBox} testID="pledges-closed">
                                             <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
                                         </View>
@@ -1042,6 +1049,7 @@ export default function TreasuryDetailScreen() {
                                         </Pressable>
                                     </View>
                                     )}
+                                    </>)}
                                 </View>
                             );
                         })()}

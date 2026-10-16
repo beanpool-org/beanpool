@@ -610,12 +610,13 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         features: { beans: false, openJoin: true, guestListingsOnly: true, decisions: false },
     };
     const sectionTabs = () => within(screen.getByTestId('commons-section-tabs')).getAllByRole('button').map(b => b.textContent);
+    const kindChips = () => within(screen.getByTestId('group-filter-chips')).getAllByRole('button').map(b => b.textContent);
 
     it('shows no Decide tab, and a page asked to open on Decide opens on Groups with no way to propose', async () => {
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
-        await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
-        expect(sectionTabs()).toHaveLength(1);
+        // Groups alone is no choice (audit item 5): the switcher goes with Decide.
+        await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
         expect(screen.getByText('Groups:')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
@@ -638,7 +639,11 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-decision')).toBeNull();
+        expect(sectionTabs()).toHaveLength(2);
         expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
+        // Enterprises in preview: no Projects or Enterprises chip, which could only ever be empty here.
+        fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
+        expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
     });
 
     it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
@@ -647,8 +652,32 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-enterprise')).toBeNull();
-        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false);
+        expect(screen.queryByTestId('commons-section-tabs')).toBeNull();
         expect(screen.getByText('Commons Pool')).toBeInTheDocument();
+        // Enterprises live: the kind chips are all there.
+        expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+    });
+
+    it('the global node as it ships (previews, enterprises and Decisions off): no switcher, no Projects or Enterprises chip, Groups real', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, enterprises: false, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.queryByTestId('commons-section-tabs')).toBeNull();
+        expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
+        expect(screen.getByText('Groups:')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
+    });
+
+    it('a local node: both tabs and all five kind chips, as before', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce({ ...globalInfo, profile: 'local' as never, features: {} });
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(sectionTabs()).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
+        expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
     });
 
     // Rehearsal 14 Oct, S2: on global "+ Propose a Project" opened a Beans form the node answers 404 "Enterprises are
@@ -657,7 +686,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
         render(<ProjectsPage identity={backerIdentity} />);
-        await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
+        await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(screen.queryByText('No enterprises found')).toBeNull();
         expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();

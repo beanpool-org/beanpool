@@ -43,6 +43,11 @@ interface PostAuthorTrustProps {
     /** Public key for profile navigation */
     publicKey?: string;
     onOpenProfile?: (pubkey: string) => void;
+    /**
+     * False where Beans live in a local community for this reader (lib/features `marked`): no tier badge. A tier is
+     * earned through Beans, so on such a node every author would read Newcomer for good. Default true.
+     */
+    showTier?: boolean;
 }
 
 /** Small avatar circle with initials fallback */
@@ -71,10 +76,10 @@ function MiniAvatar({ callsign, avatarUrl, size }: { callsign: string; avatarUrl
 
 /**
  * Hybrid Trust Display: Avatar + Tier Badge + Star Rating
- * Tier badge always shows. Star rating only shows when count > 0.
+ * Tier badge shows unless `showTier` is false. Star rating only shows when count > 0.
  * Clicking opens the public profile modal.
  */
-export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'full', className = '', avatarUrl, publicKey, onOpenProfile }: PostAuthorTrustProps) {
+export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'full', className = '', avatarUrl, publicKey, onOpenProfile, showTier = true }: PostAuthorTrustProps) {
     const tier = getTrustTier(energyCycled);
 
     const handleClick = (e: React.MouseEvent) => {
@@ -110,9 +115,11 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                     {/* Avatar */}
                     <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} size={18} />
                     {/* Tier badge */}
-                    <span className={`w-[18px] h-[18px] rounded-full border flex items-center justify-center text-[10px] ${tier.bg} ${tier.border}`}>
-                        {tier.emoji}
-                    </span>
+                    {showTier && (
+                        <span data-testid="author-tier" className={`w-[18px] h-[18px] rounded-full border flex items-center justify-center text-[10px] ${tier.bg} ${tier.border}`}>
+                            {tier.emoji}
+                        </span>
+                    )}
                     {/* Callsign */}
                     <span className="text-xs text-nature-500 dark:text-nature-400 font-medium truncate flex-1">
                         {callsign}
@@ -139,10 +146,12 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 {/* Avatar */}
                 <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} size={24} />
                 {/* Tier badge with label */}
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold ${tier.bg} ${tier.border} ${tier.color}`}>
-                    <span className="text-[11px]">{tier.emoji}</span>
-                    {tier.label}
-                </span>
+                {showTier && (
+                    <span data-testid="author-tier" className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold ${tier.bg} ${tier.border} ${tier.color}`}>
+                        <span className="text-[11px]">{tier.emoji}</span>
+                        {tier.label}
+                    </span>
+                )}
                 {/* Callsign */}
                 <span className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold truncate flex-shrink">
                     {callsign}

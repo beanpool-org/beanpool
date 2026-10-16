@@ -105,11 +105,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
-    const [groupCategoryFilter, setGroupCategoryFilter] = useState<string>('all');
+    const [pickedGroupCategory, setGroupCategoryFilter] = useState<string>('all');
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
 
-    // The kind chips: projects and enterprises hold Beans; chat groups (and My groups) are the rest.
+    // The kind chips: projects and enterprises hold Beans; chat groups (and My groups) are the rest. Where enterprises
+    // are in preview (the global node) no project or enterprise can exist, so those two chips would only ever be empty:
+    // they are not offered, and one picked before the mode arrived reads as All.
+    const enterprisesPreview = enterprisesMode === 'preview';
+    const groupCategoryFilter = enterprisesPreview && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
     const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
     const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
     const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
@@ -408,7 +412,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </>)}
             </header>
 
-            {/* Section Switcher: Decide vs Groups — the one sticky row */}
+            {/* Section Switcher: Decide vs Groups — the one sticky row. Only where there is a choice: with Decide off
+                (the global node) it would be one tab, Groups, which switches to nothing. */}
+            {votes && (
             <div className="sticky top-0 z-40 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
@@ -416,7 +422,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     {([
                         { key: 'decide', emoji: '🗳️', label: 'Decide' },
                         { key: 'groups', emoji: '👥', label: 'Groups' },
-                    ] as const).filter(tab => votes || tab.key !== 'decide').map(tab => (
+                    ] as const).map(tab => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveSection(tab.key)}
@@ -439,6 +445,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     ))}
                 </div>
             </div>
+            )}
 
             {/* Filters scroll away with the content */}
             <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
@@ -452,7 +459,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 { key: 'projects', label: '🌱 Projects' },
                                 { key: 'enterprises', label: '🏛️ Enterprises' },
                                 { key: 'chat', label: '👥 Chat groups' },
-                            ].map(option => (
+                            ].filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
                                 <button
                                     key={option.key}
                                     onClick={() => setGroupCategoryFilter(option.key)}

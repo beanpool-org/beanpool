@@ -34,4 +34,18 @@ describe('PostAuthorTrust tier', () => {
         render(<PostAuthorTrust callsign="Rowan" energyCycled={600} />);
         expect(screen.getByText('Steward')).toBeInTheDocument();
     });
+
+    // Where Beans are marked (the global node) a tier can't be earned, so no card shows one (global previews audit, item 2).
+    it.each(['full', 'compact'] as const)('%s: no tier badge with showTier false; the name stays', (mode) => {
+        render(<PostAuthorTrust callsign="Rowan" energyCycled={0} mode={mode} showTier={false} />);
+        expect(screen.queryByTestId('author-tier')).toBeNull();
+        expect(screen.queryByText('🌱')).toBeNull();
+        expect(screen.queryByText('Newcomer')).toBeNull();
+        expect(screen.getByText('Rowan')).toBeInTheDocument();
+    });
+
+    it.each(['full', 'compact'] as const)('%s: the tier badge by default, as before', (mode) => {
+        render(<PostAuthorTrust callsign="Rowan" energyCycled={0} mode={mode} />);
+        expect(screen.getByTestId('author-tier')).toHaveTextContent('🌱');
+    });
 });

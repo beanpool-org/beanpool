@@ -523,6 +523,7 @@ export async function connectToAddress(address: string): Promise<boolean> {
 
     const connector = connectors.find(c => c.address === address);
     const hasPeerInAddress = Boolean(peerIdFromAddress(address));
+    const dialTargetNamedNode = hasPeerInAddress || Boolean(connector?.pinnedPeerId);
 
     // If the address doesn't already specify a /p2p/ peer ID, but we already have a pinnedPeerId from the first dial,
     // dial address + /p2p/<pinnedPeerId> so libp2p itself refuses a different node.
@@ -578,9 +579,8 @@ export async function connectToAddress(address: string): Promise<boolean> {
         // the whole loop failing rather than one address failing.
         status.connected = false;
         const rawMsg = errorMessage(e);
-        const isIdentityMismatch = (e as any)?.name === 'EncryptionFailedError' ||
-            rawMsg.includes('does not match expected remote identity key') ||
-            rawMsg.includes('does not match expected remote');
+        const isIdentityMismatch = dialTargetNamedNode &&
+            rawMsg.includes('does not match expected remote identity key');
 
         if (isIdentityMismatch) {
             status.error = 'A different node answered at this address';

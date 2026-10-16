@@ -217,6 +217,22 @@ async function main() {
     assert(fullConnector?.pinnedPeerId === undefined,
         `5c. connector with /p2p/ does not set pinnedPeerId (already specified in address)`);
 
+    // ── 6. Unrecorded connector at non-libp2p port does not get identity mismatch error (N1) ──
+    const nonP2pAddr = `127.0.0.1:${PORT}`;
+    const addNonP2p = await postConnector({ address: nonP2pAddr, trustLevel: 'peer', callsign: 'HttpsPort' });
+    assert(addNonP2p.status === 200 && addNonP2p.json?.success === true,
+        `6a. added unrecorded connector at HTTPS port`);
+
+    const dialNonP2p = await dialOverHttp(nonP2pAddr);
+    assert(dialNonP2p.status === 200 && dialNonP2p.json?.success === false,
+        `6b. dial to non-libp2p port failed`);
+
+    const nonP2pConn = cm.getConnectorByAddress(nonP2pAddr);
+    assert(nonP2pConn?.error !== 'A different node answered at this address',
+        `6c. unrecorded connector at non-libp2p port must not get "A different node answered at this address" (got: "${nonP2pConn?.error}")`);
+    assert(nonP2pConn?.pinnedPeerId === undefined,
+        `6d. unrecorded connector was not pinned`);
+
     // Cleanup
     await localNode.stop();
     await nodeY.stop();

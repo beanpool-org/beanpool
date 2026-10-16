@@ -25,6 +25,7 @@ import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -76,6 +77,8 @@ export function EconomySection({
     initialSubTab = 'enterprises',
     onSubTabChange,
 }: EconomySectionProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
     const [subTab, setSubTab] = useSectionSubTab<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab, onSubTabChange);
 
@@ -364,7 +367,7 @@ export function EconomySection({
         }
 
         const displayName = getMemberDisplayName(keeperInput);
-        if (!confirm(`Revoke keeper permissions from @${displayName} for ${manageKeepersTreasury.name}?`)) {
+        if (!(await ask({ title: `Revoke keeper permissions from @${displayName} for ${manageKeepersTreasury.name}?`, body: 'They can no longer move Beans from this account. You can make them a keeper again later.', confirmLabel: 'Revoke' }))) {
             return;
         }
 
@@ -420,7 +423,7 @@ export function EconomySection({
     };
 
     const handleRejectProject = async (projectId: string) => {
-        if (!confirm('Reject and dismiss this commons proposal?')) return;
+        if (!(await ask({ title: 'Reject and dismiss this commons proposal?', confirmLabel: 'Reject it' }))) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/reject');
             await fetch(url, {
@@ -436,6 +439,7 @@ export function EconomySection({
 
     return (
         <div className="space-y-6 font-sans animate-fade-in">
+            {confirmation}
             {/* Header & Subtabs */}
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>

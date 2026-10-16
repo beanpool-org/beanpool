@@ -519,13 +519,8 @@ export function FleetSidebar({
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs px-1">
-                        <a
-                            href="/settings-legacy"
-                            className={`${inDrawer ? 'min-h-[48px] inline-flex items-center text-sm' : 'text-[11px]'} text-nature-400 hover:text-bp-ink-terra transition-colors underline`}
-                        >
-                            Legacy Settings
-                        </a>
+                    {/* No link to the old static Settings page: it is gone (design case 18, D9), /settings-legacy answers 404. */}
+                    <div className="flex items-center justify-end text-xs px-1">
                         {onLogout && (
                             <button
                                 onClick={onLogout}

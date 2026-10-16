@@ -205,6 +205,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const isModerator = !isFleetMode && isModeratorSession(keySession);
     const moderatorRef = useRef(false);
     moderatorRef.current = isModerator;
+    /**
+     * Who the open screens work for. A new Manage link that signs this page in as someone else (another key, another
+     * role, or the password instead of a key) starts the screens afresh: an open modal or wizard, and what it holds, was
+     * the earlier session's (opus-2028 confirm N1). The same session carried on keeps them (opus-2028 B3).
+     */
+    const sessionIdentity = isFleetMode ? 'fleet' : keySession ? `key:${keySession.memberPubkey}:${keySession.role}` : 'password';
 
     // Where the member came from (the app, the web app or neither), read from the fragment before
     // startKeySession strips it, and the way back there (lib/came-from.ts). Single-node Settings only.
@@ -1497,7 +1503,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 {/* Workspace Body */}
                 {/* Fleet mode: a 401 "2FA code required" (the 2FA session ended) opens the 2FA prompt, not a screen's code box. */}
                 <SecondFactorPromptContext.Provider value={secondFactorPrompt}>
-                <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                <main key={sessionIdentity} className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
                     {/* The phone's link couldn't be used, so this is the same account's earlier sign-in, carried on. */}
                     {!isFleetMode && keySession && keySessionNotice && (
                         <div role="status" className="bg-nature-900 border border-terra-600 text-nature-100 text-sm rounded-lg px-4 py-3 flex items-start gap-3">

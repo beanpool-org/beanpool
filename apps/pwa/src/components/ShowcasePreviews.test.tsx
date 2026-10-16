@@ -11,7 +11,8 @@ import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
-import { CommonsPreview, DealsPreviewDialog, sampleInvites, sampleInviteTree, sampleDecisions, samplePoolVoting, sampleCommonsBalance } from './ShowcasePreviews';
+import { CommonsPreview, sampleDealChip, sampleInvites, sampleInviteTree, sampleDecisions, samplePoolVoting, sampleCommonsBalance } from './ShowcasePreviews';
+import { MyDealsModal } from './MyDealsModal';
 import { LedgerPage } from '../pages/LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -143,38 +144,85 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(sampleCommonsBalance()).toBe(SAMPLE_COMMUNITY.pool);
     });
 
-    it('My Deals: each sample deal says where it stands by name (waiting on you holds nothing yet, held in trust, sold +30); both Approves open the sheet', async () => {
-        render(<DealsPreviewDialog onClose={() => {}} />);
-        // Each deal, found by its name, says its own line: a deal in any other state would say none of these.
-        const LINES: Record<string, { line: string; amount: string; action?: RegExp }> = {
-            'Putting up two shelves': { line: 'A neighbour offered to do this. Approve to hold the Beans safely.', amount: '40 Beans', action: /^Approve and hold in trust/ },
-            'Fixing a bike puncture': { line: 'Held in trust until the job is done.', amount: '20 Beans', action: /^Approve and release/ },
-            'Mending a jacket': { line: 'Done: you earned +30 Beans.', amount: '+30 Beans' },
+    it('My Deals: the real modal in preview with In Progress / My Posts / History tabs; requested shows Action Required, held Held in trust, sold +30; every button opens the sheet', async () => {
+        const onNearYou = vi.fn();
+        const onGuide = vi.fn();
+        const { unmount } = render(<MyDealsModal visible identity={MEMBER} preview onClose={() => {}} onNearYou={onNearYou} onGuide={onGuide} />);
+
+        // The strip and sample header are rendered in preview inside the scroll container
+        expect(screen.getByTestId('deals-preview-head')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-header')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.header);
+
+        // Each sample deal, found by its name on its tab, says its own state: a deal in any other state would say none
+        // of these, and a status outside the sample's three gets no chip at all (never drawn as Completed).
+        const CHIPS: Record<string, { state: string; tab: RegExp; chip: string }> = {
+            'Putting up two shelves': { state: 'requested', tab: /^In Progress/, chip: 'Action Required' },
+            'Fixing a bike puncture': { state: 'pending', tab: /^In Progress/, chip: 'Held in trust' },
+            'Mending a jacket': { state: 'completed', tab: /^History/, chip: 'Completed' },
         };
-        expect(S.deals.map(d => d.what).sort()).toEqual(Object.keys(LINES).sort());
+        expect(S.deals.map(d => d.what).sort()).toEqual(Object.keys(CHIPS).sort());
         for (const d of S.deals) {
-            const want = LINES[d.what];
-            const card = screen.getByTestId(`sample-deal-${d.id}`);
-            expect(within(card).getByText(d.what)).toBeInTheDocument();
-            expect(within(card).getByTestId('sample-deal-line').textContent, d.what).toContain(want.line);
-            expect(within(card).getByText(want.amount)).toBeInTheDocument();
-            expect(card.textContent, d.what).not.toMatch(/the Beans were released|The work is done/);
-            const actions = within(card).queryAllByTestId('local-community-action');
-            if (want.action) {
-                expect(actions, d.what).toHaveLength(1);
-                expect(actions[0].textContent).toMatch(want.action);
-            } else {
-                expect(actions, d.what).toHaveLength(0);
-            }
+            const want = CHIPS[d.what];
+            expect(d.state, d.what).toBe(want.state);
+            fireEvent.click(screen.getByRole('button', { name: want.tab }));
+            expect(screen.getByTestId(`sample-deal-${d.id}`).querySelector('span.uppercase')?.textContent, d.what).toBe(want.chip);
         }
-        // The sold deal's +30 is the Ledger's row for it.
+        for (const other of ['cancelled', 'rejected', '']) expect(sampleDealChip(other), other).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^In Progress/ }));
+
+        // Initial tab is "In Progress"
+        // Requested deal (shelves): shows Action Required, explainer, and Approve and hold in trust
+        const shelves = screen.getByTestId('sample-deal-sample-deal-shelves');
+        expect(within(shelves).getByText('Putting up two shelves')).toBeInTheDocument();
+        expect(within(shelves).getByText('Action Required')).toBeInTheDocument();
+        expect(within(shelves).getByText('A neighbour offered to do this. Approve to hold the Beans safely.')).toBeInTheDocument();
+        const approveHold = within(shelves).getByRole('button', { name: /^Approve and hold in trust/ });
+        expect(approveHold).toBeInTheDocument();
+
+        // Held deal (bike): shows Held in trust, explainer, and Approve and release
+        const bike = screen.getByTestId('sample-deal-sample-deal-bike');
+        expect(within(bike).getByText('Fixing a bike puncture')).toBeInTheDocument();
+        expect(within(bike).getByText('Held in trust')).toBeInTheDocument();
+        expect(within(bike).getByText('Held in trust until the job is done.')).toBeInTheDocument();
+        const approveRelease = within(bike).getByRole('button', { name: /^Approve and release/ });
+        expect(approveRelease).toBeInTheDocument();
+
+        // Both buttons open the local community sheet
+        fireEvent.click(approveHold);
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+
+        fireEvent.click(approveRelease);
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+
+        // Clicking the card itself in preview also opens the sheet
+        fireEvent.click(shelves);
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+
+        // Switch to "My Posts" tab
+        fireEvent.click(screen.getByRole('button', { name: /My Posts/ }));
+        expect(screen.getByText('Putting up two shelves')).toBeInTheDocument();
+        expect(screen.getByText(/Action Required/)).toBeInTheDocument();
+
+        // Switch to "History" tab
+        fireEvent.click(screen.getByRole('button', { name: /History/ }));
+        const mending = screen.getByTestId('sample-deal-sample-deal-mending');
+        expect(within(mending).getByText('Mending a jacket')).toBeInTheDocument();
+        expect(within(mending).getByText('+ 30')).toBeInTheDocument();
+        const leaveReview = within(mending).getByRole('button', { name: /^Leave Review/ });
+        expect(leaveReview).toBeInTheDocument();
+
+        // The sold deal's +30 is the Ledger's row for it
         const sold = S.deals.find(d => d.what === 'Mending a jacket')!;
         expect(S.transactions.find(x => x.what === sold.what)?.amount).toBe(30);
-        for (const name of [/^Approve and hold in trust/, /^Approve and release/]) {
-            fireEvent.click(screen.getByRole('button', { name }));
-            expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
-            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
-        }
+
+        fireEvent.click(leaveReview);
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+
+        unmount();
         onlyInfo();
     });
 });
@@ -235,12 +283,21 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
 
 describe('the marker never looks locked', () => {
     it('no lock, no greying, no reduced opacity, no tier colour, and Beans never Ʀ', () => {
-        const { container } = render(<><CommonsPreview /><DealsPreviewDialog onClose={() => {}} /></>);
-        const html = container.innerHTML;
-        expect(html).not.toMatch(/🔒|Locked|locked|Ʀ/);
-        expect(html).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
-        for (const el of Array.from(container.querySelectorAll('[data-testid="local-community-action"]'))) {
-            expect(el).not.toBeDisabled();
+        const { container } = render(<><CommonsPreview /><MyDealsModal visible identity={MEMBER} preview onClose={() => {}} /></>);
+        // All of it, on each of My Deals' three tabs; and each marker on its own.
+        for (const tab of [/^In Progress/, /^My Posts/, /^History/]) {
+            fireEvent.click(screen.getByRole('button', { name: tab }));
+            const html = container.innerHTML;
+            expect(html, String(tab)).not.toMatch(/🔒|Locked|locked|Ʀ/);
+            expect(html, String(tab)).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
+            const markers = Array.from(container.querySelectorAll('[data-testid^="local-community-"]'));
+            expect(markers.length).toBeGreaterThan(0);
+            for (const m of markers) {
+                expect(m.outerHTML).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
+                if (m instanceof HTMLButtonElement) {
+                    expect(m).not.toBeDisabled();
+                }
+            }
         }
     });
 

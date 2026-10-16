@@ -66,8 +66,9 @@ async function main() {
     addConnector('/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWpeer3', 'peer', 'Peer Three', 'https://peer3.com');
     // peer3 not connected (no status update)
 
-    addConnector('/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWmirror', 'mirror', 'Mirror Node', 'https://mirror.com');
-    updateInboundHandshakeStatus('12D3KooWmirror', true, 'mirror', true);
+    // A level other than `peer` (there is no replication level: case 19 D4) is never a peer node.
+    addConnector('/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWblocked', 'blocked', 'Blocked Node', 'https://blocked.example');
+    updateInboundHandshakeStatus('12D3KooWblocked', true, 'blocked', true);
 
 
     // ── 2. Request Node Info ──────────────────────────────────────────────────
@@ -87,7 +88,7 @@ async function main() {
     assert(peerNames.includes('Peer One'), 'connected mutually-trusted peer is included');
     assert(!peerNames.includes('Peer Two'), 'peer without mutual trust is excluded');
     assert(!peerNames.includes('Peer Three'), 'disconnected peer is excluded');
-    assert(!peerNames.includes('Mirror Node'), 'mirror node is excluded');
+    assert(!peerNames.includes('Blocked Node'), 'a blocked node is excluded');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

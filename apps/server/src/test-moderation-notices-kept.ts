@@ -50,6 +50,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import * as mod from './engine/moderation-notices.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -424,7 +425,7 @@ async function main(): Promise<void> {
     console.log('\n── 8. replication: a standby holds them ──');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`);
     const payload: any = await exportSyncState(nodeId);
     const exported: any[] = payload.moderationNotices ?? [];
     const allRows = attempt(() => db.prepare('SELECT * FROM moderation_notices').all() as Row[]) ?? [];

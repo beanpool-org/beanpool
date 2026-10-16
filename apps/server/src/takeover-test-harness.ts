@@ -503,6 +503,9 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         peerId: peerIdFromPrivateKey(getPrivateKey()).toString(),
         roles: db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all(),
         connectors: getConnectors().map((c: any) => ({ address: c.address, trustLevel: c.trustLevel })),
+        /** The standby's pin (services/standby-main.ts), and the ones a take-over retired. */
+        standbyMain: fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'standby-main.json')),
+        standbyMainRetired: fs.readdirSync(process.env.BEANPOOL_DATA_DIR!).filter((n) => /^standby-main\.retired-\d+\.json$/.test(n)),
         keySignIn,
         promotionAuditPending: !!config.promotionAuditPending,
         lastPromotionAudit: config.lastPromotionAudit ?? null,

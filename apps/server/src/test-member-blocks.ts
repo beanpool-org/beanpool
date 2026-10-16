@@ -72,6 +72,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 // Before each check, who blocked each key as a listing's push keeps it is held to the table (#1831, keptAgree in main).
@@ -458,7 +459,7 @@ async function main(): Promise<void> {
     console.log('\n── 8. replication: a standby holds every list ──');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`);
     await call('POST', eve, '/api/blocks', { targetPubkeys: [bo.pk, annNew.pk, dee.pk] });
     const payload: any = await exportSyncState(nodeId);
     const exported: any[] = payload.memberBlocks ?? [];

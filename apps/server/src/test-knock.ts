@@ -83,6 +83,7 @@ import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -493,7 +494,7 @@ async function main(): Promise<void> {
     console.log('\n── 13. replication to a standby ──');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4097/p2p/${nodeId}`, 'mirror', 'knock-standby-test');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4097/p2p/${nodeId}`);
     const expected = db.prepare('SELECT id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at FROM join_requests ORDER BY id').all();
     const payload: any = await exportSyncState(nodeId);
     const carried = payload.joinRequests ?? [];

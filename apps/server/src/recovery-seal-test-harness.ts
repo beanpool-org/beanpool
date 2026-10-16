@@ -23,6 +23,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { sealSeedToSso, openSeedFromSso } from '@beanpool/core';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 /** The seal's own command line (the rollback command, run as a command in 7 and 21). */
 export const SEAL_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'services', 'recovery-seal-key.ts');
@@ -528,7 +529,7 @@ export async function child(mode: string): Promise<void> {
         await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
         const wanted = scripted ? script!.pulls : 3;
         try {
-            addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`);
             updateLocalConfig({
                 backupPrimaryUrl: `http://localhost:${(server.address() as { port: number }).port}`,
                 backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: scripted ? script!.reconcileMinutes : 0,
@@ -618,7 +619,7 @@ export async function child(mode: string): Promise<void> {
         const { initStateEngine } = await import('./state-engine.js');
         initStateEngine();
         const { addConnector } = await import('./connector-manager.js');
-        addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${process.env.SEAL_MAIN_PEER}`, 'mirror', 'main-server');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/1/p2p/${process.env.SEAL_MAIN_PEER}`);
         const envelope = Buffer.from(fs.readFileSync(process.env.SEAL_ENVELOPE!, 'utf-8'), 'base64');
         const { readSealedHeader } = await import('@beanpool/core');
         const held = path.join(dataDir, 'held-takeover-envelopes');

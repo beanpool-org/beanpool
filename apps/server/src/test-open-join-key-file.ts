@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { spawn } from 'node:child_process';
 import { spawnNode, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.GOOGLE_CLIENT_IDS;
@@ -93,7 +94,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },

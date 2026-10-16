@@ -536,9 +536,10 @@ console.log('\n— 5b. another community —');
             `5b. B2: ${what} → "not a BeanPool backup", nothing shown or asked, nothing changed (exit ${r.code}: ${r.out.trim().slice(-200)})`);
     }
     // A standby: the same community's file locked by another machine names the main server it copies.
-    fs.writeFileSync(path.join(DATA_DIR, 'connectors.json'), JSON.stringify([{ trustLevel: 'mirror', address: `/ip4/127.0.0.1/tcp/4001/p2p/${ownPeer}` }]));
+    // Its pin, as `beanpool pair` leaves it (services/standby-main.ts).
+    fs.writeFileSync(path.join(DATA_DIR, 'standby-main.json'), JSON.stringify({ v: 1, peerId: ownPeer, communityId: null, url: null, pairedAt: 1, how: 'shell' }));
     const standby = cli(['restore', '--code-file', codeFile, forgedFile], '', { NODE_ROLE: 'backup' });
-    fs.rmSync(path.join(DATA_DIR, 'connectors.json'), { force: true });
+    fs.rmSync(path.join(DATA_DIR, 'standby-main.json'), { force: true });
     assert(standby.code === 1 && standby.out.includes(`locked by another machine, ${forgerPeer}, not by the main server this standby copies`) && state() === before,
         `5b. on a standby: "not by the main server this standby copies" (exit ${standby.code}: ${standby.out.trim().slice(-200)})`);
 }

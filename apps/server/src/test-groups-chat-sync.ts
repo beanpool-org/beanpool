@@ -29,6 +29,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedGroupLine } from './group-test-payload.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -61,7 +62,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4077/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4077/p2p/${nodeId}`);
 
     const alice = makeMember('Alice');
     const bob = makeMember('Bob');

@@ -32,6 +32,7 @@ import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -76,7 +77,7 @@ async function run() {
 
         // 1. Default role: primary imports from nobody — even a valid mirror payload.
         assert(getNodeRole() === 'primary', 'default NODE_ROLE is primary (fail-safe)');
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
         const primaryErr = await assertRejects(() => importRemoteState(snapshot),
             'PRIMARY refuses to import a valid, mirror-trusted snapshot');
         assert(/primary|imports no remote state/i.test(primaryErr),
@@ -131,7 +132,7 @@ async function run() {
             'SRV-20 safety net: a peer (non-mirror) snapshot is rejected even on a backup');
         assert(/mirror/i.test(peerErr), 'rejection cites the mirror-only requirement');
         removeConnector(trustedAddr);
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
 
         // 4. Failover promotion sanity check on a consistent (freshly-seeded) ledger.
         const audit = promotionSanityCheck();

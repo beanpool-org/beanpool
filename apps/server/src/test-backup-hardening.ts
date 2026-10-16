@@ -19,6 +19,7 @@ import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 import { isAllowedPrimaryUrl } from './services/backup-puller.js';
 import { db } from './db/db.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0, testsPassed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -56,7 +57,7 @@ async function run() {
 
         // Act as a backup whose only trusted mirror is this node.
         setNodeRole('backup');
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
 
         // Seed >1 account (COMMONS_POOL + A + B) so the conservation guard is armed
         // (bootstrapping nodes with ≤1 account are exempt).

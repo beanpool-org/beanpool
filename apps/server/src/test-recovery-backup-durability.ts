@@ -32,6 +32,7 @@ import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -116,7 +117,7 @@ async function run() {
 
         // Set role to backup and configure trusted mirror
         setNodeRole('backup');
-        addConnector(trustedAddr, 'mirror', 'primary-node');
+        pinMainServerForTests(trustedAddr);
 
         // Import remote state from the primary snapshot
         await importRemoteState(payload);

@@ -21,7 +21,7 @@ import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { withDmFormerKeys } from '../engine/key-succession.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
-import { federatedRelayMessage } from '../federation-protocol.js';
+import { relayLineToPeer } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { assertDmLineFits, assertMayReachNewPeople } from '../engine/writer-bounds.js';
@@ -281,8 +281,8 @@ router.post('/api/messages/send', async (ctx) => {
                             const hostname = process.env.CF_RECORD_NAME || (localConfig.communityName ? localConfig.communityName.toLowerCase().replace(/\s+/g, '') + '.beanpool.org' : undefined);
                             const localUrl = hostname ? `https://${hostname}` : undefined;
 
-                            // Fire-and-forget over secure Libp2p mesh
-                            federatedRelayMessage(p2pNode, targetConnector.peerId, {
+                            // Fire-and-forget over secure Libp2p mesh; a refusal or a failure is logged, never thrown here.
+                            void relayLineToPeer(p2pNode, targetConnector.peerId, targetConnector.callsign || null, {
                                 // The line's id, carried verbatim: the line is sealed to it (relayedMessageId).
                                 id: msg.id,
                                 senderPublicKey: authorPubkey,
@@ -292,7 +292,7 @@ router.post('/api/messages/send', async (ctx) => {
                                 ciphertext,
                                 nonce,
                                 metadata
-                            }).catch(e => console.warn('[Federation] Failed to relay message to remote peer:', e.message));
+                            });
                         }
                     }
                 }

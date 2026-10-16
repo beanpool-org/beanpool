@@ -173,3 +173,27 @@ describe('Settings → Chat memory at 320dp with 1.3× text (amendment 6 §3)', 
         for (const [what, fg, bg] of pairs) expect(contrast(fg, bg), `${what}: ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     });
 });
+
+// Pre-build phone check (16 Oct, emulator-5554): Settings → Chat memory said "No communities on this phone yet." on a
+// phone holding two, so the reset that DM_PIN_STORE_UNREAD_TEXT sends the member to wasn't there. The card is drawn
+// from `savedNodes`, and Settings read that list only when Advanced opened (`if (mode === 'advanced')`), so the list was
+// empty unless Advanced had been opened first in the same visit. The screen can't be rendered here (vitest.config.ts):
+// its wiring is read from its source, as settings-words-put-away.test.ts does.
+describe('Settings → Chat memory lists the communities on this phone on a first visit', () => {
+    /** Code only: what a comment says is not what the screen does. */
+    const code = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const settings = () => code(fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf-8'));
+
+    it('opening Chat memory reads the saved communities itself, whether or not Advanced was opened', () => {
+        const s = settings();
+        const at = s.search(/React\.useEffect\(\(\) => \{\s*if \(mode !== 'chatMemory'\) return;/);
+        expect(at, 'an effect that runs when Chat memory opens').toBeGreaterThan(-1);
+        const body = s.slice(at, s.indexOf('}, [mode]);', at));
+        expect(body).toContain('getSavedNodes()');
+        expect(body).toMatch(/setSavedNodes\(/);
+    });
+
+    it('the card is still drawn from that one list', () => {
+        expect(settings()).toMatch(/<ChatMemoryCard\s+communities=\{savedNodes\.map\(/);
+    });
+});

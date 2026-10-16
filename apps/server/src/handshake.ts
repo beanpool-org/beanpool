@@ -9,11 +9,17 @@
  */
 
 import type { Libp2p } from 'libp2p';
-import { isPeerTrusted, updateInboundHandshakeStatus, type TrustLevel } from './connector-manager.js';
+import { isPeerTrusted, updateInboundHandshakeStatus, ENABLE_PEER_CONNECTORS, type TrustLevel } from './connector-manager.js';
 
 const PROTOCOL = '/beanpool/handshake/1.0.0';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
+/**
+ * FED-05: a handshake request or reply is one JSON object of about 200 bytes, and the handler answers ANY peer, trusted
+ * or not, so nothing larger is ever read from it.
+ */
+export const HANDSHAKE_MAX_BYTES = 4 * 1024;
 
 export interface HandshakeResult {
     mutualTrust: boolean;
@@ -26,19 +32,29 @@ export interface HandshakeResult {
  * Read data from a stream by polling readBuffer until data arrives
  * and the remote write side is closed (or we have data after a short wait).
  */
-function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
+function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_SIZE): Promise<string> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error('Read timeout'));
-        }, timeoutMs);
+        const chunks: Uint8Array[] = [];
+        let settled = false;
+        // FED-05: a timeout or an oversize used to REJECT and leave the stream open, and the `for await` below
+        // kept every chunk the sender wrote until it chose to close: a stranger with no connector held ~10 MB per
+        // stream for as long as it liked (measured: still open at +130 s). Now both paths drop what was read and
+        // ABORT the stream, which ends the loop and frees its buffers.
+        const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            chunks.length = 0;
+            try { stream.abort?.(err); } catch { /* already closed */ }
+            reject(err);
+        };
+        const timer = setTimeout(() => fail(new Error('Read timeout')), timeoutMs);
 
         (async () => {
-            const chunks: Uint8Array[] = [];
             let totalLength = 0;
-            const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
-
             try {
                 for await (const chunk of stream) {
+                    if (settled) return;
                     let parsedChunk: Uint8Array;
                     if (chunk instanceof Uint8Array) {
                         parsedChunk = chunk;
@@ -49,14 +65,14 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
                     }
 
                     totalLength += parsedChunk.length;
-                    if (totalLength > MAX_PAYLOAD_SIZE) {
-                        clearTimeout(timer);
-                        reject(new Error('Payload size exceeded maximum limit of 10MB'));
+                    if (totalLength > maxBytes) {
+                        fail(new Error(`Payload size exceeded maximum limit of ${maxBytes} bytes`));
                         return;
                     }
 
                     chunks.push(parsedChunk);
                 }
+                if (settled) return;
 
                 // A2-12: decode + (the caller) parse ONCE after the write side closes
                 // (writeToStream always close()s its write side) instead of re-decoding +
@@ -65,11 +81,11 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
                 // trust gate (we must reply to untrusted peers too), so the old
                 // per-chunk parse was a pre-auth CPU-exhaustion lever: a peer dribbling
                 // a ~10 MB frame one byte per packet forced ~10M full re-parses.
+                settled = true;
                 clearTimeout(timer);
                 resolve(decoder.decode(Buffer.concat(chunks)));
             } catch (err) {
-                clearTimeout(timer);
-                reject(err);
+                fail(err instanceof Error ? err : new Error(String(err)));
             }
         })();
     });
@@ -130,7 +146,7 @@ export function registerHandshakeHandler(node: Libp2p): void {
 
         try {
             // Read request
-            const raw = await readFromStream(stream, 5000);
+            const raw = await readFromStream(stream, 5000, HANDSHAKE_MAX_BYTES);
 
             let request: any;
             try {
@@ -164,7 +180,10 @@ export function registerHandshakeHandler(node: Libp2p): void {
                 ts: Date.now(),
                 youAreTrusted: trusted,
                 trustLevel: trustLevel,
-                active: ourEnabled,
+                // FED-06: with ENABLE_PEER_CONNECTORS off this node serves no peer (federation-protocol.ts refuses its
+                // lookups, relays, listing pulls and purchases), so its answer never calls it an active one: a peer's
+                // panel showed a healthy, active link to it (#2039 review N3).
+                active: ENABLE_PEER_CONNECTORS && ourEnabled,
             });
 
             await writeToStream(stream, response);
@@ -198,7 +217,7 @@ export async function sendHandshake(node: Libp2p, peerId: any): Promise<Handshak
         });
 
         // Start reading before writing (duplex stream — concurrent read/write)
-        const readPromise = readFromStream(stream);
+        const readPromise = readFromStream(stream, 10000, HANDSHAKE_MAX_BYTES);
         readPromise.catch(() => {}); // Prevent unhandled rejection if writeToStream throws or exits early
 
         // Write request

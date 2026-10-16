@@ -334,7 +334,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
-    '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
+    '/api/federation/links',         // members only (MEMBERS_ONLY_READS_EXACT): link cards carry each link's Beans balance (FED-10)
     '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
@@ -391,6 +391,9 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
 export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
     '/api/pulse/feed',
+    // The link cards (#143): each link enterprise's Beans balance with a peer community. Public by design until the
+    // 2026-09-28 decision that balances are members' business (FED-10); no app reads it, and a member still does.
+    '/api/federation/links',
 ]);
 // And every read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
 // projects, where they are switched on (switched off, each answers 404 feature_off to everyone). Members only rather
@@ -1659,7 +1662,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             // making the transaction's authorship re-verifiable by any importing node.
             // `payload` is the text signed; in format 2 the signed bytes are 0xFF then that text (engine/sync.ts
             // verifyTransactionAuthorship puts it back); @beanpool/core parseSignedText reads either format.
-            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
+            // `format`: 1 for the old text bound to no community, 2 for one bound to this host (a route that hands back a
+            // credential refuses 1: routes/node-admin.ts break-glass).
+            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage, format: verdict.format };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the

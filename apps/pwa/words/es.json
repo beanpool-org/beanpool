@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -459,7 +459,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "Demasiados dígitos incorrectos, por lo que no se envió nada. Genera un nuevo código e inténtalo de nuevo.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "Ese código ha caducado, por lo que no se envió nada. Genera un nuevo código e inténtalo de nuevo.",
   "That did not go through. Try again.": "No se pudo completar. Inténtalo de nuevo.",
-  "Type the two digits your phone shows": "Escribe los dos dígitos que muestra tu teléfono",
+  "Type the four digits your phone shows": "Escribe los cuatro dígitos que muestra tu teléfono",
   "Confirm": "Confirmar",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Tu cuenta se abrirá aquí solo tras ingresar los dígitos correctos. Tras tres intentos fallidos, no se enviará nada.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Todavía no ha llegado nada de tu teléfono. Este código es de {host}. Si tu teléfono dice que es de un servidor que no usa, abre BeanPool en la dirección de tu propia comunidad, o únete primero a {host} en tu teléfono y luego vuelve a escanear. Si tu teléfono no muestra dígitos, actualiza la app BeanPool en él y luego vuelve a escanear.",

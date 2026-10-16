@@ -4,10 +4,10 @@
  *   GET  /api/pair/poll
  *   POST /api/pair/transfer
  *   POST /api/pair/cancel
- *   POST /api/pair/confirm (number matching, fable-security-signin finding 1: the phone's payload waits for its two
- *   digits, typed by the browser that opened the session, which holds the binding cookie)
- *   A transfer without `confirm: 'digits'` comes from an app too old to show the digits: 409, nothing held, the session
- *   stays open for a newer app.
+ *   POST /api/pair/confirm (number matching, fable-security-signin finding 1: the phone's payload waits for its four
+ *   digits, typed by the browser that opened the session, which holds the binding cookie; SEC-INV-02 widened two to four)
+ *   A transfer without `confirm: 'four-digits'` comes from an app too old to show the four digits: 409, nothing held,
+ *   the session stays open for a newer app.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-pairing-routes.ts
@@ -31,7 +31,7 @@ const poll = (id: string, cookie: string) => fetch(`${BASE}/api/pair/poll?sessio
 const confirmDigits = (id: string, code: unknown, cookie: string) => fetch(`${BASE}/api/pair/confirm`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify({ sessionId: id, code }),
 });
-const otherDigits = (code: string) => String((Number(code) + 1) % 100).padStart(2, '0');
+const otherDigits = (code: string) => String((Number(code) + 1) % 10_000).padStart(4, '0');
 
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -110,7 +110,7 @@ async function main() {
     };
     const encrypted = encryptPairingPayload(samplePayload, session.publicKeyHex, session.sessionId);
 
-    // An app that can't show the two digits (every store build before #1983) sends no `confirm`: the relay would hold the
+    // An app that can't show the digits (every store build before #1983) sends no `confirm`: the relay would hold the
     // account for digits nobody sees and the browser would wait for ever. Refused, nothing held, in words the old app
     // shows as they are (it displays a 4xx's `error` in the sheet).
     const oldAppRes = await fetch(`${BASE}/api/pair/transfer`, {
@@ -119,10 +119,23 @@ async function main() {
         body: JSON.stringify({ sessionId: session.sessionId, mobilePubHex: encrypted.mobilePubHex, nonceHex: encrypted.nonceHex, ciphertextHex: encrypted.ciphertextHex }),
     });
     const oldAppBody = (await oldAppRes.json()) as any;
-    assert(oldAppRes.status === 409 && oldAppBody.error === 'This BeanPool app is too old to show the two digits, so nothing was sent. Update the BeanPool app, then scan again.' && !oldAppBody.confirmCode,
-        `a transfer without confirm: 'digits' (an app too old to show them) is refused 409 with words for that app, no digits (${oldAppRes.status} "${oldAppBody.error}")`);
+    const OLD_APP = 'This BeanPool app is too old to show the four digits, so nothing was sent. Update the BeanPool app, then scan again.';
+    assert(oldAppRes.status === 409 && oldAppBody.error === OLD_APP && !oldAppBody.confirmCode,
+        `a transfer without confirm (an app too old to show digits) is refused 409 with words for that app, no digits (${oldAppRes.status} "${oldAppBody.error}")`);
     const afterOldApp = (await (await poll(session.sessionId, cookie)).json()) as any;
     assert(afterOldApp.status === 'waiting' && !afterOldApp.payload, `nothing is held after the refusal: the session still waits for a phone (${afterOldApp.status})`);
+    // SEC-INV-02: an app built before four digits sends confirm: 'digits'. It takes only two digits from the answer and
+    // would drop four with an error but never cancel, so the relay must not hold its account: 409, its words, nothing held.
+    {
+        const r = await fetch(`${BASE}/api/pair/transfer`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: session.sessionId, mobilePubHex: encrypted.mobilePubHex, nonceHex: encrypted.nonceHex, ciphertextHex: encrypted.ciphertextHex, confirm: 'digits' }),
+        });
+        const b = (await r.json()) as any;
+        const after = (await (await poll(session.sessionId, cookie)).json()) as any;
+        assert(r.status === 409 && b.error === OLD_APP && !b.confirmCode && after.status === 'waiting' && !after.payload,
+            `a two-digit app (confirm: 'digits') is refused 409 with words it shows, no digits, nothing held (${r.status} "${b.error}", poll "${after.status}")`);
+    }
     for (const confirm of ['', 'yes', 1, true]) {
         const r = await fetch(`${BASE}/api/pair/transfer`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -139,14 +152,14 @@ async function main() {
             mobilePubHex: encrypted.mobilePubHex,
             nonceHex: encrypted.nonceHex,
             ciphertextHex: encrypted.ciphertextHex,
-            confirm: 'digits',
+            confirm: 'four-digits',
         }),
     });
     assert(goodTransferRes.status === 200, 'POST /api/pair/transfer returns 200 on valid transfer');
     const goodTransferBody = (await goodTransferRes.json()) as any;
     assert(goodTransferBody.success === true, 'POST /api/pair/transfer returns success: true');
     const digits = String(goodTransferBody.confirmCode || '');
-    assert(/^\d{2}$/.test(digits), `POST /api/pair/transfer answers the phone two digits to show (${digits})`);
+    assert(/^\d{4}$/.test(digits), `POST /api/pair/transfer answers the phone four digits to show (${digits})`);
 
     // Number matching: nothing leaves the relay until the opening browser types the digits.
     const heldRes = await poll(session.sessionId, cookie);
@@ -157,6 +170,9 @@ async function main() {
     const strangerBody = (await strangerRes.json()) as any;
     assert(strangerRes.status === 403 && strangerBody.status === 'wrong-browser' && !strangerBody.payload,
         'a poll from a browser without the init cookie gets 403 wrong-browser and nothing');
+    // The phone's probe is this poll: it learns the relay asks for four digits before it reads the 12 words.
+    assert(strangerBody.confirmDigits === 4 && Object.keys(strangerBody).sort().join() === 'confirmDigits,status',
+        `the probe's 403 says four digits and nothing else (${JSON.stringify(strangerBody)})`);
     const strangerConfirm = await confirmDigits(session.sessionId, digits, '');
     assert(strangerConfirm.status === 403 && ((await poll(session.sessionId, cookie)).status === 200),
         'the right digits from a browser without the cookie are refused (403) and release nothing');
@@ -164,6 +180,12 @@ async function main() {
     const wrongBody = (await wrongRes.json()) as any;
     assert(wrongRes.status === 400 && wrongBody.result === 'wrong' && wrongBody.triesLeft === 2, 'wrong digits: 400, two tries left');
     assert(((await (await poll(session.sessionId, cookie)).json()) as any).status === 'confirming', 'and still no payload');
+    // SEC-INV-02: a two-digit answer (an old page's box, or the first two of the four) can never be right: a wrong try.
+    const twoRes = await confirmDigits(session.sessionId, digits.slice(0, 2), cookie);
+    const twoBody = (await twoRes.json()) as any;
+    assert(twoRes.status === 400 && twoBody.result === 'wrong' && twoBody.triesLeft === 1
+        && ((await (await poll(session.sessionId, cookie)).json()) as any).status === 'confirming',
+        `two digits are refused as a wrong try, one left, still no payload (${twoRes.status} ${JSON.stringify(twoBody)})`);
     const rightRes = await confirmDigits(session.sessionId, digits, cookie);
     assert(rightRes.status === 200 && ((await rightRes.json()) as any).result === 'released', 'POST /api/pair/confirm with the right digits and the cookie releases it');
 
@@ -204,7 +226,7 @@ async function main() {
         const e2 = encryptPairingPayload(samplePayload, s2.publicKeyHex, s2.sessionId);
         const t2 = (await (await fetch(`${BASE}/api/pair/transfer`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: s2.sessionId, mobilePubHex: e2.mobilePubHex, nonceHex: e2.nonceHex, ciphertextHex: e2.ciphertextHex, confirm: 'digits' }),
+            body: JSON.stringify({ sessionId: s2.sessionId, mobilePubHex: e2.mobilePubHex, nonceHex: e2.nonceHex, ciphertextHex: e2.ciphertextHex, confirm: 'four-digits' }),
         })).json()) as any;
         const statuses: number[] = [];
         for (let i = 0; i < 3; i++) statuses.push((await confirmDigits(s2.sessionId, otherDigits(t2.confirmCode), c2)).status);
@@ -237,10 +259,10 @@ async function main() {
     const transferStart = Date.now();
     const realTransfer = await fetch(`${BASE}/api/pair/transfer`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: real.sessionId, mobilePubHex: realPayload.mobilePubHex, nonceHex: realPayload.nonceHex, ciphertextHex: realPayload.ciphertextHex, confirm: 'digits' }),
+        body: JSON.stringify({ sessionId: real.sessionId, mobilePubHex: realPayload.mobilePubHex, nonceHex: realPayload.nonceHex, ciphertextHex: realPayload.ciphertextHex, confirm: 'four-digits' }),
     });
     const transferMs = Date.now() - transferStart;
-    // The member reads the two digits off the phone and types them on the computer.
+    // The member reads the four digits off the phone and types them on the computer.
     await confirmDigits(real.sessionId, ((await realTransfer.json()) as any).confirmCode, realCookie);
     for (let i = 0; i < 100 && !collectedAt; i++) await new Promise((r) => setTimeout(r, 50));
     clearInterval(poller);

@@ -1,6 +1,6 @@
 /**
  * "Link with Mobile App (Scan QR)" and number matching (fable-security-signin finding 1): once the phone has sent the
- * account, the relay holds it until this browser types the two digits the phone shows. The page swaps the QR for the
+ * account, the relay holds it until this browser types the four digits the phone shows (two before SEC-INV-02). The page swaps the QR for the
  * digit entry, sends what is typed to /api/pair/confirm, says so on wrong digits, and stops on a burned session. The
  * node is a stubbed fetch; the relay's side is test-pairing-routes / test-pairing-relay.
  *
@@ -44,7 +44,7 @@ function stubRelay(answers: Array<[number, unknown]>, pollStatus = () => 'confir
 async function openQrAndWaitForDigits() {
     render(<WelcomePage onComplete={vi.fn()} start="restore" />);
     fireEvent.click((await screen.findAllByRole('button', { name: /Link with Mobile App/ }))[0]);
-    return screen.findByLabelText('Type the two digits your phone shows', {}, { timeout: 4_000 });
+    return screen.findByLabelText('Type the four digits your phone shows', {}, { timeout: 4_000 });
 }
 
 beforeEach(() => {
@@ -62,35 +62,50 @@ afterEach(() => {
     resetCapturedAuthReturn();
 });
 
-describe('linking with the phone: the two digits', () => {
+describe('linking with the phone: the four digits', () => {
     it('swaps the QR for the digit entry once the phone has sent, and sends what is typed with the session', async () => {
         const confirms = stubRelay([[400, { result: 'wrong', triesLeft: 2 }], [200, { result: 'released' }]]);
         const input = await openQrAndWaitForDigits();
         expect(screen.queryByRole('img', { name: /QR code/ })).toBeNull();
         expect((input as HTMLInputElement).inputMode).toBe('numeric');
+        // SEC-INV-02: four digits, offered by the phone's keyboard as a one-time code.
+        expect(input.getAttribute('autocomplete')).toBe('one-time-code');
+        expect((input as HTMLInputElement).maxLength).toBe(4);
+        expect(input.getAttribute('pattern')).toBe('[0-9]{4}');
+        // Layout, which jsdom cannot measure. #2041 fix round 1, headless Chrome with the page's Inter font, the page's
+        // wrappers (p-8, px-4 below 360 px), "8888" in the box; same in light and dark:
+        //   320 px, 130 % text: welcome card content 234.8 px; status card 234.8 (maxWidth 100%, border-box); form 182.8;
+        //     input 182.8 (100%, at most 9.5rem), 162.4 inside its padding and border; the digits at 0.3em 152.9; page
+        //     scroll width 320. At the PR head (a fixed 9.5rem box, 0.4em, form side padding 1rem) the card was 291.2 and
+        //     the page scrolled to 334.
+        //   320 px, 100 % text: card 254; form 214; input 152 (9.5rem), 135.2 inside; the digits 117.6; page 320.
+        //   1280 px, 100 % text: card 296; form 256 (16rem); input 152, 135.2 inside; the digits 117.6; page 1280.
+        //   The QR state of the same card at 320 px / 130 %: card 234.8 (was 262, past the welcome card's edge), QR 210 inside it.
 
-        fireEvent.change(input, { target: { value: '4a7' } });
-        expect((input as HTMLInputElement).value).toBe('47');
+        fireEvent.change(input, { target: { value: '47' } });
+        expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.change(input, { target: { value: '4a7193' } });
+        expect((input as HTMLInputElement).value).toBe('4719');
         fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
         await waitFor(() => expect(confirms.length).toBe(1));
-        expect(confirms[0]).toEqual({ sessionId: expect.stringMatching(/^[0-9a-f]{16,64}$/), code: '47' });
+        expect(confirms[0]).toEqual({ sessionId: expect.stringMatching(/^[0-9a-f]{16,64}$/), code: '4719' });
         expect(await screen.findByText('Those are not the digits on the phone. Check them and try again.')).toBeTruthy();
         expect((input as HTMLInputElement).value).toBe('');
 
-        fireEvent.change(input, { target: { value: '12' } });
+        fireEvent.change(input, { target: { value: '0012' } });
         fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
         await waitFor(() => expect(confirms.length).toBe(2));
-        expect(confirms[1].code).toBe('12');
+        expect(confirms[1].code).toBe('0012');
         await waitFor(() => expect(screen.queryByText('Those are not the digits on the phone. Check them and try again.')).toBeNull());
     });
 
     it('stops on a burned session: nothing was sent, make a new code', async () => {
         stubRelay([[410, { result: 'burned' }]]);
         const input = await openQrAndWaitForDigits();
-        fireEvent.change(input, { target: { value: '00' } });
+        fireEvent.change(input, { target: { value: '0000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
         expect(await screen.findByText('Too many wrong digits, so nothing was sent. Make a new code and try again.')).toBeTruthy();
-        expect(screen.queryByLabelText('Type the two digits your phone shows')).toBeNull();
+        expect(screen.queryByLabelText('Type the four digits your phone shows')).toBeNull();
     });
 
     it('a page the relay cannot tie to its code (no binding cookie: another address) stops at once and says why', async () => {
@@ -104,7 +119,7 @@ describe('linking with the phone: the two digits', () => {
     it('the right digits from a page the relay cannot tie to its code: said, not "try again"', async () => {
         stubRelay([[403, { result: 'wrong-browser' }]]);
         const input = await openQrAndWaitForDigits();
-        fireEvent.change(input, { target: { value: '12' } });
+        fireEvent.change(input, { target: { value: '1234' } });
         fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
         expect(await screen.findByText(/This page can't finish linking from here/)).toBeTruthy();
         expect(screen.queryByText('That did not go through. Try again.')).toBeNull();
@@ -116,7 +131,7 @@ describe('linking with the phone: the two digits', () => {
         fireEvent.click((await screen.findAllByRole('button', { name: /Link with Mobile App/ }))[0]);
         expect(await screen.findByRole('img', { name: /QR code/ })).toBeTruthy();
         await new Promise((r) => setTimeout(r, 1_700));
-        expect(screen.queryByLabelText('Type the two digits your phone shows')).toBeNull();
+        expect(screen.queryByLabelText('Type the four digits your phone shows')).toBeNull();
     });
 
     const SILENT = /^Nothing has come from your phone yet\. This code is from (\S+)\. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join \1 on your phone first, then scan again\. If your phone shows no digits, update the BeanPool app on it, then scan again\.$/;

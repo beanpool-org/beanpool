@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "بہت زیادہ غلط ہندسے درج کیے گئے، اس لیے کچھ نہیں بھیجا گیا۔ نیا کوڈ بنائیں اور دوبارہ کوشش کریں۔",
   "That code has expired, so nothing was sent. Make a new code and try again.": "اس کوڈ کی میعاد ختم ہو گئی ہے، اس لیے کچھ نہیں بھیجا گیا۔ نیا کوڈ بنائیں اور دوبارہ کوشش کریں۔",
   "That did not go through. Try again.": "وہ مکمل نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
-  "Type the two digits your phone shows": "وہ دو ہندسے درج کریں جو آپ کا فون دکھاتا ہے",
+  "Type the four digits your phone shows": "وہ چار ہندسے درج کریں جو آپ کا فون دکھاتا ہے",
   "Confirm": "تصدیق کریں",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "صحیح ہندسوں کے بعد ہی آپ کا اکاؤنٹ یہاں کھلے گا۔ تین غلط کوششوں پر کچھ نہیں بھیجا جائے گا۔",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "آپ کے فون سے ابھی تک کچھ نہیں آیا۔ یہ کوڈ {host} سے ہے۔ اگر آپ کا فون کہے کہ یہ ایسے سرور سے ہے جو وہ استعمال نہیں کرتا، تو اپنی کمیونٹی کے پتے پر BeanPool کھولیں، یا پہلے اپنے فون پر {host} میں شامل ہوں، پھر دوبارہ اسکین کریں۔ اگر آپ کا فون کوئی ہندسے نہیں دکھاتا، تو اس پر BeanPool ایپ اپ ڈیٹ کریں، پھر دوبارہ اسکین کریں۔",

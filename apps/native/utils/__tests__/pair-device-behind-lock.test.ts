@@ -7,7 +7,8 @@
  * - The check is Manage's (node-admin.requireDeviceUnlock), asked before anything is read or sent. It fails closed: a phone
  *   with no screen lock sends nothing and is told, in plain words, how to set one (fable-security-signin finding 1: the
  *   old check, LocalAuth.authenticateUser, let a lockless phone through).
- * - The relay hands back two digits; the phone shows them and the other device types them before it gets anything.
+ * - The relay hands back four digits (SEC-INV-02: two with three tries won 3% of phished scans; four, 0.03%); the phone
+ *   shows them on one line at 320 dp and 1.3x text, and the other device types them before it gets anything.
  * - A check that doesn't pass reads nothing and sends nothing, and the sheet stays as it was.
  * - One that answers after the sheet was closed (or another code scanned) sends nothing; a second tap asks once.
  *
@@ -51,12 +52,54 @@ describe('pair-device: Confirm & Link Device', () => {
         expect(body).toContain("if (unlock !== 'ok' || scannedDataRef.current !== scanned) return;");
     });
 
-    it('shows the two digits the relay gives back, and stops on a relay that gives none', () => {
+    it('shows the four digits the relay gives back, and stops on a relay that gives none, or two', () => {
         const body = confirm();
         expect(body).toContain('setConfirmCode(code)');
-        expect(body).toMatch(/if \(!code\) throw new Error\(t\(/);
-        expect(pair()).toContain("t('Type these two digits on the other device')");
+        expect(body).toContain("/^\\d{4}$/.test(done.confirmCode)");
+        expect(body).not.toContain('\\d{2}');
+        expect(pair()).toContain("t('Type these four digits on the other device')");
+        expect(pair()).toContain("t('The four digits are {digits}'");
+        expect(pair()).not.toMatch(/two digits/i);
         expect(body).not.toContain('router.back()');
+    });
+
+    it('a relay that gives no four digits may hold the account: it is cancelled before the member is told', () => {
+        const body = confirm();
+        const refused = slice(body, 'if (!code) {', 'setConfirmCode(code)');
+        const cancel = refused.indexOf('await fetch(urls.cancel');
+        const told = refused.indexOf("throw new Error(t('Your community\\'s server did not ask for the four digits.");
+        expect(cancel).toBeGreaterThan(-1);
+        expect(told).toBeGreaterThan(cancel);
+        expect(refused).toContain('JSON.stringify({ sessionId: scanned.sessionId })');
+    });
+
+    it('says it shows four digits, and stops before the words on a relay that asks for two (or none)', () => {
+        const body = confirm();
+        expect(body).toContain("confirm: 'four-digits',");
+        expect(body).not.toContain("confirm: 'digits'");
+        // The probe: a 2-digit relay's 403 has no confirmDigits; a pre-#1983 relay answers the session itself.
+        expect(body).toContain("probe.status === 403 && probeBody.status === 'wrong-browser' && probeBody.confirmDigits !== 4");
+        expect(body).toContain("probe.status === 200 && probeBody.status === 'waiting'");
+        const older = body.indexOf('if (olderRelay) {');
+        expect(older).toBeGreaterThan(-1);
+        expect(older).toBeLessThan(body.indexOf('await getMnemonic(identity)'));
+        expect(older).toBeLessThan(body.indexOf('await fetch(urls.transfer'));
+    });
+
+    it('the four digits fit one line at 320 dp and 1.3x text, with room to spare', () => {
+        const src = pair();
+        const font = Number(/const PAIR_DIGITS_FONT = (\d+);/.exec(src)?.[1]);
+        const spacing = Number(/const PAIR_DIGITS_SPACING = (\d+);/.exec(src)?.[1]);
+        const pad = Number(/sheetContent: \{\s*padding: (\d+),/.exec(src)?.[1]);
+        expect(src).toMatch(/fontSize: PAIR_DIGITS_FONT, letterSpacing: PAIR_DIGITS_SPACING[^}]*\}\]\}\s*numberOfLines=\{1\}/);
+        // A digit is 0.5625 em in Roboto and San Francisco; 0.62 em is the margin. letterSpacing after every glyph, the last
+        // included, and scaled with the text too, as the worst case.
+        const scale = 1.3;
+        const width = 4 * (font * scale * 0.62) + 4 * (spacing * scale);
+        const room = 320 - 2 * pad;
+        expect(font).toBe(40);
+        expect(width).toBeLessThan(room);
+        expect(room - width).toBeGreaterThan(60);
     });
 
     it("the sheet says the key AND the 12 words go, and to scan only a code on a screen in front of you", () => {

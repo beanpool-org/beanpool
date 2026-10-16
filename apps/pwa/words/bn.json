@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "অনেকবার ভুল সংখ্যা টাইপ করা হয়েছে, তাই কিছুই পাঠানো হয়নি। নতুন কোড তৈরি করে আবার চেষ্টা করুন।",
   "That code has expired, so nothing was sent. Make a new code and try again.": "সেই কোডের মেয়াদ শেষ হয়েছে, তাই কিছুই পাঠানো হয়নি। নতুন কোড তৈরি করে আবার চেষ্টা করুন।",
   "That did not go through. Try again.": "সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।",
-  "Type the two digits your phone shows": "আপনার ফোনে দেখানো দুটি সংখ্যা টাইপ করুন",
+  "Type the four digits your phone shows": "আপনার ফোনে দেখানো চারটি সংখ্যা টাইপ করুন",
   "Confirm": "নিশ্চিত করুন",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "সঠিক সংখ্যা দেওয়ার পরই এখানে আপনার অ্যাকাউন্ট খুলবে। তিনবার ভুল চেষ্টা করলে কিছুই পাঠানো হবে না।",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "আপনার ফোন থেকে এখনও কিছু আসেনি। এই কোডটি {host} থেকে। যদি আপনার ফোন বলে এটি এমন সার্ভারের যা সে ব্যবহার করে না, তাহলে আপনার নিজের কমিউনিটির ঠিকানায় BeanPool খুলুন, অথবা আগে আপনার ফোনে {host}-এ যোগ দিন, তারপর আবার স্ক্যান করুন। যদি আপনার ফোনে কোনো সংখ্যা না দেখায়, তাহলে ফোনের BeanPool অ্যাপটি আপডেট করুন, তারপর আবার স্ক্যান করুন।",

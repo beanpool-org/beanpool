@@ -292,14 +292,18 @@ export const unfinalisedSettlementsSql = (direction?: SettlementDirection): stri
  * can be accepted that together exceed the cap — and their receipts then predictably lapse *after* the
  * buyers have committed, forcing compensating reversals that were avoidable.
  *
+ * FED-03: a `reserved` row counts only until its `reserved_until` (the same ISO format expiredReservations compares):
+ * a lapsed one holds no headroom, though the recovery sweep has not yet marked it expired.
+ *
  * @param excludeKey the reservation being re-checked at payment time, which must not count against itself.
  */
 export function reservedAgainstPeer(peerId: string, excludeKey?: string): number {
     const row = db.prepare(`
         SELECT COALESCE(SUM(amount), 0) AS total FROM settlements
-        WHERE direction = 'inbound' AND peer_id = ? AND state IN ('reserved', 'held')
+        WHERE direction = 'inbound' AND peer_id = ?
+          AND (state = 'held' OR (state = 'reserved' AND (reserved_until IS NULL OR reserved_until >= ?)))
           AND (? IS NULL OR key != ?)
-    `).get(peerId, excludeKey ?? null, excludeKey ?? '') as any;
+    `).get(peerId, new Date().toISOString(), excludeKey ?? null, excludeKey ?? '') as any;
     return Math.round((row?.total ?? 0) * 10000) / 10000;
 }
 

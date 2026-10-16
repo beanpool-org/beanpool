@@ -2,7 +2,7 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "Zu viele falsche Ziffern eingegeben, daher wurde nichts gesendet. Erstelle einen neuen Code und versuche es erneut.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "Dieser Code ist abgelaufen, daher wurde nichts gesendet. Erstelle einen neuen Code und versuche es erneut.",
   "That did not go through. Try again.": "Das hat nicht geklappt. Versuche es erneut.",
-  "Type the two digits your phone shows": "Gib die zwei Ziffern ein, die dein Telefon anzeigt",
+  "Type the four digits your phone shows": "Gib die vier Ziffern ein, die dein Telefon anzeigt",
   "Confirm": "Bestätigen",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Dein Konto öffnet sich hier erst nach Eingabe der richtigen Ziffern. Nach drei Fehlversuchen wird nichts gesendet.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Von deinem Telefon ist noch nichts gekommen. Dieser Code stammt von {host}. Wenn dein Telefon sagt, er stamme von einem Server, den es nicht nutzt, öffne BeanPool unter der Adresse deiner eigenen Gemeinschaft, oder tritt zuerst auf deinem Telefon {host} bei und scanne dann erneut. Wenn dein Telefon keine Ziffern zeigt, aktualisiere die BeanPool-App darauf und scanne dann erneut.",

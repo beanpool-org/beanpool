@@ -78,8 +78,8 @@ export function FreshProofBox({ proof, testId = 'fresh-proof' }: { proof: FreshP
             <div className="mt-3 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-sm text-bp-chip-warn-ink break-words"
                 role="alert" data-testid={`${testId}-${refusal.kind}`}>
                 <p className="m-0">{sentence}</p>
-                <button type="button" onClick={proof.close}
-                    className="mt-2 text-xs text-nature-300 hover:text-nature-100 underline bg-transparent border-0 p-0 cursor-pointer">
+                <button type="button" onClick={proof.close} data-testid={`${testId}-dismiss`}
+                    className="mt-1 min-h-[44px] inline-flex items-center text-xs text-nature-300 hover:text-nature-100 underline bg-transparent border-0 p-0 cursor-pointer">
                     {t(W.cancel)}
                 </button>
             </div>

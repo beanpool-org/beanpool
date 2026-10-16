@@ -17,7 +17,7 @@ import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
-import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT } from './event-series-roll.js';
+import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT, rollDueSeries } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -956,12 +956,23 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
 
+/**
+ * A repeating event whose date has ended since the last minute roll is moved to its next date first (event-series-roll.ts
+ * rollDueSeries, main server only), so an edit or an RSVP in that minute is for the date the card is about to show, not
+ * refused as ended while the event chat calls the same series open (event-thread.ts seriesContinues).
+ */
+function rollIfDue(broadcast: BroadcastFn | undefined, id: string): void {
+    const r = db.prepare("SELECT event_repeat, event_end_at FROM posts WHERE id = ? AND type = 'event'").get(id) as { event_repeat: string | null; event_end_at: string | null } | undefined;
+    if (r?.event_repeat && r.event_end_at && Date.parse(r.event_end_at) <= Date.now()) rollDueSeries(broadcast);
+}
+
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
     // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
     // matches for a keeper or convenor. Falling back to `authorPublicKey` keeps direct engine callers working.
     const actorPublicKey = actorPubkey || authorPublicKey;
+    rollIfDue(broadcast, id);
     const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
     if (eventRow?.type === 'event') {
         // A convenor whose account is suspended hosts none of their group's events until it ends: refused, saying why,
@@ -1384,6 +1395,7 @@ export function rsvpEvent(
     if (!memberRow || memberRow.status !== 'active') {
         throw new Error('Only active members can RSVP to events');
     }
+    rollIfDue(broadcast, postId);
 
     const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP

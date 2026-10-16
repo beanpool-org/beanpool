@@ -212,6 +212,11 @@ describe('the Invites page in preview mode shows the real screen with sample dat
         vi.mocked(communityInfoOnce).mockResolvedValue(SHOWCASE as never);
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
 
+        // Strip, sample header, and invites-preview wrapper are present
+        expect(await screen.findByTestId('local-community-strip')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-header')).toBeInTheDocument();
+        expect(screen.getByTestId('invites-preview')).toBeInTheDocument();
+
         // Top line stays
         expect(await screen.findByText(/Bring someone here/)).toBeInTheDocument();
         const line = await screen.findByTestId('local-community-line');
@@ -274,7 +279,7 @@ describe('the Invites page in preview mode shows the real screen with sample dat
 
         // Community Tree tab shows sample members
         fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
-        expect(await screen.findByText(/an example member/)).toBeInTheDocument();
+        expect((await screen.findAllByText(/an example member/)).length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText(/a neighbour/).length).toBeGreaterThanOrEqual(2);
 
         // No network calls made for member's own invites/tree/generate

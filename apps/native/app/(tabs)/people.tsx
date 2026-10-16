@@ -23,7 +23,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
-import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
 import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
@@ -1096,6 +1096,12 @@ export default function PeopleScreen() {
                         </View>
                     ) : (
                         <>
+                            {invitesPreview && (
+                                <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 16 }}>
+                                    <LocalCommunityMark variant="strip" feature="invites" />
+                                    <ExampleHeader />
+                                </View>
+                            )}
                             {identity && anchorUrl && takesKnocks && (
                                 <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} />
                             )}

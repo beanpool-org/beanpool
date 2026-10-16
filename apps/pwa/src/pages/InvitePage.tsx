@@ -16,8 +16,8 @@ import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, re
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
-import { LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
-import { sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
+import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
+import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
@@ -349,7 +349,13 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     }
 
     return (
-        <div className="p-4 max-w-[500px] mx-auto min-h-full">
+        <div className="p-4 max-w-[500px] mx-auto min-h-full" data-testid={isPreview ? "invites-preview" : undefined}>
+            {isPreview && (
+                <div className="mb-4">
+                    <LocalCommunityStrip feature="invites" {...waysForward} />
+                    <SampleHeader />
+                </div>
+            )}
             {isPreview && (
                 <div className="mb-6">
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">

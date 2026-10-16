@@ -169,6 +169,8 @@ describe("the control: a local community's Invites, the same screen", () => {
         await render(createElement(PeopleScreen));
         expect(net.calls).toContain(`fetch ${INVITES}`);
         expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.invites);
+        expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
+        expect(text()).not.toContain('Example Valley');
     });
 });
 
@@ -184,6 +186,11 @@ describe('Invites on the worldwide community, its profile on the phone', () => {
     it("renders the real invite screen fed sample invites, used invites, and community tree", async () => {
         rememberProfile('global', WORLDWIDE);
         await render(createElement(PeopleScreen));
+
+        // Strip and Example header
+        expect(host.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
+        expect(text()).toContain('Example Valley');
+        expect(text()).toContain('An example invitation.');
 
         // Sample pending invite
         expect(text()).toContain('EXAMPLE-1234');

@@ -3,11 +3,17 @@
  *
  * A peer connector authenticates the CONNECTION (libp2p Noise), not what the peer says about the members it relays
  * or buys for. Before this, a relayed line's sender got the home the payload named (`senderNodeUrl`), and a cross-node
- * buyer the payload's `buyerHomeNode`: so peer A could relay a line "from" a member of community B into B's thread,
- * or name A as the home of a B member who had no row here yet, so replies to them went to A.
+ * buyer the payload's `buyerHomeNode`: so a peer could name any community at all, a third one included, as the home of
+ * a member who had no row here yet.
  *
- * Now the home is the relaying peer's own address from our connector record for the authenticated peer id, and a
- * member whose row already names another home is refused. The payload's URL is ignored.
+ * Now a new row takes the relaying peer's own address, from our connector record for the authenticated peer id, and
+ * the payload's URL is ignored. A row that already names a home keeps it (engine/members.ts writeVisitorRow), and a
+ * later peer relaying or buying for that key is still served: a member of two communities keeps one key on every node
+ * (apps/native/utils/join-another-community.ts), and an operator may correct a peer's public URL. (A refusal of a key
+ * whose row names another home turned both away: #2039 review B1.)
+ *
+ * What this does not close: the first configured peer to mention a key decides its home here, and any configured peer
+ * can put a line under an existing visitor's name. Per-message sender signatures (a protocol change) close that.
  */
 
 import { getConnectorByPeerId } from './connector-manager.js';
@@ -19,30 +25,13 @@ export function peerHomeUrl(peerId: string): string | null {
     return typeof url === 'string' && url.trim() ? url.trim() : null;
 }
 
-function normaliseHome(url: string): string {
-    try {
-        return new URL(url).origin.toLowerCase();
-    } catch {
-        return url.trim().replace(/\/+$/, '').toLowerCase();
-    }
-}
-
-export function sameHomeUrl(a: string, b: string): boolean {
-    return normaliseHome(a) === normaliseHome(b);
-}
-
 /**
- * What our members table says about a key a peer claims as one of its own members:
- * - `local`: one of OUR members: a row with no home that is not a visitor's. Never a remote sender or buyer. (A row with
- *   a home reads as remote whatever its is_visitor says: the first boot's visitor marking can leave one at 0.)
- * - `elsewhere`: a visitor whose row already names a different home than this peer's.
- * - `ok`: no row yet, or a visitor with no home (M5: a row a local DM made) or with this peer's home.
+ * Whether a key a peer claims as one of its own members is one of OURS: a row with no home that is not a visitor's.
+ * Never a remote sender or buyer. A row with a home reads as remote whatever its is_visitor says (the first boot's
+ * visitor marking can leave one at 0), and a visitor's row with no home (M5: a row a local DM made) is not ours.
  */
-export function remoteMemberStanding(publicKey: string, peerHome: string | null): 'local' | 'elsewhere' | 'ok' {
+export function isLocalMemberKey(publicKey: string): boolean {
     const row = db.prepare('SELECT is_visitor, home_node_url FROM members WHERE public_key = ?').get(publicKey) as
         { is_visitor: number; home_node_url: string | null } | undefined;
-    if (!row) return 'ok';
-    if (!row.is_visitor && !row.home_node_url) return 'local';
-    if (row.home_node_url && (!peerHome || !sameHomeUrl(row.home_node_url, peerHome))) return 'elsewhere';
-    return 'ok';
+    return !!row && !row.is_visitor && !row.home_node_url;
 }

@@ -41,7 +41,7 @@ import {
 } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
 import { getConnectors } from './connector-manager.js';
-import { peerHomeUrl, remoteMemberStanding } from './federation-origin.js';
+import { peerHomeUrl, isLocalMemberKey } from './federation-origin.js';
 import {
     openSettlement, claimSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
@@ -845,22 +845,11 @@ export function handlePurchaseRequest(input: {
     // `home_node_url` onto an existing member row that has none — quietly converting one of OUR members
     // into a visitor. `assertLocalSettlement` then refuses that member's own local spending (#102). So any
     // peer that knows a local member's public key could freeze their account by naming them as a buyer.
-    const peerHome = peerHomeUrl(input.peerId);
-    const buyerStanding = remoteMemberStanding(input.buyerPublicKey, peerHome);
-    if (buyerStanding === 'local') {
+    if (isLocalMemberKey(input.buyerPublicKey)) {
         console.warn(`[Federation] Peer ${input.peerId.slice(-8)} claimed local member ${input.buyerPublicKey.slice(0, 8)} as a cross-node buyer`);
         return {
             accepted: false, reason: 'buyer_is_local',
             message: 'That buyer is a member of this community, so their purchase is settled here, not across nodes.',
-        };
-    }
-
-    // M3 (the FED-02 binding): a buyer whose row already names another community is not this peer's to buy for.
-    if (buyerStanding === 'elsewhere') {
-        console.warn(`[Federation] Peer ${input.peerId.slice(-8)} claimed ${input.buyerPublicKey.slice(0, 8)}, a member of another community, as its buyer`);
-        return {
-            accepted: false, reason: 'buyer_elsewhere',
-            message: 'That buyer is a member of another community, not of the node asking.',
         };
     }
 
@@ -884,8 +873,11 @@ export function handlePurchaseRequest(input: {
     // peer is from the authenticated connection, whereas `buyerHomeNode` is just a string they sent.
     //
     // M3: and ONLY from the connector. The payload's `buyerHomeNode` used to win, so a capped peer could name any
-    // community as its buyer's home (measured: https://some-other-community.example stamped on the row).
-    const resolvedHomeNode = peerHome;
+    // community as its buyer's home (measured: https://some-other-community.example stamped on the row). A buyer whose
+    // row already names a home keeps it (writeVisitorRow; federation-origin.ts): a member of two communities buying
+    // through the second, or a peer whose URL the operator corrected. The settlement records the asking peer's URL,
+    // because that peer pays, from its own cap and bridge account.
+    const resolvedHomeNode = peerHomeUrl(input.peerId);
     if (!resolvedHomeNode) {
         return {
             accepted: false, reason: 'unknown_home_node',

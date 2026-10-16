@@ -9,7 +9,7 @@
  */
 
 import type { Libp2p } from 'libp2p';
-import { isPeerTrusted, updateInboundHandshakeStatus, type TrustLevel } from './connector-manager.js';
+import { isPeerTrusted, updateInboundHandshakeStatus, ENABLE_PEER_CONNECTORS, type TrustLevel } from './connector-manager.js';
 
 const PROTOCOL = '/beanpool/handshake/1.0.0';
 const encoder = new TextEncoder();
@@ -180,7 +180,10 @@ export function registerHandshakeHandler(node: Libp2p): void {
                 ts: Date.now(),
                 youAreTrusted: trusted,
                 trustLevel: trustLevel,
-                active: ourEnabled,
+                // FED-06: with ENABLE_PEER_CONNECTORS off this node serves no peer (federation-protocol.ts refuses its
+                // lookups, relays, listing pulls and purchases), so its answer never calls it an active one: a peer's
+                // panel showed a healthy, active link to it (#2039 review N3).
+                active: ENABLE_PEER_CONNECTORS && ourEnabled,
             });
 
             await writeToStream(stream, response);

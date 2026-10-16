@@ -8,7 +8,7 @@
 
 import type { Libp2p } from 'libp2p';
 import { isPeerTrusted, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
-import { peerHomeUrl, remoteMemberStanding } from './federation-origin.js';
+import { peerHomeUrl, isLocalMemberKey } from './federation-origin.js';
 import { assertDmLineFits, WriterLimitError } from './engine/writer-bounds.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
@@ -32,7 +32,6 @@ const PEER_ONLY_ACTIONS = new Set(['verify_member', 'relay_message', 'list_listi
 export const PEERS_OFF_ERROR = 'Peer connectors are switched off on this node';
 /** FED-02: a peer whose connector record here has no public URL cannot be named as anyone's home. */
 export const NO_PEER_HOME_ERROR = 'This node holds no public address for your node, so it cannot name a sender\'s home';
-export const SENDER_ELSEWHERE_ERROR = 'Sender is a member of another community';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
@@ -303,14 +302,15 @@ export function registerFederationHandler(node: Libp2p): void {
                     // is no remote sender (it passed the impersonation guard below, and got a visitor's row of its own).
                     response = { error: BAD_KEY_ERROR };
                 } else {
-                    // FED-02: the sender's home is THIS peer's, from our connector record for the authenticated
-                    // connection, never the payload's `senderNodeUrl`.
+                    // FED-02: a new sender's home is THIS peer's, from our connector record for the authenticated
+                    // connection, never the payload's `senderNodeUrl`. A sender whose row already names a home keeps it
+                    // (federation-origin.ts): a member of two communities, or a peer whose URL the operator corrected.
                     const peerHome = peerHomeUrl(remotePeerId);
                     // Verify recipient exists locally (O(1) indexed lookup)
                     const recipient = getMember(recipientPublicKey);
                     if (!recipient) {
                         response = { error: 'Recipient not found on this node' };
-                    } else if (remoteMemberStanding(senderPublicKey, peerHome) === 'local') {
+                    } else if (isLocalMemberKey(senderPublicKey)) {
                         // A2-28: the connection is trusted (a `peer` connector), but that
                         // authorizes the CONNECTION, not the asserted sender authorship —
                         // a compromised/malicious federation peer can set senderPublicKey
@@ -326,11 +326,6 @@ export function registerFederationHandler(node: Libp2p): void {
                         response = { error: 'Sender impersonates a local member' };
                     } else if (!peerHome) {
                         response = { error: NO_PEER_HOME_ERROR };
-                    } else if (remoteMemberStanding(senderPublicKey, peerHome) === 'elsewhere') {
-                        // FED-02: this member's row already names another community as home, so this peer does
-                        // not speak for them. Before, peer A could put a line "from" B's member in their thread.
-                        console.warn(`[Federation] Rejected relay for ${senderPublicKey.slice(0, 8)}, a member of another community, from peer ${remotePeerId.slice(-8)}`);
-                        response = { error: SENDER_ELSEWHERE_ERROR };
                     } else {
                         // Origin is asserted by the relaying node (a trusted peer connector),
                         // NOT cryptographically verified per-message — treat as
@@ -585,6 +580,30 @@ export async function settleCrossNodePurchase(
 /**
  * Initiator (Sender) side: Relay a message over Libp2p
  */
+/**
+ * Relay a member's line to its recipient's community (routes/messaging.ts sends without waiting) and log the outcome
+ * when it is not a stored line. A peer that refuses ANSWERS `{ error }` rather than throwing: peers off (FED-06), no
+ * address for us (FED-02), the 64 KB line limit (FED-09), a recipient it does not know. The route caught only a throw,
+ * so each refusal reached the sender as a line sent, with nothing in either node's log (#2039 review B1, N2). The log
+ * names the line, the peer and the peer's reason, never the line's text.
+ */
+export async function relayLineToPeer(
+    node: Libp2p,
+    targetPeerId: any,
+    peerName: string | null,
+    payload: Parameters<typeof federatedRelayMessage>[2],
+): Promise<void> {
+    const peer = peerName || String(targetPeerId).slice(-8);
+    try {
+        const answer = await federatedRelayMessage(node, targetPeerId, payload);
+        if (answer && typeof answer === 'object' && 'error' in answer) {
+            console.warn(`[Federation] ${peer} refused relayed line ${payload.id ?? '(no id)'}: ${JSON.stringify(String(answer.error).slice(0, 200))}`);
+        }
+    } catch (e: any) {
+        console.warn(`[Federation] Failed to relay line ${payload.id ?? '(no id)'} to ${peer}:`, e?.message || e);
+    }
+}
+
 export async function federatedRelayMessage(
     node: Libp2p, 
     targetPeerId: any, 

@@ -244,3 +244,57 @@ describe('a refused server: join it on this phone first, through its own door, t
         expect(global).toContain('redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name');
     });
 });
+
+/**
+ * Every kind of QR or link the phone's camera app (or a message) can hand BeanPool, and the screen it opens: a route
+ * file that exists, never Unmatched Route. Expo Router reads `beanpool://<host>/<path>` as the path `<host>/<path>`, and
+ * an https link as its path alone (here always `/`: the App Links claim only `/`, utils/__tests__/android-app-links).
+ */
+describe('every link kind from the camera opens a screen that exists', () => {
+    const appDir = path.resolve(__dirname, '../../app');
+    /** The route file Expo Router matches for an href the intent hands it, or null: Unmatched Route. */
+    function screenFor(href: string): string | null {
+        const p = href.replace(/^beanpool:\/\/\/?/i, '').replace(/^https?:\/\/[^/?#]*/i, '').replace(/[?#].*$/, '').replace(/^\/+|\/+$/g, '');
+        if (p === '') return fs.existsSync(path.join(appDir, 'index.tsx')) ? 'index.tsx' : null;
+        const segs = p.split('/');
+        let dir = appDir;
+        const found: string[] = [];
+        for (let i = 0; i < segs.length; i++) {
+            const last = i === segs.length - 1;
+            const entries = fs.readdirSync(dir);
+            const exact = last ? entries.find((e) => e === `${segs[i]}.tsx`) : entries.find((e) => e === segs[i]);
+            const dynamic = last ? entries.find((e) => /^\[[^\]]+\]\.tsx$/.test(e)) : entries.find((e) => /^\[[^\]]+\]$/.test(e));
+            const next = exact ?? dynamic;
+            if (!next) return null;
+            found.push(next);
+            dir = path.join(dir, next);
+        }
+        return found.join('/');
+    }
+    const kinds: Array<[string, string, string]> = [
+        ['the web pairing QR', LINK, 'pair-device.tsx'],
+        ['a garbled pairing link', 'beanpool://pair?garbage', 'pair-device.tsx'],
+        ['an invite link (a community on *.beanpool.org; the root layout then reads the invite)', 'https://mullum.beanpool.org/?invite=INV-ABCD-EFGH', 'index.tsx'],
+        ['the legacy invite link', 'beanpool://invite?code=INV-ABCD-EFGH&server=https%3A%2F%2Fmullum.beanpool.org', 'invite.tsx'],
+        ["the invite page's Open the app", 'beanpool://welcome?invite=INV-ABCD-EFGH&server=https%3A%2F%2Fmullum.beanpool.org', 'welcome.tsx'],
+        ['a server claim QR', `beanpool://claim?node=${encodeURIComponent('https://new.example')}&id=a1b2c3d4`, 'claim-community.tsx'],
+        ['a shared post', 'https://mullum.beanpool.org/?post=abc123', 'post/[id].tsx'],
+        ['a re-key code (the root layout then opens rekey-code)', 'https://mullum.beanpool.org/?rekey=RK-ABCD-1234', 'index.tsx'],
+        ['take over with this phone', 'beanpool://unlock-keys?node=x', 'unlock-keys.tsx'],
+        ['a group invitation', 'beanpool://group/g1', 'group/[id].tsx'],
+        ['pay the commons', 'beanpool://pay-commons?code=d1&amount=5', 'pay-commons.tsx'],
+        ['View my profile (from node Settings)', 'beanpool://public-profile?publicKey=ab', 'public-profile.tsx'],
+    ];
+
+    it.each(kinds)('%s', (_name, link, screen) => {
+        for (const initial of [true, false]) {
+            const to = redirectSystemPath({ path: link, initial });
+            expect(to, link).not.toBeNull();
+            expect(screenFor(to as string), `${link} → ${to}`).toBe(screen);
+        }
+    });
+
+    it('a pairing link before this change fell through to a route that does not exist (what Marty saw)', () => {
+        expect(screenFor(LINK)).toBeNull();
+    });
+});

@@ -552,6 +552,13 @@ async function main(): Promise<void> {
         const m2 = await childStart(today, standbyEnv);
         assert(m2?.outcome?.kind === 'paired-already' && sha(path.join(today, PIN_FILE)) === pinAfter1 && sha(path.join(today, 'connectors.json')) === connAfter1,
             `f. a second start rewrites nothing (${m2?.outcome?.kind})`);
+        // Once per data folder: an unpaired standby whose database a restore replaced (its import record naming any key)
+        // is not pinned by a later start; only its shell pairs it.
+        const once = newDir([{ peer: K1 }]);
+        const o1 = await childStart(once, standbyEnv);
+        const o2 = await childStart(once, { ...standbyEnv, PIN_SEED: `audit:${K4}` });
+        assert(o1?.outcome?.kind === 'unpaired' && o2?.outcome?.kind === 'ran-before' && o2.pin === null && /not paired/.test(o2.unpaired || ''),
+            `f. the migration runs once: a later start with an import record naming K4 pins nothing (${o1?.outcome?.kind}, then ${o2?.outcome?.kind})`);
         const audited = newDir([{ peer: K4 }]);
         const m3 = await childStart(audited, { ...standbyEnv, PIN_SEED: `audit:${K1}` });
         assert(m3?.outcome?.kind === 'migrated' && m3.outcome.from === 'audit-log' && m3.pin?.peerId === K1,

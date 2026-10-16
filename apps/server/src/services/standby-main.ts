@@ -25,6 +25,8 @@ import { peerIdFromString } from '@libp2p/peer-id';
 export const STANDBY_MAIN_FILE = 'standby-main.json';
 export const PAIR_REQUEST_FILE = 'pair-request.json';
 export const PAIR_ANSWER_FILE = 'pair-answer.json';
+/** The boot migration ran on this data folder (any outcome): it never runs again (see migrateStandbyMainAtBoot). */
+export const PIN_MIGRATED_FILE = 'standby-main.migrated';
 /** A pairing code is a few hundred characters; anything longer is not one. */
 export const PAIRING_CODE_MAX_CHARS = 1024;
 const MAX_FILE_BYTES = 4096;
@@ -389,6 +391,7 @@ export function stopPairRequestWatch(): void {
 
 export type MigrationOutcome =
     | { kind: 'paired-already' }
+    | { kind: 'ran-before' }
     | { kind: 'not-a-standby' }
     | { kind: 'migrated'; from: 'audit-log' | 'mirror-link'; peerId: string }
     | { kind: 'unpaired'; why: string };
@@ -412,14 +415,23 @@ function mirrorLinksOnDisk(dir: string): { peerId: string | null }[] {
  * At the first start on this version, a standby with no pin: its own import record's newest signer (one row per accepted
  * import, the verified signer: engine/sync.ts recordSyncAudit; a local table, never copied), else its one `mirror` link
  * when it has taken a copy, else none (`standby.unpaired`). One write; a second boot finds the pin and writes nothing.
- * Never throws: a failure leaves the standby unpaired, which is loud.
+ * Once per data folder, whatever it found (data/standby-main.migrated): the import record is the standby's own only until
+ * a whole database replaces it, and a restore onto a fresh, unpaired standby (design case 18 S2b's "install, claim,
+ * restore") brings the uploader's database, whose record could name any key. After the first start on this version only
+ * the shell pairs. Never throws: a failure leaves the standby unpaired, which is loud.
  */
 export async function migrateStandbyMainAtBoot(dir = dataDir()): Promise<MigrationOutcome> {
     const { logger } = await import('../logger.js');
+    if (readStandbyMain(dir)) return { kind: 'paired-already' };
+    const marker = path.join(dir, PIN_MIGRATED_FILE);
+    if (fs.existsSync(marker)) return { kind: 'ran-before' };
+    const done = (outcome: MigrationOutcome): MigrationOutcome => {
+        try { writeWhole(marker, JSON.stringify({ at: Date.now(), outcome: outcome.kind })); } catch (e: any) { logger.warn('P2P', `[Standby] ${e?.message || e}`); }
+        return outcome;
+    };
     try {
         const { roleFromSettings } = await import('../config/node-role.js');
-        if (roleFromSettings() !== 'backup') return { kind: 'not-a-standby' };
-        if (readStandbyMain(dir)) return { kind: 'paired-already' };
+        if (roleFromSettings() !== 'backup') return done({ kind: 'not-a-standby' });
         const { db } = await import('../db/db.js');
         const { getLocalConfig } = await import('../config/local-config.js');
         let communityId: string | null = null;
@@ -431,7 +443,7 @@ export async function migrateStandbyMainAtBoot(dir = dataDir()): Promise<Migrati
         const pin = (peerId: string, from: 'audit-log' | 'mirror-link'): MigrationOutcome => {
             writeStandbyMain({ v: 1, peerId, communityId, url, pairedAt: Date.now(), how: 'migrated' }, dir);
             logger.security('P2P', `[Standby] Pinned this standby's main server ${peerId} from its ${from === 'audit-log' ? 'own record of the copies it took' : 'one mirror link and the copy it took'} (data/${STANDBY_MAIN_FILE})`);
-            return { kind: 'migrated', from, peerId };
+            return done({ kind: 'migrated', from, peerId });
         };
         let newest: string | null = null;
         try {
@@ -449,7 +461,7 @@ export async function migrateStandbyMainAtBoot(dir = dataDir()): Promise<Migrati
         const why = links.length > 1 ? `${links.length} mirror links` : links.length === 1 ? (copied ? 'a mirror link without a key' : 'a mirror link, but no copy taken') : 'no mirror link';
         logger.security('P2P', `[Standby] This standby is not paired with a main server (${why}), so it copies nothing. `
             + 'On the main server make a pairing code under Replication Access, then on this server: docker compose exec beanpool-node beanpool pair');
-        return { kind: 'unpaired', why };
+        return done({ kind: 'unpaired', why });
     } catch (e: any) {
         logger.warn('P2P', `[Standby] The pin migration failed (${e?.message || e}): this standby stays unpaired`);
         return { kind: 'unpaired', why: 'error' };

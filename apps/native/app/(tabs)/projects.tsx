@@ -466,7 +466,8 @@ export default function ProjectsScreen() {
                                 style={[styles.sectionTabBtn, activeSection === 'decide' && styles.sectionTabBtnActive]}
                                 onPress={() => {
                                     setActiveSection('decide');
-                                    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+                                    // In preview Groups holds the sample's cards and Decide does not: start Decide at its top.
+                                    if (enterprisesPreview) listRef.current?.scrollToOffset({ offset: 0, animated: false });
                                 }}
                             >
                                 <MaterialCommunityIcons
@@ -497,7 +498,7 @@ export default function ProjectsScreen() {
                                 style={[styles.sectionTabBtn, activeSection === 'groups' && styles.sectionTabBtnActive]}
                                 onPress={() => {
                                     setActiveSection('groups');
-                                    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+                                    if (enterprisesPreview) listRef.current?.scrollToOffset({ offset: 0, animated: false });
                                 }}
                             >
                                 <MaterialCommunityIcons

@@ -334,16 +334,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         return list;
     }, [treasuries, filter]);
 
-    // Scroll container ref: switching tabs scrolls to top so Decide opens at its own content
+    // In preview the two tabs hold very different lengths (the sample's cards on Groups only): a switch starts the new tab
+    // at its top, or Decide would open far above the screen. A local node keeps its place as before.
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const previewTabs = enterprisesMode === 'preview';
     useEffect(() => {
-        if (!scrollContainerRef.current) return;
-        if (typeof scrollContainerRef.current.scrollTo === 'function') {
-            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
-        } else {
-            scrollContainerRef.current.scrollTop = 0;
-        }
-    }, [activeSection]);
+        const el = scrollContainerRef.current;
+        if (!previewTabs || !el) return;
+        if (typeof el.scrollTo === 'function') el.scrollTo({ top: 0 });
+        else el.scrollTop = 0;
+    }, [activeSection, previewTabs]);
 
     return (
         <div ref={scrollContainerRef} className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>

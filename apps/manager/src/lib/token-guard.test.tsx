@@ -38,7 +38,7 @@ describe('an owner-only action with a token', () => {
     it('covers the routes refused to every token and the owner-only ones', () => {
         for (const p of ['/api/local/admin/auth/password', '/api/local/admin/automation-tokens', '/api/local/admin/2fa/setup',
             '/api/local/admin/ws-ticket', '/api/local/admin/csrf-token', '/api/local/admin/public-address/claim',
-            '/api/local/admin/takeover/open', '/api/local/admin/stranded-escrows/e1/write-off', '/api/local/reset',
+            '/api/local/admin/takeover/open', '/api/local/admin/stranded-escrows/e1/write-off',
             '/api/local/change-password', '/api/local/admin/offbox-backups/settings',
             '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check',
             '/api/local/admin/takeover/confirm', '/api/local/admin/takeover/cancel',

@@ -72,6 +72,7 @@ import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { cleanLabel } from '../config/clean-label.js';
 import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
@@ -86,7 +87,7 @@ import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { reportKind, type ReportKind } from './report-kind.js';
-import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
+import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
 import { agentCallsTodayAll } from '../agent/limits.js';
@@ -143,6 +144,7 @@ export type AlertKey =
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
+    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address'
     | 'sec.log'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy';
@@ -186,6 +188,19 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     /** An AI assistant connected to /mcp or disconnected (admin MCP design §8): told as a role change is. */
     'sec.agent': { title: 'an AI assistant connected or disconnected', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** Owner-delete S5 (design case 18 §7): a restore or roll-back, and refused uploads of another community's backup. */
+    'sec.restore': { title: 'restored from a backup', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** A change to where backups go or who copies this server: one line each, folded hourly past the actor's bound. */
+    'sec.backups': { title: 'a backup setting changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    /** Members removed by an admin, branches pruned by an owner: a day's count. */
+    'sec.members': { title: 'members removed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    /** The community's name, callsign or contacts changed by an admin. */
+    'sec.settings': { title: "the community's details changed", priority: 2, webhook: true, pushEveryMs: EACH, banner: true },
+    /**
+     * An owner's own act on the address (taken offline, a new name over the live one, a spare name released, a new tunnel
+     * key): its own row, never sec.name's, so it neither reads as a hijack nor stamps sec.name's day (#2033 B1).
+     */
+    'sec.address': { title: 'its address changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
@@ -205,7 +220,10 @@ const ROWS: Record<AlertKey, Row> = {
 const REPORT_KEYS: ReadonlySet<AlertKey> = new Set<AlertKey>(['reports.new', 'reports.child', 'reports.child-more']);
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
-const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent']);
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>([
+    'sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent', 'sec.restore', 'sec.backups', 'sec.members', 'sec.settings',
+    'sec.address',
+]);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
 const SECURITY_QUIET_MS = 60 * 60_000;
@@ -229,6 +247,8 @@ export interface Condition {
     push?: boolean;
     /** Members pushed with the owners for it (an owner or admin who lost the role): never kept. */
     alsoPush?: string[];
+    /** A count's line (SecurityNote.perDay): it replaces the same count's earlier line of the last day. */
+    dayLine?: string;
 }
 
 export interface AlertEvent {
@@ -248,6 +268,8 @@ export interface AlertEvent {
      * banner; the history keeps it.
      */
     standby?: true;
+    /** A count's line (Condition.dayLine): one per count and day in each list, the newest words in place of the older. */
+    dayLine?: string;
 }
 
 /** One actor's hour (raiseSecurity): what went out at once, and what folds into the hour's one line. */
@@ -258,6 +280,13 @@ interface ActorHour {
     folded: number;
     foldedHigh: number;
     role: string;
+    /**
+     * Quiet notes told this hour (SecurityNote.quiet), unpushed: their own allowance, so they never use the pushes of the
+     * act's own pushed line (#2033 C1-B1: two role holders removed folded the admin's next role grant). Left out: none yet.
+     */
+    quietTold?: number;
+    /** The fold line's own words (SecurityNote.foldAs), `{n}` the count. */
+    foldAs?: { one: string; many: string };
 }
 
 interface Raised {
@@ -300,6 +329,17 @@ interface BookState {
     reports: ReportWindow | null;
     /** Child-safety reports (noteNewReport): those told at once in the last hour, each reporter's hour, the open summary. */
     child: ChildReports;
+    /** The counts of SecurityNote.perDay lines, by key and words: the open window's first event and how many since. */
+    dayCounts: Record<string, DayCount>;
+}
+
+/**
+ * A count's window (SecurityNote.perDay): it opens at its first event and runs a day (#2033 C1-N1), so its line counts
+ * everything since then and a later window's line never takes its place.
+ */
+interface DayCount {
+    from: number;
+    n: number;
 }
 
 interface ChildReports {
@@ -321,7 +361,7 @@ const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, f
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
     diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {}, reports: null,
-    child: { told: [], reporters: {}, summary: null },
+    child: { told: [], reporters: {}, summary: null }, dayCounts: {},
 });
 
 let clockOffsetMs = 0;
@@ -342,11 +382,25 @@ function readState(): BookState {
     if (state) return state;
     try {
         const parsed = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
-        state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) } };
+        state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) }, dayCounts: dayCountsOf(parsed?.dayCounts) };
     } catch {
         state = emptyState();
     }
     return state!;
+}
+
+/**
+ * The count windows a book on disk holds, read at boot: an entry of another shape (the hour buckets kept before
+ * #2033 C1-N1, `{ "<hour>": n }`) is dropped, so its count starts again with its next event.
+ */
+function dayCountsOf(raw: unknown): Record<string, DayCount> {
+    const out: Record<string, DayCount> = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [id, c] of Object.entries(raw as Record<string, unknown>)) {
+        const { from, n } = (c && typeof c === 'object' ? c : {}) as Partial<Record<keyof DayCount, unknown>>;
+        if (typeof from === 'number' && Number.isFinite(from) && typeof n === 'number' && Number.isFinite(n) && n > 0) out[id] = { from, n };
+    }
+    return out;
 }
 
 function writeState(): void {
@@ -356,6 +410,11 @@ function writeState(): void {
     } catch (e) {
         logger.warn('SYS', `[Alerts] Could not keep the alert book: ${errorMessage(e)}`);
     }
+}
+
+/** Read the book from disk again at the next event, as a restart does (a suite checking what a boot keeps). */
+export function rereadAlertsForTests(): void {
+    state = null;
 }
 
 /** Forget everything (a suite starting a step from nothing). */
@@ -446,6 +505,7 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     { ok: true } | { ok: false; error: string } {
     if (process.env.ALERTS_WEBHOOK_URL?.trim()) return { ok: false, error: 'The alert channel is set in .env (ALERTS_WEBHOOK_URL): change it there' };
     const file = settingsFile();
+    const old = readAlertChannel();
     if (input.remove === true) {
         try {
             fs.unlinkSync(file);
@@ -454,6 +514,7 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
                 return { ok: false, error: "The channel kept in Settings (data/alerts.json) could not be removed: remove that file by hand" };
             }
         }
+        if (old) tellOldChannel(old, 'removed');
         return { ok: true };
     }
     const bad = checkChannelUrl(input.url);
@@ -467,10 +528,32 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
         : input.token === undefined && before?.source === 'settings' && before.url === url ? before.token : null;
     writeFileAtomic(file, JSON.stringify({ url, format: input.format === 'json' ? 'json' : 'ntfy', token }, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
+    // A new or cleared token for the same channel can cut it off as surely as a new address (a protected ntfy topic), so
+    // the old token's holder is told, in words that say what changed and nothing else (#2033 N3, C1-N2).
+    if (old && old.url !== url) tellOldChannel(old, 'changed');
+    else if (old && old.token !== token) tellOldChannel(old, 'token');
     const s = readState();
     s.channel = emptyChannel();
     writeState();
     return { ok: true };
+}
+
+/**
+ * The last message to a channel an owner changed or took away (design case 18 §7, C11): sent to the OLD channel, so
+ * whoever watched it learns it no longer hears from this server. For a token changed on the same channel ('token'), one
+ * line saying so, with the old token. Straight to it, outside the book and its queue, under the hard ceiling; never retried.
+ */
+function tellOldChannel(old: AlertChannel, how: 'changed' | 'removed' | 'token'): void {
+    const s = readState();
+    const t = now();
+    if (sentThisHour(s, t) >= ALERT_HOURLY_CEILING) return;
+    s.sentAt.push(t);
+    const community = communityName();
+    const text = how === 'removed' ? OWNER_ALERT_WORDS.channelRemoved(community)
+        : how === 'token' ? OWNER_ALERT_WORDS.channelTokenChanged : OWNER_ALERT_WORDS.channelChanged(community);
+    const subject = how === 'token' ? `${community}: the alert channel's token was changed` : `${community}: the alert channel was ${how}`;
+    void sendToChannel(old, { subject, priority: 4, click: settingsLink(), events: [], text })
+        .catch(() => undefined);
 }
 
 /** Two letters of a country under which names are registered a level down (example.co.uk, example.com.au). */
@@ -506,8 +589,8 @@ function when(ms: number): string {
 function communityName(): string {
     try {
         const lc = getLocalConfig() as any;
-        const name = (lc.communityName || lc.callsign || '').toString().trim();
-        return name ? name.slice(0, 60) : 'Your BeanPool server';
+        // The callsign fallback is cleaned as the name is (#2033 N6): no control or bidi character reaches a title.
+        return cleanLabel(String(lc.communityName || lc.callsign || ''), 60) ?? 'Your BeanPool server';
     } catch {
         return 'Your BeanPool server';
     }
@@ -779,7 +862,10 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
         const r = s.raised[c.key];
         const priority = c.priority ?? ROWS[c.key].priority;
         if (c.active && c.oneShot) {
-            const e: AlertEvent = { key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}) };
+            const e: AlertEvent = {
+                key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}),
+                ...(c.dayLine ? { dayLine: c.dayLine } : {}),
+            };
             tell(e);
             if (c.push === false) quiet.add(e);
             if (c.alsoPush?.length) also.set(e, c.alsoPush);
@@ -833,9 +919,18 @@ const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.prio
  * lines, which the coalescing keeps to a handful). A new report line with no older one to drop makes room with the oldest
  * disk, backup or other condition line that is not high, never a security line, and only then drops itself: so a
  * history full of daily reminders still shows the reports (the deciding review of #1850, confirmation 2, finding 1).
+ * A count's line (dayLine) takes the place of the same count's earlier line of its day that is not on its way: a day's
+ * removals are one line, the newest count, however many there were (#2033 B2). The id carries when the day opened, so a
+ * later day's line is a line of its own (#2033 C1-N1).
  * Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
+    const older = e.dayLine ? list.findIndex((x) => x.dayLine === e.dayLine && e.at - x.at < DAY && !inFlight.includes(x)) : -1;
+    if (older >= 0) {
+        const [x] = list.splice(older, 1);
+        list.push({ ...e, priority: Math.max(x.priority, e.priority) as AlertPriority });
+        return 0;
+    }
     const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
     if (same >= 0) {
         const [x] = list.splice(same, 1);
@@ -877,7 +972,9 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
         return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
     }
     if (!happened(note)) return Promise.resolve([]);
-    if (note.state === undefined) return raiseBounded(note);
+    let lineId: string | undefined;
+    if (note.perDay) { const c = dayCountWords(note.key, note.perDay, note.perDayAdds ?? 1); lineId = c.lineId; note = { ...note, detail: c.words }; }
+    if (note.state === undefined) return raiseBounded(note, lineId);
     if (note.state === 'seen') {
         readState().seenAt[note.key] = now();
     }
@@ -885,6 +982,26 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
 }
 
 const HOUR_MS = 60 * 60_000;
+
+/** The line a count is told on (SecurityNote.perDay): its key and words. */
+const dayLineOf = (key: AlertKey, words: { one: string }) => `${key}:${words.one}`;
+
+/**
+ * `adds` more of a counted line, in its words for its day (#2033 N8: not the UTC day, which restarted mid-morning in
+ * Australia): `one` while the count is 1, else `many` with the count. The day opens at the count's first event and
+ * runs 24 hours (#2033 C1-N1); the line's id carries when it opened, so a line only ever takes the place of its own
+ * day's earlier line, never one whose events it does not count.
+ */
+function dayCountWords(key: AlertKey, words: { one: string; many: string }, adds: number): { words: string; lineId: string } {
+    const s = readState();
+    const t = now();
+    const counts = s.dayCounts;
+    for (const [id, c] of Object.entries(counts)) if (t - c.from >= DAY) delete counts[id];
+    const id = dayLineOf(key, words);
+    const c = (counts[id] ??= { from: t, n: 0 });
+    c.n += Math.max(1, Math.floor(adds));
+    return { words: c.n === 1 ? words.one : words.many.replace('{n}', String(c.n)), lineId: `${id}@${c.from}` };
+}
 
 function actorId(actor: string): string {
     return crypto.createHash('sha256').update(`beanpool-alerts-actor:${actor}`).digest('hex').slice(0, 24);
@@ -895,25 +1012,42 @@ function actorId(actor: string): string {
  * and pushed at once, and as many high ones (an owner made or removed, break-glass) besides. Past that, a high one is
  * still told on the channel and in the card, unpushed; any other is only counted. When the hour is over, what was
  * counted is told as one line, pushed: "N more changes by the same admin". One admin flipping a moderator 200 times
- * an hour sends each owner 4 pushes, not 200, and never pushes a real owner grant out of the channel.
+ * an hour sends each owner 4 pushes, not 200, and never pushes a real owner grant out of the channel. A quiet note (its act
+ * pushed another line) has as many tellings of its own, unpushed, and past them is counted for the hour's line.
  */
-function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
+function raiseBounded(note: SecurityNote, lineId?: string): Promise<AlertEvent[]> {
     const s = readState();
     const t = now();
     const id = actorId(note.actor ?? 'server');
     const before = foldedConditions(s, t, id);
-    const w = s.actors[id] ??= { from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server' };
+    const w = s.actors[id] ??= {
+        from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server', ...(note.foldAs ? { foldAs: note.foldAs } : {}),
+    };
+    // A quiet note is bounded in its actor's hour too (#2033 B2): one admin removing 55 role holders tells the first few,
+    // unpushed, and folds the rest into the hour's line, so their lines never push an earlier one out. Its own allowance
+    // (#2033 C1-B1): it never uses a push, so the act's pushed line (sec.role) and the admin's next grant still push.
     let push = true;
-    if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
+    if (note.quiet) {
+        if ((w.quietTold ?? 0) < SECURITY_PUSHES_PER_HOUR) w.quietTold = (w.quietTold ?? 0) + 1;
+        else { push = false; w.folded++; }
+    } else if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
     else if (!note.high && w.pushed < SECURITY_PUSHES_PER_HOUR) w.pushed++;
     else {
         push = false;
         w.folded++;
         if (note.high) w.foldedHigh++;
     }
+    const tellIt = push || !!note.high;
+    if (note.quiet) push = false;
+    // A count past the bound is not told again, but its line in the history and the card says the count (#2033 C1-N3):
+    // the same line's words, in place. Not sent, not pushed: the hour's line tells the channel and the owners.
+    if (!tellIt && lineId) for (const x of [...s.history, ...s.recent]) if (x.dayLine === lineId) x.detail = note.detail;
     const conditions = [...before];
-    if (push || note.high) {
-        conditions.push({ key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push, alsoPush: push ? note.alsoPush : undefined });
+    if (tellIt) {
+        conditions.push({
+            key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push,
+            alsoPush: push ? note.alsoPush : undefined, ...(lineId ? { dayLine: lineId } : {}),
+        });
     }
     if (!conditions.length) {
         writeState();
@@ -931,8 +1065,10 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
         if (w.folded === 0) continue;
         out.push({
             key: 'sec.more', active: true, oneShot: true, high: w.foldedHigh > 0,
-            detail: `${w.folded} more change${w.folded === 1 ? '' : 's'} by the same ${w.role} in the hour after its first ones were pushed`
-                + `${w.foldedHigh ? ` (${w.foldedHigh} of them listed on their own)` : ''}. Open Settings to see who.`,
+            detail: w.foldAs
+                ? (w.folded === 1 ? w.foldAs.one : w.foldAs.many.replace('{n}', String(w.folded)))
+                : `${w.folded} more change${w.folded === 1 ? '' : 's'} by the same ${w.role} in the hour after its first ones were pushed`
+                    + `${w.foldedHigh ? ` (${w.foldedHigh} of them listed on their own)` : ''}. Open Settings to see who.`,
         });
     }
     return out;

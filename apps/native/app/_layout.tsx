@@ -50,6 +50,7 @@ import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
+import { isPairLink } from '../utils/pair-link';
 import * as WebBrowser from 'expo-web-browser';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -306,6 +307,9 @@ function RootLayoutNav() {
         // "Take over with this phone" (app/unlock-keys.tsx) is routed by expo-router. Not an invite: its server address
         // would otherwise make extractInviteToken read the path's last part ("unlock-keys") as an invite code.
         if (isUnlockLink(currentUrl)) return;
+        // The web app's pairing QR opened from the camera app: routed to app/pair-device.tsx by +native-intent.ts. Not an
+        // invite: its `node=` host could otherwise be read as one (extractInviteToken looks for BP-xxxx-xxxx anywhere).
+        if (isPairLink(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).

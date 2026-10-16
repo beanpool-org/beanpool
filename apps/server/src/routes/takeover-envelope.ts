@@ -45,6 +45,7 @@ import {
 } from '../services/takeover.js';
 import { currentSignedEpoch, IDENTITY_EPOCH_PATH } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
+import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 
 const TAKEOVER_OWNER_ONLY = 'Only an owner of this standby can take over as the main server.';
 
@@ -96,6 +97,7 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         if (replace && !(await requireFreshProof(ctx, (ctx as any).requestBody?.code, 'replace the recovery code'))) return;
         try {
             const made = await makeRecoveryCode({ replace });
+            if (made.replacedCodeId) noteSecurityEvent({ key: 'sec.keys', detail: OWNER_ALERT_WORDS.recoveryCodeReplaced, high: true, priority: 4, ...actingAs(ctx.state) });
             ctx.set('Cache-Control', 'no-store');
             ctx.body = {
                 success: true,

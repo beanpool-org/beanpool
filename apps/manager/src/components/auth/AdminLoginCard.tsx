@@ -234,15 +234,6 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                 )}
                 </>
                 )}
-
-                <div className="mt-6 text-center">
-                    <a
-                        href="/settings-legacy"
-                        className="text-xs text-nature-400 hover:text-bp-ink-terra transition-colors underline"
-                    >
-                        Switch to Legacy Settings Page
-                    </a>
-                </div>
             </div>
         </div>
     );

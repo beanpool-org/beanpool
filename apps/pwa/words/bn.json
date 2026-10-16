@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "আগুন",
   "Free\u0004price": "বিনামূল্যে",
   "Gallery": "গ্যালারি",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "**সেটিংস → আপনার অ্যাকাউন্ট অন্য ডিভাইসে ব্যবহার করুন**-এ যান (পুরনো অ্যাপে: **আরেকটি ডিভাইস যুক্ত করুন**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "**সেটিংস → ডিভাইস যুক্ত করুন**-এ যান (পুরনো অ্যাপে: **Use your account on another device**)",
   "Going": "যাচ্ছি",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "আমন্ত্রণ কোড আছে বা QR স্ক্যান করেছেন? যোগ দিতে নিচে আপনার বেছে নেওয়া কলসাইনসহ সেটি লিখুন।",
   "Green Bean": "সবুজ শিম",
@@ -460,5 +460,6 @@
   "That did not go through. Try again.": "সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।",
   "Type the two digits your phone shows": "আপনার ফোনে দেখানো দুটি সংখ্যা টাইপ করুন",
   "Confirm": "নিশ্চিত করুন",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "সঠিক সংখ্যা দেওয়ার পরই এখানে আপনার অ্যাকাউন্ট খুলবে। তিনবার ভুল চেষ্টা করলে কিছুই পাঠানো হবে না।"
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "সঠিক সংখ্যা দেওয়ার পরই এখানে আপনার অ্যাকাউন্ট খুলবে। তিনবার ভুল চেষ্টা করলে কিছুই পাঠানো হবে না।",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "আপনার ফোন থেকে এখনও কিছু আসেনি। এই কোডটি {host} থেকে। যদি আপনার ফোন বলে এটি এমন সার্ভারের যা সে ব্যবহার করে না, তাহলে আপনার নিজের কমিউনিটির ঠিকানায় BeanPool খুলুন, অথবা আগে আপনার ফোনে {host}-এ যোগ দিন, তারপর আবার স্ক্যান করুন। যদি আপনার ফোনে কোনো সংখ্যা না দেখায়, তাহলে ফোনের BeanPool অ্যাপটি আপডেট করুন, তারপর আবার স্ক্যান করুন।"
 }

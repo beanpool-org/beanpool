@@ -977,6 +977,17 @@ const ALERTS_STATUS = {
     assistants: { calls: 1234, connected: 3 },
 };
 
+/** This server's own community and node key (GET backup-enroll), set beside a backup's in the restore confirmation. */
+const RESTORE_HERE = { communityId: 'a1b2c3d4e5f60718', primaryPeerId: '12D3KooWRiverbendMainServerIdentityKeptAcrossTheTakeOver' };
+
+/** The server's restore points (GET restore-points, services/restore-point-names.ts), newest first. */
+const RESTORE_POINTS = [
+    { name: '2026-10-14T09-12-40.511Z-before-roll-back', why: 'roll-back', takenAt: '2026-10-14T09:12:40.511Z', bytes: 812_400_000,
+        keptAtLeastUntil: '2026-10-21T09:12:40.511Z', keptAtMostUntil: '2026-11-13T09:12:40.511Z' },
+    { name: '2026-10-13T22-47-03.090Z-before-restore', why: 'restore', takenAt: '2026-10-13T22:47:03.090Z', bytes: 809_100_000,
+        keptAtLeastUntil: '2026-10-20T22:47:03.090Z', keptAtMostUntil: '2026-11-12T22:47:03.090Z' },
+];
+
 export function mockResponse(method, pathname, searchParams, bodyText) {
     const ok = (json) => ({ status: 200, json });
     const m = (method || 'GET').toUpperCase();
@@ -1175,7 +1186,22 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/backup-config') return ok({ success: true });
     if (pathname === '/api/local/admin/backup/verify') return ok({ success: true, ok: true, verifiedAt: '2026-09-19T00:00:00.000Z', result: [] });
     if (pathname === '/api/local/admin/backup') return ok({});
-    if (pathname === '/api/local/admin/restore') return ok({ success: true });
+    // A codeless upload of a locked file, as the server answers it (routes/backup.ts): its header, and nothing changed.
+    if (pathname === '/api/local/admin/restore') {
+        return {
+            status: 400,
+            json: {
+                error: "This backup is locked. To open it, type recovery code #2, or open it with an owner's phone.",
+                needsRecoveryCode: true, ownerPhoneCanOpen: true,
+                backup: {
+                    envelopeId: '9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c', communityId: RESTORE_HERE.communityId, createdAt: '2026-10-12T21:04:00.000Z',
+                    sealedBy: RESTORE_HERE.primaryPeerId, owners: ['riverbend-anna'], codeIds: [2], opensWith: '@riverbend-anna, recovery code #2',
+                },
+            },
+        };
+    }
+    if (pathname === '/api/local/admin/backup-enroll') return ok({ ...RESTORE_HERE, primaryUrl: 'https://riverbend.example.org' });
+    if (pathname === '/api/local/admin/restore-points') return ok({ points: RESTORE_POINTS });
 
     // ---- snapshots ----
     if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS });

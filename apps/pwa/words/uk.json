@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "Вогонь",
   "Free\u0004price": "Безкоштовно",
   "Gallery": "Галерея",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "Перейдіть у **Налаштування → Використати обліковий запис на іншому пристрої** (у старіших застосунках: **Пов’язати інший пристрій**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "Перейдіть у **Налаштування → Під’єднати пристрій** (у старіших застосунках: **Use your account on another device**)",
   "Going": "Піду",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "Маєте код запрошення чи відсканували QR-код? Введіть його нижче разом з обраним псевдонімом, щоб приєднатися.",
   "Green Bean": "Зелений біб",
@@ -478,5 +478,6 @@
   "That did not go through. Try again.": "Не вдалося виконати дію. Спробуйте знову.",
   "Type the two digits your phone shows": "Введіть дві цифри, які показує телефон",
   "Confirm": "Підтвердити",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ваш обліковий запис відкриється тут лише після введення правильних цифр. Три невдалі спроби — і нічого не надсилається."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ваш обліковий запис відкриється тут лише після введення правильних цифр. Три невдалі спроби — і нічого не надсилається.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "З вашого телефона поки нічого не надійшло. Цей код із {host}. Якщо телефон каже, що код із сервера, який він не використовує, відкрийте BeanPool за адресою вашої власної спільноти або спершу приєднайтеся до {host} на телефоні, а тоді відскануйте знову. Якщо телефон не показує цифр, оновіть на ньому застосунок BeanPool, а тоді відскануйте знову."
 }

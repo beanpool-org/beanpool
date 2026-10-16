@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "불",
   "Free\u0004price": "무료",
   "Gallery": "갤러리",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "**설정 → 다른 기기에서 내 계정 사용**으로 이동하세요(이전 앱: **다른 기기 연결**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "**설정 → 기기 연결**로 이동하세요(이전 앱: **Use your account on another device**)",
   "Going": "참석",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "초대 코드가 있거나 QR을 스캔했나요? 아래에 입력하고 정한 닉네임으로 참여하세요.",
   "Green Bean": "초록 콩",
@@ -451,5 +451,6 @@
   "That did not go through. Try again.": "처리되지 않았어요. 다시 시도해 주세요.",
   "Type the two digits your phone shows": "휴대폰에 표시된 두 자리 숫자를 입력하세요",
   "Confirm": "확인",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "올바른 숫자를 입력해야만 계정이 열려요. 세 번 잘못 입력하면 아무것도 전송되지 않아요."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "올바른 숫자를 입력해야만 계정이 열려요. 세 번 잘못 입력하면 아무것도 전송되지 않아요.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "아직 휴대폰에서 아무것도 오지 않았어요. 이 코드는 {host}의 코드예요. 휴대폰에 사용하지 않는 서버의 코드라고 나오면, 내 커뮤니티 주소에서 BeanPool을 열거나 먼저 휴대폰에서 {host}에 가입한 뒤 다시 스캔하세요. 휴대폰에 숫자가 나오지 않으면 휴대폰의 BeanPool 앱을 업데이트한 뒤 다시 스캔하세요."
 }

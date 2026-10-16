@@ -86,11 +86,21 @@ export function createPairingRoutes(deps: RouteDeps): Router {
     router.post('/api/pair/transfer', async (ctx) => {
         if (!deps.rateLimit(ctx, 'pairing')) return;
 
-        const { sessionId, mobilePubHex, nonceHex, ciphertextHex } = (ctx.request as any).body || {};
+        const { sessionId, mobilePubHex, nonceHex, ciphertextHex, confirm } = (ctx.request as any).body || {};
 
         if (!sessionId || !mobilePubHex || !nonceHex || !ciphertextHex) {
             ctx.status = 400;
             ctx.body = { error: 'Missing required transfer fields (sessionId, mobilePubHex, nonceHex, ciphertextHex)' };
+            return;
+        }
+
+        // Only an app that shows the two digits says so (`confirm: 'digits'`). Every app before #1983 sends without it and
+        // never shows them: holding its account would leave the browser waiting for digits nobody can read. Refused before
+        // the relay is touched, so nothing is held and the session stays open for a newer app. The old app shows a 4xx's
+        // `error` in its sheet as it is, so the words are written for it.
+        if (confirm !== 'digits') {
+            ctx.status = 409;
+            ctx.body = { error: 'This BeanPool app is too old to show the two digits, so nothing was sent. Update the BeanPool app, then scan again.' };
             return;
         }
 

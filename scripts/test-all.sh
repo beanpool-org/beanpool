@@ -211,8 +211,9 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
+# e2e/in-page-confirm.mjs: every in-page question is on top and answerable, from a modal (Keepers → Revoke) or the page.
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions'
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:in-page-confirm'
 
 # The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
 # fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for
@@ -311,7 +312,7 @@ run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 # The website follows the visitor's light or dark setting (Marty, 15 Oct 2026). Its every colour is in style.css's two
 # sets, and each light value is its role in core's brand-colours.ts (it reads core's dist, so it starts once build has
 # finished; instant). Then every page in headless Chromium, both themes, 320 and 1280 px: words under 4.5:1 (3:1 large)
-# fail in light, and in dark any but the pairs pinned as they were. No network; about a minute.
+# fail, in light and in dark. No network; about a minute.
 run_website_colours() {
   while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
   node --test scripts/website-colours.test.mjs

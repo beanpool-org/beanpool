@@ -310,7 +310,7 @@ async function main(): Promise<void> {
         assert(madeFirst.status === 200 && typeof madeFirst.json?.code === 'string',
             `the FIRST recovery code stays plain: a computer's owner session makes it (${madeFirst.status})`);
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
-        const firstClaim = { name: 'oldvale', mode: 'direct' };
+        const firstClaim = { name: 'oldvale', mode: 'tunnel' };
         const sameClaim = await call('POST', '/api/local/admin/public-address/claim', asComputer, firstClaim);
         assert(sameClaim.status !== 401 && sameClaim.status !== 403, `claiming the name already held asks no proof (${short(sameClaim)})`);
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
@@ -341,7 +341,7 @@ async function main(): Promise<void> {
             { what: 'take the community offline (B1)', method: 'POST', route: '/api/local/admin/public-address/offline', body: () => ({}), ok: passes,
                 before: () => updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any) },
             { what: 'release a name (B2)', method: 'POST', route: '/api/local/admin/public-address/release-name', body: () => ({ name: 'sparevale' }), ok: passes },
-            { what: 'claim over a different live name (B3)', method: 'POST', route: '/api/local/admin/public-address/claim', body: () => ({ name: 'newvale', mode: 'direct' }), ok: passes,
+            { what: 'claim over a different live name (B3)', method: 'POST', route: '/api/local/admin/public-address/claim', body: () => ({ name: 'newvale', mode: 'tunnel' }), ok: passes,
                 before: () => updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any) },
             { what: 'break-glass mode (C5)', method: 'POST', route: '/api/local/admin/auth/break-glass-mode', body: () => ({ enabled: false }),
                 ok: (r) => r.status === 200 && r.json?.breakGlassMode === false },
@@ -542,10 +542,10 @@ async function main(): Promise<void> {
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
             const liveBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
             code = tfa.code();
-            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'direct', code });
+            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'tunnel', code });
             assert(badClaim.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === liveBefore,
                 `3-NB2. claiming over the live name with a name that is no address label → 400, unchanged (${short(badClaim)})`);
-            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'direct', code });
+            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'tunnel', code });
             assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
         }

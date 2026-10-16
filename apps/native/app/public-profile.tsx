@@ -761,13 +761,16 @@ export default function PublicProfileScreen() {
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
-                    {/* Visual Reciprocity Health Ring / Badge (#4) */}
+                    {/* Visual Reciprocity Health Ring / Badge (#4). The deal completion rate: Beans, gated like the trust
+                        panel below. Where nobody makes a deal (the worldwide community) it read 100% for everyone. */}
+                    {showsBeans && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: colors.brand.primary, marginTop: 6 }}>
                         <MaterialCommunityIcons name="circle-outline" size={15} color={colors.brand.primary} />
                         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary }}>
                             {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>
+                    )}
                     {profile?.bio && (
                         <Text style={styles.bioText}>"{profile.bio}"</Text>
                     )}
@@ -1127,11 +1130,14 @@ export default function PublicProfileScreen() {
                             <Text style={styles.statTileNum} numberOfLines={1}>{friendsCount}</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Friends</Text>
                         </Pressable>
+                        {/* A count of deals: Beans, so not drawn where nobody makes one (the worldwide community). */}
+                        {showsBeans && (<>
                         <View style={styles.statDivider} />
                         <View style={styles.statTile}>
                             <Text style={styles.statTileNum} numberOfLines={1}>{balanceInfo?.trustStats?.tradeCount ?? 0}</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
                         </View>
+                        </>)}
                     </View>
                 )}
 

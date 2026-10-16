@@ -43,8 +43,11 @@ beforeEach(() => { resetReaderFeaturesOnce(); reader.value = null; });
 
 // The node's /api/community/info, read once per page load: a local community (no members on demand) unless a test says.
 const info = vi.hoisted(() => ({ value: { profile: 'local', features: {} } as Record<string, unknown> }));
-vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => info.value) }));
-import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+vi.mock('../lib/visitor-lobby-gate', () => ({
+    communityInfoOnce: vi.fn(async () => info.value),
+    resetCommunityInfoOnce: vi.fn(),
+}));
+import { communityInfoOnce, resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
 const identity: BeanPoolIdentity = {
     publicKey: 'viewer-pubkey',
@@ -534,5 +537,52 @@ describe('the Ledger before the node has said what Beans are here', () => {
         expect(getBalance).toHaveBeenCalledTimes(1);
         expect(getTransactions).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('status')?.textContent ?? '').not.toContain('Loading your ledger');
+    });
+
+    it('caps the wait when the node never answers, offers Try again, and reads the ledger once retried', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            render(<LedgerPage identity={identity} isMember={true} />);
+            expect(screen.getByRole('status')).toHaveTextContent('Loading your ledger…');
+            expect(screen.queryByText(/Could not load your ledger/i)).toBeNull();
+            expect(screen.queryByRole('button', { name: /Try again/i })).toBeNull();
+            expect(getBalance).not.toHaveBeenCalled();
+
+            // Advance past the 10 s cap while the info read is still hanging
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(10_000);
+            });
+
+            // Now it plainly says it could not load and offers Try again
+            expect(screen.getByRole('alert')).toHaveTextContent('Could not load your ledger.');
+            const retryButton = screen.getByRole('button', { name: /Try again/i });
+            expect(retryButton).toBeInTheDocument();
+            // Still never shows balance, ledger or preview
+            expect(screen.queryByTestId('ledger-balance')).toBeNull();
+            expect(getBalance).not.toHaveBeenCalled();
+
+            // When "Try again" is pressed, it resets and waits again
+            let secondAnswer: (info: Record<string, unknown>) => void = () => {};
+            const secondHeld = new Promise<Record<string, unknown>>((r) => { secondAnswer = r; });
+            vi.mocked(communityInfoOnce).mockImplementation(() => secondHeld as any);
+
+            await act(async () => {
+                fireEvent.click(retryButton);
+            });
+
+            // It shows loading again
+            expect(screen.getByRole('status')).toHaveTextContent('Loading your ledger…');
+            expect(screen.queryByRole('button', { name: /Try again/i })).toBeNull();
+
+            // When the second read answers as local:
+            await act(async () => {
+                secondAnswer({ profile: 'local', features: {} });
+            });
+            await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+            expect(getBalance).toHaveBeenCalledTimes(1);
+            expect(screen.queryByRole('status')?.textContent ?? '').not.toContain('Loading your ledger');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

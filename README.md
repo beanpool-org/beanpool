@@ -287,7 +287,7 @@ docker compose up -d
 - **PWA:** `https://localhost:8443/` — community map, marketplace, messaging, ledger
 - **Landing Page:** `http://localhost:8080/` — community welcome hub (3 paths: join, transfer, recover)
 - **Fleet Manager:** `http://localhost:5173/` — multi-node control plane & operator dashboard (`pnpm manager`)
-- **Node-to-node links (libp2p, federation peers only):** TCP `:4001` / WS `:4002`
+- **Node-to-node links (libp2p, federation peers only):** TCP `:4001` / WS `:4002` — opt-in: only needed to let linked nodes dial this node.
 
 > 📖 For detailed setup instructions (including Let's Encrypt, no-domain options, and High-Availability mirrors), see [apps/server/README.md](apps/server/README.md).
 
@@ -385,8 +385,8 @@ All endpoints are served on port 8443 (HTTPS):
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| **4001** | TCP | libp2p link to connected nodes (federation peers); no automatic discovery |
-| **4002** | WS | libp2p WebSocket transport for the same links |
+| **4001** | TCP | libp2p link to connected nodes (federation peers); no automatic discovery. Opt-in: only needed to let linked nodes dial this node. |
+| **4002** | WS | libp2p WebSocket transport for the same links. Opt-in: only needed to let linked nodes dial this node. |
 | **8080** | HTTP | HTTP → HTTPS redirect (LAN: QR trust bootstrap) |
 | **8443** | HTTPS | Landing page (`/`), PWA (`/app`), Settings, REST API, WebSocket |
 

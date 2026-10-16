@@ -26,6 +26,7 @@ function Screen({ answers, sent }: { answers: Array<{ status: number; body: unkn
         <div>
             <button type="button" onClick={() => void send()}>Remove admin</button>
             <span data-testid="done">{done}</span>
+            <span data-testid="last">{proof.lastCode ?? ''}</span>
             <FreshProofBox proof={proof} testId="p" />
         </div>
     );
@@ -94,6 +95,49 @@ describe('FreshProofBox: a code once typed is never offered again (opus-2028 B4)
         expect(await screen.findByTestId('p-error')).toHaveTextContent('Invalid 2FA code');
         expect(input().value).toBe('000000');
         expect(confirm().disabled).toBe(true);
+    });
+});
+
+describe('FreshProofBox: no code outlives its ask, and a new request opens empty (opus-2028 confirm N2)', () => {
+    it('a 500 after the code: the box closes and keeps no code', async () => {
+        const sent: Array<string | undefined> = [];
+        render(<Screen sent={sent} answers={[{ status: 401, body: ASK }, { status: 500, body: { error: 'Internal error' } }]} />);
+        fireEvent.click(screen.getByText('Remove admin'));
+        await screen.findByTestId('p-input');
+        fireEvent.change(input(), { target: { value: '654321' } });
+        fireEvent.click(confirm());
+        await waitFor(() => expect(screen.queryByTestId('p-code')).toBeNull());
+        expect(sent).toEqual([undefined, '654321']);
+        expect(screen.getByTestId('last').textContent).toBe('');
+    });
+
+    it('a success through check() (the screen calls no close()): the box closes and keeps no code', async () => {
+        const sent: Array<string | undefined> = [];
+        render(<Screen sent={sent} answers={[{ status: 401, body: ASK }, { status: 200, body: { success: true } }]} />);
+        fireEvent.click(screen.getByText('Remove admin'));
+        await screen.findByTestId('p-input');
+        fireEvent.change(input(), { target: { value: '765432' } });
+        fireEvent.click(confirm());
+        await waitFor(() => expect(screen.getByTestId('done').textContent).toBe('1'));
+        expect(screen.queryByTestId('p-code')).toBeNull();
+        expect(screen.getByTestId('last').textContent).toBe('');
+    });
+
+    it("a second request's ask while the box is open: an empty field, Confirm off, and the box comes into view again", async () => {
+        const sent: Array<string | undefined> = [];
+        render(<Screen sent={sent} answers={[{ status: 401, body: ASK }, { status: 401, body: ASK }]} />);
+        fireEvent.click(screen.getByText('Remove admin'));
+        await screen.findByTestId('p-input');
+        fireEvent.change(input(), { target: { value: '444555' } });
+        const before = scrolled.length;
+        // Typed, not sent: the person presses the screen's button again instead of Confirm.
+        fireEvent.click(screen.getByText('Remove admin'));
+        await waitFor(() => expect(sent).toEqual([undefined, undefined]));
+        await waitFor(() => expect(input().value).toBe(''));
+        expect(confirm().disabled).toBe(true);
+        expect(screen.getByTestId('last').textContent).toBe('');
+        await waitFor(() => expect(scrolled.length).toBeGreaterThan(before));
+        expect(document.activeElement).toBe(input());
     });
 });
 

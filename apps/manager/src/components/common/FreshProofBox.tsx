@@ -9,9 +9,10 @@ import { FRESH_PROOF_WORDS as W, freshProofRefusalOf, isSecondFactorAsk, isSecon
  *                         keeps the field open with the server's sentence, and Confirm waits for a different code;
  *   the phone viewer      (a stale Manage hand-off) "Press Manage on your phone again…";
  *   the computer viewer   (a key session from "Sign in with your phone") "Do this from your phone…".
- * The box opens EMPTY every time and its field is emptied when it closes, so a code once typed is never offered for a
- * second request (opus-2028 B4). On opening it scrolls itself into view and takes focus, wherever the screen put it
- * (opus-2028 B1): the button pressed may be a screen away.
+ * The box opens EMPTY for every request (a second press of the screen's button while it is open too) and its field is
+ * emptied when it closes, so a code once typed is never offered for a second request; the last code sent is kept only
+ * while the box shows (opus-2028 B4, confirm N2). On opening it scrolls itself into view and takes focus, wherever
+ * the screen put it (opus-2028 B1): the button pressed may be a screen away.
  */
 export interface FreshProof {
     refusal: FreshProofRefusal | null;
@@ -50,11 +51,13 @@ export function useFreshProof(): FreshProof {
     const askSecondFactor = useContext(SecondFactorPromptContext);
 
     const open = useCallback((r: FreshProofRefusal | null, retry: (code: string) => Promise<unknown>, sentCode?: string) => {
-        setLastCode(sentCode);
+        // Kept only while the box shows: no code outlives the ask it answered (opus-2028 confirm N2).
+        setLastCode(r ? sentCode : undefined);
         if (r) {
             retryRef.current = retry;
-            if (kindRef.current !== r.kind) {
-                // Opening (or a different ask): an empty field, and the box comes into view.
+            if (kindRef.current !== r.kind || sentCode === undefined) {
+                // Opening, a different ask, or a new request's ask (no code sent): an empty field, and the box comes
+                // into view. Only the box's own Confirm keeps what was typed (a wrong code stays to be corrected).
                 setCode('');
                 setOpened((n) => n + 1);
             }

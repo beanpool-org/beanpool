@@ -65,7 +65,7 @@ export type GroupKind = 'all' | 'projects' | 'enterprises' | 'chat';
 
 /** The chips this node shows, in order. None where it lists no projects or enterprises: every group is a chat group. */
 export function groupKindChips(features: NodeFeatures | null | undefined): Array<{ key: GroupKind; label: string }> {
-    if (!enterprisesOn(features) && features?.showcase !== true) return [];
+    if (!enterprisesOn(features)) return [];
     return [
         { key: 'all', label: 'All' },
         { key: 'projects', label: '🌱 Projects' },
@@ -100,7 +100,7 @@ export function commonsGroupRows<E extends CommonsEnterprise>(
     yours: ReadonlyArray<{ kind: string; id: string }>,
     features: NodeFeatures | null | undefined,
 ): CommonsGroupRow<E>[] {
-    const withEnterprises = enterprisesOn(features) || features?.showcase === true;
+    const withEnterprises = enterprisesOn(features);
     const showChat = !withEnterprises || kind === 'all' || kind === 'chat';
     const mineChat = new Set(yours.filter(y => y.kind === 'group').map(y => y.id));
     const mineKept = new Set(yours.filter(y => y.kind === 'enterprise').map(y => y.id));

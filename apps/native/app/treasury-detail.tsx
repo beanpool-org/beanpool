@@ -1205,11 +1205,11 @@ export default function TreasuryDetailScreen() {
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
                         {isEffectivePreview ? (
                             <View style={styles.joinCard}>
-                                <Text style={styles.joinTitle}>🤝 ASK TO JOIN AS A {kw.Keeper.toUpperCase()}</Text>
+                                <Text style={styles.joinTitle}>🤝 {t('Ask to join as a {keeper}', { keeper: kw.keeper }).toUpperCase()}</Text>
                                 <Text style={styles.joinDesc}>
-                                    Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
+                                    {t('Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.', { kind: kw.kind })}
                                 </Text>
-                                <LocalCommunityMark variant="action" feature="enterprises" label={t('Join as keeper')} />
+                                <LocalCommunityMark variant="action" feature="enterprises" label={t('Join as {keeper}', { keeper: kw.keeper })} />
                             </View>
                         ) : identity && !isKeeperOfThis && detail?.status !== 'completed' && (
                             myPendingRequest ? (

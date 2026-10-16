@@ -66,11 +66,12 @@ vi.mock('react-native', () => {
     };
 });
 
+const nav = vi.hoisted(() => ({ pushes: [] as string[] }));
 const searchParams = vi.hoisted(() => ({ current: {} as Record<string, string | undefined> }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, setParams() {} },
+        router: { push(x: unknown) { nav.pushes.push(JSON.stringify(x)); }, navigate(x: unknown) { nav.pushes.push(`nav ${JSON.stringify(x)}`); }, setParams() {}, back() { nav.pushes.push('back'); } },
         useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => searchParams.current,
@@ -151,123 +152,164 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     searchParams.current = {};
+    nav.pushes.length = 0;
     me.identity = { publicKey: 'a-real-member-key', callsign: 'RealMember' };
     globalThis.fetch = vi.fn(async (url: unknown) => { net.calls.push(`fetch ${String(url)}`); return new Response('{}'); }) as typeof fetch;
 });
 
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-describe('treasury-detail on global node (preview mode)', () => {
-    it('renders real enterprise detail from sample without calling network', async () => {
-        rememberProfile('global', WORLDWIDE);
-        searchParams.current = { publicKey: 'sample-enterprise-valley-bakery' };
+const BAKERY = SAMPLE_COMMUNITY.enterprises[0];
+const PROJECT = SAMPLE_COMMUNITY.projects[0];
+const markers = () => Array.from(host.querySelectorAll('[data-testid="local-community-action"]')) as HTMLElement[];
+const label = (el: Element) => (el.textContent ?? '').replace(/🏘️.*$/u, '').trim();
+const press = async (el: HTMLElement) => { await act(async () => { el.click(); }); await settle(); };
 
+describe('treasury-detail on global node (preview mode)', () => {
+    it("Example Valley's enterprise: the real page fed the sample, marked, and not one call", async () => {
+        rememberProfile('global', WORLDWIDE);
+        searchParams.current = { publicKey: BAKERY.id, name: BAKERY.name };
         await render(createElement(TreasuryDetailScreen));
 
-        // Bakery name from sample
-        expect(text()).toContain('Example Valley Bakery');
-
-        // Did NOT call any real DB APIs
-        expect(net.calls).not.toContain('db.getTreasuryDetail');
-        expect(net.calls).not.toContain('db.getBalance');
-        expect(net.calls).not.toContain('db.getEnterpriseLedger');
-        expect(net.calls).not.toContain('db.getEnterpriseThread');
-
-        // Shows Local Community strip and Example header
+        expect(text()).toContain(BAKERY.name);
         expect(host.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
         expect(text()).toContain('Example Valley · an example member');
-
-        // Keepers from sample
         expect(text()).toContain('a neighbour');
-
-        // Live listings from sample
-        expect(text()).toContain('Sourdough loaves, baked twice a week');
-
-        // Balance from sample
-        expect(text()).toContain('160');
-
-        // EnterpriseDecisions is NOT drawn
+        expect(text()).toContain(BAKERY.listings[0].title);
+        expect(text()).toContain(String(BAKERY.balance));
         expect(host.querySelector('[data-testid="enterprise-decisions"]')).toBeNull();
-
-        // Report Enterprise is NOT drawn
         expect(text()).not.toContain('Report Enterprise');
+        expect(host.querySelector('input')).toBeNull();
+        expect(net.calls).toEqual([]);
+        expect(nav.pushes).toEqual([]);
     });
 
-    it('renders every control as a marker action opening the local community sheet', async () => {
+    it('every control is a marker that opens the sheet; none calls the node or leaves the page', async () => {
         rememberProfile('global', WORLDWIDE);
-        searchParams.current = { publicKey: 'sample-enterprise-valley-bakery' };
-
+        searchParams.current = { publicKey: BAKERY.id };
         await render(createElement(TreasuryDetailScreen));
 
-        // Find all marker actions on screen
-        const markerActions = host.querySelectorAll('[data-testid="local-community-action"]');
-        const labels = Array.from(markerActions).map(el => el.textContent);
+        expect(markers().map(label)).toEqual(['Join as keeper', 'Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up']);
+        for (const i of markers().keys()) {
+            await press(markers()[i]);
+            expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+            expect(text()).toContain('Why this lives in a local community');
+            await press(host.querySelector('[data-modal] [aria-label="Close"]') as HTMLElement);
+            expect(host.querySelector('[data-testid="local-community-sheet"]')).toBeNull();
+        }
+        // A listing tap goes nowhere.
+        const listing = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes(BAKERY.listings[0].title)) as HTMLElement;
+        await press(listing);
+        expect(net.calls).toEqual([]);
+        expect(nav.pushes).toEqual([]);
+    });
 
-        // Verify the 6 enterprise controls are marker actions
-        expect(labels.some(l => l?.includes('Join as keeper'))).toBe(true);
-        expect(labels.some(l => l?.includes('Post Offer'))).toBe(true);
-        expect(labels.some(l => l?.includes('Post Need'))).toBe(true);
-        expect(labels.some(l => l?.includes('To Commons'))).toBe(true);
-        expect(labels.some(l => l?.includes('Pause for season'))).toBe(true);
-        expect(labels.some(l => l?.includes('Start wind-up'))).toBe(true);
+    it('a keeper chip is not a button: no profile, no call (review of #2063, B3)', async () => {
+        rememberProfile('global', WORLDWIDE);
+        searchParams.current = { publicKey: BAKERY.id };
+        await render(createElement(TreasuryDetailScreen));
+        const buttons = Array.from(host.querySelectorAll('button, [role="button"]'));
+        expect(buttons.filter(b => b.textContent?.includes('a neighbour') && !b.textContent?.includes(BAKERY.listings[0].title))).toEqual([]);
+        expect(net.calls).toEqual([]);
+    });
 
-        // Clicking a marker action opens the Local Community sheet
-        const joinBtn = Array.from(markerActions).find(el => el.textContent?.includes('Join as keeper')) as HTMLElement;
-        expect(joinBtn).toBeDefined();
+    it("Example Valley's project: the Pledge is the marker, never the box", async () => {
+        rememberProfile('global', WORLDWIDE);
+        searchParams.current = { publicKey: PROJECT.id };
+        await render(createElement(TreasuryDetailScreen));
 
-        await act(async () => { joinBtn.click(); });
-        await settle();
-
+        expect(text()).toContain(PROJECT.title);
+        expect(host.querySelector('[data-testid="pledge-preview"]')).not.toBeNull();
+        expect(host.querySelector('[aria-label="Pledge amount"]')).toBeNull();
+        expect(text()).not.toContain('PLEDGE BEANS');
+        // The join card says the project's word (review N4).
+        expect(markers().map(label)).toContain('Join as collaborator');
+        expect(markers().map(label)).not.toContain('Join as keeper');
+        const pledge = markers().find(m => label(m) === 'Pledge')!;
+        await press(pledge);
         expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
-        expect(text()).toContain('Why this lives in a local community');
+        expect(net.calls).toEqual([]);
+        expect(nav.pushes).toEqual([]);
     });
 
-    it('renders sample crowdfund project with Pledge marker action', async () => {
+    it('a deep link to a real enterprise says why (a line that opens the sheet) and calls nothing', async () => {
         rememberProfile('global', WORLDWIDE);
-        searchParams.current = { publicKey: 'sample-project-compost-bay' };
-
+        searchParams.current = { publicKey: 'b'.repeat(64) };
         await render(createElement(TreasuryDetailScreen));
 
-        expect(text()).toContain('A compost bay by the community garden');
-
-        // Did NOT call real APIs
-        expect(net.calls).not.toContain('db.getTreasuryDetail');
-        expect(net.calls).not.toContain('db.getEnterpriseLedger');
-
-        // Pledge marker action exists
-        const markerActions = host.querySelectorAll('[data-testid="local-community-action"]');
-        const pledgeBtn = Array.from(markerActions).find(el => el.textContent?.includes('Pledge')) as HTMLElement;
-        expect(pledgeBtn).toBeDefined();
-
-        await act(async () => { pledgeBtn.click(); });
-        await settle();
-
-        expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
-    });
-
-    it('displays feature check explanation on global deep link to non-sample enterprise', async () => {
-        rememberProfile('global', WORLDWIDE);
-        searchParams.current = { publicKey: 'real-enterprise-from-deep-link' };
-
-        await render(createElement(TreasuryDetailScreen));
-
-        // Explains why instead of "Couldn't load this group. Check your connection."
-        expect(text()).toContain('Enterprises live in a local community.');
+        const line = host.querySelector('[data-testid="enterprise-elsewhere"]')!;
+        expect(line.textContent).toContain('Enterprises live in a local community');
         expect(text()).not.toContain("Couldn't load this group. Check your connection.");
-
-        // Calls NO real APIs
-        expect(net.calls).not.toContain('db.getTreasuryDetail');
-        expect(net.calls).not.toContain('db.getBalance');
+        expect(text()).not.toContain(BAKERY.name);
+        await press(line.querySelector('button') as HTMLElement);
+        expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+        expect(net.calls).toEqual([]);
     });
 });
 
-describe("the control: a local community's treasury detail", () => {
-    it('calls real APIs when on a local community', async () => {
-        rememberProfile('local', { beans: true, enterprises: true, decisions: true, showcase: false });
-        searchParams.current = { publicKey: 'local-community-enterprise-1' };
+describe("the control: a local community's treasury detail reads as before", () => {
+    const LOCAL = { beans: true, escrow: true, enterprises: true, decisions: true, invites: true, showcase: false };
+    const DETAIL = {
+        publicKey: 'local-ent-1', name: 'Garden Bakery', purpose: 'Bread from the garden oven', balance: 50, creditLine: 100, liveOffers: 1,
+        lifecycle: 'ongoing', status: 'active', paused: false, keepers: [{ publicKey: 'a-real-member-key', callsign: 'RealMember', role: 'lead' }], posts: [],
+    };
+    const answers: Record<string, unknown> = {
+        getTreasuryDetail: DETAIL,
+        getBalance: { balance: 10, keeperOf: ['local-ent-1'] },
+        getEnterpriseLedger: { enterprise: { publicKey: 'local-ent-1' }, period: { since: null, until: null }, summary: { totalIncome: 30, totalSpend: 10, netChange: 20, startingBalance: 30, endingBalance: 50, transactionCount: 2 }, entries: [] },
+        getEnterpriseThread: { conversation: null, messages: [], readOnly: false },
+    };
+    // What the screen asked before the preview came (measured at 25e3390a, review of #2063).
+    const BASE_KEEPER = ['db.getTreasuryDetail', 'db.getEnterpriseThread', 'db.getEnterpriseLedger', 'db.getBalance'];
+    const BASE_UNANSWERED = ['db.getTreasuryDetail', 'db.getEnterpriseThread', 'db.getEnterpriseLedger'];
 
+    it('a keeper on their own enterprise: the same calls, the keeper controls, no strip and no marker', async () => {
+        rememberProfile('local', LOCAL);
+        net.answer = (name) => (name in answers ? Promise.resolve(answers[name]) : undefined);
+        searchParams.current = { publicKey: 'local-ent-1', name: 'Garden Bakery' };
         await render(createElement(TreasuryDetailScreen));
+        expect([...net.calls].sort()).toEqual([...BASE_KEEPER].sort());
+        expect(text()).toContain('OPERATOR CONTROLS');
+        expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
+        expect(markers()).toEqual([]);
+    });
 
+    it('a link with ?preview=true is a real link: read as before (N6)', async () => {
+        rememberProfile('local', LOCAL);
+        net.answer = (name) => (name in answers ? Promise.resolve(answers[name]) : undefined);
+        searchParams.current = { publicKey: 'local-ent-1', preview: 'true' };
+        await render(createElement(TreasuryDetailScreen));
+        expect([...net.calls].sort()).toEqual([...BASE_KEEPER].sort());
+        expect(text()).toContain('Garden Bakery');
+        expect(text()).not.toContain(BAKERY.name);
+    });
+
+    it('enterprises switched off by the operator, a stale link: base\'s calls and base\'s words (B5)', async () => {
+        rememberProfile('local', { ...LOCAL, enterprises: false, showcase: false });
+        net.answer = (name) => (name === 'getTreasuryDetail' || name === 'getEnterpriseLedger' || name === 'getEnterpriseThread' ? Promise.reject(new Error('feature_off')) : undefined);
+        searchParams.current = { publicKey: 'local-ent-1' };
+        await render(createElement(TreasuryDetailScreen));
+        expect([...net.calls].sort()).toEqual([...BASE_UNANSWERED].sort());
+        expect(text()).toContain("Couldn't load this group. Check your connection.");
+        expect(text()).not.toContain('Enterprises live in a local community');
+        expect(host.querySelector('[data-testid="enterprise-elsewhere"]')).toBeNull();
+    });
+
+    it('a reader who may only read enterprises (node on, reader off): read as before', async () => {
+        rememberProfile('local', LOCAL);
+        // Not asked here: the reader's own set is only asked where it can matter; the node's set alone says live.
+        net.answer = (name) => (name in answers ? Promise.resolve(answers[name]) : undefined);
+        searchParams.current = { publicKey: 'local-ent-1' };
+        await render(createElement(TreasuryDetailScreen));
         expect(net.calls).toContain('db.getTreasuryDetail');
+        expect(net.calls).toContain('db.getEnterpriseLedger');
+    });
+
+    it('the node answers nothing (offline): the same calls, still waiting', async () => {
+        rememberProfile('local', LOCAL);
+        searchParams.current = { publicKey: 'local-ent-1' };
+        await render(createElement(TreasuryDetailScreen));
+        expect([...net.calls].sort()).toEqual([...BASE_UNANSWERED].sort());
+        expect(text()).not.toContain('Enterprises live in a local community');
     });
 });

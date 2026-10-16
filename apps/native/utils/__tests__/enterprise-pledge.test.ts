@@ -95,8 +95,11 @@ describe('The Commons card says "Pledge Beans" only while the enterprise takes p
     });
 
     it('the card shows its Pledge Beans line from takesPledges', () => {
-        const card = source('(tabs)/projects.tsx');
+        // The card is its own component (the Commons list and its preview draw the same one: review of #2063, B2).
+        const card = code(fs.readFileSync(path.resolve(__dirname, '../../components/EnterpriseCard.tsx'), 'utf-8'));
         expect(card).toContain('{takesPledges && (');
         expect(card).not.toContain('{hasGoal && !isFunded && (');
+        expect(source('(tabs)/projects.tsx')).toContain('const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => <EnterpriseCard item={item} />;');
+        expect(source('(tabs)/projects.tsx')).not.toContain('Pledge Beans');
     });
 });

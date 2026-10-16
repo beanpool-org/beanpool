@@ -671,7 +671,14 @@ export function removeConnector(address: string): boolean {
     saveConnectors();
     logger.info('P2P', `[Connectors] Removed connector: ${address}`);
 
-    deletePeerListings(peerId, publicUrl);
+    // Only what no remaining connector still names: the same peer under another address, a peer whose id ends the same
+    // (the 12-character prefix), or a peer at the same URL keeps its listings, and its next pull replaces them. A
+    // standby's listings are its main server's rows (review opus-2068 N1, N2).
+    const suffix = (id: string | null | undefined) => (id ? id.slice(-12) : null);
+    const remaining = getConnectors();
+    const prefixInUse = !!peerId && remaining.some(c => suffix(c.peerId ?? peerIdFromAddress(c.address)) === suffix(peerId));
+    const urlInUse = !!publicUrl && remaining.some(c => (c.publicUrl ?? derivePublicUrl(c.address)) === publicUrl);
+    if (getNodeRole() !== 'backup') deletePeerListings(prefixInUse ? null : peerId, urlInUse ? null : publicUrl);
     return true;
 }
 

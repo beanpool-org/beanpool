@@ -212,6 +212,29 @@ async function main() {
     assert(listingsBFinal.length === 0, `6b. Peer B listings are gone after removal (${listingsBFinal.length})`);
     assert(doorbells() === 2, `6c. Fake socket heard post_updated a second time (got ${doorbells()})`);
 
+    // ── 7. A peer that moved host keeps its listings when its OLD connector is removed ────────────────
+    const peerE = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
+    const addrE1 = `/ip4/172.18.0.41/tcp/4001/p2p/${peerE}`;
+    const addrE2 = `/ip4/172.18.0.42/tcp/4001/p2p/${peerE}`;
+    const urlE = 'https://peer-e.beanpool.org';
+    for (const address of [addrE1, addrE2]) {
+        await post('/api/local/connectors', { password: PW, address, trustLevel: 'peer', callsign: 'peer-e', publicUrl: urlE, enabled: true });
+        await post('/api/local/connectors/credit-cap', { password: PW, address, cap: 500 });
+    }
+    listingsByPeer.set(peerE, [listing({ title: 'Peer E eggs', credits: 3 }), listing({ title: 'Peer E jam', credits: 5 })]);
+    await pullAllPeerListings(fakeNode);
+    await tick();
+    const bellsBeforeE = doorbells();
+    assert(cachedFor(urlE).length === 2, `7a. Peer E's 2 listings cached (${cachedFor(urlE).length})`);
+    const remE1 = await post('/api/local/connectors/remove', { password: PW, address: addrE1 });
+    await tick();
+    assert(remE1.status === 200 && cachedFor(urlE).length === 2,
+        `7b. Removing E's old address keeps its listings: its other connector still names it (${remE1.status}, ${cachedFor(urlE).length})`);
+    assert(doorbells() === bellsBeforeE, `7c. and rings nobody (post_updated ×${doorbells() - bellsBeforeE})`);
+    const remE2 = await post('/api/local/connectors/remove', { password: PW, address: addrE2 });
+    await tick();
+    assert(remE2.status === 200 && cachedFor(urlE).length === 0, `7d. Removing E's last connector deletes them (${cachedFor(urlE).length})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Removed connector listings tests passed.');

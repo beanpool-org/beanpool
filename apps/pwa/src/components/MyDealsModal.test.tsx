@@ -35,7 +35,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             sellerPublicKey: 'seller-pubkey-456',
             sellerCallsign: 'seed-keeper',
             credits: 10,
-            status: 'pending',
+            status: 'pending' as const,
             createdAt: new Date().toISOString(),
             coverImage: '/api/marketplace/posts/post-2/photos/0',
         },

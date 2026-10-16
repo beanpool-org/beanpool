@@ -446,8 +446,7 @@ export function MyDealsModal({
                                             {(dealsTab === 'history' || (!preview && needsReview)) && (
                                                 <div className="flex justify-between items-end mt-2">
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
-                                                        {isBuyer ? t('Bought from ') : t('Sold to ')}
-                                                        <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
+                                                        {isBuyer ? t('Bought from {who}', { who: partnerCallsign }) : t('Sold to {who}', { who: partnerCallsign })}
                                                     </p>
                                                     {preview && isCompleted ? (
                                                         <div data-testid="sample-deal-line">

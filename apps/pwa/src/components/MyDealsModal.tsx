@@ -558,12 +558,12 @@ export function MyDealsModal({
                                             )}
 
                                             {dealsTab === 'history' && (
-                                                <div className="flex justify-between items-end mt-2">
+                                                <div className="flex flex-wrap justify-between items-end gap-2 mt-2">
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
                                                         {isBuyer ? t('Bought from {who}', { who: partnerCallsign }) : t('Sold to {who}', { who: partnerCallsign })}
                                                     </p>
                                                     {isCompleted && (
-                                                        <div data-testid="sample-deal-line">
+                                                        <div data-testid="sample-deal-line" className="ml-auto max-w-full">
                                                             <LocalCommunityAction
                                                                 feature="escrow"
                                                                 label={t('Leave Review')}

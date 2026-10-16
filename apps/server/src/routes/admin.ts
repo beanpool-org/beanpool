@@ -50,7 +50,7 @@ import { gatewayAllowlistRefusal } from '../config/gateway.js';
 import { clientIp } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
-import { noteSecurityEvent } from '../services/security-signal.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -1855,6 +1855,8 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
         adminPruneUser(ctx.params.pubkey, actor);
+        // The owners count removals (design case 18 §7): how many today, never who.
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor, actorRole: 'admin' });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
@@ -1871,6 +1873,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await ownerRemovalProof(ctx, 'prune-branch', ctx.params.pubkey, actor))) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.branchesPruned, actor, actorRole: 'owner' });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
@@ -2748,6 +2751,7 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor: effectiveActor, actorRole: 'admin' });
         // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
         try {
             logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled', lookTokenOf(ctx));

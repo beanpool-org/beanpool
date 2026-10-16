@@ -253,19 +253,8 @@ async function main() {
     tiltBridge(PEER_ID, 8);   // back to square
     assert(nodeTotal() === baseline, '4d. and the ledger still sums to where it started');
 
-    // ── 5. Members can SEE it. The read is public by design (§7), the ceiling is not. ────────────────────
-    const publicRead = await get('/api/federation/links');
-    assert(publicRead.status === 200, `5a. GET /api/federation/links needs no password (got ${publicRead.status})`);
-    const shown = (publicRead.json?.links ?? []).find((l: any) => l.peerId === PEER_ID);
-    assert(!!shown, '5b. THE POINT OF THE CARD: a member can read the community\'s own energy position');
-    assert(shown?.commissionCeiling === 0 && shown?.energyBalance === 0,
-        '5c. with the ceiling beside the balance — §7 makes the ceiling the safety, so it must be visible too');
-    assert(!('address' in (shown ?? {})) && !('creditCap' in (shown ?? {})),
-        '5d. and it leaks no operator configuration — no peer address, no credit cap');
-
-    // ── 6. The Commons list, which is where a member actually meets this. ────────────────────────────────
-    const ordinary = createTreasury('Egg Flock', 'bundled://sprout', 0);
-    // Read as a member: the enterprises are members' reads on every node (2026-10-01).
+    // ── 5. Members can SEE it (§7); strangers cannot (FED-10: balances are members' business, 2026-09-28). ──
+    // Read as a member: the enterprises and the link cards are members' reads on every node (2026-10-01, FED-10).
     const reader = { pk: '', priv: null as unknown as crypto.KeyObject };
     {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -275,6 +264,20 @@ async function main() {
                     VALUES (?, 'Reader', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'TEST', 'active')`).run(reader.pk);
         setMemberPhoto(db, reader.pk, 'https://example.com/r.jpg');
     }
+    const strangerRead = await get('/api/federation/links');
+    assert(strangerRead.status === 401 && strangerRead.json?.code === 'members_only',
+        `5a0. an unsigned GET /api/federation/links is refused, members_only (got ${strangerRead.status} ${strangerRead.json?.code})`);
+    const publicRead = await signedGet(reader, '/api/federation/links');
+    assert(publicRead.status === 200, `5a. a member's GET /api/federation/links needs no password (got ${publicRead.status})`);
+    const shown = (publicRead.json?.links ?? []).find((l: any) => l.peerId === PEER_ID);
+    assert(!!shown, '5b. THE POINT OF THE CARD: a member can read the community\'s own energy position');
+    assert(shown?.commissionCeiling === 0 && shown?.energyBalance === 0,
+        '5c. with the ceiling beside the balance — §7 makes the ceiling the safety, so it must be visible too');
+    assert(!('address' in (shown ?? {})) && !('creditCap' in (shown ?? {})),
+        '5d. and it leaks no operator configuration — no peer address, no credit cap');
+
+    // ── 6. The Commons list, which is where a member actually meets this. ────────────────────────────────
+    const ordinary = createTreasury('Egg Flock', 'bundled://sprout', 0);
     const treasuries = await signedGet(reader, '/api/treasuries');
     const linkCard = (treasuries.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
     const plainCard = (treasuries.json?.treasuries ?? []).find((t: any) => t.publicKey === ordinary.publicKey);
@@ -328,8 +331,8 @@ async function main() {
     assert(ok.status === 200 && ok.json?.link?.commissionCeiling === 20,
         `7j. a ceiling of 20 is accepted and echoed (got ${ok.status} ceiling=${ok.json?.link?.commissionCeiling})`);
     assert(getFederationLink(PEER_ID)?.commissionCeiling === 20, '7k. and reads back through the accessor');
-    assert((await get('/api/federation/links')).json.links.find((l: any) => l.peerId === PEER_ID)?.commissionCeiling === 20,
-        '7l. and is visible on the public read, which is the point of a ceiling being a safety');
+    assert((await signedGet(reader, '/api/federation/links')).json.links.find((l: any) => l.peerId === PEER_ID)?.commissionCeiling === 20,
+        '7l. and is visible on the members\' read, which is the point of a ceiling being a safety');
     assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 0 })).json?.link?.commissionCeiling === 0,
         '7m. and 0 turns commissioning back off — the documented way to stop it');
 

@@ -158,12 +158,13 @@ describe('FleetSidebar Component', () => {
             expect(onSelectTab).toHaveBeenCalledWith('appliance');
         });
 
-        it('renders single node status card and legacy settings link', () => {
+        it('renders single node status card, and no link to the old static Settings page (gone, design case 18 D9)', () => {
             render(<FleetSidebar {...singleNodeProps} />);
 
             expect(screen.getByText('Node Status')).toBeInTheDocument();
             expect(screen.getByText('Alpha Node')).toBeInTheDocument();
-            expect(screen.getByText('Legacy Settings')).toHaveAttribute('href', '/settings-legacy');
+            expect(screen.queryByText(/legacy settings/i)).not.toBeInTheDocument();
+            expect(document.querySelector('a[href="/settings-legacy"]')).toBeNull();
         });
 
         it('renders community name in header brand and marks decorative seedling as aria-hidden', () => {

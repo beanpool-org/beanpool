@@ -106,7 +106,9 @@ If you joined the global community with 12 words, they are your only way back. A
 
 - In the web app on the computer, choose to link with the mobile app. It shows a QR code.
 - On the phone, open **Settings** and tap **Link a device** (older apps: **Use your account on another device**).
-- Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that.
+- Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check.
+- The phone then shows **four digits**. Type them on the computer and press **Confirm**. Your account goes to the computer only after that. Three wrong tries and nothing is sent: make a new code. Never read the digits out or send them to anyone.
+- If the phone says its app is too old, update the BeanPool app on it, then scan a new code.
 
 ## Installing it
 

@@ -27,6 +27,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from './security-signal.js';
 import { bucketOf, getImageStore } from '../storage/image-store.js';
 import { captureSnapshotImages, snapshotImagesDir, writeDbSnapshot } from './snapshot-scheduler.js';
 import {
@@ -160,14 +161,17 @@ export function takeRestorePoint(why: RestorePointWhy, now = Date.now()): Restor
     return info;
 }
 
-/** The server files a point kept, as point.json names them (the tar is the bytes). */
-export function restorePointServerFiles(pointDir: string): string[] {
+/**
+ * The server files a point kept, as point.json names them (the tar is the bytes). Null when point.json cannot be read or
+ * names no list: a roll-back then cannot tell a file the point never held from one it lost, and must not move any aside.
+ */
+export function restorePointServerFiles(pointDir: string): string[] | null {
     try {
         const meta = JSON.parse(fs.readFileSync(path.join(pointDir, RESTORE_POINT_META), 'utf-8'));
-        const listed = Array.isArray(meta?.serverFiles) ? meta.serverFiles : [];
-        return RESTORE_POINT_SERVER_FILES.filter((f) => listed.includes(f));
+        if (!Array.isArray(meta?.serverFiles)) return null;
+        return RESTORE_POINT_SERVER_FILES.filter((f) => meta.serverFiles.includes(f));
     } catch {
-        return [];
+        return null;
     }
 }
 
@@ -227,6 +231,8 @@ export interface RestoreNotice {
     madeAt: string | null;
     /** The point kept before it. */
     point: string;
+    /** Who: an owner in Settings, or the server's shell (`beanpool restore`, `beanpool restore-point`). Older notices: an owner. */
+    by?: 'owner' | 'shell';
 }
 
 /**
@@ -282,6 +288,14 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
         try {
             deps.announce(title, body, 'critical');
         } catch { /* the log line below still records it */ }
+        try {
+            const by = notice.by === 'shell' ? 'shell' : 'owner';
+            // The owners' alert (sec.restore, high; design case 18 §7), in the server's words: a date, by whom, never a member.
+            // An unlocked shell restore has no date: said without one (#2033 N8), never "made an earlier date".
+            const madeOn = notice.madeAt && Number.isFinite(Date.parse(notice.madeAt)) ? day(notice.madeAt) : null;
+            const detail = notice.kind === 'restore' ? OWNER_ALERT_WORDS.restored(madeOn, by) : OWNER_ALERT_WORDS.rolledBack(madeOn ?? day(null), by);
+            noteSecurityEvent({ key: 'sec.restore', detail, high: true, priority: 4 });
+        } catch { /* an alert never blocks the boot */ }
         deps.log(`[RESTORE] ${body} Restore point kept before it: ${notice.point} (at ${notice.at}).`);
         delivered++;
     }

@@ -3,6 +3,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
  * "Connected assistants" (admin MCP design §8, §10; slice S3; the server is apps/server agent/grants-route.ts). An owner
@@ -86,6 +87,8 @@ function commandLine(mcpUrl: string, token: string): string {
 }
 
 export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'password' } }: ConnectedAssistantsPanelProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const drawn = viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin';
     const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
 
@@ -221,7 +224,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
 
     const handleRevoke = async (g: AgentGrantRow) => {
         const whose = g.mine || !g.member ? '' : ` (${g.member}'s)`;
-        if (!confirm(`Disconnect "${g.name}"${whose}? It stops at once: its next call is refused.`)) return;
+        if (!(await ask({ title: `Disconnect "${g.name}"${whose}?`, body: 'It stops at once: its next call is refused.', confirmLabel: 'Disconnect' }))) return;
         setMessage('');
         try {
             const { res, json } = await post(`${GRANTS}/${encodeURIComponent(g.id)}/revoke`, {});
@@ -330,6 +333,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4 min-w-0" data-testid="connected-assistants-card">
+            {confirmation}
             <div className="min-w-0">
                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                     <span>🧠</span>

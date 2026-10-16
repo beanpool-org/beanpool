@@ -206,8 +206,9 @@ describe('pair-device: the rule is wired in (the screen cannot be rendered here,
 
     it("every request goes to the matched saved origin (pairingRequestUrls), never to the QR's text", () => {
         const fetches = pair().match(/fetch\(([^,)]*)/g) ?? [];
-        // The only three requests the screen makes: the probe, the transfer, and the cancel.
-        expect(fetches).toEqual(['fetch(urls.probe', 'fetch(urls.transfer', 'fetch(pairingRequestUrls(target']);
+        // The only requests the screen makes: the probe, the transfer, and the cancel (a relay that gave no four digits,
+        // and the member's Cancel), each built from the matched origin.
+        expect(fetches).toEqual(['fetch(urls.probe', 'fetch(urls.transfer', 'fetch(urls.cancel', 'fetch(pairingRequestUrls(target']);
         expect(pair()).toContain('fetch(pairingRequestUrls(target, scannedData.sessionId).cancel, {');
         expect(pair()).toContain('const urls = pairingRequestUrls(target, scanned.sessionId);');
         expect(pair()).not.toMatch(/scanned(?:Data)?\??\.nodeUrl/);

@@ -395,9 +395,10 @@ async function main() {
     assert(annaMake.status === 200 && annaMake.body.codeId === 3, "9. an owner's key session from the phone, just unlocked, makes code #3");
     assert(JSON.stringify(annaMake.body.status).indexOf(annaMake.body.code) === -1, '9. the status in that response does not repeat the code');
     // With 2FA on, the password alone reaches none of the admin routes here (checkAdminAuth); the token is unaffected.
-    const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
+    const { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } = await import('./totp.js');
     const totpSecret = generateTotpSecret();
     updateLocalConfig({ totpEnabled: true, totpSecret });
+    forgetUsedTotpCodesForTests(); // the suite's own 2FA used a code this step; the kept step (AUTH-07) is not per secret
     await svc.flushTakeoverChecks(); // the 2FA secret is in the bundle: this re-seals
     for (const p of ['/api/local/admin/takeover/status', '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check']) {
         const r = await call('POST', p, { headers: passwordOnly, body: { replace: true, code: 'x' } });

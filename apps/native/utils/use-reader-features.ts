@@ -15,20 +15,20 @@ import { useNodeProfileState } from './use-node-profile';
 import { effectiveFeatures, readNodeProfile, showcaseMode, type NodeFeatures } from './node-profile';
 import { signedGet } from './node-post';
 import type { BeanPoolIdentity } from './identity';
+import { readerFeaturesHeld as cache, readerFeaturesKey as cacheKey } from './reads-own';
 
 /** How long one account's answer is used before it is asked again, as the node's own (an hour). */
 const READER_FRESH_MS = 60 * 60 * 1000;
 /** A refusal (a visitor's 403) or no answer at all is asked again sooner, but never on every focus. */
 const READER_RETRY_MS = 10 * 60 * 1000;
 const READER_ASK_MS = 10_000;
-/**
- * Every answer is kept, a null one too: an older node's 200 without `features` is as settled as a W1 node's, and six
- * screens read this on every focus, so an unkept null was a signed ask per focus (review of #1852, finding 1).
+/*
+ * Every answer is kept (utils/reads-own.ts holds them, so a service's guard reads them too), a null one too: an older
+ * node's 200 without `features` is as settled as a W1 node's, and six screens read this on every focus, so an unkept
+ * null was a signed ask per focus (review of #1852, finding 1).
  */
-const cache = new Map<string, { features: NodeFeatures | null; at: number; freshMs: number }>();
 /** One ask in flight per node and account: screens that come into view together wait for the same answer. */
 const asking = new Map<string, Promise<NodeFeatures | null>>();
-const cacheKey = (url: string, publicKey: string) => `${url.trim().replace(/\/+$/, '').toLowerCase()}|${publicKey}`;
 
 async function askReader(url: string, identity: BeanPoolIdentity, fetchTimeoutMs: number): Promise<{ features: NodeFeatures | null; freshMs: number }> {
     const stop = new AbortController();

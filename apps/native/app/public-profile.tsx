@@ -23,6 +23,7 @@ import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
+import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
@@ -525,7 +526,8 @@ export default function PublicProfileScreen() {
         Promise.all([
             getMemberProfile(pubKeyStr).catch(() => null),
             getMemberPosts(pubKeyStr).catch(() => []),
-            isSelf ? getBalance(pubKeyStr).catch(() => null) : Promise.resolve(null),
+            // The reader's own balance (the trust card) is Beans: never asked where they are in preview (utils/reads-own.ts).
+            isSelf ? readsOwn('beans', pubKeyStr).then(reads => (reads ? getBalance(pubKeyStr) : null)).catch(() => null) : Promise.resolve(null),
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
         ]).then(([prof, posts, bal, friends]) => {
             // Never over a card the fetch by key (below) has already brought fresher.
@@ -560,8 +562,11 @@ export default function PublicProfileScreen() {
                 .catch(() => null)
                 .finally(() => setTrustLoading(false));
 
+            // The reader's own balance (the vouch button's): never asked where Beans are in preview (utils/reads-own.ts).
             if (identity?.publicKey) {
-                getBalance(identity.publicKey)
+                const viewer = identity.publicKey;
+                readsOwn('beans', viewer)
+                    .then(reads => (reads ? getBalance(viewer) : null))
                     .then(viewerBal => {
                         if (viewerBal) setViewerBalance(viewerBal);
                     })
@@ -761,13 +766,16 @@ export default function PublicProfileScreen() {
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
-                    {/* Visual Reciprocity Health Ring / Badge (#4) */}
+                    {/* Visual Reciprocity Health Ring / Badge (#4). The deal completion rate: Beans, gated like the trust
+                        panel below. Where nobody makes a deal (the worldwide community) it read 100% for everyone. */}
+                    {showsBeans && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: colors.brand.primary, marginTop: 6 }}>
                         <MaterialCommunityIcons name="circle-outline" size={15} color={colors.brand.primary} />
                         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary }}>
                             {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>
+                    )}
                     {profile?.bio && (
                         <Text style={styles.bioText}>"{profile.bio}"</Text>
                     )}
@@ -1127,11 +1135,14 @@ export default function PublicProfileScreen() {
                             <Text style={styles.statTileNum} numberOfLines={1}>{friendsCount}</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Friends</Text>
                         </Pressable>
+                        {/* A count of deals: Beans, so not drawn where nobody makes one (the worldwide community). */}
+                        {showsBeans && (<>
                         <View style={styles.statDivider} />
                         <View style={styles.statTile}>
                             <Text style={styles.statTileNum} numberOfLines={1}>{balanceInfo?.trustStats?.tradeCount ?? 0}</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
                         </View>
+                        </>)}
                     </View>
                 )}
 

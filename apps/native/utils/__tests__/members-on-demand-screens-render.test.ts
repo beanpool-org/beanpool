@@ -882,6 +882,17 @@ for (const scheme of ['light', 'dark'] as const) {
                 // The verdict's own tips, once: the plain box is for Beans-off nodes only.
                 expect(host.querySelector('[data-testid="meeting-tips"]')).toBeNull();
                 expect(text().split(MEETING_TIPS[0]).length - 1).toBe(1);
+                expect(text()).toContain('Reciprocity Health');
+            });
+
+            it("the member's own profile on a local community (Beans on): the Reciprocity Health badge and the Trades count, as before", async () => {
+                community.membersOnDemand = false;
+                nav.params = { publicKey: OWN };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain('Reciprocity Health');
+                expect(text()).toContain('Trades');
+                expect(text()).toContain('Friends');
             });
         });
 
@@ -936,6 +947,31 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(box.textContent).not.toMatch(/trade|vouch|Trust|⚠️/i);
                 expect(text().indexOf(MEETING_TIPS[0])).toBeLessThan(text().indexOf(LOCAL_COMMUNITY_LINES.profile));
                 await fits([OWN, KOFI]);
+            });
+
+            // Pre-build phone check (16 Oct): the header's "100% Reciprocity Health" is the deal completion rate, and the
+            // own "Trades" tile a count of deals. Nobody makes a deal here, so the badge read 100% for everyone (its
+            // stand-in when there is no rate) and the tile 0, both live numbers beside the line that says trust is earned
+            // in a local community. Gated like the rest of the trust panel now.
+            it('Public profile, another member: no "Reciprocity Health" badge, a deal rate nobody can have here', async () => {
+                node.trust = NEWCOMER_TRUST;
+                nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                expect(text()).not.toContain('Reciprocity Health');
+                await fits([OWN, KOFI]);
+            });
+
+            it('Public profile, the member\'s own: no "Reciprocity Health" badge and no "Trades" count; Friends stays', async () => {
+                nav.params = { publicKey: OWN };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                expect(text()).not.toContain('Reciprocity Health');
+                expect(text()).not.toContain('Trades');
+                expect(text()).toContain('Friends');
+                await fits([OWN]);
             });
 
             it('Public profile offline with no card: the key\'s first 8 characters and "Connect to see more", beside the trust line', async () => {

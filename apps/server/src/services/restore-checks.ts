@@ -33,8 +33,10 @@
  * view in it must be one this server's own database has. Why that list: boot makes every trigger this server has
  * (69 on 2026-10-01, and no views) from db/schema.sql, with `CREATE TRIGGER IF NOT EXISTS`, and from db.ts
  * (the plain tables' stamps, members_touch_updated_at, posts_cleanup_on_group_delete), so the live database's
- * sqlite_master IS the list this version knows. A name it does not have refuses the backup. A known name whose text
- * differs is dropped from the copy, and the restart makes it again from this version's code: `IF NOT EXISTS` would
+ * sqlite_master IS the list this version knows. A name it does not have refuses the backup, unless an older release
+ * made it ({@link RETIRED_SCHEMA_OBJECTS}) or it is a trigger on a table this version does not have: those are dropped
+ * from the copy and never run (review of #2050 N1). A known name whose text differs is dropped from the copy too, and
+ * the restart makes it again from this version's code: `IF NOT EXISTS` would
  * otherwise keep whatever body the file brought, and posts_touch_updated_at is even put back from the database's own
  * text (state-engine.ts backfillSearchKeywords). A trigger fires below the ledger's JavaScript guards, so one the
  * backup brought could rewrite balances on every ordinary write after the restore.
@@ -426,24 +428,67 @@ export function extractBackupArchive(tarGzPath: string, into: string, limits: Ar
     return readArchive(tarGzPath, limits, path.resolve(into));
 }
 
-type SchemaObject = { type: string; name: string; sql: string | null };
+type SchemaObject = { type: string; name: string; tbl_name: string; sql: string | null };
 
 function triggersAndViews(handle: Database.Database): SchemaObject[] {
-    return handle.prepare(`SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY type, name`).all() as SchemaObject[];
+    return handle.prepare(`SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY type, name`).all() as SchemaObject[];
 }
+
+/**
+ * The triggers and views an older release made that this version does not, each with the table it is on (review of
+ * #2050 N1). Built from every release's db/schema.sql, v1.1.34 … v1.2.28, each run into an empty database, and from
+ * the ones those releases made in code (posts_ai/ad/au, members_touch_updated_at, posts_cleanup_on_group_delete, all of
+ * which this version still makes): keeper recovery's trigger, in v1.1.34 … v1.2.18, is the only one. A backup a node of
+ * those releases made carries it, so it is dropped from the copy and never runs. Under its name on another table it is
+ * not this, and refuses the backup. A release that retires a trigger or view adds it here.
+ */
+export const RETIRED_SCHEMA_OBJECTS: Readonly<Record<string, string>> = {
+    'trigger recovery_requests_touch_updated_at': 'recovery_requests',
+};
 
 function quoteName(name: string): string {
     return `"${name.replace(/"/g, '""')}"`;
 }
 
 /**
+ * The tables, and their key columns, without which a database is not a community's: a file that lacks one would boot as an
+ * empty community with no owner, or not boot at all (verified review H2). Checked by name, so any version's backup that
+ * holds a community passes: all of these are in the first schema (2026-07-01). Not node_roles, which came on 2026-09-14
+ * (v1.2.26): the boot makes it when it is missing and seeds the owner from the genesis member, and every backup of a
+ * release before it lacks it (review of #2050 B1).
+ */
+export const CORE_TABLES: Record<string, readonly string[]> = {
+    members: ['public_key', 'callsign'],
+    accounts: ['public_key', 'balance'],
+    node_config: [],
+};
+
+/** The first core table or column `handle` lacks, in words, or null when it has them all. */
+function missingCoreTable(handle: Database.Database): string | null {
+    for (const [table, columns] of Object.entries(CORE_TABLES)) {
+        // A table, not a view of that name: the boot's CREATE TABLE IF NOT EXISTS would pass a view by and then fail on it.
+        if (!handle.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)) return `no ${table} table`;
+        const cols = (handle.prepare(`SELECT name FROM pragma_table_info(?)`).all(table) as { name: string }[]).map((c) => c.name);
+        const lacking = columns.find((c) => !cols.includes(c));
+        if (lacking) return `its ${table} table has no ${lacking} column`;
+    }
+    return null;
+}
+
+/**
  * The database a restore is about to put in place, checked while the live one is still open (see the top of this file).
  * `candidate` must sit alone in a folder of its own, so no `-wal` or `-journal` the archive brought is read with it: what
  * is checked is exactly the file that is copied into place. Throws {@link RestoreRefused} (400) when it is not a
- * database, fails `PRAGMA integrity_check`, or carries a trigger or view `live` does not have. Returns the known ones it
- * dropped because their text differs from `live`'s; the restart makes them again from this version's code.
+ * database, fails `PRAGMA integrity_check`, lacks a core table or key column ({@link CORE_TABLES}), or carries a trigger
+ * or view `live` does not have. Returns the known ones it dropped because their text differs from `live`'s (`remade`;
+ * the restart makes them again from this version's code), and the ones an older release made that it dropped (`retired`:
+ * one in {@link RETIRED_SCHEMA_OBJECTS} on its own table, or a trigger on a table `live` does not have).
+ *
+ * `ownPoint`: the candidate is a restore point this server took of itself (a roll-back). Its triggers and views are this
+ * server's own, so one the live database lacks is not a refusal: a live database that is broken (a restore of a file
+ * with no schema) has none at all, and the point is the way back from it (verified review H2, note).
  */
-export function checkRestoreDatabase(candidate: string, live: Database.Database): { remade: string[] } {
+export function checkRestoreDatabase(candidate: string, live: Database.Database, opts: { ownPoint?: boolean } = {}): { remade: string[]; retired: string[] } {
     const refuse = (why: string) => new RestoreRefused(`This backup's state.db ${why}. Nothing was changed.`, 400);
     const head = Buffer.alloc(16);
     const fd = fs.openSync(candidate, 'r');
@@ -473,25 +518,37 @@ export function checkRestoreDatabase(candidate: string, live: Database.Database)
             throw refuse(`fails SQLite's integrity check: ${result.slice(0, 3).map((r) => r.integrity_check).join('; ')}`);
         }
 
-        const known = new Map(triggersAndViews(live).map((o) => [`${o.type} ${o.name}`, o.sql]));
+        let notCommunity: string | null;
         let carried: SchemaObject[];
         try {
+            notCommunity = missingCoreTable(handle);
             carried = triggersAndViews(handle);
         } catch (e: any) {
             throw refuse(`has a schema this server cannot read (${e?.message || e})`);
         }
-        const unknown = carried.filter((o) => !known.has(`${o.type} ${o.name}`));
+        if (notCommunity) throw refuse(`is not a BeanPool database (${notCommunity})`);
+
+        const id = (o: SchemaObject) => `${o.type} ${o.name}`;
+        const known = new Map(triggersAndViews(live).map((o) => [id(o), o.sql]));
+        const liveTables = new Set((live.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map((t) => t.name));
+        // What an older release made, which this version does not (N1). Dropped below, so nothing in it runs. A point
+        // this server took is checked against the list alone: the live database it rolls back from may have no tables.
+        const retired = carried.filter((o) => !known.has(id(o)) && (RETIRED_SCHEMA_OBJECTS[id(o)] === o.tbl_name
+            || (!opts.ownPoint && o.type === 'trigger' && !liveTables.has(o.tbl_name))));
+        const unknown = opts.ownPoint ? [] : carried.filter((o) => !known.has(id(o)) && !retired.includes(o));
         if (unknown.length > 0) {
             const named = unknown.slice(0, 3).map((o) => `${o.type} "${o.name}"`).join(', ') + (unknown.length > 3 ? ', …' : '');
             throw refuse(`carries ${unknown.length === 1 ? 'a' : unknown.length} ${unknown.length === 1 ? unknown[0].type : 'triggers or views'} `
                 + `this server's own database does not have (${named}): it was changed after the backup was made, `
                 + 'or made by a newer version of BeanPool');
         }
-        const remade = carried.filter((o) => known.get(`${o.type} ${o.name}`) !== o.sql);
-        for (const o of remade) handle.exec(`DROP ${o.type === 'view' ? 'VIEW' : 'TRIGGER'} ${quoteName(o.name)}`);
+        const remade = carried.filter((o) => known.has(id(o)) && known.get(id(o)) !== o.sql);
+        const dropped = carried.filter((o) => remade.includes(o) || retired.includes(o));
+        // Triggers before views (the order above): dropping a view takes its own triggers with it, hence IF EXISTS.
+        for (const o of dropped) handle.exec(`DROP ${o.type === 'view' ? 'VIEW' : 'TRIGGER'} IF EXISTS ${quoteName(o.name)}`);
         // Into the file itself before it is copied, whatever journal mode it was made in.
-        if (remade.length > 0) handle.pragma('wal_checkpoint(TRUNCATE)');
-        return { remade: remade.map((o) => `${o.type} ${o.name}`) };
+        if (dropped.length > 0) handle.pragma('wal_checkpoint(TRUNCATE)');
+        return { remade: remade.map(id), retired: retired.map(id) };
     } finally {
         handle.close();
     }

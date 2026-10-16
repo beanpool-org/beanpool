@@ -53,7 +53,7 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, readsOwnData } from '@beanpool/core';
 
 export const MARKETPLACE_CATEGORIES = [
     { id: 'all', emoji: '🏷️', label: 'All Categories' },
@@ -108,7 +108,8 @@ export default function MarketScreen() {
     // The loads below run from listeners set up once: they read the mode as it is now, not as it was then.
     const escrowModeNow = useRef(escrowMode);
     escrowModeNow.current = escrowMode;
-    const readsOwnDeals = () => escrowModeNow.current !== undefined && escrowModeNow.current !== 'preview';
+    // The phone's own-data rule (utils/reads-own.ts, core's readsOwnData): not until the mode is known, never in preview.
+    const readsOwnDeals = () => readsOwnData(escrowModeNow.current);
 
     // Contributions-First quest card: shown until the member has listed their
     // first Offer (the gate that unlocks posting Needs / accepting Offers), so

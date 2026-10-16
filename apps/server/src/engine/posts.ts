@@ -1533,10 +1533,30 @@ export const EVENT_WAITING_PUSH_TITLE = 'People are waiting';
 /** At most one "people are waiting" push per event in this long: a crowd of throwaways tapping Going is one push an hour. */
 export const EVENT_WAITING_PUSH_EVERY_MS = 60 * 60 * 1000;
 const waitingPushSentAt = new Map<string, number>();
+/**
+ * When each member was last told they were let in to each event (`<post id>|<member>`): at most once per
+ * EVENT_WAITING_PUSH_EVERY_MS. A take-back is silent, so a host who takes it back and lets them in again, over and over,
+ * pushed them each time (the push audit's item 1: 50 in 0.35 s, to a member who had blocked the host as to anyone). The
+ * let-in itself, the note and the chat seat follow every time; only the push waits. Kept in memory, as waitingPushSentAt.
+ */
+const letInPushSentAt = new Map<string, number>();
 
-/** For a suite: forget when each host was last told, as a restart does. */
+/** For a suite: forget when each host was last told, and each member let in, as a restart does. */
 export function resetEventWaitingPushes(): void {
     waitingPushSentAt.clear();
+    letInPushSentAt.clear();
+}
+
+/** Whether `member`, just let in to `postId`, is told now (and if so, noted). */
+function letInPushDue(postId: string, member: string, now: number): boolean {
+    const key = `${postId}|${member}`;
+    const last = letInPushSentAt.get(key);
+    if (last !== undefined && now - last < EVENT_WAITING_PUSH_EVERY_MS) return false;
+    if (letInPushSentAt.size >= 10_000) {
+        for (const [k, t] of letInPushSentAt) if (now - t >= EVENT_WAITING_PUSH_EVERY_MS) letInPushSentAt.delete(k);
+    }
+    letInPushSentAt.set(key, now);
+    return true;
 }
 
 /**
@@ -1592,7 +1612,8 @@ export const LET_IN_OUT_OF_SIGHT = "They can't see this event, so they can't be 
  * people in (DESIGN-global-member-privacy-fable.md §2.2, §2.4). `everyone` lets in every Going member waiting now; people
  * who tap Going later still wait. A host's write on the member's row, so it bumps the row's updated_at (last-write-wins
  * on sync) and the post's, so a phone's delta brings the note. The chat's participants follow in the same transaction.
- * Pushes "<host> let you in to <title>" to each member let in; a take-back is silent.
+ * Pushes "<host> let you in to <title>" to each member let in, at most once an hour each (letInPushDue); a take-back is
+ * silent.
  */
 export function letInEvent(
     postId: string,
@@ -1665,7 +1686,8 @@ export function letInEvent(
     if (changedMembers.length > 0) bumpPostsVersion();
     if (letIn && push && changedMembers.length > 0) {
         try {
-            const recipients = changedMembers.filter(pk => !isVisitorKey(db, pk));
+            const now = Date.now();
+            const recipients = changedMembers.filter(pk => !isVisitorKey(db, pk) && letInPushDue(postId, pk, now));
             const hostName = (getMember(db, actorPubkey) as any)?.callsign || 'The host';
             const name = (row.title || 'an event').trim() || 'an event';
             if (recipients.length > 0) {

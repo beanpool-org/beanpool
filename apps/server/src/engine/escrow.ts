@@ -181,6 +181,42 @@ function postHiddenNoNewDeal(): Error {
     );
 }
 
+/**
+ * How often a new deal from the same member on the same listing pushes the listing's author: a request, or a 1-step
+ * accept, cancelled by its maker and made again, over and over, is one push an hour, not one each time (the push audit's
+ * item 2: 100 pushes in 0.7 s to an author who had blocked nobody, before the 100 a day stopped it; with a 1-step accept
+ * and its cancel, two a turn). Anyone could, and a block made in the phone app never reaches the node to stop it. The
+ * deal itself is as any other's: in the author's deals, with its SYSTEM lines and its escrow. Kept in memory, as the
+ * host's "people are waiting" push is (engine/posts.ts): a restart may send one more.
+ */
+export const REPEAT_DEAL_PUSH_EVERY_MS = 60 * 60 * 1000;
+const dealPushSentAt = new Map<string, number>();
+/** Deals whose start pushed nobody (repeatDealPushDue): their buyer's cancel pushes nobody either. */
+const quietDeals = new Set<string>();
+
+/** For a suite: forget when each author was last told, as a restart does. */
+export function resetRepeatDealPushes(): void {
+    dealPushSentAt.clear();
+    quietDeals.clear();
+}
+
+/** Whether deal `txId`, just made by `from` on `postId`, pushes the listing's author now; when not, it is a quiet deal. */
+function repeatDealPushDue(postId: string, from: string, txId: string): boolean {
+    const now = Date.now();
+    const key = `${postId}|${from}`;
+    const last = dealPushSentAt.get(key);
+    if (last !== undefined && now - last < REPEAT_DEAL_PUSH_EVERY_MS) {
+        if (quietDeals.size >= 10_000) quietDeals.clear();
+        quietDeals.add(txId);
+        return false;
+    }
+    if (dealPushSentAt.size >= 10_000) {
+        for (const [k, t] of dealPushSentAt) if (now - t >= REPEAT_DEAL_PUSH_EVERY_MS) dealPushSentAt.delete(k);
+    }
+    dealPushSentAt.set(key, now);
+    return true;
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -312,8 +348,9 @@ export function requestPost(
 
     // A request from someone the listing's author has blocked (engine/member-blocks.ts) waits in their deals with no push:
     // it holds no Beans and carries no words of the requester's, and refusing it would tell the requester they are blocked.
+    // So does the requester's next one within the hour (repeatDealPushDue).
     cb.dispatchPushNotification(
-        hasBlocked(post.author_pubkey, requesterPublicKey) ? [] : [post.author_pubkey],
+        hasBlocked(post.author_pubkey, requesterPublicKey) || !repeatDealPushDue(post.id, requesterPublicKey, tx.id) ? [] : [post.author_pubkey],
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
@@ -777,8 +814,9 @@ export function acceptPost(
     // A 1-step accept by someone the seller has blocked (engine/member-blocks.ts) comes with no push, as their request
     // does: with the buyer's own cancel it could be repeated at will to push the seller (#1403 review). The deal itself,
     // its escrow and its SYSTEM lines are as for anyone, and the seller sees it in their deals.
+    // And the buyer's next one on this listing within the hour, whoever they are (repeatDealPushDue).
     cb.dispatchPushNotification(
-        hasBlocked(post.authorPublicKey, buyerPublicKey) ? [] : [post.authorPublicKey],
+        hasBlocked(post.authorPublicKey, buyerPublicKey) || !repeatDealPushDue(post.id, buyerPublicKey, tx.id) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
         `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
@@ -1111,7 +1149,9 @@ export function cancelPostTransaction(
     const otherParty = cancellerPublicKey === row.buyer_pubkey ? row.seller_pubkey : row.buyer_pubkey;
     // The buyer's cancel tells a seller who has blocked them nothing, as their accept didn't (#1403 review): the deal is
     // back on the seller's board, refunded, with its SYSTEM line in their chat. A seller's cancel always tells the buyer.
-    const silenced = cancellerPublicKey === row.buyer_pubkey && hasBlocked(row.seller_pubkey, row.buyer_pubkey);
+    // Nor a buyer's cancel of a deal that started with no push (repeatDealPushDue).
+    const silenced = cancellerPublicKey === row.buyer_pubkey && (hasBlocked(row.seller_pubkey, row.buyer_pubkey) || quietDeals.has(row.id));
+    quietDeals.delete(row.id);
     cb.dispatchPushNotification(
         silenced ? [] : [otherParty],
         cancellerPublicKey,

@@ -47,7 +47,7 @@ export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => vo
             aria-modal="true"
             aria-labelledby="start-community-title"
             data-testid="start-community-screen"
-            className="fixed inset-0 z-[210] overflow-y-auto bg-nature-50 dark:bg-nature-950"
+            className="fixed inset-0 z-[1210] overflow-y-auto bg-nature-50 dark:bg-nature-950"
         >
             <div className="mx-auto max-w-2xl px-4 pb-10 pt-4">
                 <div className="mb-4 flex items-center gap-2">

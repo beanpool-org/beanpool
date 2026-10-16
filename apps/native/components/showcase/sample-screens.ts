@@ -119,6 +119,45 @@ export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerRespons
 }
 
 /**
+ * Example Valley's invitations in the shape people.tsx reads (design §1 row 8, Marty's 16 Oct pick):
+ * - one pending invite (EXAMPLE-1234), waiting on a neighbour;
+ * - two used invites (EXAMPLE-5678, EXAMPLE-9012), by the two members the example member brought in.
+ */
+export function sampleInvites(now: number = Date.now()) {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    return SAMPLE_COMMUNITY.invites.map((inv) => ({
+        code: inv.code,
+        createdBy: 'sample-member-example',
+        createdAt: at(inv.daysAgo),
+        usedBy: inv.status === 'used' ? (inv.usedBy ?? 'sample-member-second') : null,
+        usedAt: inv.status === 'used' ? at(inv.usedDaysAgo ?? inv.daysAgo) : null,
+        intendedFor: inv.intendedFor ? t(inv.intendedFor) : undefined,
+    }));
+}
+
+/**
+ * The community invite tree for Example Valley: the example member at the root, and the two members they brought in.
+ */
+export function sampleInviteTree(now: number = Date.now()) {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    const tree = SAMPLE_COMMUNITY.inviteTree;
+    return [{
+        publicKey: tree.id,
+        callsign: t(tree.who),
+        joinedAt: at(tree.joinedDaysAgo),
+        inviteCode: 'EXAMPLE-ROOT',
+        children: tree.invited.map((child) => ({
+            publicKey: child.id,
+            callsign: t(child.who),
+            joinedAt: at(child.joinedDaysAgo),
+            // The code each was brought in with: the used invite that names them.
+            inviteCode: SAMPLE_COMMUNITY.invites.find((inv) => inv.usedBy === child.id)?.code ?? '',
+            children: [],
+        })),
+    }];
+}
+
+/**
  * Example Valley's Decision as the phone's Decide screen reads it (DecisionWithTally): touches pool, grant enterprise,
  * quadratic on trade, turnout 9 of 6, Yes 12 (86%) · No 2 · needs 60%, closing in 3 days.
  */

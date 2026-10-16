@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
+import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
@@ -404,12 +404,12 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     // A DM's re-keyed people's signed former keys, to someone in it (engine/key-succession.ts withDmFormerKeys).
-    const conversations = withDmFormerKeys(convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
+    const conversations = withDmFormerKeys(convs.map(c => ({ ...withEventChatReaders(c), unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
     // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
     // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
     // Only people already listed above as in the caller's chats.
     const others = new Set<string>();
-    for (const c of convs) for (const p of c.participants) if (p !== publicKey) others.add(p);
+    for (const c of conversations) for (const p of c.participants) if (p !== publicKey) others.add(p);
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
     ctx.body = {
         conversations,
@@ -656,7 +656,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         : getConversationMessages(conversationId, l, o);
     ctx.body = {
         // As the list serves it: a DM's re-keyed people's former keys, to someone in it (withDmFormerKeys).
-        conversation: withDmFormerKeys([conv], viewer)[0],
+        conversation: withDmFormerKeys([withEventChatReaders(conv)], viewer)[0],
         // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,
         // as they sent it. Only the reader's own, so the other person's read is the lines and nothing else.
         messages: conv.type === 'dm' && viewer && conv.participants.includes(viewer)

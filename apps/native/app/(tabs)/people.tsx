@@ -23,8 +23,9 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
-import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
+import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
+import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
     guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -184,6 +185,7 @@ export default function PeopleScreen() {
         return () => { showSub.remove(); hideSub.remove(); };
     }, []);
     const [invites, setInvites] = useState<any[]>([]);
+    const [tree, setTree] = useState<any[]>([]);
     const [generating, setGenerating] = useState(false);
     const [intendedFor, setIntendedFor] = useState('');
     const [newCode, setNewCode] = useState('');
@@ -320,8 +322,15 @@ export default function PeopleScreen() {
     }, [view]);
 
     useEffect(() => {
-        if (view === 'invites' && invitesMode !== undefined && invitesMode !== 'preview') loadOfflineInvites();
-    }, [view, invitesMode]);
+        if (view === 'invites') {
+            if (invitesPreview) {
+                setInvites(sampleInvites());
+                setTree(sampleInviteTree());
+            } else if (invitesMode !== undefined) {
+                loadOfflineInvites();
+            }
+        }
+    }, [view, invitesMode, invitesPreview, identity?.publicKey]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
@@ -438,7 +447,7 @@ export default function PeopleScreen() {
     };
 
     const handleGenerate = async () => {
-        if (!identity) return;
+        if (!identity || invitesPreview) return;
         setGenerating(true);
         try {
             // First attempt Online generation via API
@@ -539,6 +548,7 @@ export default function PeopleScreen() {
     };
 
     const shareInvite = async (codeToShare: string) => {
+        if (invitesPreview) return;
         const magicLink = `${anchorUrl}/?invite=${codeToShare}`;
         
         let message = `Join my private BeanPool Node! ✨\n\n`;
@@ -799,6 +809,7 @@ export default function PeopleScreen() {
     };
 
     const pendingInvites = invites.filter((i: any) => !i.usedBy);
+    const usedInvites = invites.filter((i: any) => i.usedBy);
 
     return (
         <View style={styles.safeArea}>
@@ -1085,6 +1096,12 @@ export default function PeopleScreen() {
                         </View>
                     ) : (
                         <>
+                            {invitesPreview && (
+                                <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 16 }}>
+                                    <LocalCommunityMark variant="strip" feature="invites" />
+                                    <ExampleHeader />
+                                </View>
+                            )}
                             {identity && anchorUrl && takesKnocks && (
                                 <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} />
                             )}
@@ -1124,7 +1141,9 @@ export default function PeopleScreen() {
                                         </Pressable>
                                     )}
                                 </>
-                            ) : (
+                            ) : null}
+
+                            {(invitesPreview || (makesInvites && mayInvite)) && (
                             <>
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
@@ -1138,31 +1157,39 @@ export default function PeopleScreen() {
                                 placeholderTextColor={colors.text.muted}
                             />
 
-                            <Pressable
-                                accessibilityRole="button"
-                                style={[styles.btnGenerate, generating && { opacity: 0.6 }]}
-                                onPress={handleGenerate}
-                                disabled={generating}
-                            >
-                                <Text style={styles.btnGenerateText}>{generating ? 'Generating...' : isOnline ? '✨ Generate Ticket' : '✨ Generate Offline Ticket'}</Text>
-                            </Pressable>
+                            {invitesPreview ? (
+                                <LocalCommunityMark variant="action" feature="invites" label={isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')} />
+                            ) : (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={[styles.btnGenerate, generating && { opacity: 0.6 }]}
+                                    onPress={handleGenerate}
+                                    disabled={generating}
+                                >
+                                    <Text style={styles.btnGenerateText}>{generating ? 'Generating...' : isOnline ? '✨ Generate Ticket' : '✨ Generate Offline Ticket'}</Text>
+                                </Pressable>
+                            )}
 
                             {newCode ? (
                                 <View style={styles.qrCard}>
                                     <Text style={styles.qrTitle}>Share this cryptographic code</Text>
                                     <View style={styles.qrBox}>
                                         <QRCode
-                                            value={`${anchorUrl}/?invite=${newCode}`}
+                                            value={invitesPreview ? newCode : `${anchorUrl}/?invite=${newCode}`}
                                             size={180}
                                         />
                                     </View>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={styles.btnCopyQR}
-                                        onPress={() => shareInvite(newCode)}
-                                    >
-                                        <Text style={styles.btnCopyQRText}>📤 Share Invite</Text>
-                                    </Pressable>
+                                    {invitesPreview ? (
+                                        <LocalCommunityMark variant="action" feature="invites" label={t('📤 Share Invite')} />
+                                    ) : (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            style={styles.btnCopyQR}
+                                            onPress={() => shareInvite(newCode)}
+                                        >
+                                            <Text style={styles.btnCopyQRText}>{t('📤 Share Invite')}</Text>
+                                        </Pressable>
+                                    )}
                                 </View>
                             ) : null}
 
@@ -1170,24 +1197,80 @@ export default function PeopleScreen() {
                                 <View style={{ marginTop: 24 }}>
                                     <Text style={styles.pendingHeader}>⏳ PENDING ({pendingInvites.length})</Text>
                                     {pendingInvites.map((inv) => (
-                                        <View key={inv.code} style={styles.pendingCard}>
-                                            <View style={{ flex: 1 }}>
-                                                {inv.intendedFor ? (
-                                                    <Text style={styles.pendingFor}>For: {inv.intendedFor}</Text>
-                                                ) : null}
-                                                <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
-                                                    {inv.code}
-                                                </Text>
+                                        <View key={inv.code} style={[styles.pendingCard, invitesPreview && { flexDirection: 'column', alignItems: 'stretch' }]}>
+                                            <View style={{ flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <View style={{ flex: 1 }}>
+                                                    {inv.intendedFor ? (
+                                                        <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
+                                                    ) : null}
+                                                    <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
+                                                        {inv.code}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+                                                    {invitesPreview && (
+                                                        <Pressable
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={t('Show QR code')}
+                                                            style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }]}
+                                                            onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
+                                                        >
+                                                            <Text style={styles.btnCopySmallText}>📱</Text>
+                                                        </Pressable>
+                                                    )}
+                                                    {!invitesPreview && (
+                                                        <Pressable
+                                                            accessibilityRole="button"
+                                                            style={[styles.btnCopySmall, { marginLeft: 0 }]}
+                                                            onPress={() => shareInvite(inv.code)}
+                                                        >
+                                                            <Text style={styles.btnCopySmallText}>{t('Share')}</Text>
+                                                        </Pressable>
+                                                    )}
+                                                </View>
                                             </View>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                style={styles.btnCopySmall}
-                                                onPress={() => shareInvite(inv.code)}
-                                            >
-                                                <Text style={styles.btnCopySmallText}>Share</Text>
-                                            </Pressable>
+                                            {invitesPreview && (
+                                                <View style={{ marginTop: 10 }}>
+                                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
+                                                </View>
+                                            )}
                                         </View>
                                     ))}
+                                </View>
+                            )}
+
+                            {invitesPreview && usedInvites.length > 0 && (
+                                <View style={{ marginTop: 24 }}>
+                                    <Text style={styles.pendingHeader}>{t('✅ REDEEMED ({count})', { count: usedInvites.length })}</Text>
+                                    {usedInvites.map((inv: any) => (
+                                        <View key={inv.code} style={[styles.pendingCard, { opacity: 0.7 }]}>
+                                            <View style={{ flex: 1 }}>
+                                                {inv.intendedFor ? (
+                                                    <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
+                                                ) : null}
+                                                <Text style={[styles.pendingCode, { textDecorationLine: 'line-through' }]} numberOfLines={1} ellipsizeMode="middle">
+                                                    {inv.code}
+                                                </Text>
+                                                {inv.usedAt ? (
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 4 }}>
+                                                        {t('Used {date}', { date: new Date(inv.usedAt).toLocaleDateString() })}
+                                                    </Text>
+                                                ) : null}
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
+                            {invitesPreview && tree.length > 0 && (
+                                <View style={{ marginTop: 24 }}>
+                                    <Text style={styles.sectionHeader}>{t('🌳 Community Tree')}</Text>
+                                    <Text style={styles.sectionDesc}>{t('Who invited whom. The tree shows how your community grows.')}</Text>
+                                    <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginTop: 12 }}>
+                                        {tree.map((node: any) => (
+                                            <TreeMemberView key={node.publicKey} node={node} depth={0} myKey={identity?.publicKey} colors={colors} />
+                                        ))}
+                                    </View>
                                 </View>
                             )}
                             </>
@@ -1275,3 +1358,44 @@ export default function PeopleScreen() {
         </View>
     );
 }
+
+function TreeMemberView({ node, depth, myKey, colors }: { node: any; depth: number; myKey?: string; colors: any }) {
+    const isMe = node.publicKey === myKey;
+    const hasChildren = node.children && node.children.length > 0;
+    const joinDate = new Date(node.joinedAt).toLocaleDateString();
+    return (
+        <View style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: depth > 0 ? 8 : 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>
+                <View style={{
+                    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: isMe ? colors.brand.fill : colors.surface.sunken,
+                }}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: isMe ? colors.text.inverse : colors.text.primary }}>
+                        {node.callsign.charAt(0).toUpperCase()}
+                    </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text.primary }}>
+                            {node.callsign}
+                        </Text>
+                        {isMe && (
+                            <View style={{ backgroundColor: colors.feedback.success.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.feedback.success.fg }}>{t('you')}</Text>
+                            </View>
+                        )}
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
+                        {hasChildren
+                            ? tn(node.children.length, 'Joined {date} · {n} invite', 'Joined {date} · {n} invites', { date: joinDate })
+                            : t('Joined {date}', { date: joinDate })}
+                    </Text>
+                </View>
+            </View>
+            {hasChildren && node.children.map((child: any) => (
+                <TreeMemberView key={child.publicKey} node={child} depth={depth + 1} myKey={myKey} colors={colors} />
+            ))}
+        </View>
+    );
+}
+

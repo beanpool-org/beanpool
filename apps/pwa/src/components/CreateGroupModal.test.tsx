@@ -36,15 +36,26 @@ describe('CreateGroupModal Accessibility', () => {
     });
 
     it('applies focus-visible outline rings to interactive close and option buttons', () => {
-        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} />);
+        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} onStartWithBeans={vi.fn()} />);
 
         const closeBtn = screen.getByRole('button', { name: /Close/i });
         expect(closeBtn.className).toContain('focus-visible:ring-2');
+        expect(closeBtn.className).toContain('min-w-[44px]');
+        expect(closeBtn.className).toContain('min-h-[44px]');
+
+        const nameInput = screen.getByPlaceholderText(/e\.g\. Bindarrabi/i);
+        expect(nameInput.className).toContain('focus-visible:ring-2');
 
         const optionBtns = screen.getAllByRole('button', { pressed: true });
         expect(optionBtns.length).toBeGreaterThan(0);
         optionBtns.forEach((btn) => {
             expect(btn.className).toContain('focus-visible:ring-2');
         });
+
+        const startProjectBtn = screen.getByRole('button', { name: /Start a project/i });
+        expect(startProjectBtn.className).toContain('focus-visible:ring-2');
+
+        const submitBtn = screen.getByRole('button', { name: /Create Group/i });
+        expect(submitBtn.className).toContain('focus-visible:ring-2');
     });
 });

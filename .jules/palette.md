@@ -245,3 +245,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-15 - LobbyJoin Keyboard Focus Ring Styling
 **Learning:** `LobbyHeader.tsx` rendered the `LobbyJoin` header action button with explicit `border-0` styling without explicit `focus-visible` ring indicators, preventing keyboard users from discerning focus state during header navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2` styling to `LobbyJoin` in `LobbyHeader.tsx` and created `LobbyHeader.test.tsx`.
+
+## 2026-10-18 - CreateGroupModal Touch Target Sizing & Focus Ring Indicators
+**Learning:** `CreateGroupModal.tsx` close button lacked explicit 44px minimum touch target sizing (`min-w-[44px] min-h-[44px]`), and form controls (`input`, `textarea`, project/enterprise action buttons, and submit button) relied on bare `focus:outline-none` or lacked explicit `focus-visible:ring-2 focus-visible:ring-emerald-500` focus indicators during keyboard navigation.
+**Action:** Added `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center` to the close button, updated inputs and action buttons with `focus-visible:ring-2 focus-visible:ring-emerald-500` ring styling, and updated `CreateGroupModal.test.tsx` assertions.

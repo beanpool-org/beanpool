@@ -1854,9 +1854,11 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!actor) return;
     if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
+        const heldRole = heldNodeRoleOf(ctx.params.pubkey);
         adminPruneUser(ctx.params.pubkey, actor);
-        // The owners count removals (design case 18 §7): how many today, never who.
-        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor, actorRole: 'admin' });
+        // The owners count removals (design case 18 §7): how many today, never who. A role holder's removal already pushed
+        // its own line (sec.role), so this one is only told.
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor, actorRole: 'admin', quiet: !!heldRole });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
@@ -2746,12 +2748,13 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
     if (!(await ownerRemovalProof(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase()))) return;
 
     try {
+        const heldRole = heldNodeRoleOf(String(pubkey).trim().toLowerCase());
         const result = executeOffboard(
             pubkey,
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
-        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor: effectiveActor, actorRole: 'admin' });
+        noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor: effectiveActor, actorRole: 'admin', quiet: !!heldRole });
         // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
         try {
             logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled', lookTokenOf(ctx));

@@ -351,7 +351,7 @@ async function main(): Promise<void> {
 
     registrar.close();
     channel.close();
-    await getP2PNode()?.stop().catch(() => undefined);
+    try { await getP2PNode()?.stop(); } catch { /* stopping only */ }
     console.log(`\n${testsPassed}/${testsRun} passed`);
     process.exit(testsPassed === testsRun ? 0 : 1);
 }

@@ -86,6 +86,8 @@ export interface SecurityNote {
      * `{n}` as the count, in place of `detail`.
      */
     perDay?: { one: string; many: string };
+    /** Told on the channel and in the card, never pushed: the same act already pushed its own line (a role holder removed: sec.role). */
+    quiet?: boolean;
     /** Members also pushed with this one (an owner or admin who lost the role): never kept, never told. */
     alsoPush?: string[];
 }

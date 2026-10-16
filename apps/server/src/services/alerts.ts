@@ -946,7 +946,8 @@ function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
     const before = foldedConditions(s, t, id);
     const w = s.actors[id] ??= { from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server' };
     let push = true;
-    if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
+    if (note.quiet) push = false;
+    else if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
     else if (!note.high && w.pushed < SECURITY_PUSHES_PER_HOUR) w.pushed++;
     else {
         push = false;
@@ -954,7 +955,7 @@ function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
         if (note.high) w.foldedHigh++;
     }
     const conditions = [...before];
-    if (push || note.high) {
+    if (push || note.high || note.quiet) {
         conditions.push({ key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push, alsoPush: push ? note.alsoPush : undefined });
     }
     if (!conditions.length) {

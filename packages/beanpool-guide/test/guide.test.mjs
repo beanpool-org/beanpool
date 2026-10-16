@@ -439,3 +439,15 @@ test("the names list's pages say the design's sentences, and none of the old pro
         assert.doesNotMatch(`${operators}\n${members}`, gone);
     }
 });
+
+test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {
+    const gone = ['Wipe & Reset', 'Factory reset', 'Delete snapshot', 'Legacy Settings', '/settings-legacy', '/api/local/admin/restore'];
+    const pages = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'));
+    assert.ok(pages.length > 20, `found ${pages.length} manual pages`);
+    const found = [];
+    for (const f of pages) {
+        const text = fs.readFileSync(path.join(OPERATORS_DIR, f), 'utf8').toLowerCase();
+        for (const w of gone) if (text.includes(w.toLowerCase())) found.push(`${f}: ${w}`);
+    }
+    assert.deepEqual(found, []);
+});

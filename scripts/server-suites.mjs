@@ -194,6 +194,7 @@ export const SUITES = [
     'test-owner-delete-gates',
     'test-owner-delete-alerts',
     'test-restore-points',
+    'test-restore-verified',
     'test-sealed-backups',
     'test-offbox-backups',
     'test-alerts',

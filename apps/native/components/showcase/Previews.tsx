@@ -10,6 +10,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
@@ -24,7 +25,7 @@ export function beansText(amount: number, signed = false): string {
     return `${sign}${n} ${abs === 1 ? 'Bean' : 'Beans'}`;
 }
 
-export function CommonsPreview() {
+export function CommonsPreview({ onOpenEnterprise }: { onOpenEnterprise?: (pubkey: string) => void } = {}) {
     const { colors } = useTheme();
     const s = previewStyles(colors);
     const [info, setInfo] = useState(false);
@@ -45,9 +46,18 @@ export function CommonsPreview() {
                 <Text style={s.big}>{beansText(c.pool)}</Text>
             </View>
             <View style={s.card}>
-                <Text style={s.heading} accessibilityRole="header">{e.name}</Text>
-                <Text style={s.body}>{e.what}</Text>
-                <Text style={s.muted}>{e.keepers} keepers · this season {beansText(e.season, true)}</Text>
+                <Pressable
+                    onPress={() => onOpenEnterprise
+                        ? onOpenEnterprise(e.id)
+                        : router.push({ pathname: '/treasury-detail', params: { publicKey: e.id, name: e.name } })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={e.name}
+                >
+                    <Text style={s.heading} accessibilityRole="header">{e.name}</Text>
+                    <Text style={s.body}>{e.what}</Text>
+                    <Text style={s.muted}>{e.keepers} keepers · this season {beansText(e.season, true)}</Text>
+                </Pressable>
                 <View style={s.actions}>
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pledge" />
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pause" />

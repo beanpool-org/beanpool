@@ -8,6 +8,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
+import { sampleEnterprises } from '../../components/showcase/sample-screens';
 import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
@@ -246,7 +247,7 @@ export default function ProjectsScreen() {
         if (beansPreview) setBalanceState({ earnedCredit: 0, commons: 0 });
 
         if (enterprisesPreview) {
-            setEnterprises([]);
+            setEnterprises(sampleEnterprises());
             setLoading(false);
         } else {
             try {

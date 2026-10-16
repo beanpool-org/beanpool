@@ -179,6 +179,13 @@ describe('the Commons on the worldwide community, its profile on the phone', () 
         expect(strip).toBeLessThan(text().indexOf('Real group number 1'));
         expect(text().indexOf(SAMPLE_COMMUNITY.enterprises[0].name)).toBeLessThan(text().indexOf('Real group number 1'));
     });
+
+    it('renders the sample enterprise and crowdfund project in the Commons list when enterprises are in preview', async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(ProjectsScreen));
+        expect(text()).toContain(SAMPLE_COMMUNITY.enterprises[0].name);
+        expect(text()).toContain(SAMPLE_COMMUNITY.projects[0].title);
+    });
 });
 
 describe("a phone that has never heard the worldwide community's profile", () => {

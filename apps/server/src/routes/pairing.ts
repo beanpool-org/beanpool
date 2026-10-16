@@ -2,8 +2,9 @@
  * Pairing Routes — Ephemeral QR Device Pairing Endpoints (#89).
  *
  *   POST /api/pair/init      browser: opens a session; sets its binding cookie (httpOnly, SameSite=Strict, /api/pair)
- *   POST /api/pair/transfer  phone: the sealed account; answers the two digits the phone shows
- *   GET  /api/pair/poll      browser, with the binding cookie: 'confirming' until the digits are typed, then the payload
+ *   POST /api/pair/transfer  phone: the sealed account; answers the four digits the phone shows
+ *   GET  /api/pair/poll      browser, with the binding cookie: 'confirming' until the digits are typed, then the payload.
+ *                            Without it (the phone's probe): 403 wrong-browser, with how many digits this relay asks for
  *   POST /api/pair/confirm   browser, with the binding cookie: { sessionId, code }; three wrong burn the session
  *   POST /api/pair/cancel
  */
@@ -75,7 +76,13 @@ export function createPairingRoutes(deps: RouteDeps): Router {
 
         const res = pollPairingSession(sessionId, ctx.cookies.get(pairBindingCookieName(sessionId)) || undefined);
         ctx.set('Cache-Control', 'no-store');
-        if (res.status === 'wrong-browser') ctx.status = 403;
+        // The phone probes here before it reads the 12 words: `confirmDigits` tells it this relay asks for four. A
+        // relay that asks for two never said it, so a phone that shows four refuses it with nothing sent.
+        if (res.status === 'wrong-browser') {
+            ctx.status = 403;
+            ctx.body = { ...res, confirmDigits: PAIRING_RELAY_LIMITS.confirmDigits };
+            return;
+        }
         ctx.body = res;
     });
 
@@ -94,13 +101,15 @@ export function createPairingRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        // Only an app that shows the two digits says so (`confirm: 'digits'`). Every app before #1983 sends without it and
-        // never shows them: holding its account would leave the browser waiting for digits nobody can read. Refused before
-        // the relay is touched, so nothing is held and the session stays open for a newer app. The old app shows a 4xx's
-        // `error` in its sheet as it is, so the words are written for it.
-        if (confirm !== 'digits') {
+        // Only an app that shows the four digits says so (`confirm: 'four-digits'`). Every app before #1983 sends no
+        // `confirm` and shows none; an app from #1983 until four digits (SEC-INV-02) sends `confirm: 'digits'`, accepts
+        // only two and drops four with an error, but never cancels: the relay would go on holding its account. Either
+        // way the browser would wait for digits nobody can read. Refused before the relay is touched, so nothing is held
+        // and the session stays open for a newer app. An old app shows a 4xx's `error` in its sheet as it is, so the
+        // words are written for it.
+        if (confirm !== 'four-digits') {
             ctx.status = 409;
-            ctx.body = { error: 'This BeanPool app is too old to show the two digits, so nothing was sent. Update the BeanPool app, then scan again.' };
+            ctx.body = { error: 'This BeanPool app is too old to show the four digits, so nothing was sent. Update the BeanPool app, then scan again.' };
             return;
         }
 
@@ -116,7 +125,7 @@ export function createPairingRoutes(deps: RouteDeps): Router {
 
     /**
      * POST /api/pair/confirm
-     * The browser types the two digits the phone shows, with its binding cookie.
+     * The browser types the four digits the phone shows, with its binding cookie.
      */
     router.post('/api/pair/confirm', async (ctx) => {
         const { sessionId, code } = (ctx.request as any).body || {};

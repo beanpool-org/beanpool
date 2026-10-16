@@ -1038,6 +1038,19 @@ export default function SettingsScreen() {
             });
         }
     }, [mode]);
+
+    // Chat memory lists the communities on this phone from the same list. Advanced reads it above, so before this a
+    // visit straight to Chat memory showed "No communities on this phone yet." and no reset, the way out
+    // DM_PIN_STORE_UNREAD_TEXT names. Read here too, keeping what Advanced already knows of each (status, size).
+    React.useEffect(() => {
+        if (mode !== 'chatMemory') return;
+        let live = true;
+        getSavedNodes().then((nodes) => {
+            if (!live) return;
+            setSavedNodes((prev) => nodes.map((node) => prev.find((p) => p.url === node.url) ?? { ...node, status: 'pinging' as const, sizeBytes: 0 }));
+        }).catch(() => {});
+        return () => { live = false; };
+    }, [mode]);
     
 
 

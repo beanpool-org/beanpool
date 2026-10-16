@@ -6,18 +6,20 @@
  * Review of #1645: a private preview turned on over a local node's phones left every member's face blank until the
  * phone's next whole directory read. The saved URL had no key (a local node keyed no face), the preview refuses it
  * unsigned, and the phone's members delta (`/api/members?updatedAfter=`, apps/native services/pillar-sync.ts) did not
- * send again a member who had not changed.
+ * send again a member who had not changed. Since the public-routes audit's SEC-PUB-02 (16 Oct) every node keys faces, so
+ * the change a local node's phones meet is the update itself: the older server recorded plain faces.
  *
- *   1. A local node, no preview: faces at plain URLs that open unsigned. The phone syncs.
- *   2. Restart with PRIVATE_PREVIEW=1: the phone's saved URL is refused, and its next members delta (cursor from before
- *      the switch) carries every member, each face at a keyed URL that opens unsigned (200). A phone that has synced
- *      since gets a plain delta.
- *   3. Restart with the preview off again: the same heal back to plain URLs.
+ *   1. A local node: faces at keyed URLs that open unsigned; the same URL without its key is refused. The phone syncs.
+ *   2. A local node whose older server kept faces plain, updated: the phone's saved plain URL is refused, and its next
+ *      members delta (cursor from before the update) carries every member, each face at a keyed URL that opens unsigned
+ *      (200). A phone that has synced since gets a plain delta.
+ *   3. Restart into a private preview and out of it: faces were keyed already, so the shape and avatarKeysSince stay.
  *   4. Restart with nothing changed: the record is kept, and the delta is byte for byte the delta before the restart.
  *      Sections 1 and 5 print the sha256 of a delta that carries every member, to compare with origin/main's.
  *   5. A global node (faces keyed by guestListingsOnly): its first boot with this record answers no delta whole, and a
  *      restart into the preview changes no face URL and answers no delta whole.
- *   6. A local node from before this record (no rows) restarted straight into the preview: it heals too.
+ *   6. A local node from before this record (no rows) restarted: it heals too.
+ *   7. A take-over: a standby keys faces with its own shape.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-faces-keys-resync.ts
  */
@@ -87,6 +89,13 @@ async function child(): Promise<void> {
         // The operator's override of `openMembership` (on by default on the global node, where it refuses the whole directory
         // and its delta: test-open-membership-reads): this suite reads both to see the faces heal, or not, on a keyed node.
         wholeReads: () => db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run().changes,
+        // What an older server that kept faces plain recorded (avatarKeysShape open, since the start of time).
+        asOlderServer: () => {
+            const put = db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)');
+            put.run('avatarKeysShape', 'open');
+            put.run('avatarKeysSince', new Date(0).toISOString());
+            return true;
+        },
         // A node from before this record.
         dropRecords: () => db.prepare("DELETE FROM node_config WHERE key IN ('avatarKeysShape', 'avatarKeysSince')").run().changes,
     };
@@ -258,62 +267,68 @@ async function main(): Promise<void> {
     let quietDelta = '';
 
     try {
-        await section('1. a local node, no preview: plain faces, and the phone syncs', async () => {
+        await section('1. a local node: keyed faces, the bare URL refused, and the phone syncs', async () => {
             node = await boot(LOCAL, 'local');
             await seed(node);
+            await stop(node);
+            node = await boot(LOCAL, 'local');
             const rec = await node.send('records');
-            assert(rec.shape === 'open', `the face URLs' shape is recorded as plain (${rec.shape})`);
-            assert(Date.parse(rec.since) === 0, `no face had changed shape: no delta is answered whole (${rec.since})`);
+            assert(typeof rec.shape === 'string' && rec.shape.startsWith('keyed:'), `the face URLs' shape is recorded as keyed (${rec.shape})`);
             const dir = await signed(node, alice, '/api/members');
-            plainFaces = faces(dir);
-            assert(dir.status === 200 && plainFaces.length === 4 && plainFaces.every(u => !!u && !keyed(u)), `every face at a plain URL (${plainFaces[0]})`);
-            assert(allOk(await opens(node, plainFaces)), 'and each opens unsigned');
+            keyedFaces = faces(dir);
+            assert(dir.status === 200 && keyedFaces.length === 4 && keyedFaces.every(keyed), `every face at a keyed URL (${keyedFaces[0]})`);
+            assert(allOk(await opens(node, keyedFaces)), 'and each opens unsigned (200)');
+            plainFaces = keyedFaces.map(u => u && u.replace(/&k=[A-Za-z0-9_-]{22}/, ''));
+            const bare = await opens(node, plainFaces);
+            assert(bare.every(s => s === 404), `the same URLs without their key are refused, as a face that isn't there (${bare.join(',')})`);
             lastSync = Date.now();
             const d = await delta(node, lastSync);
             assert(d.status === 200 && pks(d).length === 0, `a delta from now carries no unchanged member (${show(d)})`);
             quietDelta = d.text;
             const old = await signed(node, alice, OLD_DELTA);
             assert(old.status === 200 && JSON.stringify(pks(old)) === JSON.stringify(everyone), `a delta from before every member's last change carries them all (${pks(old).length})`);
-            console.log(`   local, no change: delta from ${OLD_CURSOR}: ${old.text.length} bytes, sha256 ${sha(old.text)}`);
+            console.log(`   local, no change: delta from ${OLD_CURSOR}: ${old.text.length} bytes, sha256 without the keys ${sha(old.text.replace(/&k=[A-Za-z0-9_-]{22}/g, ''))}`);
             await stop(node);
         });
 
-        await section('2. restart into the private preview: the phone\'s next delta heals every face', async () => {
-            node = await boot(LOCAL_PREVIEW, 'local');
+        await section('2. a local node whose older server kept faces plain, updated: the phone\'s next delta heals every face', async () => {
+            node = await boot(LOCAL, 'local');
+            await node.send('asOlderServer');
+            const synced = Date.now();
+            await stop(node);
+            node = await boot(LOCAL, 'local');
             const rec = await node.send('records');
-            assert(typeof rec.shape === 'string' && rec.shape.startsWith('keyed:') && Date.parse(rec.since) > lastSync,
+            assert(typeof rec.shape === 'string' && rec.shape.startsWith('keyed:') && Date.parse(rec.since) > synced,
                 `the shape is keyed, and avatarKeysSince is later than the phone's last sync (${rec.shape} ${rec.since})`);
             const saved = await opens(node, plainFaces);
-            assert(saved.every(s => s === 403), `the phone's saved plain URLs are refused unsigned (${saved.join(',')})`);
-            const d = await delta(node, lastSync);
+            assert(saved.every(s => s === 404), `the phone's saved plain URLs are refused unsigned (${saved.join(',')})`);
+            const d = await delta(node, synced);
             assert(d.status === 200 && JSON.stringify(pks(d)) === JSON.stringify(everyone),
-                `the phone's delta from before the switch carries every member (${pks(d).length} of ${everyone.length}: ${show(d)})`);
-            keyedFaces = faces(d);
-            assert(keyedFaces.every(keyed), `each face at a keyed URL (${keyedFaces[0]})`);
-            assert(allOk(await opens(node, keyedFaces)), 'and each opens unsigned (200)');
+                `the phone's delta from before the update carries every member (${pks(d).length} of ${everyone.length}: ${show(d)})`);
+            assert(faces(d).every(keyed), `each face at a keyed URL (${faces(d)[0]})`);
+            assert(allOk(await opens(node, faces(d))), 'and each opens unsigned (200)');
             const dir = await signed(node, alice, '/api/members');
-            assert(JSON.stringify(faces(dir).slice().sort()) === JSON.stringify(keyedFaces.slice().sort()), 'the same URLs the whole directory hands out');
+            assert(JSON.stringify(faces(dir).slice().sort()) === JSON.stringify(faces(d).slice().sort()), 'the same URLs the whole directory hands out');
             // The phone synced: its next cursor is that sync less five minutes, inside the change's overlap. A delta.
             lastSync = Date.now();
             const after = await delta(node, lastSync);
             assert(after.status === 200 && pks(after).length === 0, `a phone that has synced since gets a plain delta (${show(after)})`);
+            quietDelta = after.text;
             await stop(node);
         });
 
-        await section('3. restart with the preview off again: the same heal back to plain faces', async () => {
+        await section('3. into a private preview and out again: faces were keyed already, so nothing heals', async () => {
             node = await boot(LOCAL, 'local');
-            const rec = await node.send('records');
-            assert(rec.shape === 'open' && Date.parse(rec.since) > lastSync, `the shape is plain again, and avatarKeysSince moves (${rec.shape} ${rec.since})`);
-            const d = await delta(node, lastSync);
-            assert(d.status === 200 && JSON.stringify(pks(d)) === JSON.stringify(everyone),
-                `the phone's delta from before the switch carries every member (${pks(d).length} of ${everyone.length}: ${show(d)})`);
-            const now = faces(d);
-            assert(now.every(u => !!u && !keyed(u)), `each face at a plain URL (${now[0]})`);
-            assert(allOk(await opens(node, now)), 'and each opens unsigned (200)');
-            lastSync = Date.now();
-            const after = await delta(node, lastSync);
-            assert(after.status === 200 && pks(after).length === 0, `a phone that has synced since gets a plain delta (${show(after)})`);
+            const before = await node.send('records');
             await stop(node);
+            for (const env of [LOCAL_PREVIEW, LOCAL]) {
+                node = await boot(env, 'local');
+                const rec = await node.send('records');
+                assert(rec.shape === before.shape && rec.since === before.since, `${env.PRIVATE_PREVIEW ? 'into' : 'out of'} the preview: the same shape, avatarKeysSince kept (${rec.since})`);
+                const d = await delta(node, lastSync);
+                assert(d.status === 200 && pks(d).length === 0, `the phone's delta is a plain delta (${show(d)})`);
+                await stop(node);
+            }
         });
 
         await section('4. restart with nothing changed: the record kept, the delta the same bytes', async () => {
@@ -325,7 +340,7 @@ async function main(): Promise<void> {
             assert(rec.shape === before.shape && rec.since === before.since, `the restart keeps the shape and avatarKeysSince (${rec.since})`);
             // A phone whose last sync is after avatarKeysSince but before this restart.
             const d = await delta(node, lastSync);
-            assert(d.status === 200 && d.text === quietDelta, `its delta is byte for byte the delta before any change (${d.text.length} bytes)`);
+            assert(d.status === 200 && d.text === quietDelta, `its delta is byte for byte the delta before the restart (${d.text.length} bytes)`);
             await stop(node);
         });
 
@@ -365,13 +380,13 @@ async function main(): Promise<void> {
             await stop(node);
         });
 
-        await section('6. a local node from before this record, restarted straight into the preview: it heals', async () => {
+        await section('6. a local node from before this record, restarted: it heals', async () => {
             node = await boot(LOCAL, 'upgrade');
             await seed(node);
             await node.send('dropRecords');
             const synced = Date.now();
             await stop(node);
-            node = await boot(LOCAL_PREVIEW, 'upgrade');
+            node = await boot(LOCAL, 'upgrade');
             const rec = await node.send('records');
             assert(typeof rec.shape === 'string' && rec.shape.startsWith('keyed:') && Date.parse(rec.since) > synced,
                 `with no record, the shape before is the one guestListingsOnly made (plain): a change (${rec.shape} ${rec.since})`);
@@ -380,18 +395,8 @@ async function main(): Promise<void> {
             assert(allOk(await opens(node, faces(d))), 'and each opens unsigned (200)');
             await stop(node);
         });
-        await section('7. a take-over of a node with plain faces changes no face URL, so nothing heals; a keyed one does', async () => {
+        await section('7. a take-over: a standby keys faces with its own shape', async () => {
             node = await boot(LOCAL, 'takeover');
-            await seed(node);
-            const before = await node.send('records');
-            await node.send('asRole', { role: 'backup' });
-            const standby = await node.send('records');
-            assert(standby.shape === 'open' && standby.since === before.since, `plain faces on a standby: the same shape and time (${standby.shape} ${standby.since})`);
-            await node.send('asRole', { role: 'primary' });
-            const promoted = await node.send('records');
-            assert(promoted.shape === 'open' && promoted.since === before.since, `promoted: still the same, so no phone gets the whole directory (${promoted.shape} ${promoted.since})`);
-            await stop(node);
-            node = await boot(LOCAL_PREVIEW, 'takeover-keyed');
             await seed(node);
             const keyedBefore = await node.send('records');
             await node.send('asRole', { role: 'backup' });

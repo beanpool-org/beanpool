@@ -4,6 +4,7 @@
 
 import { audienceOf } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
+import { proofField, proofHeader, throwIfFreshProof } from './fresh-proof';
 
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
@@ -1537,40 +1538,49 @@ export async function fetchNodeRoles(
     return data.roles || [];
 }
 
+/**
+ * Give a node role. Granting owner or admin (or changing an owner's or admin's role) asks an owner's fresh proof
+ * (server roleChangeProof): `code` carries it; a refusal that asks for it throws FreshProofRequiredError.
+ */
 export async function grantNodeRoleApi(
     nodeUrl: string,
     pubkey: string,
     role: 'owner' | 'admin' | 'moderator',
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; message?: string }> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
     const res = await fetch(url, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ pubkey, role }),
+        body: JSON.stringify({ pubkey, role, ...proofField(code) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+        throwIfFreshProof(res.status, data);
         throw new Error(data.error || 'Failed to grant node role');
     }
     return data;
 }
 
+/** Take a node role away. An owner's or admin's asks the fresh proof; a DELETE has no body, so it travels as X-Fresh-Proof. */
 export async function revokeNodeRoleApi(
     nodeUrl: string,
     pubkey: string,
     role: 'owner' | 'admin' | 'moderator',
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; message?: string }> {
     const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/node-roles/${encodeURIComponent(pubkey)}/${encodeURIComponent(role)}`);
     const res = await fetch(url, {
         method: 'DELETE',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(code) },
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+        throwIfFreshProof(res.status, data);
         throw new Error(data.error || 'Failed to revoke node role');
     }
     return data;
@@ -2288,9 +2298,18 @@ export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, t
     return lock && typeof lock.locked === 'boolean' && typeof lock.message === 'string' ? lock : null;
 }
 
-/** Make the recovery code, or with `replace` a new one in place of the current one. Owners only. */
-export async function makeRecoveryCode(nodeUrl: string, replace: boolean, adminPassword?: string, tfaToken?: string): Promise<MadeRecoveryCode> {
-    const json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code', { replace }, adminPassword, tfaToken);
+/**
+ * Make the recovery code, or with `replace` a new one in place of the current one. Owners only. Replacing asks an owner's
+ * fresh proof (server A11): `proof` carries it; a refusal that asks for it throws FreshProofRequiredError.
+ */
+export async function makeRecoveryCode(nodeUrl: string, replace: boolean, adminPassword?: string, tfaToken?: string, proof?: string): Promise<MadeRecoveryCode> {
+    let json: Record<string, unknown>;
+    try {
+        json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code', { replace, ...proofField(proof) }, adminPassword, tfaToken);
+    } catch (e) {
+        if (e instanceof TakeoverRequestError) throwIfFreshProof(e.status, e.body);
+        throw e;
+    }
     if (typeof json.code !== 'string' || !json.code) throw new TakeoverRequestError('The node did not return a code.', 500, {});
     return json as unknown as MadeRecoveryCode;
 }

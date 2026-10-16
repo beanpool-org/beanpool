@@ -12,6 +12,7 @@ import {
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 import { SignOutEverywhere } from './SignOutEverywhere';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 /**
  * Owners & admins — who holds authority over this node (docs/admin-surface.md §1, the-commons.md §9.2).
@@ -240,18 +241,23 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         }
     };
 
-    const doGrant = async () => {
+    // Granting or taking an owner's or admin's role asks an owner's fresh proof (server roleChangeProof).
+    const proof = useFreshProof();
+
+    const doGrant = async (code?: string) => {
         if (!target) return;
         setBusy(true);
         setNotice(null);
         try {
-            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa);
+            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa, code);
+            proof.close();
             const who = target.pubkey === myKey ? 'You are' : `${target.name} is`;
             setNotice({ kind: 'success', text: `${who} now ${ROLE_ARTICLE[newRole]}.` });
             resetAdd();
             await load();
             onChanged?.();
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => doGrant(c), code)) return;
             const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
             setNotice({ kind: 'error', text: msg });
             setConfirmingAdd(false);
@@ -260,18 +266,20 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         }
     };
 
-    const doRevoke = async () => {
+    const doRevoke = async (code?: string) => {
         if (!removing) return;
         const name = nameOf(removing.member_pubkey, removing.callsign);
         setBusy(true);
         setNotice(null);
         try {
-            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa);
+            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa, code);
+            proof.close();
             setNotice({ kind: 'success', text: `${name} is no longer ${ROLE_ARTICLE[removing.role]}.` });
             setRemoving(null);
             await load();
             onChanged?.();
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => doRevoke(c), code)) return;
             const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
             setNotice({ kind: 'error', text: msg });
             setRemoving(null);
@@ -309,6 +317,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 )}
             </div>
 
+            <FreshProofBox proof={proof} testId="roles-proof" />
             {notice && (
                 <div
                     ref={noticeRef}

@@ -16,7 +16,7 @@
 import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
 import { feedSections, type FeedSection } from './feed-sections';
-import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, postRulesFor, t } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -48,6 +48,23 @@ export function noBeansTermsNote(beansPreview: boolean): string {
 
 /** What a post's edit form, and the map's Offer/Need form, say in place of the price field, on a node with Beans off. */
 export const NO_BEANS_EDIT_NOTE = 'No price here: say in the description what you would like in return, or that it is free.';
+
+/**
+ * Another member's profile where Beans are off (the worldwide one): the trust verdict, tier and trade counts are Beans and
+ * are not drawn there (#2022), but meeting a stranger still deserves the plain advice the verdict carried on a local
+ * community (apps/server/src/state-engine.ts assessTradeRisk's meeting tips). Nothing about trades or vouching: neither
+ * happens there. Director's call, 16 Oct.
+ */
+export function meetingTips(): { heading: string; tips: string[] } {
+    return {
+        heading: t('Meeting someone new'),
+        tips: [
+            t('Meet somewhere public the first time.'),
+            t("Don't share your home address until you've met."),
+            t("Tell a friend where and when you're meeting."),
+        ],
+    };
+}
 
 /*
  * The map's Offer/Need form (app/(tabs)/map.tsx). With Beans off it has no price section, and the price never holds

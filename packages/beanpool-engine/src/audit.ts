@@ -137,6 +137,21 @@ export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unk
  * compares — a balance of 0 wiped to NULL reads as no drift at all. Shared by the conservation check and the boot
  * migration that makes the column NOT NULL (apps/server db.ts).
  */
+/**
+ * The escrows an open deal or an open project still holds, as a WHERE clause on the escrow's account key (`keyColumn`):
+ * a pending or requested marketplace deal's (escrow_<deal id>), and an open crowdfund's or open bounded enterprise's
+ * (escrow_<project id>, holding its pledges until the goal is met: the server's pledgeToProject). None of them is
+ * stranded. One clause for the ledger audit and the admin's stranded-escrow list (the server's
+ * engine/escrow-write-off.ts), so the count the audit gives is the list the admin sees. `id IS NOT NULL`: one row with a
+ * NULL id (SQLite lets a TEXT PRIMARY KEY hold it) would make `NOT IN` NULL for every escrow and hide them all. A bare
+ * ledger database (a test's, a copy being checked) may have no projects table.
+ */
+export function escrowNotHeldOpenSql(db: Db, keyColumn = 'public_key'): string {
+    const hasProjects = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects'`).get();
+    return `SUBSTR(${keyColumn}, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE id IS NOT NULL AND status IN ('pending', 'requested'))`
+        + (hasProjects ? ` AND SUBSTR(${keyColumn}, 8) NOT IN (SELECT id FROM projects WHERE id IS NOT NULL AND status = 'ACTIVE')` : '');
+}
+
 export const BROKEN_BALANCE_SQL = `balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`;
 
 /**
@@ -163,10 +178,12 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
     }
     const drift = sumBalances - baseline;
 
+    // An open deal's, crowdfund's or bounded enterprise's escrow is not stranded (escrowNotHeldOpenSql). A completed deal's,
+    // or a funded or closed project's, escrow that still holds Beans is.
     const strandedEscrows = (db.prepare(`
         SELECT COUNT(*) as c FROM accounts
         WHERE public_key LIKE 'escrow_%' AND ABS(balance) > 0.01
-          AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
+          AND ${escrowNotHeldOpenSql(db)}
     `).get() as any).c as number;
 
     // `Math.abs(drift) < 0.01` is false for a NaN drift, so a non-finite sum fails too.

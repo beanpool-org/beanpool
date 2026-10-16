@@ -28,7 +28,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
+import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
 import { useReadsOwn } from '../lib/features';
 
 interface Props extends LocalCommunityWays {
@@ -283,6 +283,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
 
     async function handleSend() {
         if (!sendTo || !sendAmount) return;
+        // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
+        if (!isWholeCents(Number(sendAmount))) {
+            setError(t('The amount is a number of Beans above 0, to the cent.'));
+            return;
+        }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (Number(sendAmount) > balance) {

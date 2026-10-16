@@ -20,6 +20,8 @@ import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+/** What the screen handed the share sheet or the clipboard: a preview hands neither anything. */
+const sent = vi.hoisted(() => ({ shares: [] as unknown[], clips: [] as unknown[] }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
@@ -48,7 +50,7 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
         Alert: { alert() {} },
-        Share: { share: async () => ({}) },
+        Share: { share: async (d: unknown) => { sent.shares.push(d); return {}; } },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
@@ -74,7 +76,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('react-native-qrcode-svg', () => ({ default: (props: any) => createElement('div', { 'data-testid': 'qr-code', 'data-qr-value': props?.value }) }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: async () => {} }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: async (v: unknown) => { sent.clips.push(v); } }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
     KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
@@ -148,6 +150,8 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     net.calls.length = 0;
+    sent.shares.length = 0;
+    sent.clips.length = 0;
     answers.held.clear();
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -221,15 +225,33 @@ describe('Invites on the worldwide community, its profile on the phone', () => {
         expect(text()).toContain('an example member');
         expect(text()).toContain('a neighbour');
 
-        // Action markers
-        const actionButtons = host.querySelectorAll('[data-testid="local-community-action"]');
-        expect(actionButtons.length).toBeGreaterThanOrEqual(2); // Generate and Share
-
-        // Clicking an action button opens the local community sheet
-        const firstAction = actionButtons[0] as HTMLElement;
-        await act(async () => { firstAction.click(); });
+        // Every marker, the QR card's too once 📱 opens it, opens its own sheet; nothing is shared or copied.
+        const markers = () => Array.from(host.querySelectorAll('[data-testid="local-community-action"]')) as HTMLElement[];
+        const sheets = () => Array.from(host.querySelectorAll('[data-testid="local-community-sheet"]'));
+        const pressEach = async (them: HTMLElement[]) => {
+            for (const marker of them) {
+                expect(sheets()).toHaveLength(0);
+                await act(async () => { marker.click(); });
+                await settle();
+                expect(sheets()).toHaveLength(1);
+                const close = host.querySelector('[data-modal] [aria-label="Close"]') as HTMLElement;
+                await act(async () => { close.click(); });
+                await settle();
+                expect(sheets()).toHaveLength(0);
+            }
+        };
+        const labels = (them: HTMLElement[]) => them.map((m) => m.getAttribute('aria-label'));
+        const first = markers();
+        expect(labels(first)).toEqual([expect.stringMatching(/^✨ Generate/), expect.stringMatching(/^Share, /)]);
+        await pressEach(first);
+        const qrToggle = host.querySelector('[aria-label="Show QR code"]') as HTMLElement;
+        await act(async () => { qrToggle.click(); });
         await settle();
-        expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+        const withQr = markers();
+        expect(labels(withQr)).toEqual([expect.stringMatching(/^✨ Generate/), expect.stringMatching(/^📤 Share Invite, /), expect.stringMatching(/^Share, /)]);
+        await pressEach([withQr[1]]);
+        expect(sent.shares).toEqual([]);
+        expect(sent.clips).toEqual([]);
     });
 
     it("draws a QR code that encodes only EXAMPLE-1234 when toggled, refusing any URL prefix", async () => {

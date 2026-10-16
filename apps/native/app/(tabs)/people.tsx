@@ -1198,7 +1198,7 @@ export default function PeopleScreen() {
                                     <Text style={styles.pendingHeader}>⏳ PENDING ({pendingInvites.length})</Text>
                                     {pendingInvites.map((inv) => (
                                         <View key={inv.code} style={[styles.pendingCard, invitesPreview && { flexDirection: 'column', alignItems: 'stretch' }]}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <View style={{ flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <View style={{ flex: 1 }}>
                                                     {inv.intendedFor ? (
                                                         <Text style={styles.pendingFor}>{t('For: {name}', { name: inv.intendedFor })}</Text>
@@ -1212,7 +1212,7 @@ export default function PeopleScreen() {
                                                         <Pressable
                                                             accessibilityRole="button"
                                                             accessibilityLabel={t('Show QR code')}
-                                                            style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8 }]}
+                                                            style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }]}
                                                             onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
                                                         >
                                                             <Text style={styles.btnCopySmallText}>📱</Text>

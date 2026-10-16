@@ -101,15 +101,24 @@ describe('People → Invites goes through the helpers (source check)', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../..', 'app/(tabs)/people.tsx'), 'utf-8');
     const count = (needle: string) => src.split(needle).length - 1;
     const gate = src.indexOf('{!makesInvites ? (');
-    const otherwise = src.indexOf(') : (', gate);
+    const adminsGate = src.indexOf(') : !mayInvite ? (', gate);
+    const gateEnd = src.indexOf(') : null}', adminsGate);
+    /** The generator's own gate: drawn where the node makes invites and this member may, or as the global preview. */
+    const makesGateText = '{(invitesPreview || (makesInvites && mayInvite)) && (';
+    const makesGate = src.indexOf(makesGateText, gateEnd);
     const redeemSection = src.indexOf('REDEEM INVITE SECTION');
-    const noInvites = src.slice(gate, otherwise);
-    const makes = src.slice(otherwise, redeemSection);
-    /** The two branches exist, in this order, before the redeem section: without them every check below reads nothing. */
+    const noInvites = src.slice(gate, adminsGate);
+    const makes = src.slice(makesGate, redeemSection);
+    /** The branches exist, in this order, before the redeem section, with nothing drawn between the first ternary and
+     *  the generator's gate: without them every check below reads nothing. */
     const branchesFound = () => {
         expect(gate).toBeGreaterThan(0);
-        expect(otherwise).toBeGreaterThan(gate);
-        expect(redeemSection).toBeGreaterThan(otherwise);
+        expect(adminsGate).toBeGreaterThan(gate);
+        expect(gateEnd).toBeGreaterThan(adminsGate);
+        expect(makesGate).toBeGreaterThan(gateEnd);
+        expect(src.slice(gateEnd + ') : null}'.length, makesGate).trim()).toBe('');
+        expect(src.split(makesGateText).length - 1).toBe(1);
+        expect(redeemSection).toBeGreaterThan(makesGate);
     };
 
     it("reads the node's switch through invitesOn", () => {
@@ -119,10 +128,25 @@ describe('People → Invites goes through the helpers (source check)', () => {
 
     it('every way to make or share an invite is drawn only where the node makes them', () => {
         branchesFound();
-        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', '📤 Share Invite', 'shareInvite(inv.code)']) {
+        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', 'shareInvite(inv.code)']) {
             expect(count(entry)).toBe(1);
             expect(makes).toContain(entry);
             expect(noInvites).not.toContain(entry);
+        }
+        // Twice: the preview's marker label and the live button's; both inside the generator, neither in the others.
+        expect(count('📤 Share Invite')).toBe(2);
+        expect(makes.split('📤 Share Invite').length - 1).toBe(2);
+        expect(noInvites).not.toContain('📤 Share Invite');
+        // In the preview each live action is the marker's other arm: the real generate and shares sit only where it is off.
+        for (const live of ['onPress={handleGenerate}', 'onPress={() => shareInvite(newCode)}', 'onPress={() => shareInvite(inv.code)}']) {
+            const before = makes.slice(0, makes.indexOf(live));
+            expect(before.length).toBeGreaterThan(0);
+            // The nearest invitesPreview before it opens its arm: `{!invitesPreview && (`, or `{invitesPreview ? (` with it after the `) : (`.
+            const arm = before.slice(before.lastIndexOf('{', before.lastIndexOf('invitesPreview')));
+            if (!arm.startsWith('{!invitesPreview && (')) {
+                expect(arm.startsWith('{invitesPreview ? (')).toBe(true);
+                expect(arm).toContain(') : (');
+            }
         }
     });
 
@@ -311,15 +335,17 @@ describe('what a member who may not invite is told', () => {
 describe('People → Invites where only admins invite (source check)', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../..', 'app/(tabs)/people.tsx'), 'utf-8');
     const gate = src.indexOf(') : !mayInvite ? (');
-    const otherwise = src.indexOf(') : (', gate);
+    const gateEnd = src.indexOf(') : null}', gate);
+    const makesGate = src.indexOf('{(invitesPreview || (makesInvites && mayInvite)) && (', gateEnd);
     const redeemSection = src.indexOf('REDEEM INVITE SECTION');
-    const adminsOnly = src.slice(gate, otherwise);
-    const makes = src.slice(otherwise, redeemSection);
+    const adminsOnly = src.slice(gate, gateEnd);
+    const makes = src.slice(makesGate, redeemSection);
     const found = () => {
         expect(src.indexOf('{!makesInvites ? (')).toBeGreaterThan(0);
         expect(gate).toBeGreaterThan(src.indexOf('{!makesInvites ? ('));
-        expect(otherwise).toBeGreaterThan(gate);
-        expect(redeemSection).toBeGreaterThan(otherwise);
+        expect(gateEnd).toBeGreaterThan(gate);
+        expect(makesGate).toBeGreaterThan(gateEnd);
+        expect(redeemSection).toBeGreaterThan(makesGate);
     };
 
     it("reads the door and the member's role through the helpers", () => {

@@ -141,3 +141,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-10 - Replace catch e any in NodeRolesPanel
 **Learning:** `NodeRolesPanel.tsx` used `catch (e: any)` in async role fetching, granting, and revoking handlers, bypassing strict type checking for error objects.
 **Action:** Replace `catch (e: any)` with `catch (e: unknown)` and safe type guards checking `e instanceof Error` or object message properties.
+
+## 2026-12-11 - Add loading indicator for AgentSuggestionsPanel
+**Learning:** `AgentSuggestionsPanel.tsx` returned `null` immediately while AI assistant suggestions were fetching asynchronously (`items === null`), leaving operators without visual feedback before suggestions loaded.
+**Action:** Render an explicit loading card with an animated spinner when `items === null && !message`.

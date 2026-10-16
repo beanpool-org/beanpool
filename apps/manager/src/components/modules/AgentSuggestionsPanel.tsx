@@ -112,7 +112,18 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
         }
     };
 
-    if (!drawn || !items || (items.length === 0 && !message)) return null;
+    if (!drawn || (items && items.length === 0 && !message)) return null;
+
+    if (items === null) {
+        return (
+            <section aria-labelledby="agent-suggestions-title" data-testid="agent-suggestions-card" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="agent-suggestions-loading">
+                    <span className="animate-spin text-bp-ink-terra">🔄</span>
+                    <span>Loading assistant suggestions…</span>
+                </div>
+            </section>
+        );
+    }
 
     return (
         <section aria-labelledby="agent-suggestions-title" data-testid="agent-suggestions-card" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">

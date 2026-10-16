@@ -26,23 +26,34 @@ import type { ReceiptStatus } from './federation-settlement-state.js';
 const PROTOCOL = '/beanpool/federation/1.0.0';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
  * Read data from a stream by polling readBuffer until data arrives.
  */
-function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
+function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_SIZE): Promise<string> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error('Read timeout'));
-        }, timeoutMs);
+        const chunks: Uint8Array[] = [];
+        let settled = false;
+        // FED-05: a timeout or an oversize used to REJECT and leave the stream open, and the `for await` below
+        // kept every chunk the sender wrote until it chose to close: a stranger with no connector held ~10 MB per
+        // stream for as long as it liked (measured: still open at +130 s). Now both paths drop what was read and
+        // ABORT the stream, which ends the loop and frees its buffers.
+        const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            chunks.length = 0;
+            try { stream.abort?.(err); } catch { /* already closed */ }
+            reject(err);
+        };
+        const timer = setTimeout(() => fail(new Error('Read timeout')), timeoutMs);
 
         (async () => {
-            const chunks: Uint8Array[] = [];
             let totalLength = 0;
-            const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
-
             try {
                 for await (const chunk of stream) {
+                    if (settled) return;
                     let parsedChunk: Uint8Array;
                     if (chunk instanceof Uint8Array) {
                         parsedChunk = chunk;
@@ -53,22 +64,22 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
                     }
 
                     totalLength += parsedChunk.length;
-                    if (totalLength > MAX_PAYLOAD_SIZE) {
-                        clearTimeout(timer);
-                        reject(new Error('Payload size exceeded maximum limit of 10MB'));
+                    if (totalLength > maxBytes) {
+                        fail(new Error(`Payload size exceeded maximum limit of ${maxBytes} bytes`));
                         return;
                     }
 
                     chunks.push(parsedChunk);
                 }
+                if (settled) return;
 
                 // A2-12: decode once after the write side closes (caller parses),
                 // instead of an O(n²) re-decode + JSON.parse on every chunk.
+                settled = true;
                 clearTimeout(timer);
                 resolve(decoder.decode(Buffer.concat(chunks)));
             } catch (err) {
-                clearTimeout(timer);
-                reject(err);
+                fail(err instanceof Error ? err : new Error(String(err)));
             }
         })();
     });

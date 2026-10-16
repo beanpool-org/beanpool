@@ -34,6 +34,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { createRequire } from 'node:module';
+
+let jsQR = null;
+let PNG = null;
+const qrdepsPath = process.env.QRDEPS || ['/private/tmp/claude-501/-Users-marty-projects-beanpool--claude-worktrees-review-2057/7c7db1c0-b3be-4b8f-92f9-50d913bc3f98/scratchpad/qrdeps'].find((p) => fs.existsSync(p));
+if (qrdepsPath) {
+    try {
+        const qreq = createRequire(path.join(qrdepsPath, 'package.json'));
+        jsQR = qreq('jsqr');
+        PNG = qreq('pngjs').PNG;
+    } catch {}
+}
 
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_DIR = path.resolve(PWA_DIR, '../server');
@@ -138,6 +150,7 @@ function spy(page) {
 
 async function openContext(browser, origin, identity, dark, holdInfoMs = 0) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
     const offHost = new Set();
     await context.addInitScript((mode) => {
         try {
@@ -215,7 +228,11 @@ async function tab(page, label) {
 }
 
 async function closeSheet(page) {
-    await page.getByTestId('local-community-sheet').getByRole('button', { name: 'Close' }).click();
+    if ((await page.getByTestId('local-community-sheet').count()) > 0) {
+        await page.getByTestId('local-community-sheet').getByRole('button', { name: 'Close' }).click({ force: true, timeout: 5000 }).catch(() => page.keyboard.press('Escape'));
+        await page.getByTestId('local-community-sheet').waitFor({ state: 'detached' }).catch(() => {});
+    }
+    await wait(200);
 }
 
 async function globalMember(browser, root, dark) {
@@ -308,12 +325,71 @@ async function globalMember(browser, root, dark) {
 
         await page.keyboard.press('Escape');
 
-        // People → Invites: the line.
+        // People → Invites: preview with strip, actions, QR and no card overflow.
         const tInvites = Date.now();
         await tab(page, 'People');
         await page.getByRole('tab', { name: /Invites/ }).click();
-        await page.getByTestId('invites-local-line').waitFor({ timeout: 10_000 });
+        await page.getByTestId('invites-preview').waitFor({ timeout: 10_000 });
+        check(await page.getByTestId('local-community-strip').isVisible(), 'Invites: Example Valley under the strip');
         check(/12 words or a sign-in/.test(await page.locator('body').innerText()), 'Invites: "12 words or a sign-in"');
+
+        // Actions open the sheet and leave clipboard untouched
+        await page.evaluate(() => navigator.clipboard.writeText('<cleared>').catch(() => {}));
+        const generateBtn = page.getByRole('button', { name: /Generate New Invite/ });
+        await generateBtn.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page);
+
+        const rowShare = page.getByTestId('invites-preview').getByTestId('local-community-action').filter({ hasText: /Share/ }).first();
+        await rowShare.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page);
+
+        const rowCopy = page.getByTestId('invites-preview').getByTestId('local-community-action').filter({ hasText: /Copy/ }).first();
+        await rowCopy.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page);
+
+        const clipboard = await page.evaluate(() => navigator.clipboard.readText().catch((e) => `ERR: ${e}`));
+        check(clipboard === '<cleared>', `Invites: clipboard untouched by preview actions (got: ${clipboard})`);
+
+        // Toggle QR code and check it decodes to EXAMPLE-1234
+        await page.getByRole('button', { name: 'Show QR code' }).first().click();
+        const box = page.locator('[data-testid="invites-preview"] div.bg-white.rounded-xl.inline-block').first();
+        await box.waitFor({ timeout: 5_000 });
+        check(await box.isVisible(), 'Invites: QR SVG visible');
+
+        if (jsQR && PNG) {
+            await box.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+            await wait(300);
+            const bb = await box.boundingBox();
+            if (bb) {
+                const buf = await page.screenshot({ clip: bb });
+                const png = PNG.sync.read(buf);
+                const code = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
+                check(code && code.data === 'EXAMPLE-1234', `Invites: QR decodes to EXAMPLE-1234 via jsQR (got: ${code?.data})`);
+            }
+        }
+
+        // Check no button past its card at 320 @130%
+        const overflow = await page.evaluate(() => {
+            const preview = document.querySelector('[data-testid="invites-preview"]');
+            if (!preview) return [];
+            const cards = Array.from(preview.querySelectorAll('.rounded-xl.p-4'));
+            const bad = [];
+            for (const card of cards) {
+                const cr = card.getBoundingClientRect();
+                for (const btn of card.querySelectorAll('button')) {
+                    const br = btn.getBoundingClientRect();
+                    if (br.right > cr.right + 1 || br.left < cr.left - 1) {
+                        bad.push(`button "${btn.textContent.trim().slice(0, 20)}" right ${br.right} > card right ${cr.right}`);
+                    }
+                }
+            }
+            return bad;
+        });
+        check(overflow.length === 0, `Invites: no control past its card at 320 @130%${overflow.length ? ` (${overflow.join(', ')})` : ''}`);
+
         await noSideScroll(page, 'Invites');
         await targetsAtLeast44(page, 'Invites');
         await shot(page, `invites-${scheme}`);
@@ -417,6 +493,8 @@ async function localMember(browser, root) {
         await tab(page, 'People');
         await page.getByRole('tab', { name: /Invites/ }).click();
         await wait(2_000);
+        check(await page.getByRole('button', { name: 'Show QR code' }).count() === 0, 'Invites (local, live): no 📱 button');
+        check(await page.locator('button').filter({ hasText: '📱' }).count() === 0, 'Invites (local, live): no 📱 button text');
         readsOwnAsBefore(net, tInvites, node.origin, 'Invites', ['their invites', 'their invite tree']);
         const tProfile = Date.now();
         await page.goto(`${node.origin}/app#profile=${ana.publicKey}`, { waitUntil: 'load' });

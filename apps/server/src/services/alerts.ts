@@ -454,7 +454,6 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     const file = settingsFile();
     const old = readAlertChannel();
     if (input.remove === true) {
-        if (old) tellOldChannel(old, 'removed');
         try {
             fs.unlinkSync(file);
         } catch (e) {
@@ -462,6 +461,7 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
                 return { ok: false, error: "The channel kept in Settings (data/alerts.json) could not be removed: remove that file by hand" };
             }
         }
+        if (old) tellOldChannel(old, 'removed');
         return { ok: true };
     }
     const bad = checkChannelUrl(input.url);
@@ -473,9 +473,9 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     const before = readAlertChannel();
     const token = typeof input.token === 'string' && input.token ? input.token
         : input.token === undefined && before?.source === 'settings' && before.url === url ? before.token : null;
-    if (old && (old.url !== url || old.token !== token)) tellOldChannel(old, 'changed');
     writeFileAtomic(file, JSON.stringify({ url, format: input.format === 'json' ? 'json' : 'ntfy', token }, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
+    if (old && (old.url !== url || old.token !== token)) tellOldChannel(old, 'changed');
     const s = readState();
     s.channel = emptyChannel();
     writeState();

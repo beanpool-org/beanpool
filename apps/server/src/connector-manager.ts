@@ -240,6 +240,10 @@ export function loadConnectors(): void {
                 saveConnectors();
                 logger.info('P2P', `[Connectors] ✅ Migration complete — saved updated connectors.json`);
             }
+        } else {
+            // No file, no links: a reload after the file went (a take-over rolled back on a standby that had none, which
+            // is every standby since its main server is pinned elsewhere) must not keep the list it replaced in memory.
+            connectors = [];
         }
     } catch (e) {
         logger.warn('P2P', '[Connectors] Failed to load connectors:', e);

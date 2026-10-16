@@ -2324,8 +2324,8 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
     // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
     // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
-    // web-restore.ts) and whether a sign-in can bring it back. On the global node the key alone opens nothing
-    // (engine/avatar-keys.ts); a local community's faces are not keyed yet.
+    // web-restore.ts) and whether a sign-in can bring it back. On every node the key alone opens no face
+    // (engine/avatar-keys.ts, SEC-PUB-02).
     ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
 });
 

@@ -173,3 +173,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-18 - [Refine search parameter types in join-global.tsx]
+**Issue:** `join-global.tsx` typed search params as `{ then?: string }` without handling array values.
+**Learning:** Updated generic type to `{ then?: string | string[] }` and unwrapped `thenParam` safely using scalar unwrapping (`Array.isArray(thenParamRaw) ? thenParamRaw[0] : thenParamRaw`).
+**Pattern:** Check `useLocalSearchParams` parameter generic types and unwrap array parameter values safely.

@@ -34,7 +34,8 @@ export { ErrorBoundary };
  * refusal leaves everything as it was.
  */
 export default function JoinGlobalScreen() {
-    const { then: thenParam } = useLocalSearchParams<{ then?: string }>();
+    const { then: thenParamRaw } = useLocalSearchParams<{ then?: string | string[] }>();
+    const thenParam = Array.isArray(thenParamRaw) ? thenParamRaw[0] : thenParamRaw;
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({

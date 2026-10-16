@@ -45,6 +45,7 @@ import tzLookup from '@photostructure/tz-lookup';
 import { offsetZones } from './engine/event-zone.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
     // The copy in section 7 is signed by this node's own key, read from a peer the node knows, as test-events.ts does it.
     const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

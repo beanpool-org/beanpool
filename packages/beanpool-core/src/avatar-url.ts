@@ -119,9 +119,9 @@ export function avatarVersionOfRef(ref: string): string {
 }
 
 /**
- * The member-only key a node puts in every avatar URL it emits, or null (every node but the global
- * one). On a node that shows visitors the listings and not the people (global node G9a), a face is
- * served only to a URL carrying the key for that photo, and the node hands the URLs to members
+ * The member-only key every node puts in every avatar URL it emits (public-routes audit SEC-PUB-02;
+ * first on the global node, G9a), or null before the server installs it. A face is served only to a
+ * URL carrying the key for that photo, and the node hands the URLs to members
  * alone: every response that carries one is either members-only or has its faces taken off for a
  * visitor. An `<img>` cannot sign a request; the key rides inside the URL, so every app renders it
  * as it renders any URL, old builds included.

@@ -47,6 +47,7 @@ import { mergeReplicatedInvalidatedKeys } from './engine/key-move.js';
 import { formerKeysReader } from './engine/key-succession.js';
 import { dmPublicKeyOf, keySuccessionCanonical, makeKeySuccession, walkKeySuccession, KEY_SUCCESSION_MAX } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -362,7 +363,7 @@ async function main(): Promise<void> {
         // A copy is signed by the main server's node key and taken from a connector the standby knows (test-dm-standby-order).
         const p2p = await startP2P(0, 0);
         const nodeId = p2p.peerId.toString();
-        addConnector(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`);
         const whole = await se.exportSyncState(nodeId);
         const copyInto = async (payload: any) => {
             emptyCopiedTables(db);

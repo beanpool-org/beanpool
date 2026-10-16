@@ -33,6 +33,7 @@ import { db } from './db/db.js';
 import { addConnector, setConnectorCreditCap } from './connector-manager.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -109,7 +110,7 @@ async function main() {
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'Byron', PEER_URL);
     setConnectorCreditCap(PEER_ADDR, 5_000);
-    addConnector(`/dns4/backup.beanpool.org/tcp/4001/p2p/${MIRROR}`, 'mirror', 'Backup', 'https://backup.beanpool.org');
+    pinMainServerForTests(`/dns4/backup.beanpool.org/tcp/4001/p2p/${MIRROR}`);
     // A PASSIVE peer — a trading partner we do not dial. Exactly one side of a healthy pair is Passive, so
     // this is the ordinary case, not an edge case, and it must be able to BUY as well as sell.
     const PASSIVE_URL = 'https://sleepy.beanpool.org';
@@ -215,10 +216,11 @@ async function main() {
     const noPeerNamed = await buy(buyer, { sellerPublicKey: stranger(), amount: 25 });
     assert(noPeerNamed.status === 404, `naming no peer at all is refused (${noPeerNamed.status})`);
 
+    // The main server this node copies (its pin, data/standby-main.json) is no link at all (case 19 D4): never a trading
+    // partner, whatever address names it.
     const toMirror = await buy(buyer, { ...good, nodeUrl: 'https://backup.beanpool.org' });
-    assert(toMirror.status === 403 && /backup replica/i.test(toMirror.body?.error ?? ''),
-        `a MIRROR is refused, and says why (${toMirror.status}) — a replica mirrors a ledger, it does not `
-        + 'author one, and the outer trust check admits both levels');
+    assert(toMirror.status === 404 && /not one of this node's connectors/i.test(toMirror.body?.error ?? ''),
+        `the pinned main server is refused: it is no connector (${toMirror.status}) — a copy mirrors a ledger, it does not author one`);
 
     // A PASSIVE peer is a full trading partner. This assertion is the inverse of the one it replaces, which
     // asserted the bug: `enabled` is a dialling setting, and gating trade on it made federation permanently

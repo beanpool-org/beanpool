@@ -1744,7 +1744,8 @@ async function main(): Promise<void> {
         // A local community is its members' (Marty, 2026-09-28: "nothing on a private node should be public now that we
         // have a global node"): with no visitors' view, a guest is refused its listings (2026-09-28) and its other people
         // reads (2026-10-01: the Commons decisions, the Pulse feed, the Beans constructs), in words that send them to the
-        // global community. The community's totals stay public, and so do faces by key (a local node does not key them yet).
+        // global community. The community's totals stay public. A face opens only from the URL a member was handed, with its
+        // key (public-routes audit SEC-PUB-02, 16 Oct): asked by a key alone it is refused as a face that isn't there.
         console.log("── a local node: a guest is refused the listings and every other read that names people ──");
         const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
@@ -1767,7 +1768,7 @@ async function main(): Promise<void> {
             const pot = await call('GET', id, '/api/commons/balance');
             assert(pot.status === 200 && typeof pot.body?.balance === 'number', `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
-            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, not keyed here yet (${face.status})`);
+            assert(face.status === 404 && face.headers.get('content-type') !== 'image/png', `${who}: a face asked by a member's key alone is refused, 404 (${face.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
             assert(Array.isArray(lookup.body) && lookup.body.length === 0, `${who}: the recovery lookup finds nobody by a prefix (${lookup.text.slice(0, 80)})`);
             const exact = await call('GET', id, '/api/recovery/lookup/sentinelalice');
@@ -1780,10 +1781,13 @@ async function main(): Promise<void> {
         }
         const members = await call('GET', bob, '/api/members');
         const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
-        // A local community's listings are its members', so their photos are keyed here (engine/photo-keys.ts); faces are not.
-        const keyedFace = /\/api\/avatar\/[^"]*&k=/;
-        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !keyedFace.test(members.text) && !keyedFace.test(posts.text),
-            'avatar URLs carry no key here');
+        // A local community's listings are its members', so their photos are keyed here (engine/photo-keys.ts), and so are
+        // faces (SEC-PUB-02): the URL a member is handed carries its key, and opens unsigned, as an <img> asks it.
+        const aliceFace = ((members.body as any[]) ?? []).find(m => m.publicKey === alice.pk)?.avatarUrl as string | undefined;
+        const unkeyedFace = /\/api\/avatar\/[0-9a-f]{64}\?size=thumb&v=[0-9a-f]{8}"/;
+        assert(!!aliceFace && aliceFace.startsWith(`/api/avatar/${alice.pk}?size=thumb&v=`) && /&k=[A-Za-z0-9_-]{22}$/.test(aliceFace)
+            && !unkeyedFace.test(members.text) && !unkeyedFace.test(posts.text) && (await call('GET', null, aliceFace)).status === 200,
+            `avatar URLs carry their key here, and Alice's opens unsigned (${aliceFace})`);
         const offerPhoto = ((posts.body as any[]) ?? []).find(p => p.id === offer.id)?.photos?.[0] as string | undefined;
         assert(!!offerPhoto && /&k=[A-Za-z0-9_-]{22}$/.test(offerPhoto) && (await call('GET', null, offerPhoto)).status === 200
             && (await call('GET', null, `/api/marketplace/posts/${offer.id}/photos/0`)).status === 404,
@@ -1816,7 +1820,8 @@ async function main(): Promise<void> {
             const got = await Promise.all([`/api/groups?member=${alice.pk}`, '/api/members'].map(async p => [(await call('GET', id, p)).status, (await call('HEAD', id, p)).status]));
             assert(got.every(([g, h]) => g === want && h === want), `${who}: a HEAD to a gated read is ${want}, as its GET (GET/HEAD ${got.map(x => x.join('/')).join(', ')})`);
         }
-        assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
+        // Private now its faces carry keys, as on global: a shared cache must not hand one member's keyed URLs to another.
+        assert(members.headers.get('cache-control') === 'private, max-age=0, must-revalidate', `/api/members is private to its reader (${members.headers.get('cache-control')})`);
 
         // The landing card (G5), where an operator keeps the directory on a local node. Its listings are its members'
         // (2026-09-28), and this public count was the one way left to find them (#1286's deciding review, 4125322427): a

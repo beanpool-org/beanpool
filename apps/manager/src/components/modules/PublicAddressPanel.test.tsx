@@ -147,6 +147,10 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.getByLabelText(/Subdomain Prefix/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Community \/ Pool Name/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Reachability Mode/i)).toBeInTheDocument();
+        // Settings offers a tunnel only: a direct name needs the server's public IPv4 address, which it can't know (SEC-REG-01).
+        expect(screen.getByLabelText(/Reachability Mode/i)).toHaveTextContent('Tunnel');
+        expect(screen.queryByRole('option', { name: /Direct/i })).not.toBeInTheDocument();
+        expect(screen.queryByText(/Direct/)).not.toBeInTheDocument();
         expect(screen.getByText('https://cairns.beanpool.org')).toBeInTheDocument();
     });
 

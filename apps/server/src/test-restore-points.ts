@@ -743,6 +743,17 @@ async function main(): Promise<void> {
     // ── 5. No route removes a point ──
     console.log('\n── 5. no route removes a restore point: every admin route, every credential ──');
     {
+        // And a standby's pin (design case 19 row g): no route writes or removes data/standby-main.json either.
+        const { pinMainServerForTests, unpinMainServerForTests } = await import('./standby-pin-test-helper.js');
+        const { makePairingCode } = await import('./services/standby-main.js');
+        const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+        const { generateKeyPair: newKey } = await import('@libp2p/crypto/keys');
+        const pinnedMain = peerIdFromPrivateKey(await newKey('Ed25519')).toString();
+        const otherKey = peerIdFromPrivateKey(await newKey('Ed25519')).toString();
+        pinMainServerForTests(pinnedMain, { dir: dataDir!, url: 'https://main.example.invalid' });
+        const pinFile = path.join(dataDir!, 'standby-main.json');
+        const pinBefore = fs.readFileSync(pinFile).toString('hex');
+        const pinNow = () => (fs.existsSync(pinFile) ? fs.readFileSync(pinFile).toString('hex') : 'gone');
         const point = rp.takeRestorePoint ? rp.takeRestorePoint('restore') : null;
         assert(!!point?.name, `setup: a restore point exists (${point?.name})`);
         const name = point?.name ?? 'none';
@@ -771,10 +782,16 @@ async function main(): Promise<void> {
             ['the owner password with a code', () => tfa.headers()],
         ];
         const fill = (p: string) => p.replace(/:[A-Za-z]+/g, encodeURIComponent(name));
-        const bait = { name, names: [name], point: name, path: `restore-points/${name}`, file: name, id: name, keep: 3, code: '' };
+        const bait = {
+            name, names: [name], point: name, path: `restore-points/${name}`, file: name, id: name, keep: 3, code: '',
+            // The pin's bait: another key, as a link, a pairing code, a peer id.
+            address: `/ip4/127.0.0.1/tcp/4002/p2p/${otherKey}`, trustLevel: 'mirror', peerId: otherKey,
+            pairingCode: makePairingCode({ url: 'https://other.example.invalid', communityId: 'c0ffee00c0ffee00', peerId: otherKey, token: 'c'.repeat(64) }),
+        };
         let sent = 0;
         let rolledBack = 0;
         const changedAfter: string[] = [];
+        const pinChangedAfter: string[] = [];
         for (const [who, headers] of credentials) {
             for (const [m, p] of routes) {
                 // The roll-back with a proof that passes is the one route meant to add a point (row 3 runs it, in a child).
@@ -787,12 +804,18 @@ async function main(): Promise<void> {
                 sent++;
                 const now = JSON.stringify(treeOf(pointsDir));
                 if (now !== JSON.stringify(before) && changedAfter.length < 5) changedAfter.push(`${who}: ${m} ${p}`);
+                if (pinNow() !== pinBefore && pinChangedAfter.length < 5) {
+                    pinChangedAfter.push(`${who}: ${m} ${p}`);
+                    pinMainServerForTests(pinnedMain, { dir: dataDir!, url: 'https://main.example.invalid' });
+                }
             }
         }
         assert(sent > routes.length * credentials.length - credentials.length - 1 && rolledBack === 2,
             `the sweep sent ${sent} requests (${routes.length} routes × ${credentials.length} credentials, the proven roll-back skipped twice)`);
         assert(JSON.stringify(treeOf(pointsDir)) === JSON.stringify(before) && changedAfter.length === 0,
             `5. the restore point is byte for byte as it was (${changedAfter.join(' | ') || 'no request changed it'})`);
+        assert(pinChangedAfter.length === 0, `5. (case 19 g) data/standby-main.json is byte for byte as it was after every request: no route writes or removes it (${pinChangedAfter.join(' | ') || 'none changed it'})`);
+        unpinMainServerForTests(dataDir!);
     }
 
     // ── 6. Retention ──

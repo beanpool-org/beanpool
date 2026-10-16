@@ -14,6 +14,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { RedirectRefusedError } from './credential-redirect.js';
+import { standbyMainPeerId } from './standby-main.js';
 import {
     type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, pronounOf, timeInWords, whyCode, whyInWords,
 } from './standby-report.js';
@@ -336,8 +337,10 @@ export function whyOf(stage: 'fetch' | 'import', e: unknown): WhyCode {
     if (stage === 'import') {
         // engine/sync.ts OversizedCopyError: a table the ledger needs whole has more rows than one copy carries.
         if (err?.name === 'OversizedCopyError') return 'oversized';
+        // engine/sync.ts SignerNotPinnedError: signed, but not by the main server this standby is pinned to (or none).
+        if (err?.name === 'SignerNotPinnedError') return 'signer-not-pinned';
         if (/conservation/i.test(msg)) return 'conservation';
-        if (/signature|untrusted|mirror/i.test(msg)) return 'signature';
+        if (/signature|untrusted/i.test(msg)) return 'signature';
         return 'import-error';
     }
     if (err?.name === 'AbortError') return 'timeout';
@@ -363,6 +366,7 @@ export function standbyReport(now = Date.now()): StandbyReport {
         // The deletions left out mend themselves: this standby takes a force-resync for them (services/backup-puller.ts).
         leftOut: (r.lastLeftOut?.tables ?? []).filter((t) => t !== 'tombstones'),
         oversized: r.lastOversized?.tables ?? [],
+        pin: standbyMainPeerId(),
     };
 }
 

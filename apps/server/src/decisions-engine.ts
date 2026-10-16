@@ -43,7 +43,7 @@ import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
-import { db, writeTombstone } from './db/db.js';
+import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
@@ -792,7 +792,8 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
  * A grant proposal's amount against the cap. Throws the member's sentence; writes nothing. A grant with no usable amount
  * could never be paid (preflightAssert blocks it), so it gets its plain answer here instead of a vote. A cap of 0 or
  * less refuses every grant outright: the 1e-6 float allowance would otherwise let a sliver of a Bean through, to be
- * queued unpayable on a new node's empty Commons.
+ * queued unpayable on a new node's empty Commons. To the cent, as every payment a member makes is (LED-05): a part of a
+ * cent would be paid as it is and land in a hardship shield rounded to a cent (state-engine.ts sweepRepayment).
  */
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
@@ -803,6 +804,8 @@ function assertGrantWithinCap(params: any): void {
     const cap = commonsGrantCap();
     // Fails closed: a cap that isn't a finite number refuses, never lets through.
     if (!Number.isFinite(cap.capCents) || cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+    // After the cap: a sliver of a Bean against a cap of 0 keeps the cap's answer, which says what the most is.
+    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────
@@ -1182,7 +1185,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
         }
         const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount)) {
+        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
             return { status: 'blocked', reason: 'Invalid grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
@@ -1197,7 +1200,7 @@ export function preflightAssert(decision: Decision): {
             return { status: 'void', reason: 'Invalid or missing hardship recipient member' };
         }
         const amount = Number(decision.params?.amount);
-        if (!amount || amount <= 0 || !Number.isFinite(amount)) {
+        if (!amount || amount <= 0 || !Number.isFinite(amount) || !isWholeCents(amount)) {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
@@ -1507,6 +1510,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), memberPubkey, amount, `Hardship grant: ${decision.title.slice(0, 80)}`, now, authSigner);
+                    // A member working off a debt keeps the grant: the next payment they receive sweeps only what it
+                    // brought (state-engine.ts sweepRepayment), not this.
+                    db.prepare(`UPDATE names_debts SET hardship_held = ROUND(hardship_held + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
+                        .run(amount, memberPubkey);
 
                     persistDecayEvents();
                     persistCommonsBalance();

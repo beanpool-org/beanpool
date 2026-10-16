@@ -758,6 +758,28 @@ async function main() {
         const check = await get('/api/members/callsign-available/PrivAlice');
         assert(check.body?.available === false && !check.text.includes(alice.pk), `and says only that the name is taken (got ${check.text.slice(0, 90)})`);
 
+        // Public-routes audit NEW-2: `?exclude=<key>` answered "available" exactly when that key held that name, so anyone
+        // could confirm the name behind a key. The node ignores it, and takes whose name it is from the verified signer.
+        pruneAuthAttempts(Date.now() + 120_000);
+        resetGatewayRateLimit();
+        const byExclude = await get(`/api/members/callsign-available/PrivAlice?exclude=${alice.pk}`);
+        assert(byExclude.status === 200 && byExclude.body?.available === false,
+            `an unsigned check of Alice's name with ?exclude=<her key> says taken, as for anyone (got ${byExclude.status} ${byExclude.text.slice(0, 90)})`);
+        const byCarol = await get(`/api/members/callsign-available/PrivAlice?exclude=${alice.pk}`, carol);
+        assert(byCarol.body?.available === false, `so does Carol's signed check naming Alice's key (got ${byCarol.text.slice(0, 90)})`);
+        const ownName = await get('/api/members/callsign-available/PrivAlice', alice);
+        assert(ownName.status === 200 && ownName.body?.available === true,
+            `signed by Alice's own key, her own name reads as hers to keep for a rename (got ${ownName.status} ${ownName.text.slice(0, 90)})`);
+        const othersName = await get('/api/members/callsign-available/PrivBob', alice);
+        assert(othersName.body?.available === false, `and Bob's name is still taken for her (got ${othersName.text.slice(0, 90)})`);
+        const joiner = newId();
+        const freeForJoiner = await get('/api/members/callsign-available/Sentinel%20newcomer', joiner);
+        const takenForJoiner = await get('/api/members/callsign-available/PrivAlice', joiner);
+        assert(freeForJoiner.body?.available === true && takenForJoiner.body?.available === false,
+            `a joining key that holds no name: a free name free, a member's name taken (got ${freeForJoiner.text.slice(0, 60)} / ${takenForJoiner.text.slice(0, 60)})`);
+        pruneAuthAttempts(Date.now() + 120_000);
+        resetGatewayRateLimit();
+
         // Beside the allowlist: the trust profile, a read of a member's standing and who brought them in, answers only a
         // member; a redeem gives an existing member's card only to that member's own key.
         // A visitor's row is refused it one step earlier, as every POST it may not make (visitor-allowlist.ts): not_a_member.

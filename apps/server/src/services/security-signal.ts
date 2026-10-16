@@ -49,6 +49,15 @@ export const OWNER_ALERT_WORDS = {
     replicationTokenCleared: 'The replication token was cleared: no standby can copy this server until a new one is made.',
     standbyForgotten: 'A standby was forgotten: this server no longer lists it.',
     copyFromChanged: 'The server this standby copies from was changed.',
+    /** The standby pin (design case 19 D5): on the main server, from the first report of a standby that names its key. */
+    standbyPaired: 'A standby was paired with this main server.',
+    standbyPairedMore: { one: 'One more standby was paired with this main server in the hour after the first ones were pushed.', many: '{n} more standbys were paired with this main server in the hour after the first ones were pushed.' },
+    /** On the standby, from `beanpool pair` (the node's pickup): a first pairing, and --follow-new-server (high). */
+    pairedFromShell: "This standby was paired with its main server, from the server's shell.",
+    followsNewServer: "This standby now follows a different main server (paired again from the server's shell).",
+    /** On the standby: a backup another key locked, refused from Settings (sec.restore, counted). */
+    notMainServerRefused: { one: "1 backup locked by a key that is not this standby's main server was refused today.", many: "{n} backups locked by a key that is not this standby's main server were refused today." },
+    notMainServerRefusedMore: { one: "One more backup locked by a key that is not this standby's main server was refused in the hour after the first ones were pushed.", many: "{n} more backups locked by a key that is not this standby's main server were refused in the hour after the first ones were pushed." },
     offBoxRemoved: 'An off-box backup destination was removed.',
     offBoxChanged: 'An off-box backup destination was changed.',
     snapshotKeepLowered: (from: number, to: number) => `Fewer snapshots are kept now: ${to}, down from ${from}.`,

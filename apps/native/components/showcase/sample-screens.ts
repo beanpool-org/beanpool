@@ -6,6 +6,7 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
+import type { DecisionWithTally, MyPoolVoting } from '../../utils/db';
 import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote, t } from '@beanpool/core';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
@@ -134,3 +135,61 @@ export function sampleInviteTree(now: number = Date.now()) {
         })),
     }];
 }
+
+/**
+ * Example Valley's Decision as the phone's Decide screen reads it (DecisionWithTally): touches pool, grant enterprise,
+ * quadratic on trade, turnout 9 of 6, Yes 12 (86%) · No 2 · needs 60%, closing in 3 days.
+ */
+export function sampleDecisions(): DecisionWithTally[] {
+    const c = SAMPLE_COMMUNITY;
+    const d = c.decisions[0];
+    const now = Date.now();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    return [{
+        id: d.id,
+        authorPubkey: 'sample-member-neighbour',
+        title: d.question,
+        description: t('{amount} Beans from the pool: {what}.', { amount: String(d.fromPool), what: c.projects[0].what }),
+        touches: d.touches,
+        effect: d.effect,
+        subject: d.subject,
+        params: { amount: d.fromPool, subject: d.subject },
+        franchise: d.franchise,
+        status: 'open',
+        opensAt: new Date(now - 4 * DAY_MS).toISOString(),
+        closesAt: new Date(now + d.closesInDays * DAY_MS).toISOString(),
+        gracePeriodEndsAt: null,
+        createdAt: new Date(now - 4 * DAY_MS).toISOString(),
+        executedAt: null,
+        executionError: null,
+        executionReason: null,
+        adminHaltedAt: null,
+        adminHaltReason: null,
+        updatedAt: new Date(now - 4 * DAY_MS).toISOString(),
+        tally: {
+            decisionId: d.id,
+            status: 'open',
+            totalVoters: d.totalVoters,
+            electorate: d.electorate,
+            quorumRatio: d.quorumRatio,
+            quorumRequired: d.quorumRequired,
+            quorumMet: d.quorumMet,
+            yesWeight: d.yesWeight,
+            noWeight: d.noWeight,
+            totalWeight: d.yesWeight + d.noWeight,
+            supportRatio: d.yesWeight / (d.yesWeight + d.noWeight),
+            thresholdRequired: d.thresholdRequired,
+            passed: d.passed,
+        },
+        myVote: null,
+    }];
+}
+
+/** Voice credits for money votes from Example Valley (582 voice credits, completed trades). */
+export function samplePoolVoting(): MyPoolVoting {
+    return {
+        voiceCredits: SAMPLE_COMMUNITY.voiceCredits,
+        hasCompletedTrade: true,
+    };
+}
+

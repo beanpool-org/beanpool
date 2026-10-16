@@ -3,10 +3,11 @@
  *
  * Verifies that:
  * 1. GET /api/marketplace/posts, GET /api/community/members, and GET /api/members
- *    emit weak ETags and a max-age=0, must-revalidate Cache-Control — `private` for
- *    /api/marketplace/posts and /api/community/members, which vary by viewer (a member's own
- *    paused posts; the contact details each member lets this viewer see), `public` for
- *    /api/members, which does not.
+ *    emit weak ETags and a max-age=0, must-revalidate Cache-Control — `private` for all three:
+ *    /api/marketplace/posts and /api/community/members vary by viewer (a member's own paused
+ *    posts; the contact details each member lets this viewer see), and /api/members holds each
+ *    face's key (keyed on every node since the public-routes audit's SEC-PUB-02), which no shared
+ *    cache may keep.
  * 2. When If-None-Match matches, all three endpoints return 304 Not Modified immediately
  *    WITHOUT executing SQLite queries against posts or members tables and without serializing JSON.
  * 3. Any mutation (createPost, updatePost, pausePost, resumePost, removePost,
@@ -290,8 +291,8 @@ async function main() {
     assert(membersQueries > 0, `Initial 200 touched SQLite members table (${membersQueries} query)`);
     const apiMemEtag1 = apiMemRes1.headers['etag'];
     assert(!!apiMemEtag1 && apiMemEtag1.startsWith('W/"'), `Returned weak ETag: ${apiMemEtag1}`);
-    assert(apiMemRes1.headers['cache-control'] === 'public, max-age=0, must-revalidate',
-        `Cache-Control header is public, max-age=0, must-revalidate (got: ${apiMemRes1.headers['cache-control']})`);
+    assert(apiMemRes1.headers['cache-control'] === 'private, max-age=0, must-revalidate',
+        `Cache-Control is private (each face's key is in it) (got: ${apiMemRes1.headers['cache-control']})`);
 
     // 3.2 Matching ETag -> 304 without query
     membersQueries = 0;

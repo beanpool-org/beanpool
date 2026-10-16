@@ -728,8 +728,8 @@ async function main() {
 
     // Trust and identity are checked for EVERY action, flag or no flag.
     for (const action of [SETTLE_PURCHASE, SETTLE_RECEIPT, SETTLE_RECEIPT_STATUS]) {
-        assert(settlementGateRefusal('mirror', BRIS, action, 'primary', true)?.code === 'federation_settlement_disabled',
-            `a MIRROR is refused for ${action} — a backup replica is not a trading partner`);
+        assert(settlementGateRefusal('blocked', BRIS, action, 'primary', true)?.code === 'federation_settlement_disabled',
+            `a level other than peer (blocked) is refused for ${action}: only a trading partner settles`);
         assert(settlementGateRefusal(null, BRIS, action, 'primary', true) !== null, `an untrusted connection is refused for ${action}`);
         assert(settlementGateRefusal('peer', 'unknown', action, 'primary', true) !== null, `an unidentified peer is refused for ${action}`);
         assert(settlementGateRefusal('peer', '', action, 'primary', true) !== null, `an empty peer id is refused for ${action}`);

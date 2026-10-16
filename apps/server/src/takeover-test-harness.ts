@@ -220,6 +220,11 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     // from before it still starts.
     takeover.settleTakeoverBeforeDatabaseBoot?.();
     initStateEngine();
+    // index.ts step 2.505 (#2037 NB4): which server a standby copies, migrated once per data folder, and `beanpool pair`'s
+    // pickup (services/standby-main.ts), before a take-over step reads it. Optional: a tree from before the pin still starts.
+    const standbyMain = await import('./services/standby-main.js').catch(() => null);
+    await standbyMain?.migrateStandbyMainAtBoot();
+    standbyMain?.startPairRequestWatch();
     const boot = resumeTakeoverAtBoot();
     // index.ts step 2.61: the snapshot scheduler, armed from the schedule row once the take-over has resumed, for the role
     // as it now stands. Only for a suite that asks (BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1): every other suite's nodes would
@@ -503,6 +508,9 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         peerId: peerIdFromPrivateKey(getPrivateKey()).toString(),
         roles: db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all(),
         connectors: getConnectors().map((c: any) => ({ address: c.address, trustLevel: c.trustLevel })),
+        /** The standby's pin (services/standby-main.ts), and the ones a take-over retired. */
+        standbyMain: fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'standby-main.json')),
+        standbyMainRetired: fs.readdirSync(process.env.BEANPOOL_DATA_DIR!).filter((n) => /^standby-main\.retired-\d+\.json$/.test(n)),
         keySignIn,
         promotionAuditPending: !!config.promotionAuditPending,
         lastPromotionAudit: config.lastPromotionAudit ?? null,

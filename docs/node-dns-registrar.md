@@ -50,8 +50,8 @@ Pages Function.
 | Squatting / impersonation on your brand | Reserved-name blocklist (§5) + manual approval + you can **revoke** any lease instantly |
 | A bad node abusing the name | Revoke = delete tunnel/record → node is unreachable at that name within seconds |
 | Origin getting DoS'd | Offer the **tunnel** mode (origin IP never exposed) — see §3 |
-| Spam registrations | One node key holds at most `CLAIM_LIMIT_PER_KEY` names (3; its own releases count until their hold ends); every field a key sets is capped and checked (2026-10-01). Not built: a per-IP budget (planned as a Cloudflare rate-limit rule on the claim route), and pending requests don't expire |
-| A captured signed request replayed | Signing protocol v2 signs a one-use `x-bp-nonce` the registrar takes once; v1 (no nonce) stays accepted until every node sends v2, and replays inside its ±300 s window until then |
+| Spam registrations | One node key holds at most `CLAIM_LIMIT_PER_KEY` names (3; its own releases count until their hold ends); every field a key sets is capped and checked (2026-10-01); every POST body is capped at 64 KB (413). New **auto** names across all keys are budgeted: `NEW_NAMES_PER_HOUR` (20) and `NEW_NAMES_PER_DAY` (50), then 429 and one control-room alert per window, in counts (SEC-REG-05, 2026-10-16); gated claims and a key's own names are outside it. Not built: a per-IP budget (planned as a Cloudflare rate-limit rule on the claim route), and pending requests don't expire |
+| A captured signed request replayed | Signing protocol v2 signs a one-use `x-bp-nonce` the registrar takes once; nodes send v2 from the release after 2026-10-16 (SEC-REG-04); v1 (no nonce) stays accepted for older nodes, and replays inside its ±300 s window, until the Worker drops it two node releases later |
 | beanpool.org vouching for a stranger's server | The switchboard's `?n=` names only a name the registrar holds live (2026-10-01; it used to send the app to any host) |
 
 Key property: with a **tunnel**, we are the landlord and hold a kill switch. With **direct DNS**, the

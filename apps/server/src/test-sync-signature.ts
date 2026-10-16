@@ -22,6 +22,7 @@ import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -66,32 +67,32 @@ async function run() {
             'exportSyncState produces a signed payload (signature + publicKey)');
 
         // 1b. Phase 1 (one-directional backup): the DEFAULT role is 'primary',
-        //     which imports state from NOBODY. Even a perfectly valid,
-        //     mirror-trusted payload must be rejected by the structural role guard
+        //     which imports state from NOBODY. Even a perfectly valid payload from
+        //     a pinned main server must be rejected by the structural role guard
         //     before any signature/trust work. Configure trust first to prove the
         //     rejection is the role guard, not the trust gate.
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
         const primaryErr = await assertRejects(() => importRemoteState(payload),
-            'Phase 1: a PRIMARY rejects inbound state even from a trusted mirror');
+            'Phase 1: a PRIMARY rejects inbound state even from a pinned main server');
         assert(/primary|imports no remote state/i.test(primaryErr),
             'Phase 1: rejection cites the primary role / one-directional topology');
-        removeConnector(trustedAddr);
+        unpinMainServerForTests();
 
         // From here on, act as a BACKUP (the only role that imports) so the
         // existing SRV-1 / SRV-20 trust-boundary checks below exercise the import.
         setNodeRole('backup');
 
-        // 2. SRV-1 Gate B: valid signature, but signer is not a trusted connector → reject.
-        //    (No connectors are configured at this point.)
+        // 2. SRV-1 Gate B: valid signature, but this standby is pinned to no main server → reject.
+        //    (No pin at this point.)
         const untrustedErr = await assertRejects(() => importRemoteState(payload),
-            'SRV-1: validly-signed payload from a NON-trusted signer is rejected');
-        assert(/untrusted peer/i.test(untrustedErr),
-            'SRV-1: rejection reason cites the untrusted signing key (not a sig failure)');
+            'SRV-1: validly-signed payload on a standby paired with no main server is rejected');
+        assert(/not paired with a main server/i.test(untrustedErr),
+            'SRV-1: rejection reason cites the missing pin (not a sig failure)');
 
-        // 3. SRV-1 Gate B: trust the signer's PeerID → same payload now accepted.
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        // 3. SRV-1 Gate B: pin the signer's PeerID → same payload now accepted.
+        pinMainServerForTests(trustedAddr);
         await importRemoteState(payload);
-        assert(true, 'SRV-1: same payload ACCEPTED once signer is a trusted connector (no false negative)');
+        assert(true, 'SRV-1: same payload ACCEPTED once the signer is the pinned main server (no false negative)');
 
 
         // 3a. Recovery seal S2: a member's sign-in recovery copy reaches the standby as the main server's WRAPPED
@@ -130,19 +131,26 @@ async function run() {
             assert(onStandby.encrypted_share !== dep.sealed.encryptedShare && onStandby.kdf_params !== dep.sealed.kdfParams,
                 `3a. …never the client's`);
         }
-        // 3b. SRV-20: a 'peer' (cross-community federation) connector must NOT be
-        //     able to import ledger state — only 'mirror' connectors may. Re-classify
-        //     the same trusted signer as a peer and confirm the identical, validly
-        //     signed payload is now rejected.
-        removeConnector(trustedAddr);
+        // 3b. SRV-20: a 'peer' (cross-community federation) link must NOT be able to
+        //     import ledger state: only the main server this standby is pinned to may
+        //     (data/standby-main.json, case 19 D1). Unpin, link the same signer as a
+        //     peer, and confirm the identical, validly signed payload is now rejected.
+        unpinMainServerForTests();
         addConnector(trustedAddr, 'peer', 'self-test-peer');
         const peerErr = await assertRejects(() => importRemoteState(payload),
-            'SRV-20: payload from a non-mirror (peer) connector is rejected');
-        assert(/mirror/i.test(peerErr),
-            'SRV-20: rejection cites the mirror-only requirement');
-        // Restore mirror trust for the remaining cases.
+            'SRV-20: payload from a peer link, not the pinned main server, is rejected');
+        assert(/not paired with a main server/i.test(peerErr),
+            'SRV-20: rejection cites the pin');
+        // Pinned to another key: the same payload is refused, naming the pin.
+        const { generateKeyPair } = await import('@libp2p/crypto/keys');
+        const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+        pinMainServerForTests(peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString());
+        const otherErr = await assertRejects(() => importRemoteState(payload),
+            'SRV-20: payload signed by a key that is not the pin is rejected');
+        assert(/not this standby's main server/i.test(otherErr), 'SRV-20: rejection names the pin');
+        // Restore the pin for the remaining cases.
         removeConnector(trustedAddr);
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
 
         // 4. Forged signature is rejected (sig verification runs before the trust check).
         await assertRejects(() => importRemoteState({ ...payload, signature: 'a'.repeat(128) }),
@@ -152,8 +160,8 @@ async function run() {
         await assertRejects(() => importRemoteState({ ...payload, signature: undefined }),
             'Payload missing signature is rejected');
 
-        // Cleanup the test connector so a shared data dir isn't polluted.
-        removeConnector(trustedAddr);
+        // Cleanup the pin so a shared data dir isn't polluted.
+        unpinMainServerForTests();
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
         if (testsPassed !== testsRun) {

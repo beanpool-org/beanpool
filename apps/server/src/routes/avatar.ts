@@ -19,8 +19,8 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
             return;
         }
 
-        // On a node that shows visitors the listings and not the people (G9a-2), a face goes only to a URL carrying the
-        // member-only key for this photo as it is now (engine/avatar-keys.ts). Anything else is answered as no photo,
+        // On every node (SEC-PUB-02; first on the global node, G9a-2), a face goes only to a URL carrying the member-only
+        // key for this photo as it is now (engine/avatar-keys.ts). Anything else is answered as no photo,
         // before a conditional request can be answered either, so neither says whether there is one.
         if (avatarKeysRequired() && !avatarKeyMatches(pubkey, ctx.query.k)) {
             ctx.status = 404;

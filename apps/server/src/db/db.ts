@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -86,6 +86,19 @@ export function migrateCallsignFold(conn: Database.Database): void {
     }
 }
 
+let postCommitDepth = 0;
+const postCommitBatchOver: (() => void)[] = [];
+
+/**
+ * Runs `fn` once the batch of post-commit hooks now running is over (a hook's own transaction runs its hooks inside the
+ * batch), or at once when none is running. For state that belongs to one batch of after-commit work and must not reach
+ * unrelated work later in the same event-loop turn (state-engine.ts sweepRepayment's).
+ */
+export function whenPostCommitBatchOver(fn: () => void): void {
+    if (postCommitDepth === 0) fn();
+    else postCommitBatchOver.push(fn);
+}
+
 export function afterTransactionCommit(fn: () => void): void {
     if (!(db as any).inTransaction) {
         fn();
@@ -103,8 +116,16 @@ function wrapTxnFn(origFn: any) {
             const res = origFn.apply(this, args);
             if (isOuter && pendingPostCommitHooks.length > 0) {
                 const hooks = pendingPostCommitHooks.splice(0, pendingPostCommitHooks.length);
-                for (const hook of hooks) {
-                    try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                postCommitDepth++;
+                try {
+                    for (const hook of hooks) {
+                        try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                    }
+                } finally { postCommitDepth--; }
+                if (postCommitDepth === 0) {
+                    for (const over of postCommitBatchOver.splice(0, postCommitBatchOver.length)) {
+                        try { over(); } catch (e) { console.error('[DB] Post-commit batch end failed:', e); }
+                    }
                 }
             }
             return res;
@@ -1099,6 +1120,8 @@ export function initSchema() {
 
     // Ensure all tables have updated_at columns so schema.sql triggers/indexes can compile successfully
     try { db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // A hardship grant's shield on a debt being worked off (state-engine.ts sweepRepayment).
+    try { db.prepare(`ALTER TABLE names_debts ADD COLUMN hardship_held REAL NOT NULL DEFAULT 0`).run(); } catch { }
     // Elder vouch column — added BEFORE schema.sql exec so the re-created
     // members_touch_updated_at trigger (which whitelists elder_vouched_by) compiles.
     try { db.prepare(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT REFERENCES members(public_key)`).run(); } catch { }
@@ -2984,12 +3007,19 @@ export function updateCrowdfundProject(
     })();
 }
 
+/** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
+export const WHOLE_CENTS_ERROR = 'The amount is a number of Beans above 0, to the cent.';
+/** At least a cent, in whole cents (@beanpool/core ledger.ts): the apps check the same before they send. */
+export { isWholeCents };
+
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // SECURITY (SRV-8): defense-in-depth — reject non-positive amounts at the data
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
+    // To the cent, as a payment to the Commons is (state-engine.ts payToCommons). Before anything moves: a refusal in words.
+    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
@@ -3064,7 +3094,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         // Record tx — SRV-20: this is the member-authored leg (backer → escrow),
         // so persist the caller's request signature for re-verification on import.
         // The escrow sweep/refund legs below are node-authoritative (from escrow_)
-        // and accepted via the payload-level mirror-trust gate.
+        // and accepted via the payload-level pin gate (verifySyncPayload).
         db.prepare(`
             INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id, auth_signer, auth_signature, auth_payload)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3075,7 +3105,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         db.prepare(`UPDATE projects SET current_amount = current_amount + ? WHERE id = ?`).run(amount, projectId);
 
         const updatedProject = db.prepare(`SELECT current_amount, goal_amount FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
-        if (updatedProject && updatedProject.current_amount >= updatedProject.goal_amount && project.status === 'ACTIVE') {
+        // In cents: SQLite sums REALs, and 0.70 + 0.10 + 0.10 + 0.10 is 0.9999999999999999, short of a goal of 1.
+        if (updatedProject && Math.round(updatedProject.current_amount * 100) >= Math.round(updatedProject.goal_amount * 100) && project.status === 'ACTIVE') {
             db.prepare(`UPDATE projects SET status = 'FUNDED' WHERE id = ?`).run(projectId);
             db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 

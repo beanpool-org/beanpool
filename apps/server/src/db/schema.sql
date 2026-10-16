@@ -1698,6 +1698,9 @@ CREATE TABLE IF NOT EXISTS names_debts (
     work_off_confirmation_id TEXT,
     work_off_floor_before    TEXT,
     work_off_floor_set_at    TEXT,
+    -- What a hardship grant Decision gave the member working this debt off, as far as they still hold it: never swept
+    -- (state-engine.ts sweepRepayment). Spending it shrinks it, so Beans spent and earned back count toward the debt.
+    hardship_held    REAL NOT NULL DEFAULT 0,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

@@ -10,7 +10,7 @@
  *  - `db:<table> (not copied)`: any of those in a table main doesn't copy at all (one gap, whatever the standby's own
  *    writes left in it);
  *  - `setting:<where>.<name>`: a community setting (engine/replication-manifest.ts LOCAL_CONFIG_FIELDS, NODE_CONFIG_*);
- *  - `http:<call>`: the same signed call answered differently, after normalising times, new ids and ports.
+ *  - `http:<call>`: the same signed call answered differently, after normalising times, new ids, ports and face keys.
  */
 
 import type { SettingEntry } from './engine/replication-manifest.js';
@@ -122,16 +122,24 @@ export function diffSettings(twin: SettingsDump, promoted: SettingsDump, c: Sett
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const PORT = /(127\.0\.0\.1|localhost):\d+/g;
+/**
+ * A face URL's key (`k=`, engine/avatar-keys.ts): made from each server's own avatarKeySecret, which a standby never
+ * copies (as listing photos' photoKeySecret), so a take-over changes every face URL and phones catch up at their next
+ * sync (review of #2049, B2: accepted). The suite checks apart that every face URL the promoted server hands out opens.
+ */
+const FACE_URL = /\/api\/avatar\/[^\s"']*/g;
+const FACE_KEY = /(\/api\/avatar\/[^\s"']*?[?&]k=)[A-Za-z0-9_-]{22}/g;
 
 /**
  * An answer as the comparison sees it: times as `<time>`, ids neither server had before the call as `<new-id>`, local
- * ports as `<port>`. Everything else is kept, order included.
+ * ports as `<port>`, a face URL's key as `<face-key>`. Everything else is kept, order included.
  */
 export function normaliseAnswer(value: unknown, knownIds: Set<string>): unknown {
     if (typeof value === 'string') {
         if (ISO_TIME.test(value)) return '<time>';
         return value
             .replace(PORT, '$1:<port>')
+            .replace(FACE_KEY, '$1<face-key>')
             .replace(UUID, (id) => (knownIds.has(id.toLowerCase()) ? id : '<new-id>'));
     }
     if (typeof value === 'number') return value > 1e12 && value < 1e13 ? '<ms>' : value;
@@ -142,6 +150,11 @@ export function normaliseAnswer(value: unknown, knownIds: Set<string>): unknown 
         return out;
     }
     return value;
+}
+
+/** Every face URL in a value (`/api/avatar/…`, with its query), as the server wrote it. */
+export function faceUrlsIn(value: unknown): string[] {
+    return ((JSON.stringify(value) ?? '').match(FACE_URL) ?? []).map((u) => u.replace(/\\+$/, ''));
 }
 
 /** Every id-shaped string in a value, lower case. */

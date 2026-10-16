@@ -29,6 +29,7 @@ import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { getPosts, getStateHash, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -101,7 +102,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`);
 
     const router = createMarketplaceRoutes({
         clampLimit: (n: any) => Number(n) || 50,

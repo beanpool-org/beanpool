@@ -21,7 +21,7 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, t, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents, t, type TierName } from '@beanpool/core';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
@@ -421,6 +421,8 @@ export default function LedgerScreen() {
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         const amount = parseFloat(sendAmount);
         if (isNaN(amount) || amount <= 0) { setSendError('Enter a valid amount'); return; }
+        // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
+        if (!isWholeCents(amount)) { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (amount > balanceState.balance) {

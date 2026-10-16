@@ -132,8 +132,8 @@ export const LIST_LISTINGS = 'list_listings';
  *   1. The FLAG. #102's kill switch (`assertLocalSettlement`) stops a VISITOR SPENDING here; it says
  *      nothing about the inbound half, where a peer's request causes us to pay our own seller out of a
  *      bridge account. Without this gate, merging the settlement code would silently switch that on.
- *   2. Trust level `peer` SPECIFICALLY. A `mirror` is a backup replica, not a trading partner, and the
- *      handler's outer trust check admits both.
+ *   2. Trust level `peer` SPECIFICALLY: only a trading partner settles, and the handler's outer trust check
+ *      admits any trusted level.
  *   3. An identified peer. Every settlement decision is keyed on the peer id — which bridge account
  *      moves, whose cap applies, whose receipt is valid. Without one there is nothing to key on.
  */
@@ -368,8 +368,8 @@ export function registerFederationHandler(node: Libp2p): void {
             // What THIS peer's members may discover here, decided by our own posters' reach settings. Read
             // only; it moves nothing and writes nothing on this side.
             //
-            // Trust level `peer` SPECIFICALLY, for the reason `settlementGateRefusal` gives: a `mirror` is a
-            // backup replica, not a discovery partner, and the outer trust check admits both. Not gated on
+            // Trust level `peer` SPECIFICALLY, for the reason `settlementGateRefusal` gives: only a trading partner
+            // is a discovery partner, and the outer trust check admits any trusted level. Not gated on
             // FEDERATION_SETTLEMENT, deliberately — that flag means "accept no new cross-node trades", and a
             // community that has switched trading off can still reasonably let a partner see its board. A
             // purchase attempted against what they see is refused by the flag at the moment it is tried.

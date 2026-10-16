@@ -269,6 +269,25 @@ test('operator words: beans not Ʀ, badges gate nothing', () => {
     }
 });
 
+// Design case 19 (DESIGN-standby-pin-fable.md D5, D6 P3): a standby's main server is pinned from its own shell with a
+// pairing code (beanpool pair); there is no mirror link, and a bare token never pairs one.
+test('operator words: a standby is paired from its shell, never by a mirror connector or a token given to it', () => {
+    for (const f of fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))) {
+        const text = fs.readFileSync(path.join(OPERATORS_DIR, String(f)), 'utf8').replace(/\*\*/g, '').replace(/\s+/g, ' ');
+        for (const gone of [/mirror connector/i, /give it the token/i]) {
+            const m = gone.exec(text);
+            assert.equal(m, null, `${f} says "${m?.[0]}": a standby is paired with beanpool pair and a pairing code`);
+        }
+    }
+    const { manual } = sourceGuides();
+    const page = manual.guides.find((g) => g.slug === 'backups-and-replicas');
+    const words = page.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    for (const said of ['docker compose exec beanpool-node beanpool pair', 'beanpool pair --follow-new-server', 'Which server a standby trusts',
+        'A take-over needs no new pairing']) {
+        assert.ok(words.includes(said), `backups-and-replicas says: ${said}`);
+    }
+});
+
 test('the operator manual has no concept-guide section; the members\' guide still must', () => {
     const { manual } = sourceGuides();
     assert.ok(!manual.sections.some(s => s.id === 'about'));

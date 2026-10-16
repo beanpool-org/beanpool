@@ -38,6 +38,7 @@ import crypto from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -97,7 +98,7 @@ async function main() {
     const main = await nodeKey();
     const stranger = await nodeKey();
     const mirrorAddr = `/ip4/127.0.0.1/tcp/4991/p2p/${main.peerId}`;
-    addConnector(mirrorAddr, 'mirror', 'main-server', undefined, false);
+    pinMainServerForTests(mirrorAddr);
 
     const ownerSeed = crypto.randomBytes(32);
     const anna = { pubkey: Buffer.from(ed25519.getPublicKey(ownerSeed)).toString('hex'), callsign: 'Anna' };
@@ -250,15 +251,15 @@ async function main() {
         }
         const sec = securityLogs().slice(secBefore);
         assert(sec.length === refusals.length && sec.every((m) => /Refused a take-over envelope/.test(m)), `5. one SECURITY log line per refusal (${sec.length})`);
-        assert(sec[0].includes(stranger.peerId) && /not the main server this standby copies from/.test(sec[0]), `5. the line names the signer: "${sec[0]}"`);
+        assert(sec[0].includes(stranger.peerId) && /not this standby's main server/.test(sec[0]) && sec[0].includes(main.peerId), `5. the line names the signer and the pin: "${sec[0]}"`);
         assert(/signature does not match/.test(sec[1]), `5. a forged signature is named as such: "${sec[1]}"`);
         const st5 = sb.getHeldEnvelopesStatus();
         assert(st5.lastRejected?.signer === null && /did not update/.test(st5.message), `5. the status keeps the held copy and says the last check failed: "${st5.message}"`);
         // No pin at all → refuse even the real main server's envelope.
-        removeConnector(mirrorAddr);
+        unpinMainServerForTests();
         mode = { kind: 'serve', bytes: await seal() };
-        assert((await pull()) === 'rejected' && /no pinned main server/.test(sb.getHeldEnvelopesStatus().lastRejected!.why), '5. with no mirror pin, nothing is trusted');
-        addConnector(mirrorAddr, 'mirror', 'main-server', undefined, false);
+        assert((await pull()) === 'rejected' && /not paired with a main server/.test(sb.getHeldEnvelopesStatus().lastRejected!.why), '5. with no pin, nothing is trusted');
+        pinMainServerForTests(mirrorAddr);
 
         // ── 6. Keep five ──
         console.log('\n— 6. keep five —');
@@ -334,9 +335,9 @@ async function main() {
         await new Promise<void>((r) => realServer.listen(0, '127.0.0.1', () => r()));
         const realUrl = `http://127.0.0.1:${(realServer.address() as AddressInfo).port}`;
         try {
-            removeConnector(mirrorAddr);
+            unpinMainServerForTests();
             const realMirror = `/ip4/127.0.0.1/tcp/4993/p2p/${realMain.peerId}`;
-            addConnector(realMirror, 'mirror', 'real-main', undefined, false);
+            pinMainServerForTests(realMirror);
             updateLocalConfig({ backupPrimaryUrl: realUrl, backupReplicationToken: TOKEN });
             const current = await svc.flushTakeoverChecks();
             assert(current.state === 'sealed', `8. the main server has an envelope (${current.state})`);

@@ -30,8 +30,10 @@ import { getNodeRole } from '../config/node-role.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { dispatchPushNotification } from '../state-engine.js';
 import { getReplacedInfo } from './identity-epoch.js';
+import { readNodeIdentity } from './takeover-envelope.js';
 import { errorMessage } from '../error-message.js';
 import { withoutOldAddresses } from './address-retention.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from './security-signal.js';
 import { differsInWords, parseStandbyReport, pronounOf, timeInWords, whyInWords, type PullOutcome, type WhyCode } from './standby-report.js';
 
 const KEY = 'standby_health';
@@ -81,6 +83,8 @@ export interface StandbySeen {
     leftOut: string[];
     /** Tables the ledger needs whole it refuses whole copies over (services/standby-report.ts `oversized`). */
     oversized: string[];
+    /** The main server's key it is pinned to (services/standby-report.ts `pin`); null: not paired; absent: it does not say. */
+    pin?: string | null;
 }
 
 export type Problem =
@@ -160,6 +164,7 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             logger.info('P2P', `[StandbyHealth] Watching a new standby (${r.id.slice(0, 8)}) for this community's owners.`);
         }
         const at = (ago: number | null) => (ago === null ? null : t - ago);
+        const wasPaired = pairedOf(seen) === 'this';
         Object.assign(seen, {
             address: typeof address === 'string' && address.length <= 64 ? address : null,
             lastPullAt: t,
@@ -175,7 +180,14 @@ export function noteStandbyReport(header: unknown, address: string | null): bool
             healing: r.healing,
             leftOut: r.leftOut,
             oversized: r.oversized,
+            pin: r.pin,
         });
+        if (r.pin === undefined) delete seen.pin;
+        // The owners are told once per standby (design case 19 D5): from its first report that names this server's key.
+        // Bounded as one actor, so a token holder flipping its pin cannot push the owners more than the hour allows.
+        if (!wasPaired && pairedOf(seen) === 'this') {
+            noteSecurityEvent({ key: 'sec.backups', detail: OWNER_ALERT_WORDS.standbyPaired, actor: 'standby-report', actorRole: 'standby', foldAs: OWNER_ALERT_WORDS.standbyPairedMore });
+        }
         evaluate(s, t);
         return true;
     } catch (e) {
@@ -265,7 +277,7 @@ function evaluate(s: HealthState, t: number): void {
     try {
         const to = owners();
         incident.pushed = to.length === 0 ? 0 : dispatchPushNotification(
-            to, 'SYSTEM', PUSH_TITLE, pushBody(problems),
+            to, 'SYSTEM', PUSH_TITLE, pushBody(problems, s),
             { kind: 'standby_health', incidentId: incident.id, section: 'home' }, 'marketplace', 'owner.standby',
         );
         incident.pushedAt = t;
@@ -334,8 +346,32 @@ function label(id: string, s: HealthState, withAddress = true): string {
     return others ? `Standby ${id.slice(0, 6)}` : 'The standby';
 }
 
+/**
+ * Whether a standby says it is paired with this server (design case 19 D3, D5), from its report's `pin`: a display, never
+ * the alarm (a standby pointed at an impostor reports to the impostor). `unknown`: a standby from before the pin.
+ */
+export type Paired = 'this' | 'other' | 'none' | 'unknown';
+function pairedOf(x: StandbySeen | undefined): Paired {
+    if (!x || x.pin === undefined) return 'unknown';
+    if (x.pin === null) return 'none';
+    let me: string | null = null;
+    try { me = readNodeIdentity()?.peerId ?? null; } catch { me = null; }
+    return me !== null && x.pin === me ? 'this' : 'other';
+}
+
+/** The reason the push and the banner gain when the report says it. */
+function pairedReason(x: StandbySeen | undefined): string | null {
+    const paired = pairedOf(x);
+    if (paired === 'none') return 'it is not paired with this server';
+    if (paired === 'other' || x?.lastWhy === 'signer-not-pinned') return 'it refuses copies: the server it copies from is not its main server';
+    return null;
+}
+
 function sentence(p: Problem, s: HealthState, withAddress = true): string {
     const who = label(p.standby, s, withAddress);
+    const reason = p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(s.standbys.find((y) => y.id === p.standby)) : null;
+    if (reason && p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}: ${reason}.`;
+    if (reason && p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${reason}.`;
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
     if (p.kind === 'refused') {
         if (p.why === 'redirect' || p.why?.startsWith('redirect:')) {
@@ -361,7 +397,10 @@ function sentence(p: Problem, s: HealthState, withAddress = true): string {
         + `${differsInWords(p.differs)} differed. Last exact copy: ${timeInWords(p.lastExactAt)}.`;
 }
 
-function pushBody(problems: Problem[]): string {
+function pushBody(problems: Problem[], s: HealthState): string {
+    const reason = problems.map((p) => (p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(s.standbys.find((y) => y.id === p.standby)) : null))
+        .find((r): r is string => !!r);
+    if (reason) return `Your standby server needs attention: ${reason}. Open Settings to see what is wrong.`;
     const kinds = new Set(problems.map((p) => p.kind));
     const redir = problems.some((p) => p.kind === 'refused' && (p.why === 'redirect' || p.why?.startsWith('redirect:')));
     const what = redir ? 'Its address redirects to another server.'
@@ -385,6 +424,11 @@ const WHAT_TO_DO: Record<Problem['kind'], string> = {
     'left-out': TOO_MANY_ROWS,
 };
 
+/** A standby that is not paired with this server, or refuses its copies (design case 19 D5). */
+const PAIR_AGAIN = 'Make a pairing code under Replication Access, then on the standby server: '
+    + '`docker compose exec beanpool-node beanpool pair`. If this server was set up again with a new key, pair the standby '
+    + 'again from its shell with --follow-new-server.';
+
 export interface StandbyHealthBanner {
     incident: {
         id: string;
@@ -400,6 +444,8 @@ export interface StandbyHealthBanner {
         lastCopyAt: number | null;
         lastExactAt: number | null;
         healthy: boolean;
+        /** Replication Access: "paired to this server" / "paired to another key" / "not paired". */
+        paired: Paired;
     }[];
 }
 
@@ -415,11 +461,12 @@ export function getStandbyHealthBanner(): StandbyHealthBanner {
             startedAt: s.incident.startedAt,
             pushed: s.incident.pushedAt !== null && s.incident.pushed > 0,
             lines: problems.map((p) => sentence(p, s)),
-            whatToDo: [...new Set(problems.map((p) => WHAT_TO_DO[p.kind]))],
+            whatToDo: [...new Set(problems.map((p) => (pairedReason(s.standbys.find((y) => y.id === p.standby)) && (p.kind === 'stopped' || p.kind === 'refused')
+                ? PAIR_AGAIN : WHAT_TO_DO[p.kind])))],
         } : null,
         standbys: s.standbys.map((x) => ({
             id: x.id, label: label(x.id, s), lastPullAt: x.lastPullAt, lastCopyAt: x.lastCopyAt, lastExactAt: x.lastExactAt,
-            healthy: !sick.has(x.id),
+            healthy: !sick.has(x.id), paired: pairedOf(x),
         })),
     };
 }

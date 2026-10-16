@@ -76,7 +76,7 @@ import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -86,7 +86,7 @@ import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
-import { issue2faSessionToken, requireAdminRole, requireFreshProof, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
@@ -117,15 +117,6 @@ function joiningAtOpenDoor(ctx: any): string | null {
  * can lock the other admins out or wipe the node. Owner or admin: running the node from day to day.
  */
 const OWNER_ONLY: readonly AdminRole[] = ['owner'];
-/**
- * A `mirror` peer link is an owner's to add, change or remove (design case 18, A10): a mirror's key is one a standby's
- * restore trusts for the community's bundle. `peer` and `blocked` links stay an admin's. Each change to one also asks
- * the owner's fresh proof (S2b, D2): an owner's session alone could otherwise make its own key a standby's pin.
- */
-const MIRROR_OWNER_ONLY = 'Only an owner of this node can add, change or remove a mirror link';
-function isMirrorLink(address: unknown): boolean {
-    return typeof address === 'string' && getConnectors().some(c => c.address === address && c.trustLevel === 'mirror');
-}
 const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -136,10 +127,9 @@ export function createCommunityRoutes(deps: RouteDeps): Router {
 
 router.get('/api/local/status', async (ctx) => {
     const config = getLocalConfig();
-    
-    // Allow cross-origin requests so other nodes' settings UI can fetch status
-    ctx.set('Access-Control-Allow-Origin', '*');
-    
+    // No wildcard Access-Control-Allow-Origin (public-routes audit SEC-PUB-04): its one reader, the legacy settings page's
+    // sister-node map, is gone, and with it any web page could read this from a visitor's browser. An origin the operator
+    // lists in corsAllowedOrigins still gets it through the gateway's CORS layer, as every other route does.
     ctx.body = {
         // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
         // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
@@ -522,7 +512,7 @@ router.get('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address, trustLevel, callsign, enabled, publicUrl, code } = (ctx as any).requestBody || {};
+    const { address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -533,10 +523,19 @@ router.post('/api/local/connectors', async (ctx) => {
         return;
     }
 
-    const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
-    const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
-    const touchesMirror = level === 'mirror' || isMirrorLink(address);
-    if (touchesMirror && !requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
+    // Two levels (design case 19 D4): a standby's main server is pinned from its shell (beanpool pair), never here.
+    const validTrustLevels: TrustLevel[] = ['peer', 'blocked'];
+    if (trustLevel !== undefined && trustLevel !== null && !validTrustLevels.includes(trustLevel)) {
+        ctx.status = 400;
+        ctx.body = {
+            error: trustLevel === 'mirror'
+                ? "There is no mirror link: a standby's main server is paired from the standby's shell (beanpool pair). Nothing was changed."
+                : 'trustLevel is peer or blocked. Nothing was changed.',
+            trustLevels: validTrustLevels,
+        };
+        return;
+    }
+    const level: TrustLevel = trustLevel ?? 'peer';
 
     // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
     //
@@ -571,10 +570,6 @@ router.post('/api/local/connectors', async (ctx) => {
         }
         normalisedPublicUrl = `${parsed.protocol}//${parsed.host}`;
     }
-
-    // The proof last, after every check of the request itself: a current code is spent when it is checked, so a typo in
-    // the URL must not cost the owner their code and the wait for the next one (#2002 confirmation review, NB1).
-    if (touchesMirror && !(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'add or change a mirror link'))) return;
 
     const isEnabled = enabled !== undefined ? Boolean(enabled) : undefined;
     const connector = addConnector(address, level, callsign, normalisedPublicUrl, isEnabled);
@@ -780,7 +775,7 @@ router.post('/api/local/federation/links/ceiling', async (ctx) => {
 router.post('/api/local/connectors/disconnect', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address, code } = (ctx as any).requestBody || {};
+    const { address } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -789,10 +784,6 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
         ctx.status = 400;
         ctx.body = { error: 'Address is required' };
         return;
-    }
-    if (isMirrorLink(address)) {
-        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
-        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'disconnect a mirror link'))) return;
     }
 
     await disconnectFromAddress(address);
@@ -802,7 +793,7 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
 router.post('/api/local/connectors/remove', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { address, code } = (ctx as any).requestBody || {};
+    const { address } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
@@ -811,10 +802,6 @@ router.post('/api/local/connectors/remove', async (ctx) => {
         ctx.status = 400;
         ctx.body = { error: 'Address is required' };
         return;
-    }
-    if (isMirrorLink(address)) {
-        if (!requireAdminRole(ctx, OWNER_ONLY, MIRROR_OWNER_ONLY)) return;
-        if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'remove a mirror link'))) return;
     }
 
     await disconnectFromAddress(address);
@@ -1735,6 +1722,12 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: 'to and a positive amount are required' };
         return;
     }
+    // To the cent, as a pledge and a payment to the Commons are (LED-05).
+    if (!isWholeCents(parsedAmount)) {
+        ctx.status = 400;
+        ctx.body = { error: WHOLE_CENTS_ERROR };
+        return;
+    }
 
     // A2-18: this public route is member→member only. Reject SYNTHETIC recipients
     // (escrow_/project_/COMMONS_POOL/SYSTEM/genesis). Sending to an escrow_* key
@@ -2339,14 +2332,16 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
     // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
     // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
-    // web-restore.ts) and whether a sign-in can bring it back. On the global node the key alone opens nothing
-    // (engine/avatar-keys.ts); a local community's faces are not keyed yet.
+    // web-restore.ts) and whether a sign-in can bring it back. On every node the key alone opens no face
+    // (engine/avatar-keys.ts, SEC-PUB-02).
     ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
 // validates the fun-name suggestions before they're offered. Case-insensitive,
-// per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
+// per-node. The caller's own current name is never taken for a rename: the key is the request's verified signer, never a
+// query parameter. `?exclude=<key>` answered "available" exactly when that key held that name, which told a stranger the
+// name behind any key (public-routes audit NEW-2); it is ignored, and an older app that still sends it signs the check.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
     // joining through the open door, signing its own name check, counts against the door's limiter instead
@@ -2355,8 +2350,9 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     const joining = joiningAtOpenDoor(ctx);
     if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx, 'names'))) return;
     const raw = (ctx.params.callsign || '').trim();
-    const exclude = (ctx.query.exclude as string | undefined) || undefined;
-    const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
+    const signer = ctx.state?.actor;
+    const own = typeof signer === 'string' && /^[0-9a-f]{64}$/i.test(signer) ? signer.toLowerCase() : undefined;
+    const available = raw.length >= 2 && isCallsignAvailable(raw, own);
     ctx.status = 200;
     ctx.body = { callsign: raw, available, tooShort: raw.length < 2 };
 });

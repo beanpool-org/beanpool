@@ -76,6 +76,16 @@ export function isBeanAmount(amount: unknown): amount is number {
     return typeof amount === 'number' && Number.isFinite(amount) && amount >= 0;
 }
 
+/**
+ * What a member types at a money door (a send, a pledge, a payment to the Commons): at least a cent, in whole cents,
+ * within float noise (0.1 + 0.2 is 30 cents; 5e-324 is no cent at all). The node refuses anything else; the apps check
+ * first, so the member reads why before anything is sent.
+ */
+export function isWholeCents(amount: unknown): amount is number {
+    return typeof amount === 'number' && Number.isFinite(amount) && Math.round(amount * 100) >= 1
+        && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
+}
+
 /** A balance a ledger may hold: a finite number. An account holding anything else moves nothing until an operator looks. */
 function isFiniteBalance(balance: unknown): balance is number {
     return typeof balance === 'number' && Number.isFinite(balance);

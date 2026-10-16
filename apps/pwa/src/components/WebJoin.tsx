@@ -1136,7 +1136,7 @@ export function WebJoin({
         }
         let cancelled = false;
         const t = setTimeout(() => {
-            checkCallsign(trimmed, undefined, joiningKey).then((r) => {
+            checkCallsign(trimmed, joiningKey).then((r) => {
                 if (r !== 'unknown') nameChecks.current.set(trimmed.toLowerCase(), r);
                 if (!cancelled) setNameCheck(r);
             });

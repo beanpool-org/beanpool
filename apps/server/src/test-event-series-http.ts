@@ -53,6 +53,7 @@ import { eventThreadReadOnlyReason, loadEventForThread } from './engine/event-th
 import { setMemberPhoto, REPEAT_ERRORS } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -113,7 +114,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

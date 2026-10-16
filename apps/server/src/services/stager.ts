@@ -11,8 +11,8 @@
  * puller (services/backup-puller.ts) fetches each page, checks its signature and its place in the copy, writes it to
  * `data/staging/pages/<n>.json`, and tells the stager, which imports it in one transaction, deletes the file and answers.
  *
- * **The staging directory** holds the stager's database, copies of genesis.json, connectors.json (the mirror it trusts)
- * and local-config.json, and `images`, a link to the live `data/images`: photos land in the one content-addressed store.
+ * **The staging directory** holds the stager's database, copies of genesis.json, connectors.json, standby-main.json (the
+ * main server it trusts: services/standby-main.ts) and local-config.json, and `images`, a link to the live `data/images`: photos land in the one content-addressed store.
  * Nothing in it is ever written back.
  *
  * **The closing checks** (`finish`, once the last page is in), before the copy may be swapped in:
@@ -64,7 +64,7 @@ const STARTED_FILE = 'STARTED';
 /** Where the database the last swap replaced is kept until the new one passes its first check (services/backup-puller.ts deletePreviousDatabase). */
 export const PREVIOUS_DB = 'state.previous.db';
 /** The files the stager's boot reads from its data directory, copied in; never written back. */
-const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.json'];
+const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'standby-main.json', 'local-config.json'];
 /**
  * What the stager's copy of local-config.json leaves out: this server's credentials (config/local-config.ts). The stager
  * signs in to nothing and nothing signs in to it, so data/staging, which a copy made ready keeps until the next start,

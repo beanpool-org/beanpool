@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { SAMPLE_COMMUNITY } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { LocalCommunityMark, ExampleHeader } from './LocalCommunityMark';
@@ -30,7 +30,6 @@ export function CommonsPreview() {
     const [info, setInfo] = useState(false);
     const c = SAMPLE_COMMUNITY;
     const e = c.enterprises[0];
-    const d = c.decisions[0];
     return (
         <View testID="commons-preview">
             <LocalCommunityMark variant="strip" feature="enterprises" />
@@ -52,15 +51,6 @@ export function CommonsPreview() {
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pledge" />
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pause" />
                 </View>
-            </View>
-            <View style={s.card}>
-                <Text style={s.heading} accessibilityRole="header">Decide</Text>
-                <Text style={s.body}>{d.question}</Text>
-                <Text style={s.muted}>{beansText(d.fromPool)} from the pool · closes in {d.closesInDays} days · {d.yesWeight} for, {d.noWeight} against</Text>
-                <LocalCommunityMark variant="action" feature="decisions" label="Vote" />
-            </View>
-            <View style={{ marginHorizontal: 16 }}>
-                <LocalCommunityMark variant="line" feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />
             </View>
             <CommonsInfoModal isOpen={info} onClose={() => setInfo(false)} />
         </View>

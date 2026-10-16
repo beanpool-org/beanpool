@@ -25,6 +25,7 @@ import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -63,7 +64,7 @@ async function main() {
 
         // A2-11 — a table of the ledger set over the cap refuses the payload before the transaction.
         setNodeRole('backup');
-        addConnector(`/ip4/127.0.0.1/tcp/4023/p2p/${nodeId}`, 'mirror', 'self');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4023/p2p/${nodeId}`);
         const now = new Date().toISOString();
         const hex = () => crypto.randomBytes(32).toString('hex');
         const membersBefore = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;

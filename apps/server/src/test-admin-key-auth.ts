@@ -481,10 +481,15 @@ async function main() {
         assert(toggleBgRes.status === 200, 'POST /api/local/admin/auth/break-glass-mode returns 200');
         assert(isBreakGlassMode() === true, 'breakGlassMode is now active');
 
-        // Check break-glass status endpoint
-        const bgStatusRes = await fetch(`${base}/api/local/admin/auth/break-glass-status`);
-        const bgStatusBody: any = await bgStatusRes.json();
-        assert(bgStatusBody.breakGlassMode === true, 'GET /api/local/admin/auth/break-glass-status returns true');
+        // Check break-glass status endpoint: an admin's only (public-routes audit SEC-PUB-08), on both of its paths.
+        for (const bgPath of ['/api/local/admin/auth/break-glass-status', '/api/local/admin/auth/break-glass/status']) {
+            const bgUnsigned = await fetch(`${base}${bgPath}`);
+            const bgUnsignedBody: any = await bgUnsigned.json().catch(() => ({}));
+            assert(bgUnsigned.status === 401 && !('breakGlassMode' in bgUnsignedBody), `GET ${bgPath} with no session is refused, 401 (got ${bgUnsigned.status})`);
+            const bgStatusRes = await fetch(`${base}${bgPath}`, { headers: { 'x-admin-session': aliceSessionId2 } });
+            const bgStatusBody: any = await bgStatusRes.json();
+            assert(bgStatusRes.status === 200 && bgStatusBody.breakGlassMode === true, `GET ${bgPath} with the key session returns true`);
+        }
 
         // (a) Key session can still access protected routes
         const getRolesWithKey = await fetch(`${base}/api/local/admin/node-roles`, {

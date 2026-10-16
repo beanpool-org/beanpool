@@ -27,7 +27,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -2701,7 +2701,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         } else {
-            sweepRepayment(to);
+            // What this payment brought them, net of the fee: the hardship shield is read against it.
+            sweepRepayment(to, txn.amount - (txn.taxFee || 0));
         }
     });
 
@@ -3125,7 +3126,7 @@ export function payFromCommons(
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         } else {
-            sweepRepayment(to);
+            sweepRepayment(to, txn.amount);
         }
     });
 
@@ -5485,16 +5486,56 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
  * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
  * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
  * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
- * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
- * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * grant Decision (decisions-engine.ts grant_hardship) made while the member is working the debt off (flagged, even while
+ * a second admin has yet to agree) is not swept: the community chose to give those Beans for hardship, and taking them
+ * straight back would undo its own Decision. They count toward the debt only once spent and earned back: the grant raises
+ * the debt's `hardship_held` (the shield), and each sweep keeps back the part of it the member still held before this
+ * payment came in (`received`, what it brought them). Spending the grant shrinks the shield, so what is earned afterwards
+ * is swept; it shrinks the same way while the work-off waits for its second admin (nothing is swept then), so a grant
+ * spent in the wait shields nothing earned in it. A grant made before the work-off was flagged has no shield: those are
+ * Beans the member held when it started, and the first payment sweeps them (§9). The shield is this work-off's alone
+ * (engine/names-debts.ts): it ends with it.
  * Returns what moved.
  */
-export function sweepRepayment(memberPubkey: string): number {
+const sweptAhead = new Map<string, number>();
+/** A work-off waiting for its second admin: what this batch's payments brought the member so far (shrinkWaitingShield). */
+const receivedWaiting = new Map<string, number>();
+const forgetAtBatchEnd = (memberPubkey: string) => whenPostCommitBatchOver(() => {
+    sweptAhead.delete(memberPubkey);
+    receivedWaiting.delete(memberPubkey);
+});
+
+/**
+ * A flagged work-off that is not live yet (a second admin has yet to agree, engine/names-debts.ts repaymentOf) sweeps
+ * nothing, but its grant's shield still shrinks to what the member held before this batch of payments: what is left of
+ * the grant, never what was earned. Several payments in one commit each add theirs, so the last one's sweep has taken
+ * all of them off. Writes only a shield that gets smaller.
+ */
+function shrinkWaitingShield(memberPubkey: string, received: number): void {
+    const held = db.prepare(`SELECT id FROM names_debts WHERE repaying_pubkey = ? AND status = 'open' AND hardship_held > 0`).get(memberPubkey) as { id: string } | undefined;
+    if (!held) return;
+    const brought = (receivedWaiting.get(memberPubkey) ?? 0) + Math.max(0, received);
+    receivedWaiting.set(memberPubkey, brought);
+    forgetAtBatchEnd(memberPubkey);
+    const left = Math.max(0, getBalance(memberPubkey).balance - brought);
+    db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ? AND hardship_held > ?').run(left, held.id, left);
+}
+
+export function sweepRepayment(memberPubkey: string, received = 0): number {
     const debt = repaymentOf(memberPubkey);
-    if (!debt) return 0;
+    if (!debt) {
+        shrinkWaitingShield(memberPubkey, received);
+        return 0;
+    }
     const { balance } = getBalance(memberPubkey);
+    // Several payments to one member in one transaction run their sweeps one after another, after it commits: the first
+    // already swept what the later ones brought, so a later one must not count that again as money it brought (it would
+    // read the grant as spent and sweep it). Cleared when that batch of after-commit hooks is over (db.ts), never later.
+    const ahead = sweptAhead.get(memberPubkey) ?? 0;
+    const own = Math.max(0, received - ahead);
+    const shield = Math.max(0, Math.min(Number(debt.hardship_held) || 0, balance - own));
     // Down to the cent, never up: rounding up would take a part of a cent below 0.
-    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    const amount = Math.floor(Math.max(0, Math.min(balance - shield, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
     if (!(amount > 0)) return 0;
     try {
         conservingTransaction(() => {
@@ -5504,12 +5545,20 @@ export function sweepRepayment(memberPubkey: string): number {
             const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
                 .run(amount, debt.id, amount);
             if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
-            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?
+            // What is left of the grant: what was spent of it is gone from the shield.
+            db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ?').run(shield, debt.id);
+            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?, hardship_held = 0
                         WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
         console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
         return 0;
+    }
+    const over = amount - own;
+    if (over > 0 || ahead > 0) {
+        const next = Math.max(0, ahead - received) + Math.max(0, over);
+        sweptAhead.set(memberPubkey, next);
+        forgetAtBatchEnd(memberPubkey);
     }
     // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
     try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
@@ -5535,8 +5584,8 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
     }
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
-        throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
+    if (!isWholeCents(amount)) {
+        throw Object.assign(new Error(WHOLE_CENTS_ERROR), { status: 400 });
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;
@@ -6827,8 +6876,8 @@ export function importCopyPart(page: SyncPayload, part: CopyPart): Promise<Impor
 }
 
 /**
- * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer this standby
- * trusts as its mirror (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
+ * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer that is the
+ * main server this standby is pinned to (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
  */
 export function verifyCopyPage(page: SyncPayload): Promise<string> {
     if (!isCopyPage(page)) return Promise.reject(new Error('[Sync] Not a page of a copy'));
@@ -7433,14 +7482,19 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
  * the next phone that asks.
  */
 export const PUBLIC_HEALTH_TTL_MS = 30_000;
-let publicHealthCache: { at: number; counts: HealthCounts; reportCount: number; watchdog: WatchdogStatus } | null = null;
+let publicHealthCache: { at: number; counts: HealthCounts; watchdog: WatchdogStatus } | null = null;
 
-/** What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed. */
-export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags'> {
+/**
+ * What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed, and
+ * without the pending reports' count (public-routes audit SEC-PUB-03): someone who just harassed a member could watch it
+ * go up and guess they were reported. Owners and admins read it from their own routes (getCommunityHealth, alerts-summary).
+ */
+export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags' | 'reportCount'> {
     if (!publicHealthCache || now < publicHealthCache.at || now - publicHealthCache.at >= PUBLIC_HEALTH_TTL_MS) {
-        publicHealthCache = { at: now, counts: countHealth(getThresholds()), reportCount: getReportCount(), watchdog: readWatchdogStatus() };
+        publicHealthCache = { at: now, counts: countHealth(getThresholds()), watchdog: readWatchdogStatus() };
     }
-    return healthBody(publicHealthCache.counts, publicHealthCache.reportCount, publicHealthCache.watchdog);
+    const { reportCount: _adminsOnly, ...health } = healthBody(publicHealthCache.counts, 0, publicHealthCache.watchdog);
+    return health;
 }
 
 export function getCommunityHealth(): CommunityHealth {
@@ -8730,7 +8784,12 @@ export function getDirectoryInfo(): any {
     };
 
     if (config.publishLocation) {
-        info.serviceRadius = config.serviceRadius;
+        // The centre to two decimals (~1 km), as /api/node/config gives it to anyone but an owner or admin: this is served
+        // unsigned at /api/directory/info and pushed to the directory, and the pin may be the operator's home. An area
+        // needs no closer place to warn a neighbour before they start a second community there.
+        const r = config.serviceRadius;
+        const km = (n: number) => (typeof n === 'number' ? Math.round(n * 100) / 100 : n);
+        info.serviceRadius = r && typeof r === 'object' ? { lat: km(r.lat), lng: km(r.lng), radiusKm: r.radiusKm } : r;
     } else {
         info.serviceRadius = null;
     }

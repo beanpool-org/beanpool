@@ -935,14 +935,15 @@ export default function WelcomeScreen() {
                 // server. 'unknown' (node unreachable, or no answer in time) falls through — the
                 // server still auto-uniquifies as a backstop. Checked against nodeUrl explicitly
                 // since it isn't the stored anchor yet. A name the phone's own key already holds
-                // there is its own, not taken: a first redeem that landed keeps it.
+                // there is its own, not taken: a first redeem that landed keeps it. The node knows
+                // the key from the check's signature (not a parameter), so the stored key signs it.
                 const nameCheck = new AbortController();
                 const nameCheckTimer = setTimeout(() => nameCheck.abort(), NEXT_REQUEST_TIMEOUT_MS);
                 try {
-                    const availability = await checkCallsignAvailable(callsign.trim(), storedIdentity?.publicKey, nodeUrl, { signal: nameCheck.signal });
+                    const availability = await checkCallsignAvailable(callsign.trim(), nodeUrl, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });
                     if (availability === 'taken') {
                         // No longer than the redeem keeps, as the field is: a tapped suggestion is sent as it was checked and shown.
-                        const sugg = await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal });
+                        const sugg = await suggestCallsigns(callsign.trim(), 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });
                         setCallsignSuggestions(sugg);
                         setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
                         return;

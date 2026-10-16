@@ -120,8 +120,10 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
  * REPLACE, NOT MERGE. A listing withdrawn at home, or whose reach was narrowed, simply stops appearing in the
  * peer's answer — there is no "deleted" message and adding one would be a whole retraction protocol. So the
  * peer's current answer IS the truth about that peer, and anything we hold for them that is not in it is
- * gone. Scoped by `origin_node`, so a failed pull for one peer cannot disturb another's cache or, more
- * importantly, any local listing.
+ * gone. Keyed to the peer id rather than to its address alone: an edited connector URL carries that
+ * peer's listings on under the new address instead of colliding on posts.id and dropping them. Also scoped
+ * by origin_node so a peer whose identity changed at that address never inherits the old one's listings.
+ * Scoped so a failed pull for one peer cannot disturb another's cache or, more importantly, any local listing.
  *
  * THE VISITOR HAZARD, which is the sharp edge in this function. Caching a listing needs a member row for its
  * author, because `posts.author_pubkey` references `members` — so this path calls `registerVisitor`. But
@@ -145,17 +147,23 @@ export function cacheRemoteListings(
     const incoming = Array.isArray(listings) ? listings : [];
     let cached = 0, dropped = 0;
 
+    // Assumed unique per peer: two peers whose ids share their last 12 characters would replace each other's cache (~70 bits apart).
+    const peerPrefix = `${REMOTE_ID_PREFIX}${peerId.slice(-12)}:`;
+
     let deletedCount = 0;
     // The columns written below from this peer's answer, before the round and after, so an answer that changed nothing
     // rings nobody: every round replaces them all.
+    // Keyed to the peer, not merely to its address: matches this peer's listings (under any previous URL)
+    // as well as any listings currently tied to this originNode (so a new peer identity at this address
+    // never inherits a previous peer's listings). An exact prefix compare, not LIKE: LIKE ignores case, and peer ids do not.
     const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
-        updated_at, active, status, reach FROM posts WHERE origin_node = ? ORDER BY id`);
+        updated_at, active, status, reach, origin_node FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
     let changed = false;
     db.transaction(() => {
-        const before = JSON.stringify(heldForPeer.all(originNode));
+        const before = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode));
         // Everything we currently hold FOR THIS PEER. Deleted below unless the answer re-states it, so a
         // withdrawn listing disappears without a retraction message.
-        const delRes = db.prepare('DELETE FROM posts WHERE origin_node = ?').run(originNode);
+        const delRes = db.prepare('DELETE FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ?').run(peerPrefix.length, peerPrefix, originNode);
         deletedCount = delRes.changes;
 
         for (const raw of incoming) {
@@ -198,7 +206,7 @@ export function cacheRemoteListings(
 
                 // The remote id is namespaced so two peers cannot collide on it, and so a remote listing can
                 // never overwrite a local one that happens to share a UUID.
-                const localId = `${REMOTE_ID_PREFIX}${peerId.slice(-12)}:${l.id}`;
+                const localId = `${peerPrefix}${l.id}`;
                 db.prepare(`INSERT INTO posts (
                     id, type, category, title, description, credits, price_type, author_pubkey, created_at,
                     active, status, repeatable, updated_at, search_keywords, origin_node, reach
@@ -224,7 +232,7 @@ export function cacheRemoteListings(
                 dropped++;
             }
         }
-        changed = JSON.stringify(heldForPeer.all(originNode)) !== before;
+        changed = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode)) !== before;
     })();
 
     if (deletedCount > 0 || cached > 0) {

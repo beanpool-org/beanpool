@@ -302,15 +302,25 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);
         // The banner's cap is worked out from the measured column, the deals strip and the box (finding 7), never a share
-        // of the window alone; the column wraps the banner, the strip and the keyboard view, and the box is measured whole.
+        // of the window alone. The column runs from the header's bottom to the keyboard view's bottom, both read in the
+        // screen's own frame, with the banner between them; the box is measured whole.
         expect(src).toMatch(/maxHeight: dmKeyBannerMaxHeight\(\{ \.\.\.column, deals: visibleDeals\.length \? column\.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight \}\)/);
         // A keyboard already up when the pause starts comes off the banner's room (confirmation 2, finding 5).
         expect(src).toMatch(/const keyboardHeight = useKeyboardState\(s => \(s\.isVisible \? s\.height : 0\)\);/);
         expect(src).not.toMatch(/windowHeight \* 0\.55/);
-        expect(src).toMatch(/<View style=\{styles\.keyboardView\} onLayout=\{measured\('column'\)\}>\s*\{keyChange && \(/);
+        expect(src).toMatch(/if \(header > 0 && bottom > header\) setColumn\(\(c\) => \(c\.column === bottom - header \? c : \{ \.\.\.c, column: bottom - header \}\)\);/);
+        const header = src.indexOf("<View style={styles.header} onLayout={measuredEdge('header')}>");
+        const banner = src.indexOf('{keyChange && (');
+        const keyboardView = src.search(/<KeyboardAvoidingView\s+style=\{styles\.keyboardView\}\s+behavior="padding"\s+onLayout=\{measuredEdge\('bottom'\)\}\s*>/);
+        expect(header).toBeGreaterThan(-1);
+        expect(banner).toBeGreaterThan(header);
+        expect(keyboardView).toBeGreaterThan(banner);
+        // Never a View wrapped round the keyboard view to measure it: the library pads by its frame in its parent, and a
+        // wrapper starting under the header left the box under the keyboard in every DM (1.2.61; chat-keyboard-tree.test.ts).
+        expect(src).not.toMatch(/measured\('column'\)/);
+        expect(src).not.toMatch(/<\/KeyboardAvoidingView>\s*<\/View>/);
         expect(src).toMatch(/<View style=\{styles\.dealStrip\} onLayout=\{measured\('deals'\)\}>/);
         expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{isPeerBlocked \? \(/);
-        expect(src).toMatch(/<\/KeyboardAvoidingView>\s*<\/View>/);
     });
     it('Settings shows My key code above the sign-in check\'s spinner, never behind it (#1873 review, finding 9)', async () => {
         const { readFileSync } = await import('node:fs');

@@ -177,9 +177,19 @@ function ChatScreen({ id }: { id: string }) {
     // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
     const { height: windowHeight, fontScale } = useWindowDimensions();
     const [column, setColumn] = useState({ column: 0, composer: 0, deals: 0 });
-    const measured = (part: 'column' | 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
+    const measured = (part: 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
         const h = Math.round(e.nativeEvent.layout.height);
         setColumn((c) => (c[part] === h ? c : { ...c, [part]: h }));
+    };
+    // The column runs from the header's bottom to the KeyboardAvoidingView's bottom, both read in the screen's own frame.
+    // Never measure it with a View wrapped round the KeyboardAvoidingView: the library pads by its frame IN ITS PARENT
+    // (y + height − the keyboard's top), so a wrapper starting under the header made the padding short by the header and
+    // the keyboard covered the composer in every DM (1.2.61; utils/__tests__/chat-keyboard-tree.test.ts).
+    const columnEdges = useRef({ header: 0, bottom: 0 });
+    const measuredEdge = (edge: 'header' | 'bottom') => (e: { nativeEvent: { layout: { y: number; height: number } } }) => {
+        columnEdges.current[edge] = Math.round(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
+        const { header, bottom } = columnEdges.current;
+        if (header > 0 && bottom > header) setColumn((c) => (c.column === bottom - header ? c : { ...c, column: bottom - header }));
     };
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
@@ -1223,7 +1233,7 @@ function ChatScreen({ id }: { id: string }) {
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             
             {/* Header */}
-            <View style={styles.header}>
+            <View style={styles.header} onLayout={measuredEdge('header')}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.backButton}>
                     <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
                 </Pressable>
@@ -1265,7 +1275,6 @@ function ChatScreen({ id }: { id: string }) {
                 taken out: at most 55% of the column, at least 120 dp while the room has it (dmKeyBannerMaxHeight). It
                 scrolls inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named from the
                 key's member row, never the conversation id. */}
-            <View style={styles.keyboardView} onLayout={measured('column')}>
             {keyChange && (
                 <ScrollView
                     style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight }) }}
@@ -1390,6 +1399,7 @@ function ChatScreen({ id }: { id: string }) {
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior="padding"
+                onLayout={measuredEdge('bottom')}
             >
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
                 {shouldShowChatLoadError({ loadError, messageCount: messages.length }) ? (
@@ -1474,7 +1484,6 @@ function ChatScreen({ id }: { id: string }) {
                 )}
                 </View>
             </KeyboardAvoidingView>
-            </View>
 
             {/* The ⋮ menu: the same sheet, the same mute wording, as every group chat (groups decision 12). */}
             <ChatMenuSheet

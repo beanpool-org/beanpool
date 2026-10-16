@@ -72,6 +72,15 @@ describe('linking with the phone: the four digits', () => {
         expect(input.getAttribute('autocomplete')).toBe('one-time-code');
         expect((input as HTMLInputElement).maxLength).toBe(4);
         expect(input.getAttribute('pattern')).toBe('[0-9]{4}');
+        // Layout, which jsdom cannot measure. #2041 fix round 1, headless Chrome with the page's Inter font, the page's
+        // wrappers (p-8, px-4 below 360 px), "8888" in the box; same in light and dark:
+        //   320 px, 130 % text: welcome card content 234.8 px; status card 234.8 (maxWidth 100%, border-box); form 182.8;
+        //     input 182.8 (100%, at most 9.5rem), 162.4 inside its padding and border; the digits at 0.3em 152.9; page
+        //     scroll width 320. At the PR head (a fixed 9.5rem box, 0.4em, form side padding 1rem) the card was 291.2 and
+        //     the page scrolled to 334.
+        //   320 px, 100 % text: card 254; form 214; input 152 (9.5rem), 135.2 inside; the digits 117.6; page 320.
+        //   1280 px, 100 % text: card 296; form 256 (16rem); input 152, 135.2 inside; the digits 117.6; page 1280.
+        //   The QR state of the same card at 320 px / 130 %: card 234.8 (was 262, past the welcome card's edge), QR 210 inside it.
 
         fireEvent.change(input, { target: { value: '47' } });
         expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true);

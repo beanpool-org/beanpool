@@ -2486,15 +2486,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
                                     margin: '0 auto 1.25rem',
                                     width: 'fit-content',
+                                    maxWidth: '100%',
+                                    boxSizing: 'border-box',
                                     position: 'relative',
                                 }}
                             >
                                 {pairingStatus === 'waiting' && pairingSession && pairingConfirming ? (
-                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 1rem', textAlign: 'center', maxWidth: '16rem' }}>
+                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 0', textAlign: 'center', width: '100%', maxWidth: '16rem', boxSizing: 'border-box' }}>
                                         <label htmlFor="pair-digits" style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '0.75rem' }}>
                                             {t('Type the four digits your phone shows')}
                                         </label>
-                                        {/* Four digits (SEC-INV-02): about 175 px of the box's 198 at 320 px and 130% text. */}
+                                        {/* Four digits (SEC-INV-02). The box shrinks with the card (100%, at most 9.5rem) and the card with the page: at 320 px and
+                                            130% text four Inter digits at 0.3em take 153 px of the box's 162 inside, and the page stays 320 wide
+                                            (#2041 fix round 1; the widths are in WelcomePage.pairDigits.test.tsx). */}
                                         <input
                                             id="pair-digits"
                                             inputMode="numeric"
@@ -2505,7 +2509,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                             autoFocus
                                             value={pairingDigits}
                                             onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
-                                            style={{ width: '9.5rem', maxWidth: '100%', boxSizing: 'border-box', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
+                                            style={{ width: '100%', maxWidth: '9.5rem', boxSizing: 'border-box', fontSize: '2rem', letterSpacing: '0.3em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
                                         />
                                         <button
                                             type="submit"

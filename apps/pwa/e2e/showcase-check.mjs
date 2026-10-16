@@ -22,7 +22,8 @@
  * a preview, a marker, the sheet or the Start screen smaller than 44 x 44 px, a sheet or Start screen that does not cover the
  * screen (review of #2057, B3), or, with the Invites QR card open, a control or the QR past the screen or its card (B2).
  *
- * Run: pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go)
+ * Run: QRDEPS=<a folder holding jsqr and pngjs> pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go;
+ *      jsqr is not installed in the workspace, and the QR check fails without it)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element, navigator -- Node, and the page's side of evaluate() */
@@ -240,9 +241,18 @@ async function coversScreen(page, where, testId = 'local-community-sheet') {
         const cx = Math.min(Math.max(d.left + d.width / 2, 0), window.innerWidth - 1);
         const cy = Math.min(Math.max(d.top + Math.min(d.height, window.innerHeight) / 2, 0), window.innerHeight - 1);
         const hit = document.elementFromPoint(cx, cy);
+        // Every button of it, not only its centre: a layer above can cover one away from the middle (review of #2057, confirm-2 B1).
+        const covered = [...el.querySelectorAll('button, a[href]')].flatMap((b) => {
+            const br = b.getBoundingClientRect();
+            if (br.width === 0 || br.bottom <= 0 || br.top >= window.innerHeight) return [];
+            const x = Math.min(Math.max(br.left + br.width / 2, 0), window.innerWidth - 1);
+            const y = Math.min(Math.max(br.top + br.height / 2, 0), window.innerHeight - 1);
+            const at = document.elementFromPoint(x, y);
+            return at && b.contains(at) ? [] : [(b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 30)];
+        });
         return {
             overlay: [o.left, o.top, o.width, o.height].map(Math.round), screen: [window.innerWidth, window.innerHeight],
-            dialog: [d.left, d.top, d.right, d.bottom].map(Math.round), onTop: !!hit && el.contains(hit),
+            dialog: [d.left, d.top, d.right, d.bottom].map(Math.round), onTop: !!hit && el.contains(hit) && covered.length === 0, covered,
         };
     }, testId);
     const full = !r.missing && Math.abs(r.overlay[0]) <= 1 && Math.abs(r.overlay[1]) <= 1 && Math.abs(r.overlay[2] - r.screen[0]) <= 1 && Math.abs(r.overlay[3] - r.screen[1]) <= 1;
@@ -457,6 +467,21 @@ async function globalMember(browser, root, dark) {
         check(await page.getByPlaceholder('B', { exact: true }).count() === 0, 'composer: no price field');
         await noSideScroll(page, 'composer');
         await shot(page, `composer-${scheme}`);
+        // The price line's sheet and Start draw above the New Post panel, and a press meant for them never edits the draft.
+        const draftTicks = () => page.locator('[data-testid="map-new-post-panel"] input[type="checkbox"]').evaluateAll((els) => els.map((e) => e.checked));
+        const ticksBefore = await draftTicks();
+        await page.locator('[data-testid="composer-price-line"] [data-testid="local-community-line"]').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await coversScreen(page, 'composer, the price line: the sheet, above the New Post panel');
+        await page.getByTestId('local-community-start').click();
+        const startOpened = await page.getByTestId('start-community-screen').waitFor({ timeout: 5_000 }).then(() => true, () => false);
+        check(startOpened, 'composer, the price line: Start a community opens Start');
+        if (startOpened) {
+            await coversScreen(page, 'composer: the Start a community screen, above the New Post panel', 'start-community-screen');
+            await page.getByRole('button', { name: 'Back' }).click();
+        }
+        await closeSheet(page, 'composer, the price line');
+        check(JSON.stringify(await draftTicks()) === JSON.stringify(ticksBefore), 'composer: pressing the sheet left the draft as it was');
         await wait(1_000);
         readsNothingOwn(net, tMap, node.origin, 'the Map and the composer');
 

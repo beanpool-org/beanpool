@@ -51,7 +51,7 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
     }, [onClose]);
     const go = (fn: () => void) => () => { onClose(); fn(); };
     return (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
             <div
                 role="dialog"
                 aria-modal="true"

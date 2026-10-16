@@ -295,18 +295,20 @@ console.log('\n— 0. what a file\'s text looks like on the terminal (shown) —
     assert(shown('@Ann\u001bPnever ended') === '@Annnever ended' && shown('@Ann\u0090q\u001b[31mx', null) === '@Annqx',
         '0. a string with no terminator loses only its opening: nothing after it is hidden, the shell\'s own words included');
     assert(shown('[Restore] trigger "x\u001bP1$r0m\u001b\\\u001b(0" kept', null) === '[Restore] trigger "x" kept', '0. in a log line, a file\'s DCS goes and the line\'s own words stay');
-    // Every pattern stays linear: a megabyte of openings that never end, each kind, takes milliseconds (one that ran a
-    // string on over the next one's opening would take minutes here).
-    const MB = 1 << 20;
+    // Every pattern stays linear: 128 KB of openings that never end, each kind, takes milliseconds (about 40 ms for all
+    // 13). One that ran a string on over the next one's opening is quadratic: a DCS body that lets C1 in takes about 13 s
+    // on one of these on Node 22, so 5 s catches it at once and still leaves a busy CI runner room (#2031 B1: the 1 MB
+    // version took 2.8 s there against 2 s).
+    const SIZE = 128 * 1024;
     const t0 = performance.now();
     let left = 0;
     for (const unit of ['\u001bP', '\u0090', '\u009d', '\u009b', '\u001b]', '\u001bX', '\u001b(', '\u001b\u001bP', '\u001bP\u0007', '\u0090a\u009d\u001b]b\u001bPc\u001b X']) {
-        const hostile = unit.repeat(Math.ceil(MB / unit.length));
+        const hostile = unit.repeat(Math.ceil(SIZE / unit.length));
         left += shown(hostile).length + shown(hostile, null).length;
     }
-    for (const hostile of [`\u001bP${'a'.repeat(MB)}`, `\u001b[${'1'.repeat(MB)}`, `\u001b${' '.repeat(MB)}`]) left += shown(hostile, null).length;
+    for (const hostile of [`\u001bP${'a'.repeat(SIZE)}`, `\u001b[${'1'.repeat(SIZE)}`, `\u001b${' '.repeat(SIZE)}`]) left += shown(hostile, null).length;
     const took = performance.now() - t0;
-    assert(took < 2000 && left > 0, `0. 13 hostile inputs of 1 MB each go through shown() in under 2 s (${Math.round(took)} ms)`);
+    assert(took < 5000 && left > 0, `0. 13 hostile inputs of 128 KB each go through shown() in under 5 s (${Math.round(took)} ms)`);
 }
 
 console.log('\n— 1. refused while the node runs —');

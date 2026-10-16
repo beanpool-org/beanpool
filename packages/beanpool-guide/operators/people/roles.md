@@ -26,7 +26,7 @@ Owners can do everything in Settings. Only owners can:
 - sign other people out of Settings;
 - switch break-glass mode on or off, and be issued a break-glass code;
 - restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
-- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;
+- make, replace or remove the replication token (a pairing code holds it), switch token-only on or off, and set the address and token a standby copies with (which server a standby trusts is set only on its own shell: beanpool pair);
 - claim, rename or take offline the community's public address, and see its tunnel token.
 
 From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in.

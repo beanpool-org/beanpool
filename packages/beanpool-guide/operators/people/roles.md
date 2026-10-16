@@ -26,8 +26,7 @@ Owners can do everything in Settings. Only owners can:
 - sign other people out of Settings;
 - switch break-glass mode on or off, and be issued a break-glass code;
 - restore a backup or roll back to a restore point, download a backup or a snapshot, or change when snapshots are taken and how many are kept;
-- make, replace or remove the replication token, switch token-only on or off, set which server a standby copies from, forget a standby, and make a standby copy everything again (a full resync);
-- link with another community as a mirror, or change, disconnect or remove a mirror link;
+- make, replace or remove the replication token (a pairing code holds it), switch token-only on or off, set the address and token a standby copies with (which server a standby trusts is set only on its own shell: beanpool pair), forget a standby, and make a standby copy everything again (a full resync);
 - claim, rename, release or take offline the community's public address, make a new tunnel key, restart the tunnel, see its tunnel token, and remove an app address;
 - delete posts in bulk, set a new ledger baseline, and prune a whole invite branch.
 

@@ -1034,52 +1034,47 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByText(/✓ Up to date/i)).not.toBeInTheDocument();
     });
 
-    it('alerts error and does not reload window when factory reset fails', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    it('has no way to wipe the node or delete a snapshot: the server removed both routes (owner-delete S1, design case 18 A1/A3)', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm');
+        const fetchSpy = vi.fn().mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) }));
+        vi.stubGlobal('fetch', fetchSpy);
+        vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue([{ name: 'snapshot-2026-10-16.db', sizeBytes: 2048, createdAt: '2026-10-16T01:00:00Z' }]);
 
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/reset')) {
-                return Promise.resolve({
-                    ok: false,
-                    status: 401,
-                    json: () => Promise.resolve({ error: 'Unauthorized reset attempt' }),
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ connectors: [] }),
+        for (const tab of ['access', 'backups'] as const) {
+            let view!: ReturnType<typeof render>;
+            await act(async () => {
+                view = render(
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab={tab}
+                    />
+                );
             });
-        }));
-
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-
-        const resetBtn = screen.getByRole('button', { name: /wipe & reset node/i });
-        await act(async () => {
-            fireEvent.click(resetBtn);
-        });
-
-        expect(alertSpy).toHaveBeenCalledWith('Node reset failed: Unauthorized reset attempt');
+            expect(screen.queryByText(/Danger Zone/i)).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /wipe|reset node|factory reset/i })).not.toBeInTheDocument();
+            if (tab === 'backups') {
+                expect(await screen.findByText('snapshot-2026-10-16.db')).toBeInTheDocument();
+                expect(screen.getByRole('button', { name: /^verify$/i })).toBeInTheDocument();
+                expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument();
+            }
+            view.unmount();
+        }
+        const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+        expect(urls.filter((u) => /\/api\/local\/reset|snapshots\/delete/.test(u))).toEqual([]);
+        expect(confirmSpy).not.toHaveBeenCalled();
     });
 
     it('stores issued 2FA session token upon successful 2FA verification to prevent lockout', async () => {

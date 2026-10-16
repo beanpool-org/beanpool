@@ -7,7 +7,6 @@ import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotSchedule
 import {
     fetchNodeSnapshots,
     createNodeSnapshot,
-    deleteNodeSnapshot,
     fetchNodeSnapshotSchedule,
     updateNodeSnapshotSchedule,
     verifyNodeBackup,
@@ -327,20 +326,6 @@ export function ApplianceSection({
         }
     };
 
-    const handleDeleteSnapshot = async (name: string) => {
-        if (!confirm(`Delete snapshot "${name}"?`)) return;
-        try {
-            await deleteNodeSnapshot(
-                activeNode.url,
-                name,
-                nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id)
-            );
-            await loadSnapshots();
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : 'Failed to delete snapshot');
-        }
-    };
 
     const handleSaveSchedule = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -623,29 +608,6 @@ export function ApplianceSection({
         }
     };
 
-    const handleResetNode = async () => {
-        if (!confirm('CRITICAL DANGER: Are you sure you want to reset this node? All identity and local configs will be erased.')) return;
-        if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
-                }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                alert(`Node reset failed: ${err.error || `HTTP ${res.status}`}`);
-                return;
-            }
-            alert('Node has been reset. Refreshing page.');
-            window.location.reload();
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        }
-    };
 
     // Calculate latest backup time
     const latestSnapshot = snapshots.length > 0 ? snapshots[0] : null;
@@ -1318,12 +1280,6 @@ export function ApplianceSection({
                                             >
                                                 {verifying && verifyTarget === s.name ? 'Verifying...' : 'Verify'}
                                             </button>
-                                            <button
-                                                onClick={() => handleDeleteSnapshot(s.name)}
-                                                className="px-2.5 py-1 rounded bg-nature-800 hover:bg-nature-700 text-xs text-red-400 font-bold border border-nature-700"
-                                            >
-                                                Delete
-                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -1733,24 +1689,6 @@ export function ApplianceSection({
                     <SectionErrorBoundary sectionName="Connected assistants" resetKey={activeNode.id}>
                         <ConnectedAssistantsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
-
-                    {/* Factory Reset Danger Zone */}
-                    <div className="p-6 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-xl space-y-3">
-                        <h3 className="text-base font-bold text-red-400 m-0 flex items-center gap-2">
-                            <span>⚠️</span>
-                            <span>Danger Zone: Factory Reset Node</span>
-                        </h3>
-                        <p className="text-xs text-nature-400 m-0">
-                            Wipes identity and local state. Does not delete blockchain ledger files.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={handleResetNode}
-                            className="px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all shadow-md"
-                        >
-                            Wipe &amp; Reset Node
-                        </button>
-                    </div>
                 </div>
             )}
 

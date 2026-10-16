@@ -7,7 +7,6 @@ import {
     fetchNodeHistory,
     fetchNodeSnapshots,
     createNodeSnapshot,
-    deleteNodeSnapshot,
     updateNodeReplicationCadence,
     forceNodeResync,
     getRegistrarPending,
@@ -332,22 +331,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
-    // Delete Snapshot
-    const handleDeleteSnapshot = async (name: string) => {
-        if (!targetSnapshotNode || !confirm(`Delete snapshot ${name}?`)) return;
-        try {
-            await deleteNodeSnapshot(
-                targetSnapshotNode.url,
-                name,
-                nodeCredential(targetSnapshotNode),
-                getTfaSessionToken(targetSnapshotNode.id),
-            );
-            await loadSnapshots();
-        } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            alert(`Failed to delete snapshot: ${msg}`);
-        }
-    };
 
     // Save Replication Cadence
     const handleSaveCadence = async () => {
@@ -789,12 +772,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
                                                     >
                                                         ⬇ Download
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteSnapshot(snap.name)}
-                                                        className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink font-bold text-[11px] border border-rose-800/60 transition-all"
-                                                    >
-                                                        🗑 Delete
                                                     </button>
                                                 </div>
                                             </td>

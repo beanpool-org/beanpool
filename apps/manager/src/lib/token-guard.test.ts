@@ -26,7 +26,6 @@ describe('token-guard standalone functions', () => {
             expect(tokenCannotReach('/api/local/admin/standby-health')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/offbox-backups/restore')).toBe(true);
             expect(tokenCannotReach('/api/local/change-password')).toBe(true);
-            expect(tokenCannotReach('/api/local/reset')).toBe(true);
         });
 
         it('handles proxied URLs', () => {

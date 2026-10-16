@@ -58,6 +58,7 @@ import {
     RestorePointError, RESTORE_POINT_DB, RESTORE_POINT_SERVER_TAR, RESTORE_POINT_SERVER_FILES, type RestorePointInfo,
 } from '../services/restore-points.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
 import {
     isOpenJoinKeyId, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId, openJoinKeyOffLine, OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW,
@@ -483,7 +484,7 @@ export async function restoreFromTar(
 
     cleanupRestoreTemp();
     // Everyone is told at the next boot, on the database now in place (services/restore-points.ts), and the log keeps it.
-    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name });
+    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner' });
     console.log(`[Restore] A backup made ${sealedHeader?.createdAt ?? '(unlocked, date unknown)'} was restored by an owner; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's
@@ -629,7 +630,7 @@ export async function rollBackTo(pointDir: string, name: string, restartAfterMs:
         }
     }
     cleanupRestoreTemp();
-    leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name });
+    leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner' });
     console.log(`[Restore] An owner rolled this server back to restore point ${name}; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
     if (restartAfterMs !== null) {
         setTimeout(() => {
@@ -1685,6 +1686,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
                     fileCommunityId: sealedHeader.communityId, thisCommunityId, backup,
                 });
             }
+            // Counted for the owners (design case 18 §7): a day's refusals, never whose file or from where.
+            noteSecurityEvent({ key: 'sec.restore', detail: '', perDay: OWNER_ALERT_WORDS.otherCommunityRefused, actor: 'restore:other-community', actorRole: 'uploader' });
             return refuse(409, {
                 error: 'This backup is from a different community, and people have already joined the community on this server. '
                     + "To bring the backup's community back, restore the file on a fresh server (install, claim, restore), or on "

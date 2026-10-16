@@ -83,6 +83,7 @@ import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { recordBoot, startServerAlerts } from './services/alerts.js';
+import { noteSecurityEvent } from './services/security-signal.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
@@ -166,6 +167,7 @@ async function main() {
     startRestoreNoticeWatch({
         announce: adminBroadcastAnnouncement,
         log: message => logger.security('ADMIN', message),
+        alert: detail => noteSecurityEvent({ key: 'sec.restore', detail, high: true, priority: 4 }),
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: the admin password works as before either way.

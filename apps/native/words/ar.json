@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -110,7 +110,7 @@
   "Your community's server did not ask for the four digits. Ask its host to update BeanPool before you try again.": "لم يطلب خادم مجتمعك الأرقام الأربعة. اطلب من المضيف تحديث BeanPool قبل المحاولة مجددًا.",
   "Type these four digits on the other device": "اكتب هذه الأرقام الأربعة على الجهاز الآخر",
   "The four digits are {digits}": "الأرقام الأربعة هي {digits}",
-  "Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.": "يُفتح حسابك هناك فقط بعد كتابة الرقمين الصحيحين. إذا لم تكن قد طلبت ذلك للتو على شاشة أمامك، فاضغط على إلغاء ولن يحصل الجهاز الآخر على شيء.",
+  "Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.": "يُفتح حسابك هناك فقط بعد كتابة الأرقام الصحيحة. إذا لم تكن قد طلبت ذلك للتو على شاشة أمامك، فاضغط على إلغاء ولن يحصل الجهاز الآخر على شيء.",
   "Done": "تم",
   "Send your whole account to another device?": "هل تريد إرسال حسابك بالكامل إلى جهاز آخر؟",
   "The other device receives this account's key AND your 12 words: whoever has them is you, in every community.": "يستلم الجهاز الآخر مفتاح هذا الحساب وكلماتك الـ 12: كل من يملكها يصبح هو أنت، في كل مجتمع.",

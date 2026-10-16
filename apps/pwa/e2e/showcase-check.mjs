@@ -19,12 +19,14 @@
  *
  * Fails on any sideways scroll, a write, a `sample-` id on the wire, a read of the reader's own data on a screen whose
  * feature is in preview (global previews audit, "Across all five", P3), a local screen that no longer reads it, a marker in a locked or greyed style, or a control in
- * a preview, a marker, the sheet or the Start screen smaller than 44 x 44 px.
+ * a preview, a marker, the sheet or the Start screen smaller than 44 x 44 px, a sheet or Start screen that does not cover the
+ * screen (review of #2057, B3), or, with the Invites QR card open, a control or the QR past the screen or its card (B2).
  *
- * Run: pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go)
+ * Run: QRDEPS=<a folder holding jsqr and pngjs> pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go;
+ *      jsqr is not installed in the workspace, and the QR check fails without it)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element, navigator -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -34,8 +36,25 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { createRequire } from 'node:module';
 
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** jsqr + pngjs decode the Invites QR: from QRDEPS (a folder holding both) or the pwa's own node_modules. Missing, the
+ *  decode check fails (it is never skipped quietly). */
+let jsQR = null;
+let PNG = null;
+let qrDepsMissing = '';
+for (const from of [process.env.QRDEPS, PWA_DIR].filter(Boolean)) {
+    try {
+        const qreq = createRequire(path.join(from, 'package.json'));
+        jsQR = qreq('jsqr');
+        PNG = qreq('pngjs').PNG;
+        break;
+    } catch (e) {
+        qrDepsMissing = `${from}: ${e.code || e.message}`;
+    }
+}
 const SERVER_DIR = path.resolve(PWA_DIR, '../server');
 process.chdir(PWA_DIR);
 
@@ -138,6 +157,7 @@ function spy(page) {
 
 async function openContext(browser, origin, identity, dark, holdInfoMs = 0) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
     const offHost = new Set();
     await context.addInitScript((mode) => {
         try {
@@ -212,7 +232,7 @@ async function markersNeverLocked(page, where) {
 /** Every control the showcase draws (previews, markers, the sheet, the Start screen, My Deals' preview) is 44 x 44 px or more. */
 async function targetsAtLeast44(page, where) {
     const small = await page.evaluate(() => {
-        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"]';
+        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"], [role="dialog"][aria-labelledby="my-deals-title"]';
         return Array.from(document.querySelectorAll('button, a[href], [role="button"], input, select, textarea'))
             .filter((el) => el instanceof Element && (el.matches(ours) || el.closest(ours)) && el.getClientRects().length > 0)
             .map((el) => ({ el, r: el.getBoundingClientRect() }))
@@ -222,12 +242,47 @@ async function targetsAtLeast44(page, where) {
     check(small.length === 0, `${where}: every control is at least 44 x 44 px${small.length ? ` (${small.join('; ')})` : ''}`);
 }
 
+/** The open sheet's overlay is the whole screen and its dialog sits on screen, uncovered; or the Start screen fills it. */
+async function coversScreen(page, where, testId = 'local-community-sheet') {
+    const r = await page.evaluate((id) => {
+        const el = document.querySelector(`[data-testid="${id}"]`);
+        if (!el) return { missing: true };
+        const overlay = id === 'local-community-sheet' ? el.parentElement : el;
+        const o = overlay.getBoundingClientRect();
+        const d = el.getBoundingClientRect();
+        const cx = Math.min(Math.max(d.left + d.width / 2, 0), window.innerWidth - 1);
+        const cy = Math.min(Math.max(d.top + Math.min(d.height, window.innerHeight) / 2, 0), window.innerHeight - 1);
+        const hit = document.elementFromPoint(cx, cy);
+        // Every button of it, not only its centre: a layer above can cover one away from the middle (review of #2057, confirm-2 B1).
+        const covered = [...el.querySelectorAll('button, a[href]')].flatMap((b) => {
+            const br = b.getBoundingClientRect();
+            if (br.width === 0 || br.bottom <= 0 || br.top >= window.innerHeight) return [];
+            const x = Math.min(Math.max(br.left + br.width / 2, 0), window.innerWidth - 1);
+            const y = Math.min(Math.max(br.top + br.height / 2, 0), window.innerHeight - 1);
+            const at = document.elementFromPoint(x, y);
+            return at && b.contains(at) ? [] : [(b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 30)];
+        });
+        return {
+            overlay: [o.left, o.top, o.width, o.height].map(Math.round), screen: [window.innerWidth, window.innerHeight],
+            dialog: [d.left, d.top, d.right, d.bottom].map(Math.round), onTop: !!hit && el.contains(hit) && covered.length === 0, covered,
+        };
+    }, testId);
+    const full = !r.missing && Math.abs(r.overlay[0]) <= 1 && Math.abs(r.overlay[1]) <= 1 && Math.abs(r.overlay[2] - r.screen[0]) <= 1 && Math.abs(r.overlay[3] - r.screen[1]) <= 1;
+    const onScreen = !r.missing && r.dialog[0] >= -1 && r.dialog[1] >= -1 && r.dialog[2] <= r.screen[0] + 1 && (testId !== 'local-community-sheet' || r.dialog[3] <= r.screen[1] + 1);
+    check(full && onScreen && r.onTop, `${where}: it covers the screen, on top${full && onScreen && r.onTop ? '' : ` (${JSON.stringify(r)})`}`);
+}
+
 async function tab(page, label) {
     await page.locator('[data-testid="mobile-bottom-nav"] button', { hasText: label }).first().click();
 }
 
-async function closeSheet(page) {
-    await page.getByTestId('local-community-sheet').getByRole('button', { name: 'Close' }).click();
+async function closeSheet(page, where) {
+    if ((await page.getByTestId('local-community-sheet').count()) > 0) {
+        await coversScreen(page, `${where}: the sheet`);
+        await page.getByTestId('local-community-sheet').getByRole('button', { name: 'Close' }).click({ force: true, timeout: 5000 }).catch(() => page.keyboard.press('Escape'));
+        await page.getByTestId('local-community-sheet').waitFor({ state: 'detached' }).catch(() => {});
+    }
+    await wait(200);
 }
 
 async function globalMember(browser, root, dark) {
@@ -251,11 +306,13 @@ async function globalMember(browser, root, dark) {
         await shot(page, `ledger-strip-${scheme}`);
         await page.getByRole('button', { name: /Send Beans/ }).click();
         await page.getByTestId('local-community-sheet').waitFor();
+        await coversScreen(page, 'Ledger, Send Beans: the sheet');
         await noSideScroll(page, 'the sheet');
         await targetsAtLeast44(page, 'the sheet');
         await shot(page, `sheet-${scheme}`);
         await page.getByTestId('local-community-start').click();
         await page.getByTestId('start-community-screen').waitFor();
+        await coversScreen(page, 'Ledger: the Start a community screen', 'start-community-screen');
         const runANode = await page.getByTestId('start-community-run-a-node').getAttribute('href');
         check(runANode === 'https://beanpool.org/#run-a-node', `Start a community: How to run a node leads to the node's start link (${runANode})`);
         await noSideScroll(page, 'Start a community');
@@ -277,13 +334,46 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('commons-preview').waitFor({ timeout: 10_000 });
         await page.getByTestId('commons-preview').getByTestId('local-community-action').first().click();
         await page.getByTestId('local-community-sheet').waitFor();
-        await closeSheet(page);
+        await closeSheet(page, 'Commons, Vote');
         await noSideScroll(page, 'Commons preview');
         await targetsAtLeast44(page, 'Commons preview');
         await markersNeverLocked(page, 'Commons preview');
         await shot(page, `commons-${scheme}`);
         await wait(1_000);
         readsNothingOwn(net, tCommons, node.origin, 'the Commons');
+
+        // The enterprise page in preview (review of #2063): the Bakery's real card, once, marked, opens the real page fed
+        // the sample; each of its six controls is a marker; a keeper row is no button, and a tap on one opens no profile.
+        const cards = page.getByTestId('sample-enterprise-card');
+        check(await cards.count() === 2 && await page.getByTestId('commons-preview').getByTestId('sample-enterprise-card').count() === 2,
+            'Commons: the Bakery and the compost bay are the real cards, inside the preview');
+        check((await page.locator('main').innerText()).split('Example Valley Bakery').length === 2, 'Commons: the Bakery shows once');
+        const tPage = Date.now();
+        await cards.first().click();
+        const overlay = page.getByTestId('page-overlay');
+        await overlay.waitFor({ timeout: 10_000 });
+        await wait(1_000);
+        check(await overlay.getByTestId('sample-header').count() === 1, 'enterprise page: the Example header');
+        const pageMarkers = overlay.getByTestId('local-community-action');
+        const markerCount = await pageMarkers.count();
+        check(markerCount === 6, `enterprise page: its six controls are markers (${markerCount})`);
+        for (let i = 0; i < markerCount; i++) {
+            await pageMarkers.nth(i).click();
+            await page.getByTestId('local-community-sheet').waitFor();
+            await closeSheet(page);
+        }
+        check(await overlay.getByRole('button', { name: /a neighbour/ }).count() === 0, 'enterprise page: a keeper row is no button');
+        await overlay.getByText('a neighbour', { exact: true }).first().click();
+        await wait(1_000);
+        check(await overlay.count() === 1 && await page.getByText('sample-keeper-1').count() === 0, 'enterprise page: a tap on a keeper row opens no profile');
+        await noSideScroll(page, 'enterprise page');
+        await targetsAtLeast44(page, 'enterprise page');
+        await markersNeverLocked(page, 'enterprise page');
+        await shot(page, `enterprise-${scheme}`);
+        const pageReqs = net.since(tPage).filter((r) => r.url.startsWith(node.origin) && new URL(r.url).pathname.startsWith('/api/'));
+        check(pageReqs.length === 0, `net spy, the enterprise page, every marker and a keeper tap: not one request${pageReqs.length ? ` (${pageReqs.map((r) => `${r.method} ${new URL(r.url).pathname}`).join(', ')})` : ''}`);
+        await overlay.getByRole('button', { name: 'Go back' }).click();
+        await overlay.waitFor({ state: 'detached', timeout: 5_000 });
 
         // Commons → Decide in preview: each marker in it and the header opens the sheet.
         const tDecide = Date.now();
@@ -295,7 +385,7 @@ async function globalMember(browser, root, dark) {
         for (let i = 0; i < nDecide; i++) {
             await decideActs.nth(i).click();
             await page.getByTestId('local-community-sheet').waitFor({ timeout: 5_000 });
-            await closeSheet(page);
+            await closeSheet(page, `Decide, marker ${i + 1}`);
             await wait(300);
         }
         const headerPropose = page.getByTestId('local-community-action').filter({ hasText: '+ Propose' }).filter({ hasNotText: 'Decision' });
@@ -304,7 +394,7 @@ async function globalMember(browser, root, dark) {
         if (headerProposeCount > 0) {
             await headerPropose.first().click();
             await page.getByTestId('local-community-sheet').waitFor({ timeout: 5_000 });
-            await closeSheet(page);
+            await closeSheet(page, 'Decide, the header\'s + Propose');
             await wait(300);
         }
         await noSideScroll(page, 'Decide preview');
@@ -319,14 +409,24 @@ async function globalMember(browser, root, dark) {
         await tab(page, 'Market');
         await page.getByRole('button', { name: /My Deals/ }).first().click();
         await page.getByTestId('deals-preview').waitFor({ timeout: 10_000 });
-        check(await page.getByRole('button', { name: 'Close My Deals' }).count() === 0 && await page.getByRole('dialog').count() === 1, 'My Deals: the preview alone, never the live My Deals');
+        check(await page.getByTestId('local-community-strip').isVisible() && await page.getByTestId('sample-header').isVisible(), 'My Deals: strip + EXAMPLE present');
+        check(await page.getByTestId('sample-deal-sample-deal-shelves').isVisible() && await page.getByTestId('sample-deal-sample-deal-bike').isVisible(), 'My Deals: In Progress sample deals present');
         await noSideScroll(page, 'My Deals preview');
         await targetsAtLeast44(page, 'My Deals preview');
         await shot(page, `deals-${scheme}`);
-        await page.getByTestId('deals-preview').getByTestId('local-community-action').first().click();
+        await page.getByTestId('sample-deal-sample-deal-shelves').getByTestId('local-community-action').click();
         await page.getByTestId('local-community-sheet').waitFor();
-        await closeSheet(page);
-        await page.getByRole('dialog', { name: 'My Deals' }).getByRole('button', { name: 'Close' }).click();
+        await closeSheet(page, 'My Deals');
+        await page.getByTestId('sample-deal-sample-deal-bike').getByTestId('local-community-action').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page, 'My Deals, a card\'s marker');
+        await page.getByRole('button', { name: /History/ }).click();
+        await page.getByTestId('sample-deal-sample-deal-mending').waitFor({ timeout: 5_000 });
+        check(await page.getByTestId('sample-deal-sample-deal-mending').isVisible(), 'My Deals: History sample deal present');
+        await page.getByTestId('sample-deal-sample-deal-mending').getByTestId('local-community-action').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page, 'My Deals, History');
+        await page.getByRole('button', { name: /Close My Deals/ }).first().click();
         await wait(1_000);
         readsNothingOwn(net, tMarket, node.origin, 'the Market tab\'s load and My Deals');
         const tListing = Date.now();
@@ -342,19 +442,97 @@ async function globalMember(browser, root, dark) {
         await noSideScroll(page, 'listing with the sheet');
         await targetsAtLeast44(page, 'listing with the sheet');
         await shot(page, `listing-sheet-${scheme}`);
-        await closeSheet(page);
+        await closeSheet(page, 'listing, the deal action');
         await markersNeverLocked(page, 'listing');
         await wait(1_000);
         readsNothingOwn(net, tListing, node.origin, 'a listing');
 
         await page.keyboard.press('Escape');
 
-        // People → Invites: the line.
+        // People → Invites: preview with strip, actions, QR and no card overflow.
         const tInvites = Date.now();
         await tab(page, 'People');
         await page.getByRole('tab', { name: /Invites/ }).click();
-        await page.getByTestId('invites-local-line').waitFor({ timeout: 10_000 });
+        await page.getByTestId('invites-preview').waitFor({ timeout: 10_000 });
+        check(await page.getByTestId('local-community-strip').isVisible(), 'Invites: Example Valley under the strip');
         check(/12 words or a sign-in/.test(await page.locator('body').innerText()), 'Invites: "12 words or a sign-in"');
+
+        // Actions open the sheet and leave clipboard untouched
+        await page.evaluate(() => navigator.clipboard.writeText('<cleared>').catch(() => {}));
+        const generateBtn = page.getByRole('button', { name: /Generate New Invite/ });
+        await generateBtn.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page, 'Invites, Generate');
+
+        const rowShare = page.getByTestId('invites-preview').getByTestId('local-community-action').filter({ hasText: /Share/ }).first();
+        await rowShare.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page, 'Invites, the row\'s Share');
+
+        const rowCopy = page.getByTestId('invites-preview').getByTestId('local-community-action').filter({ hasText: /Copy/ }).first();
+        await rowCopy.click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await closeSheet(page, 'Invites, the row\'s Copy');
+
+        // Toggle QR code and check it decodes to EXAMPLE-1234
+        await page.getByRole('button', { name: 'Show QR code' }).first().click();
+        const box = page.locator('[data-testid="invite-qr-card"] div.bg-white.rounded-xl.inline-block').first();
+        await box.waitFor({ timeout: 5_000 });
+        check(await box.isVisible(), 'Invites: QR SVG visible');
+
+        // The QR card's own Copy and Share: markers too, each opening the sheet over the screen.
+        const qrMarkers = page.getByTestId('invite-qr-card').getByTestId('local-community-action');
+        check(await qrMarkers.count() === 2, `Invites: the QR card's Copy and Share are markers (${await qrMarkers.count()})`);
+        for (const [i, name] of [[0, 'Copy'], [1, 'Share']]) {
+            await qrMarkers.nth(i).click();
+            await page.getByTestId('local-community-sheet').waitFor();
+            await closeSheet(page, `Invites, the QR card's ${name}`);
+        }
+
+        const clipboard = await page.evaluate(() => navigator.clipboard.readText().catch((e) => `ERR: ${e}`));
+        check(clipboard === '<cleared>', `Invites: clipboard untouched by preview actions (got: ${clipboard})`);
+
+        check(!!(jsQR && PNG), `Invites: jsqr + pngjs found to decode the QR${jsQR && PNG ? '' : ` (set QRDEPS to a folder holding both; ${qrDepsMissing})`}`);
+        if (jsQR && PNG) {
+            await box.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+            await wait(300);
+            const bb = await box.boundingBox();
+            if (bb) {
+                const buf = await page.screenshot({ clip: bb });
+                const png = PNG.sync.read(buf);
+                const code = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
+                check(code && code.data === 'EXAMPLE-1234', `Invites: QR decodes to EXAMPLE-1234 via jsQR (got: ${code?.data})`);
+            }
+        }
+
+        // Every control and the QR, with the QR card open: inside the screen and inside its nearest bordered box.
+        await page.getByTestId('invite-qr-card').evaluate((e) => e.scrollIntoView({ block: 'center' }));
+        const overflow = await page.evaluate(() => {
+            const preview = document.querySelector('[data-testid="invites-preview"]');
+            if (!preview) return ['no invites-preview'];
+            const bordered = (el) => {
+                for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+                    const cs = getComputedStyle(p);
+                    if (['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(cs[`border${side}Width`]) > 0)) return p;
+                }
+                return null;
+            };
+            const bad = [];
+            for (const el of preview.querySelectorAll('button, a[href], [role="button"], svg, [data-testid="invite-qr-card"] div.bg-white')) {
+                if (el.getClientRects().length === 0 || el.closest('button') !== el && el.closest('button')) continue;
+                const r = el.getBoundingClientRect();
+                const what = `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20)}"`;
+                if (r.left < -1 || r.right > window.innerWidth + 1) bad.push(`${what} x ${Math.round(r.left)}-${Math.round(r.right)} past the screen`);
+                const box = bordered(el);
+                if (box) {
+                    const b = box.getBoundingClientRect();
+                    if (r.left < b.left - 1 || r.right > b.right + 1) bad.push(`${what} x ${Math.round(r.left)}-${Math.round(r.right)} past its box ${Math.round(b.left)}-${Math.round(b.right)}`);
+                }
+            }
+            return bad;
+        });
+        check(overflow.length === 0, `Invites, the QR card open: every control inside the screen and its card at 320 @130%${overflow.length ? ` (${overflow.join(', ')})` : ''}`);
+
         await noSideScroll(page, 'Invites');
         await targetsAtLeast44(page, 'Invites');
         await shot(page, `invites-${scheme}`);
@@ -373,6 +551,21 @@ async function globalMember(browser, root, dark) {
         check(await page.getByPlaceholder('B', { exact: true }).count() === 0, 'composer: no price field');
         await noSideScroll(page, 'composer');
         await shot(page, `composer-${scheme}`);
+        // The price line's sheet and Start draw above the New Post panel, and a press meant for them never edits the draft.
+        const draftTicks = () => page.locator('[data-testid="map-new-post-panel"] input[type="checkbox"]').evaluateAll((els) => els.map((e) => e.checked));
+        const ticksBefore = await draftTicks();
+        await page.locator('[data-testid="composer-price-line"] [data-testid="local-community-line"]').click();
+        await page.getByTestId('local-community-sheet').waitFor();
+        await coversScreen(page, 'composer, the price line: the sheet, above the New Post panel');
+        await page.getByTestId('local-community-start').click();
+        const startOpened = await page.getByTestId('start-community-screen').waitFor({ timeout: 5_000 }).then(() => true, () => false);
+        check(startOpened, 'composer, the price line: Start a community opens Start');
+        if (startOpened) {
+            await coversScreen(page, 'composer: the Start a community screen, above the New Post panel', 'start-community-screen');
+            await page.getByRole('button', { name: 'Back' }).click();
+        }
+        await closeSheet(page, 'composer, the price line');
+        check(JSON.stringify(await draftTicks()) === JSON.stringify(ticksBefore), 'composer: pressing the sheet left the draft as it was');
         await wait(1_000);
         readsNothingOwn(net, tMap, node.origin, 'the Map and the composer');
 
@@ -458,6 +651,8 @@ async function localMember(browser, root) {
         await tab(page, 'People');
         await page.getByRole('tab', { name: /Invites/ }).click();
         await wait(2_000);
+        check(await page.getByRole('button', { name: 'Show QR code' }).count() === 0, 'Invites (local, live): no 📱 button');
+        check(await page.locator('button').filter({ hasText: '📱' }).count() === 0, 'Invites (local, live): no 📱 button text');
         readsOwnAsBefore(net, tInvites, node.origin, 'Invites', ['their invites', 'their invite tree']);
         const tProfile = Date.now();
         await page.goto(`${node.origin}/app#profile=${ana.publicKey}`, { waitUntil: 'load' });

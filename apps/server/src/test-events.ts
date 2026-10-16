@@ -191,12 +191,12 @@ async function main(): Promise<void> {
     // ── 5. RSVP ──────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. RSVP ---');
     let r = rsvpEvent(capture, ev.id, goer, 'going');
-    assert(r.post.goingCount === 1 && r.post.interestedCount === 0 && r.post.myRsvp === 'going', 'going is recorded and counted');
+    assert(r.post!.goingCount === 1 && r.post!.interestedCount === 0 && r.post!.myRsvp === 'going', 'going is recorded and counted');
     r = rsvpEvent(capture, ev.id, goer, 'interested');
-    assert(r.post.goingCount === 0 && r.post.interestedCount === 1 && r.post.myRsvp === 'interested', 'switching to interested upserts, not duplicates');
+    assert(r.post!.goingCount === 0 && r.post!.interestedCount === 1 && r.post!.myRsvp === 'interested', 'switching to interested upserts, not duplicates');
     assert((db.prepare('SELECT COUNT(*) c FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(ev.id, goer) as any).c === 1, 'one row per member per event');
     r = rsvpEvent(capture, ev.id, goer, null);
-    assert(r.post.goingCount === 0 && r.post.interestedCount === 0 && r.post.myRsvp === null, 'not going deletes the RSVP');
+    assert(r.post!.goingCount === 0 && r.post!.interestedCount === 0 && r.post!.myRsvp === null, 'not going deletes the RSVP');
     assert(!!db.prepare(`SELECT 1 FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`).get(`${ev.id}|${goer}`), 'the delete writes a tombstone so a replica learns of it');
     rsvpEvent(capture, ev.id, goer, 'going');
     const reGoing = db.prepare('SELECT updated_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(ev.id, goer) as any;
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
     // Told what an id nobody has gets (engine/post-sight.ts): "UNAUTHORIZED: Must be an active convenor or member of the
     // group" confirmed the group's event to someone who can't see it, an invite-only group's included.
     assertThrows(() => rsvpEvent(capture, groupEvents[0].id, stranger, 'going'), /^Event not found$/, 'a non-member cannot RSVP to a group-only event, and is told "Event not found"');
-    assert(rsvpEvent(capture, groupEvents[0].id, groupie, 'going').post.goingCount === 1, 'a group member can RSVP to a group-only event');
+    assert(rsvpEvent(capture, groupEvents[0].id, groupie, 'going').post!.goingCount === 1, 'a group member can RSVP to a group-only event');
     const offer = createPost('offer', 'food', 'Carrots', 'Fresh', 5, 'fixed', stranger, undefined, undefined, [])!;
     assertThrows(() => rsvpEvent(capture, offer.id, goer, 'going'), /Event not found/, 'RSVP to a post that is not an event is refused');
 

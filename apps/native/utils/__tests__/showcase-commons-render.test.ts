@@ -53,10 +53,11 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+const routes = vi.hoisted(() => ({ pushed: [] as string[] }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, setParams() {} },
+        router: { push(x: unknown) { routes.pushed.push(JSON.stringify(x)); }, navigate() {}, setParams() {} },
         useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => ({}),
@@ -181,6 +182,35 @@ describe('the Commons on the worldwide community, its profile on the phone', () 
         expect(strip).toBeGreaterThan(-1);
         expect(strip).toBeLessThan(text().indexOf('Real group number 1'));
         expect(text().indexOf(SAMPLE_COMMUNITY.enterprises[0].name)).toBeLessThan(text().indexOf('Real group number 1'));
+    });
+
+    it('Example Valley\'s enterprise and project are the list\'s real cards, once each, marked, inside the preview; the list holds none (review of #2063, B2)', async () => {
+        rememberProfile('global', WORLDWIDE);
+        net.answer = name => (name === 'fetchGroups' ? Promise.resolve([{
+            id: 'g1', name: 'Garden group', slug: 'garden', description: 'A real group on this node', avatarUrl: null,
+            category: 'other', createdBy: 'someone', joinPolicy: 'open', createdAt: '2026-10-01', updatedAt: '2026-10-01', memberCount: 3,
+        }]) : emptyAnswer(name));
+        await render(createElement(ProjectsScreen));
+        const preview = host.querySelector('[data-testid="commons-preview"]')!;
+        const e = SAMPLE_COMMUNITY.enterprises[0];
+        const p = SAMPLE_COMMUNITY.projects[0];
+        expect(text().split(e.name).length).toBe(2);
+        expect(text().split(p.title).length).toBe(2);
+        const cards = Array.from(host.querySelectorAll('[data-testid="sample-enterprise-card"]'));
+        expect(cards).toHaveLength(2);
+        for (const card of cards) {
+            expect(preview.contains(card)).toBe(true);
+            expect(card.textContent).toContain('Local community');
+        }
+        expect(cards[0].textContent).toContain(e.name);
+        expect(cards[1].textContent).toContain(p.title);
+        // The real group follows, outside the preview, with no pill; no Projects or Enterprises chip (none here to list).
+        expect(text()).toContain('Garden group');
+        expect(text().indexOf('Garden group')).toBeGreaterThan(text().indexOf(p.title));
+        expect(text()).not.toContain('🌱 Projects');
+        // A card opens the real page, by the sample id, which draws it from the sample.
+        await act(async () => { (cards[0] as HTMLElement).click(); });
+        expect(routes.pushed.some(x => x.includes(e.id))).toBe(true);
     });
 
     it('switching to the Decide tab shows the DecideSection fed the sample decisions in preview mode', async () => {

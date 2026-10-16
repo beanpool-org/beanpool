@@ -28,6 +28,7 @@ import { getNodeRole } from './config/node-role.js';
 import { sweepExpiredDebts } from './engine/names-debts.js';
 import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { deletePeerListings } from './federation-listings.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 // Experimental peer‑connector toggle – defaults to off for production safety
@@ -733,10 +734,25 @@ export function removeConnector(address: string): boolean {
     const idx = connectors.findIndex(c => c.address === address);
     if (idx === -1) return false;
 
+    const connector = connectors[idx];
+    const status = statuses.get(address);
+    // The node it named or recorded (a host:port connector's first-dial record survives a restart; the status does not).
+    const peerId = status?.peerId ?? connector.pinnedPeerId ?? peerIdFromAddress(connector.address);
+    const publicUrl = connector.publicUrl ?? derivePublicUrl(connector.address);
+
     connectors.splice(idx, 1);
     statuses.delete(address);
     saveConnectors();
     logger.info('P2P', `[Connectors] Removed connector: ${address}`);
+
+    // Only what no remaining connector still names: the same peer under another address, a peer whose id ends the same
+    // (the 12-character prefix), or a peer at the same URL keeps its listings, and its next pull replaces them. A
+    // standby's listings are its main server's rows (review opus-2068 N1, N2).
+    const suffix = (id: string | null | undefined) => (id ? id.slice(-12) : null);
+    const remaining = getConnectors();
+    const prefixInUse = !!peerId && remaining.some(c => suffix(c.peerId ?? peerIdFromAddress(c.address)) === suffix(peerId));
+    const urlInUse = !!publicUrl && remaining.some(c => (c.publicUrl ?? derivePublicUrl(c.address)) === publicUrl);
+    if (getNodeRole() !== 'backup') deletePeerListings(prefixInUse ? null : peerId, urlInUse ? null : publicUrl);
     return true;
 }
 

@@ -20,6 +20,8 @@ import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+/** What the screen handed the share sheet or the clipboard: a preview hands neither anything. */
+const sent = vi.hoisted(() => ({ shares: [] as unknown[], clips: [] as unknown[] }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
@@ -48,7 +50,7 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
         Alert: { alert() {} },
-        Share: { share: async () => ({}) },
+        Share: { share: async (d: unknown) => { sent.shares.push(d); return {}; } },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
@@ -73,8 +75,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
-vi.mock('react-native-qrcode-svg', () => ({ default: () => null }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: async () => {} }));
+vi.mock('react-native-qrcode-svg', () => ({ default: (props: any) => createElement('div', { 'data-testid': 'qr-code', 'data-qr-value': props?.value }) }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: async (v: unknown) => { sent.clips.push(v); } }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
     KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
@@ -148,6 +150,8 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     net.calls.length = 0;
+    sent.shares.length = 0;
+    sent.clips.length = 0;
     answers.held.clear();
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -163,12 +167,30 @@ const render = async (node: unknown) => { await act(async () => { root.render(no
 const text = () => host.textContent ?? '';
 const OWN_CODE = { code: 'OWN-CODE-7731', createdBy: 'a-real-member-key', createdAt: new Date().toISOString() };
 
+const USED_CODE = { code: 'INV-ABCD-EFGH', createdBy: 'a-real-member-key', createdAt: new Date().toISOString(), usedBy: 'someone-else', usedAt: new Date().toISOString(), intendedFor: 'Kofi' };
+
 describe("the control: a local community's Invites, the same screen", () => {
     it("asks its node for the member's own codes, so the spy sees this screen's call", async () => {
         rememberProfile('local', { invites: true, showcase: false });
         await render(createElement(PeopleScreen));
         expect(net.calls).toContain(`fetch ${INVITES}`);
         expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.invites);
+        expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
+        expect(text()).not.toContain('Example Valley');
+    });
+
+    it("on a local community with pending and redeemed codes, does not show QR toggle, REDEEMED section, or tree", async () => {
+        rememberProfile('local', { invites: true, showcase: false });
+        await render(createElement(PeopleScreen));
+        await act(async () => { land(INVITES, { invites: [OWN_CODE, USED_CODE] }); });
+        await settle();
+        const t = text();
+        const buttons = Array.from(host.querySelectorAll('button')).map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
+        expect(t).toContain('OWN-CODE-7731');
+        expect(buttons.includes('Show QR code')).toBe(false);
+        expect(buttons.some(b => b.includes('📱'))).toBe(false);
+        expect(/REDEEMED/.test(t)).toBe(false);
+        expect(/Community Tree/.test(t)).toBe(false);
     });
 });
 
@@ -179,6 +201,79 @@ describe('Invites on the worldwide community, its profile on the phone', () => {
         expect(text()).toContain('Bring someone here');
         expect(text()).toContain(LOCAL_COMMUNITY_LINES.invites);
         expect(net.calls).not.toContain(`fetch ${INVITES}`);
+    });
+
+    it("renders the real invite screen fed sample invites, used invites, and community tree", async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(PeopleScreen));
+
+        // Strip and Example header
+        expect(host.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
+        expect(text()).toContain('Example Valley');
+        expect(text()).toContain('An example invitation.');
+
+        // Sample pending invite
+        expect(text()).toContain('EXAMPLE-1234');
+        expect(text()).toContain('For: a neighbour');
+
+        // Sample redeemed invites
+        expect(text()).toContain('EXAMPLE-5678');
+        expect(text()).toContain('EXAMPLE-9012');
+
+        // Tree
+        expect(text()).toContain('Community Tree');
+        expect(text()).toContain('an example member');
+        expect(text()).toContain('a neighbour');
+
+        // Every marker, the QR card's too once 📱 opens it, opens its own sheet; nothing is shared or copied.
+        const markers = () => Array.from(host.querySelectorAll('[data-testid="local-community-action"]')) as HTMLElement[];
+        const sheets = () => Array.from(host.querySelectorAll('[data-testid="local-community-sheet"]'));
+        const pressEach = async (them: HTMLElement[]) => {
+            for (const marker of them) {
+                expect(sheets()).toHaveLength(0);
+                await act(async () => { marker.click(); });
+                await settle();
+                expect(sheets()).toHaveLength(1);
+                const close = host.querySelector('[data-modal] [aria-label="Close"]') as HTMLElement;
+                await act(async () => { close.click(); });
+                await settle();
+                expect(sheets()).toHaveLength(0);
+            }
+        };
+        const labels = (them: HTMLElement[]) => them.map((m) => m.getAttribute('aria-label'));
+        const first = markers();
+        expect(labels(first)).toEqual([expect.stringMatching(/^✨ Generate/), expect.stringMatching(/^Share, /)]);
+        await pressEach(first);
+        const qrToggle = host.querySelector('[aria-label="Show QR code"]') as HTMLElement;
+        await act(async () => { qrToggle.click(); });
+        await settle();
+        const withQr = markers();
+        expect(labels(withQr)).toEqual([expect.stringMatching(/^✨ Generate/), expect.stringMatching(/^📤 Share Invite, /), expect.stringMatching(/^Share, /)]);
+        await pressEach([withQr[1]]);
+        expect(sent.shares).toEqual([]);
+        expect(sent.clips).toEqual([]);
+    });
+
+    it("draws a QR code that encodes only EXAMPLE-1234 when toggled, refusing any URL prefix", async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(PeopleScreen));
+
+        // Find the QR toggle button (📱)
+        const qrButtons = Array.from(host.querySelectorAll('button')).filter(
+            (b) => b.getAttribute('aria-label') === 'Show QR code' || b.textContent?.includes('📱')
+        );
+        expect(qrButtons.length).toBeGreaterThan(0);
+
+        // Click QR button
+        await act(async () => { (qrButtons[0] as HTMLElement).click(); });
+        await settle();
+
+        // Check QR code rendered
+        const qr = host.querySelector('[data-testid="qr-code"]');
+        expect(qr).not.toBeNull();
+        expect(qr?.getAttribute('data-qr-value')).toBe('EXAMPLE-1234');
+        expect(qr?.getAttribute('data-qr-value')).not.toContain('http');
+        expect(qr?.getAttribute('data-qr-value')).not.toContain('?invite=');
     });
 });
 

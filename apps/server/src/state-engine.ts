@@ -6234,7 +6234,7 @@ export function rsvpEvent(
     memberPublicKey: string,
     status: 'going' | 'interested' | null,
     signature?: string
-): { success: boolean; post: MarketplacePost } {
+): { success: boolean; post: MarketplacePost | null } {
     // The push dispatcher, so a host whose event lets people in hears that people are waiting (at most hourly).
     return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature, dispatchPushNotification);
 }

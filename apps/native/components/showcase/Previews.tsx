@@ -15,6 +15,8 @@ import { useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { LocalCommunityMark, ExampleHeader } from './LocalCommunityMark';
 import { CommonsInfoModal } from '../CommonsInfoModal';
+import { EnterpriseCard } from '../EnterpriseCard';
+import { sampleEnterprises } from './sample-screens';
 
 /** A Bean amount as a row shows it: signed, at most one decimal, and the word Beans (never Ʀ). */
 export function beansText(amount: number, signed = false): string {
@@ -24,12 +26,18 @@ export function beansText(amount: number, signed = false): string {
     return `${sign}${n} ${abs === 1 ? 'Bean' : 'Beans'}`;
 }
 
+/**
+ * The Commons in preview: the pool, Example Valley's enterprise and project as the Commons list's own cards
+ * (EnterpriseCard) fed the sample, each marked and here only, under the strip and the Example header (the list below
+ * stays the node's own: review of #2063, B2); a tap opens the real enterprise page, which draws a sample id from the
+ * sample. No Decision here: Decide in preview is the real Decide screen fed the sample (DecideSection, #2058).
+ */
 export function CommonsPreview() {
     const { colors } = useTheme();
     const s = previewStyles(colors);
     const [info, setInfo] = useState(false);
     const c = SAMPLE_COMMUNITY;
-    const e = c.enterprises[0];
+    const [bakery, project] = sampleEnterprises();
     return (
         <View testID="commons-preview">
             <LocalCommunityMark variant="strip" feature="enterprises" />
@@ -43,14 +51,15 @@ export function CommonsPreview() {
                 </View>
                 <Text style={s.big}>{beansText(c.pool)}</Text>
             </View>
-            <View style={s.card}>
-                <Text style={s.heading} accessibilityRole="header">{e.name}</Text>
-                <Text style={s.body}>{e.what}</Text>
-                <Text style={s.muted}>{e.keepers} keepers · this season {beansText(e.season, true)}</Text>
-                <View style={s.actions}>
+            <View style={s.sampleCard} testID="sample-enterprise">
+                <EnterpriseCard item={bakery} sample />
+                <View style={s.cardActions}>
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pledge" />
                     <LocalCommunityMark variant="action" feature="enterprises" label="Pause" />
                 </View>
+            </View>
+            <View style={s.sampleCard} testID="sample-project">
+                <EnterpriseCard item={project} sample />
             </View>
             <CommonsInfoModal isOpen={info} onClose={() => setInfo(false)} />
         </View>
@@ -69,6 +78,9 @@ export const previewStyles = (colors: AppColors) => StyleSheet.create({
     amount: { fontSize: 15, fontWeight: '800', flexShrink: 0 },
     txRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
     actions: { gap: 8, marginHorizontal: 16, marginBottom: 12 },
+    /** A Commons list card in the preview: the list's own 16 dp sides (the preview undoes them). */
+    sampleCard: { marginHorizontal: 16 },
+    cardActions: { gap: 8, marginTop: -4, marginBottom: 16 },
     infoBtn: { minWidth: 48, minHeight: 48, alignItems: 'flex-end', justifyContent: 'center' },
     infoText: { fontSize: 18, color: colors.text.secondary },
 });

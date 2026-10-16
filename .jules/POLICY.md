@@ -865,3 +865,27 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** NOTE (the rules stand)
 - **What happened:** both were merged before this register was checked. #2011 is rule 11's shape (see #1968): harmless only because group ids are unique. #2012 is redundant: `apps/native/app/_layout.tsx` already exports `ErrorBoundary` for every route (see #1704, #1823, #1959).
 - **Why not to re-file more:** neither is a precedent. Bolt: no more Map-for-find swaps without a profile of a real screen. Expo: no more per-screen `ErrorBoundary` exports.
+
+### 2026-10-17 — Forge: try/catch around POST /api/local/connectors/connect (#2070) — CLOSED, RE-FILE OF #1502/#1685
+- **Category:** RE-FILE
+- **Claim:** the connect route crashes on a thrown error and needs a catch.
+- **Why not to re-file:** Koa already turns a throw into a 500. The catch put the raw error text into the answer (against the generic-error rule), and no failure of `connectToAddress` was reproduced. Forge: show a reproduced failure first, and never echo `e.message` to a client.
+
+### 2026-10-17 — Pixel: accessibilityHint and busy state on Your area's clear button (#2071) — CLOSED, HINT REPEATS THE LABEL
+- **Category:** RE-FILE OF #1666 / #1623
+- **Claim:** the clear-area button needs a hint and a busy state.
+- **Why not to re-file:** its label "Clear your area" already names the action; the hint "Clears your set area from the community" restated it, and was a new English string outside the words layer (see #2009). Pixel: a hint only where it adds what the label cannot say.
+
+### 2026-10-17 — Bolt: Map lookup of the other participant in getConversationsByMember (#2072) — CLOSED, RE-FILE OF #1754
+- **Category:** RE-FILE, BEHAVIOUR CHANGE
+- **Claim:** O(1) peer pubkey lookup.
+- **Why not to re-file:** a Map filled in a loop keeps the LAST other participant where `find()` returns the FIRST, so a group conversation's listed peer changes. Rule 11: no Map-for-find swaps without a profile of a real screen.
+
+### 2026-10-17 — Expo: take the first value of a repeated `then` param in join-global (#2073) — CLOSED, DECIDED (#1753)
+- **Category:** DELIBERATE DECISION
+- **Claim:** a string-array navigation param breaks join-global.
+- **Why not to re-file:** a link that repeats a param is ambiguous and is refused on purpose (#1753, claim-community); silently taking `[0]` is the wrong answer, and no failure was reproduced. Expo: re-file only with a real link that produces the array and Marty's decision.
+
+### 2026-10-17 — Flow: loading state in AgentSuggestionsPanel, again (#2076) — CLOSED, RE-FILE OF #1957
+- **Category:** RE-FILE (second filing)
+- **Why not to re-file:** the spinner card flashes and disappears on the many nodes with no suggestions, and the emoji spinner repeats #1497. See #1957.

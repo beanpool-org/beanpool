@@ -113,6 +113,8 @@ export function App() {
     const [activeTab, setActiveTab] = useState<Tab>('home');
     // Beans off here and the node shows previews (DESIGN-global-showcase-fable.md §4): the Ledger is Example Valley's.
     const beansMode = useFeatureMode('beans');
+    const enterprisesMode = useFeatureMode('enterprises');
+    const invitesMode = useFeatureMode('invites');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
@@ -1001,7 +1003,17 @@ export function App() {
                                 />
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
-                            {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'people' && (
+                                <PeoplePage
+                                    identity={identity}
+                                    initialView={peopleSubView}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    preview={invitesMode === 'preview'}
+                                    onNearYou={() => setActiveTab('home')}
+                                    onGuide={(slug) => navigateToTab('guide', slug)}
+                                />
+                            )}
                             {activeTab === 'ledger' && (
                                 <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'}
                                     onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
@@ -1035,6 +1047,9 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
+                            enterprisesPreview={enterprisesMode === 'preview'}
+                            onNearYou={() => { setOpenTreasuryPubkey(null); setActiveTab('home'); }}
+                            onGuide={(slug) => { setOpenTreasuryPubkey(null); navigateToTab('guide', slug); }}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
                                 setOpenTreasuryPubkey(null);

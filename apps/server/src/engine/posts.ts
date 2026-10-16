@@ -17,7 +17,7 @@ import { photoRefusalError, photosRefusal } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
-import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT } from './event-series-roll.js';
+import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT, rollDueSeries } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -269,7 +269,9 @@ function notifyEventChange(
 
 function parseEventTime(raw: unknown, label: string): string {
     const ms = typeof raw === 'string' || typeof raw === 'number' ? new Date(raw).getTime() : NaN;
-    if (!Number.isFinite(ms)) throw new Error(`${label} must be a valid date and time`);
+    // A year past 9999 is written "+010000-…", which sorts before every real date where the times are compared as text
+    // (the feed's and the scrub's SQL): hidden at once and scrubbed at the next tick as ended a month ago.
+    if (!Number.isFinite(ms) || ms < 0 || ms > Date.UTC(9999, 11, 31, 23, 59, 59, 999)) throw new Error(`${label} must be a valid date and time`);
     return new Date(ms).toISOString();
 }
 
@@ -957,12 +959,23 @@ function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
 
+/**
+ * A repeating event whose date has ended since the last minute roll is moved to its next date first (event-series-roll.ts
+ * rollDueSeries, main server only), so an edit or an RSVP in that minute is for the date the card is about to show, not
+ * refused as ended while the event chat calls the same series open (event-thread.ts seriesContinues).
+ */
+function rollIfDue(broadcast: BroadcastFn | undefined, id: string): void {
+    const r = db.prepare("SELECT event_repeat, event_end_at FROM posts WHERE id = ? AND type = 'event'").get(id) as { event_repeat: string | null; event_end_at: string | null } | undefined;
+    if (r?.event_repeat && r.event_end_at && Date.parse(r.event_end_at) <= Date.now()) rollDueSeries(broadcast);
+}
+
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
     // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
     // matches for a keeper or convenor. Falling back to `authorPublicKey` keeps direct engine callers working.
     const actorPublicKey = actorPubkey || authorPublicKey;
+    rollIfDue(broadcast, id);
     const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
     if (eventRow?.type === 'event') {
         // A convenor whose account is suspended hosts none of their group's events until it ends: refused, saying why,
@@ -1376,7 +1389,7 @@ export function rsvpEvent(
     status: EventRsvpStatus | null,
     signature?: string,
     push?: PushFn,
-): { success: boolean; post: MarketplacePost } {
+): { success: boolean; post: MarketplacePost | null } {
     if (status !== null && status !== 'going' && status !== 'interested') {
         throw new Error("RSVP status must be 'going', 'interested' or null");
     }
@@ -1385,6 +1398,7 @@ export function rsvpEvent(
     if (!memberRow || memberRow.status !== 'active') {
         throw new Error('Only active members can RSVP to events');
     }
+    rollIfDue(broadcast, postId);
 
     const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
@@ -1394,11 +1408,15 @@ export function rsvpEvent(
         || postOutOfSight(row, memberPublicKey)) {
         throw new Error('Event not found');
     }
-    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
+    // "Not going" takes a member's own name off the host's list whatever the event's state: a cancelled event keeps its
+    // guest list until the scrub, 30 days after the date it was cancelled from, which can be a year away (the photos/events
+    // audit check, 2026-10-17). Only Going or Interested needs an open event.
+    const withdrawing = status === null;
+    if (!withdrawing && (!row.active || row.status !== 'active' || row.event_state === 'cancelled')) {
         throw new Error('This event has been cancelled');
     }
     const nowIso = new Date().toISOString();
-    if (row.event_end_at && row.event_end_at <= nowIso) {
+    if (!withdrawing && row.event_end_at && row.event_end_at <= nowIso) {
         throw new Error('This event has ended');
     }
     if (row.audience_scope === 'group') {
@@ -1425,9 +1443,11 @@ export function rsvpEvent(
 
     db.transaction(() => {
         // Atomically re-check the event is still open and bump updated_at so delta sync carries the change.
-        const res = db.prepare(
-            "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
-        ).run(nowIso, postId, nowIso);
+        const res = withdrawing
+            ? db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(nowIso, postId)
+            : db.prepare(
+                "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
+            ).run(nowIso, postId, nowIso);
         if (res.changes === 0) {
             throw new Error('This event is no longer open');
         }
@@ -1478,7 +1498,13 @@ export function rsvpEvent(
     bumpPostsVersion();
     // Read for the member as their own reads are (where anyone can join, the neighbourhood: engine PostFilter.neighbourhood);
     // the broadcast puts each socket's own place in (state-engine.ts broadcast).
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0];
+    // Off a cancelled or ended event's list, the member reads it no more (getPosts: its hosts and the people Going): the
+    // host's list changes, and the answer carries no post.
+    if (!updatedPost) {
+        broadcast({ type: 'post_updated', id: postId }, audienceRecipients(row));
+        return { success: true, post: null };
+    }
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
     if (status === 'going' && row.event_host_lets_in === 1 && updatedPost.myLetIn === false
         && !isEventHost(db, row, memberPublicKey)) {

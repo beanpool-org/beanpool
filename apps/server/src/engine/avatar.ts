@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, memberPhotoNotMovedYet } from '../db/db.js';
 import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl } from '@beanpool/core';
-import { hasTooManyPixels, isStorableImageValue } from '../storage/image-metadata.js';
+import { isStorableImageValue, stripImageMetadata, tooManyPixels } from '../storage/image-metadata.js';
 
 
 /**
@@ -43,25 +43,66 @@ export function sniffRasterImageType(buf: Buffer): string | null {
 export const AVATAR_FORMAT_ERROR = 'Avatar must be a JPEG, PNG, WebP or GIF image';
 
 /**
- * Write-side check for a member/enterprise avatar value. A `data:` value must be a base64 JPEG/PNG/WebP/GIF
- * whose bytes really are that image. Other strings (`bundled://…`, empty or null to clear) keep their
+ * Why a node refuses a photo value: it is no picture the node stores (`format`: not a JPEG, PNG, WebP or GIF, or one
+ * the metadata strip cannot vouch for), or a picture with more pixels than it stores (`pixels`, and how many). Each
+ * route answers the two in different words (photoRefusalText): a member's long screenshot is a JPEG, and must not be
+ * told it must be one (#2079 review B5).
+ */
+export type PhotoRefusal = { kind: 'format' } | { kind: 'pixels'; width: number; height: number };
+
+const FORMAT: PhotoRefusal = { kind: 'format' };
+
+/** The pixel refusal's own words, the same on every route. */
+export function tooManyPixelsText(size: { width: number; height: number }): string {
+    return `That photo is too big to show on phones (${size.width} × ${size.height} pixels). Crop it and try again.`;
+}
+
+/** A refusal in a route's words: the pixel sentence, or the route's own format sentence. */
+export function photoRefusalText(refusal: PhotoRefusal, formatText: string): string {
+    return refusal.kind === 'pixels' ? tooManyPixelsText(refusal) : formatText;
+}
+
+/** A photo with more pixels than a node stores, thrown where an engine function refuses one; its message is the sentence. */
+export class PhotoTooBigError extends Error {
+    constructor(size: { width: number; height: number }) {
+        super(tooManyPixelsText(size));
+        this.name = 'PhotoTooBigError';
+    }
+}
+
+/** What an engine function throws for a refusal: a PhotoTooBigError, or an Error with the caller's format sentence. */
+export function photoRefusalError(refusal: PhotoRefusal, formatText: string): Error {
+    return refusal.kind === 'pixels' ? new PhotoTooBigError(refusal) : new Error(formatText);
+}
+
+/**
+ * The pixel cap (image-metadata.ts MAX_STORED_PIXELS), judged on the bytes the node will store: what the metadata strip
+ * leaves of them, which every phone and browser that shows the photo decodes whole.
+ */
+function pixelRefusal(bytes: Buffer): PhotoRefusal | null {
+    const size = tooManyPixels(stripImageMetadata(bytes));
+    return size ? { kind: 'pixels', ...size } : null;
+}
+
+/**
+ * Write-side check for a member/enterprise avatar value: null when it may be stored, else why not. A `data:` value
+ * must be a base64 JPEG/PNG/WebP/GIF whose bytes really are that image, with no more pixels than a node stores (every
+ * phone and browser that shows it decodes it whole). Other strings (`bundled://…`, empty or null to clear) keep their
  * existing handling — the serving route refuses anything it cannot turn into image bytes.
  *
  * And whatever form it comes in, a picture the metadata strip cannot vouch for — a JPEG, PNG, WebP or GIF whose
  * structure it cannot walk, or one with metadata and no picture to keep — is refused: it would be stored with its
  * GPS (G9a-3, `isStorableImageValue`). Every photo check on the node starts here, so every route refuses it.
  */
-export function isAcceptableAvatarValue(value: unknown): boolean {
-    if (typeof value !== 'string') return true;
+export function avatarValueRefusal(value: unknown): PhotoRefusal | null {
+    if (typeof value !== 'string') return null;
     const trimmed = value.trim();
-    if (/^data:/i.test(trimmed)) {
-        const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
-        if (!m) return false;
-        const bytes = Buffer.from(m[2], 'base64');
-        // And no picture bigger than a node stores: every phone and browser that shows it decodes it whole.
-        if (sniffRasterImageType(bytes) === null || hasTooManyPixels(bytes)) return false;
-    }
-    return isStorableImageValue(trimmed);
+    if (!isStorableImageValue(trimmed)) return FORMAT;
+    if (!/^data:/i.test(trimmed)) return null;
+    const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
+    if (!m) return FORMAT;
+    const bytes = Buffer.from(m[2], 'base64');
+    return sniffRasterImageType(bytes) === null ? FORMAT : pixelRefusal(bytes);
 }
 
 /**
@@ -69,17 +110,26 @@ export function isAcceptableAvatarValue(value: unknown): boolean {
  * its JSON, a group's picture in every group listing, an enterprise's photo in its projects row. The route above
  * serves nothing it cannot sniff as a raster image; those do not look. So a value written in base64 without a
  * `data:` prefix (the legacy bare form) is judged as well: its bytes must be a JPEG, PNG, WebP or GIF, the
- * formats the metadata strip handles (G9a-3). A bare HEIC, GPS inside, would otherwise be stored and served as
- * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…`, group picture or post-photo
- * address sent back by an editor) is not image bytes and passes as before.
+ * formats the metadata strip handles (G9a-3), with no more pixels than a node stores. A bare HEIC, GPS inside, would
+ * otherwise be stored and served as sent. Any other string (a URL, a `bundled://` name, this node's own
+ * `/api/avatar/…`, group picture or post-photo address sent back by an editor) is not image bytes and passes as before.
  */
-export function isAcceptablePhotoValue(value: unknown): boolean {
-    if (!isAcceptableAvatarValue(value)) return false;
-    if (typeof value !== 'string') return true;
+export function photoValueRefusal(value: unknown): PhotoRefusal | null {
+    const refusal = avatarValueRefusal(value);
+    if (refusal || typeof value !== 'string') return refusal;
     const trimmed = value.trim();
-    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfGroupPictureUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
+    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfGroupPictureUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return null;
     const bytes = Buffer.from(trimmed, 'base64');
-    return sniffRasterImageType(bytes) !== null && !hasTooManyPixels(bytes);
+    return sniffRasterImageType(bytes) === null ? FORMAT : pixelRefusal(bytes);
+}
+
+/** The photo rule over several values: the first refusal, or null when every one may be stored. */
+export function photosRefusal(values: unknown[]): PhotoRefusal | null {
+    for (const value of values) {
+        const refusal = photoValueRefusal(value);
+        if (refusal) return refusal;
+    }
+    return null;
 }
 
 /** Standard or URL-safe base64, wrapped or not: text that Buffer.from(…, 'base64') reads whole. */

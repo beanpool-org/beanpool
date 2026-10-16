@@ -37,7 +37,7 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { photoValueRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
@@ -585,9 +585,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
         // G9a-3: the projects row below stores it too, not only createTreasury, and the crowdfund listing hands it out
         // as stored, so it is held to the photo rule (bare base64 included) as crowdfund photos are.
-        if (!isAcceptablePhotoValue(photoUrl)) {
+        const photoRefusal = photoValueRefusal(photoUrl);
+        if (photoRefusal) {
             ctx.status = 400;
-            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };
             return;
         }
         photoUrl = stripImageValue(photoUrl);
@@ -682,7 +683,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above.
-        if (!isAcceptablePhotoValue(String(avatar))) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
+        const avatarRefusal = photoValueRefusal(String(avatar));
+        if (avatarRefusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) }; return; }
         try {
             ctx.body = {
                 success: true,

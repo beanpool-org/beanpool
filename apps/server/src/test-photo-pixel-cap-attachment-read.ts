@@ -53,6 +53,39 @@ function bombPng(w: number, h: number): Buffer {
 const jpeg = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 1, g: 2, b: 3 } }, limitInputPixels: false } as any).jpeg({ quality: 60 }).toBuffer();
 const webpLossless = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 1, g: 2, b: 3 } } }).webp({ lossless: true }).toBuffer();
 const du = (mime: string, b: Buffer) => `data:${mime};base64,${b.toString('base64')}`;
+/**
+ * A JPEG with `FF 00 hi lo` after its SOI, `hi lo` the offset of its first DHT after the SOF (#2079 review B3). libjpeg
+ * skips the four bytes as extraneous, and so does the node's strip; a walk that reads `FF 00` as a segment jumps past the SOF.
+ */
+function ff00AfterSoi(j: Buffer): Buffer {
+    let pos = 2, sofSeen = false;
+    while (pos + 4 <= j.length) {
+        const m = j[pos + 1];
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) sofSeen = true;
+        else if (m === 0xc4 && sofSeen) break;
+        pos += 2 + j.readUInt16BE(pos + 2);
+    }
+    if ((pos >> 8) === 0xff || (pos & 0xff) === 0xff) throw new Error('setup: the offset has an FF byte');
+    return Buffer.concat([j.subarray(0, 2), Buffer.from([0xff, 0x00, pos >> 8, pos & 0xff]), j.subarray(2)]);
+}
+/**
+ * A GIF: its logical screen, then each image on it, the LZW data of each a clear and an end code (#2079 review B4). Before
+ * every image after the first, a NETSCAPE2.0 block (kept by the strip) whose second sub-block holds the bytes of an image
+ * descriptor of 30000 × 30000: inside a sub-block they are no image, and a walk must skip them.
+ */
+function gif(sw: number, sh: number, frames: { left?: number; top?: number; w: number; h: number }[]): Buffer {
+    const u16 = (v: number) => [v & 0xff, (v >> 8) & 0xff];
+    const out: number[] = [...Buffer.from('GIF89a', 'latin1'), ...u16(sw), ...u16(sh), 0x80, 0, 0, 0, 0, 0, 255, 255, 255];
+    frames.forEach((f, i) => {
+        if (i > 0) out.push(0x21, 0xff, 11, ...Buffer.from('NETSCAPE2.0', 'latin1'), 3, 1, 0, 0, 10, 0x2c, 0, 0, 0, 0, 0x30, 0x75, 0x30, 0x75, 0, 0);
+        out.push(0x2c, ...u16(f.left ?? 0), ...u16(f.top ?? 0), ...u16(f.w), ...u16(f.h), 0, 2, 1, 0x2c, 0);
+    });
+    out.push(0x3b);
+    return Buffer.from(out);
+}
+/** The pixel refusal's own sentence, for this many pixels (#2079 review B5): never the format sentence. */
+const tooBig = (w: number, h: number) => `That photo is too big to show on phones (${w} × ${h} pixels). Crop it and try again.`;
+const errorOf = (r: { body: any }) => String(r.body?.message ?? r.body?.error ?? '');
 
 async function main(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
@@ -102,6 +135,37 @@ async function main(): Promise<void> {
         check('P1-control', wa.status === 200 && wa.body?.data === ph2.ciphertext, `…and its sender still → 200 (got ${wa.status})`);
     }
 
+    // ── P1 for a visitor's row (#2079 review B2): "they receive messages", photos included; the route decides ──
+    {
+        const { registerVisitor } = await import('./engine/members.js');
+        const erin = member('FfErin'), visitor = newId(), otherVisitor = newId();
+        registerVisitor(visitor.pk, 'FfVisitor');
+        registerVisitor(otherVisitor.pk, 'FfVisitorTwo');
+        const conv = se.createConversation('dm', [erin.pk, visitor.pk], erin.pk)!;
+        const sendPhoto = async (from: Id) => {
+            const ph = lockedDm(256);
+            const s = await req('POST', '/api/messages/send', from, { conversationId: conv.id, authorPubkey: from.pk, ...lockedDm(), type: 'image', attachment: { data: ph.ciphertext, nonce: ph.nonce } });
+            return { id: s.body?.message?.id as string, cipher: ph.ciphertext, status: s.status };
+        };
+        const toVisitor = await sendPhoto(erin);
+        const got = await req('GET', `/api/messages/${toVisitor.id}/attachment`, visitor);
+        check('B2', got.status === 200 && got.body?.data === toVisitor.cipher, `a visitor's row gets the photo a member sent it → 200 (got ${got.status} ${got.status !== 200 ? JSON.stringify(got.body) : ''})`);
+        const own = await sendPhoto(visitor);
+        const ownGot = await req('GET', `/api/messages/${own.id}/attachment`, visitor);
+        check('B2', own.status === 200 && ownGot.status === 200 && ownGot.body?.data === own.cipher, `…and its own photo → 200 (sent ${own.status}, got ${ownGot.status})`);
+        const outside = await req('GET', `/api/messages/${toVisitor.id}/attachment`, otherVisitor);
+        check('B2', outside.status === 404, `a visitor's row outside the DM → 404, as for no photo (got ${outside.status})`);
+        // Erin blocks it: its next photo is a withheld line, kept for it alone.
+        await req('POST', '/api/blocks', erin, { targetPubkey: visitor.pk });
+        const withheld = await sendPhoto(visitor);
+        const inMessages = !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(withheld.id);
+        const wv = await req('GET', `/api/messages/${withheld.id}/attachment`, visitor);
+        const we = await req('GET', `/api/messages/${withheld.id}/attachment`, erin);
+        check('B2', withheld.status === 200 && !inMessages && wv.status === 200 && wv.body?.data === withheld.cipher,
+            `its own withheld photo → 200, as a stored one (sent ${withheld.status}, withheld ${!inMessages}, got ${wv.status})`);
+        check('B2-control', we.status === 404, `…and the member who blocked it → 404 (got ${we.status})`);
+    }
+
     // ── P2: no photo whose decode is a pixel bomb ──
     {
         const dan = member('FfDan');
@@ -118,6 +182,48 @@ async function main(): Promise<void> {
             const r = await post(du('image/jpeg', await jpeg(w, h)));
             check('P2-control', r.status === 200, `${what} → 200 (got ${r.status} ${r.status !== 200 ? JSON.stringify(r.body) : ''})`);
         }
+
+        // B3: a JPEG whose bytes after SOI start FF 00 hi lo is the honest JPEG to every decoder, and to the node's strip.
+        const lie = ff00AfterSoi(await jpeg(8000, 8000));
+        const jl = await post(du('image/jpeg', lie));
+        check('B3', jl.status === 400 && errorOf(jl) === tooBig(8000, 8000), `an 8000x8000 JPEG with FF 00 hi lo after its SOI, as a listing photo → 400 (got ${jl.status} ${JSON.stringify(errorOf(jl))})`);
+        const jla = await req('POST', '/api/profile/update', dan, { avatar: du('image/jpeg', lie) });
+        check('B3', jla.status === 400 && errorOf(jla) === tooBig(8000, 8000), `…and as an avatar → 400 (got ${jla.status} ${JSON.stringify(errorOf(jla))})`);
+
+        // B4: a GIF is as big as its biggest image on the screen, not its screen alone.
+        const lyingGif = gif(64, 64, [{ w: 20000, h: 20000 }]);
+        const ga = await req('POST', '/api/profile/update', dan, { avatar: du('image/gif', lyingGif) });
+        check('B4', ga.status === 400 && errorOf(ga) === tooBig(20000, 20000), `a GIF with a 64x64 screen and a 20000x20000 first image, as an avatar → 400 (got ${ga.status} ${JSON.stringify(errorOf(ga))})`);
+        const gg = await req('POST', '/api/groups', dan, { name: 'Ff gif group', avatarUrl: du('image/gif', lyingGif) });
+        check('B4', gg.status === 400 && errorOf(gg) === tooBig(20000, 20000), `…and as a group's picture → 400 (got ${gg.status} ${JSON.stringify(errorOf(gg))})`);
+        const laterGif = gif(64, 64, [{ w: 64, h: 64 }, { left: 10, top: 20, w: 3000, h: 3000 }]);
+        const gl = await req('POST', '/api/profile/update', dan, { avatar: du('image/gif', laterGif) });
+        check('B4', gl.status === 400 && errorOf(gl) === tooBig(3010, 3020), `a GIF whose second image runs to 3010x3020, past an extension block → 400 (got ${gl.status} ${JSON.stringify(errorOf(gl))})`);
+        const honestGif = gif(64, 64, [{ w: 64, h: 64 }, { left: 8, top: 8, w: 32, h: 32 }]);
+        const gh = await req('POST', '/api/profile/update', dan, { avatar: du('image/gif', honestGif) });
+        check('B4-control', gh.status === 200, `a two-image GIF inside its 64x64 screen, the extension's look-alike descriptor skipped → 200 (got ${gh.status} ${gh.status !== 200 ? JSON.stringify(gh.body) : ''})`);
+
+        // B5: the pixel refusal says so in its own plain words, on every route that applies the cap; the format refusal keeps its own.
+        check('B5', bomb.body?.error === tooBig(20000, 20000), `the 20000x20000 listing photo's refusal says why (got ${JSON.stringify(bomb.body?.error)})`);
+        check('B5', errorOf(av) === tooBig(20000, 20000) && av.body?.error === 'avatar_too_big', `…and the avatar's (got ${JSON.stringify(av.body)})`);
+        const long = await post(du('image/jpeg', await jpeg(800, 5300)));
+        check('B5', long.status === 400 && long.body?.error === tooBig(800, 5300), `a long phone screenshot 800x5300 → 400 with the pixel sentence, not the format one (got ${long.status} ${JSON.stringify(long.body?.error)})`);
+        const notAPicture = du('image/jpeg', Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic', 'latin1'), Buffer.alloc(64)]));
+        const fmt = await post(notAPicture);
+        check('B5-control', fmt.status === 400 && fmt.body?.error === 'Each photo must be a JPEG, PNG or WebP image', `a HEIC labelled JPEG keeps the format sentence (got ${fmt.status} ${JSON.stringify(fmt.body?.error)})`);
+        const bomb20k = du('image/png', bombPng(20000, 20000));
+        const bare = await req('POST', '/api/profile/update', dan, { avatar: bombPng(20000, 20000).toString('base64') });
+        check('B5', bare.status === 400 && errorOf(bare) === tooBig(20000, 20000), `an avatar in bare base64 → 400 with the pixel sentence (got ${bare.status} ${JSON.stringify(errorOf(bare))})`);
+        const okGroup = await req('POST', '/api/groups', dan, { name: 'Ff picture group', avatarUrl: du('image/jpeg', await jpeg(128, 128)) });
+        const gid = okGroup.body?.id ?? okGroup.body?.group?.id;
+        const gp = await req('PATCH', `/api/groups/${gid}`, dan, { avatarUrl: bomb20k });
+        check('B5', !!gid && gp.status === 400 && errorOf(gp) === tooBig(20000, 20000), `a group's new picture → 400 with the pixel sentence (made ${okGroup.status}, got ${gp.status} ${JSON.stringify(errorOf(gp))})`);
+        const cf = await req('POST', '/api/crowdfund/projects', dan, { creatorPubkey: dan.pk, title: 'Ff fund', description: 'd', goalAmount: 100, photos: [bomb20k] });
+        check('B5', cf.status === 400 && errorOf(cf) === tooBig(20000, 20000), `a crowdfund photo → 400 with the pixel sentence (got ${cf.status} ${JSON.stringify(errorOf(cf))})`);
+        const ent = await req('POST', '/api/enterprise', dan, { name: 'Ff Enterprise', avatar: bomb20k, purpose: 'p' });
+        check('B5', ent.status === 400 && errorOf(ent) === tooBig(20000, 20000), `an enterprise's photo → 400 with the pixel sentence (got ${ent.status} ${JSON.stringify(errorOf(ent))})`);
+        const kn = await req('POST', '/api/join/knock', newId(), { callsign: 'FfKnocker', message: 'Hello, I live nearby and would like to join.', avatar: du('image/gif', lyingGif) });
+        check('B5', kn.status === 400 && errorOf(kn) === tooBig(20000, 20000), `a knock's picture → 400 with the pixel sentence (got ${kn.status} ${JSON.stringify(kn.body)})`);
     }
 
     console.log(`\n${passed}/${run} passed; failing: ${[...new Set(fails)].join(' ') || 'none'}`);

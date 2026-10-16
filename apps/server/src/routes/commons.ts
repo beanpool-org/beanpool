@@ -29,7 +29,7 @@ import {
 import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { photosRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
@@ -375,9 +375,10 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
-        if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
+        const photoRefusal = photosRefusal(photos);
+        if (photoRefusal) {
             ctx.status = 400;
-            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };
             return;
         }
     }
@@ -449,9 +450,10 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
-        if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
+        const photoRefusal = photosRefusal(photos);
+        if (photoRefusal) {
             ctx.status = 400;
-            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };
             return;
         }
     }

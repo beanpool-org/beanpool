@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, memberPhotoNotMovedYet } from '../db/db.js';
 import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl } from '@beanpool/core';
-import { isStorableImageValue } from '../storage/image-metadata.js';
+import { hasTooManyPixels, isStorableImageValue } from '../storage/image-metadata.js';
 
 
 /**
@@ -56,7 +56,10 @@ export function isAcceptableAvatarValue(value: unknown): boolean {
     const trimmed = value.trim();
     if (/^data:/i.test(trimmed)) {
         const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
-        if (!m || sniffRasterImageType(Buffer.from(m[2], 'base64')) === null) return false;
+        if (!m) return false;
+        const bytes = Buffer.from(m[2], 'base64');
+        // And no picture bigger than a node stores: every phone and browser that shows it decodes it whole.
+        if (sniffRasterImageType(bytes) === null || hasTooManyPixels(bytes)) return false;
     }
     return isStorableImageValue(trimmed);
 }
@@ -75,7 +78,8 @@ export function isAcceptablePhotoValue(value: unknown): boolean {
     if (typeof value !== 'string') return true;
     const trimmed = value.trim();
     if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfGroupPictureUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
-    return sniffRasterImageType(Buffer.from(trimmed, 'base64')) !== null;
+    const bytes = Buffer.from(trimmed, 'base64');
+    return sniffRasterImageType(bytes) !== null && !hasTooManyPixels(bytes);
 }
 
 /** Standard or URL-safe base64, wrapped or not: text that Buffer.from(…, 'base64') reads whole. */

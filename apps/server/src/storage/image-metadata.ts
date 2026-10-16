@@ -115,6 +115,59 @@ export function isStorableImageValue(value: unknown): boolean {
     return read === null || walkImage(read.bytes) !== 'unsafe';
 }
 
+/**
+ * The most pixels a stored photo may have: what the list copy's decoder takes (storage/photo-thumbnails.ts), 2048 × 2048.
+ * Every photo either app sends is far below it (800 px wide on the phone, 800 on the longest side on the web; a long
+ * phone screenshot at 800 wide is 3.6 megapixels). A photo is decoded whole by every phone and browser that shows it, a
+ * list's 56-px square included: a 49 KB PNG of 20,000 × 20,000 is 1.6 GB of pixels, and a desktop Chromium held 1.8 GB
+ * to draw one at 80 px (the photos/events audit check, 2026-10-17).
+ */
+export const MAX_STORED_PIXELS = 2048 * 2048;
+
+/**
+ * The width and height a JPEG, PNG, GIF or WebP says it has, read from its header alone (nothing is decoded), or null
+ * for anything else or a header cut short: the routes judge those as before.
+ */
+export function imageSize(b: Buffer): { width: number; height: number } | null {
+    try {
+        if (b.length >= 24 && b.subarray(0, 8).equals(PNG_SIGNATURE) && b.toString('latin1', 12, 16) === 'IHDR') {
+            return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+        }
+        if (b.length >= 10 && (b.toString('latin1', 0, 6) === 'GIF87a' || b.toString('latin1', 0, 6) === 'GIF89a')) {
+            return { width: b.readUInt16LE(6), height: b.readUInt16LE(8) };
+        }
+        if (b.length >= 30 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') {
+            const kind = b.toString('latin1', 12, 16);
+            if (kind === 'VP8X') return { width: 1 + b.readUIntLE(24, 3), height: 1 + b.readUIntLE(27, 3) };
+            if (kind === 'VP8L') { const bits = b.readUInt32LE(21); return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 }; }
+            if (kind === 'VP8 ') return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+            return null;
+        }
+        if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+            let pos = 2;
+            while (pos + 4 <= b.length) {
+                if (b[pos] !== 0xff) { pos++; continue; }
+                const marker = b[pos + 1];
+                if (marker === 0xff) { pos++; continue; }
+                if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) { pos += 2; continue; }
+                if (marker === 0xda || marker === 0xd9) return null;
+                // A start of frame (SOF0-15 but DHT, JPG and DAC): its height, then its width.
+                if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+                    return pos + 9 <= b.length ? { width: b.readUInt16BE(pos + 7), height: b.readUInt16BE(pos + 5) } : null;
+                }
+                pos += 2 + b.readUInt16BE(pos + 2);
+            }
+        }
+    } catch { /* cut short */ }
+    return null;
+}
+
+/** Whether these bytes are an image with more pixels than a node stores (MAX_STORED_PIXELS). */
+export function hasTooManyPixels(b: Buffer): boolean {
+    const size = imageSize(b);
+    return !!size && size.width * size.height > MAX_STORED_PIXELS;
+}
+
 const DATA_URL = /^data:([^;,]+);base64,([\s\S]*)$/i;
 
 /** The bytes a stored value holds, read as the avatar route reads them, and how to write stripped bytes back in its form. */

@@ -25,10 +25,12 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { groupKindLine, isWholeCents, keeperWords, t } from '@beanpool/core';
+import { groupKindLine, isSampleId, isWholeCents, keeperWords, t } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
+import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
+import { LocalCommunityStrip, LocalCommunityAction } from '../components/LocalCommunityMark';
 
 /** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
 function decodeThreadText(ciphertext: string, type: string, metadata?: string, keeper = 'keeper'): string {
@@ -55,9 +57,12 @@ interface Props {
     isMember?: boolean;
     /** Opens a member's profile — a keeper row is tapped. */
     onOpenProfile?: (pubkey: string) => void;
+    /** When true or when pubkey is a sample id, drawn from Example Valley with every control a marker. */
+    preview?: boolean;
 }
 
-export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile }: Props) {
+export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile, preview }: Props) {
+    const isEffectivePreview = preview || isSampleId(pubkey);
     const viewerIsMember = !!identity && isMember !== false;
     const [detail, setDetail] = useState<any>(null);
     /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
@@ -351,6 +356,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     };
 
     const load = useCallback(async () => {
+        if (isEffectivePreview) {
+            setLoading(true);
+            setError(null);
+            const d = sampleTreasuryDetail(pubkey);
+            setDetail(d);
+            setIsKeeperOfThis(false);
+            setLoading(false);
+            return;
+        }
         try {
             setLoading(true);
             setError(null);
@@ -377,13 +391,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } finally {
             setLoading(false);
         }
-    }, [pubkey, identity?.publicKey, viewerIsMember]);
+    }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview]);
 
     useEffect(() => {
         load();
     }, [load]);
 
     const loadLedger = useCallback(async (period: 'all' | '30d' | '90d' | '365d' = ledgerPeriod) => {
+        if (isEffectivePreview) {
+            setLedgerLoading(true);
+            setLedgerError(null);
+            setLedgerData(sampleEnterpriseLedger(pubkey));
+            setLedgerLoading(false);
+            return;
+        }
         try {
             setLedgerLoading(true);
             setLedgerError(null);
@@ -402,14 +423,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } finally {
             setLedgerLoading(false);
         }
-    }, [pubkey, ledgerPeriod]);
+    }, [pubkey, ledgerPeriod, isEffectivePreview]);
 
     useEffect(() => {
         loadLedger(ledgerPeriod);
     }, [loadLedger, ledgerPeriod]);
 
     const loadThread = useCallback(async () => {
-        if (!pubkey) return;
+        if (!pubkey || isEffectivePreview) return;
         try {
             const res = await getEnterpriseThread(pubkey);
             if (res) {
@@ -420,15 +441,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } catch {
             setThreadUnavailable(true);
         }
-    }, [pubkey]);
+    }, [pubkey, isEffectivePreview]);
 
     useEffect(() => {
         loadThread();
+        if (isEffectivePreview) return;
         const unsubscribe = onSyncActivity(() => {
             loadThread();
         });
         return () => unsubscribe();
-    }, [loadThread]);
+    }, [loadThread, isEffectivePreview]);
 
     const handlePostThreadMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -847,6 +869,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     <div className="py-20 text-center text-nature-500">Group not found.</div>
                 ) : (
                     <>
+                        {isEffectivePreview && (
+                            <div className="space-y-3">
+                                <LocalCommunityStrip feature="enterprises" />
+                                <SampleHeader />
+                            </div>
+                        )}
+
                         {/* Identity Banner */}
                         <div className="flex items-center gap-3 sm:gap-4 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 shadow-sm">
                             {showAvatar ? (
@@ -1004,42 +1033,53 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </p>
 
                                     {/* Inline Pledge Form — pledging moves the member's own beans */}
-                                    {viewerIsMember && pledgesClosed && (
-                                    <p data-testid="pledges-closed" className="pt-3 border-t border-nature-100 dark:border-nature-800 text-sm font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">
-                                        {pledgesClosed}
-                                    </p>
-                                    )}
-                                    {viewerIsMember && !pledgesClosed && (
-                                    <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
-                                        <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                                            Back this initiative
+                                    {isEffectivePreview ? (
+                                        <div className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
+                                            <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                                {t('Back this initiative')}
+                                            </div>
+                                            <LocalCommunityAction feature="enterprises" label={t('Pledge')} className="w-full" />
                                         </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                placeholder="Amount (🫘)"
-                                                value={pledgeAmount}
-                                                onChange={(e) => setPledgeAmount(e.target.value)}
-                                                className="w-32 sm:w-36 min-w-[7.5rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                            />
-                                            <input
-                                                type="text"
-                                                placeholder="Memo (optional)"
-                                                value={pledgeMemo}
-                                                onChange={(e) => setPledgeMemo(e.target.value)}
-                                                className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                            />
-                                            <button
-                                                type="submit"
-                                                disabled={pledging || !pledgeAmount}
-                                                className="py-2 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
-                                            >
-                                                {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
-                                            </button>
-                                        </div>
-                                    </form>
+                                    ) : (
+                                        <>
+                                            {viewerIsMember && pledgesClosed && (
+                                            <p data-testid="pledges-closed" className="pt-3 border-t border-nature-100 dark:border-nature-800 text-sm font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">
+                                                {pledgesClosed}
+                                            </p>
+                                            )}
+                                            {viewerIsMember && !pledgesClosed && (
+                                            <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                                    Back this initiative
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        step="1"
+                                                        placeholder="Amount (🫘)"
+                                                        value={pledgeAmount}
+                                                        onChange={(e) => setPledgeAmount(e.target.value)}
+                                                        className="w-32 sm:w-36 min-w-[7.5rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Memo (optional)"
+                                                        value={pledgeMemo}
+                                                        onChange={(e) => setPledgeMemo(e.target.value)}
+                                                        className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        disabled={pledging || !pledgeAmount}
+                                                        className="py-2 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                                    >
+                                                        {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             );
@@ -1136,11 +1176,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
-                        <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
-                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
+                        {!isEffectivePreview && (
+                            <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                                earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
+                        )}
 
                         {/* Operator Controls Panel */}
-                        {isKeeperOfThis && (
+                        {(isKeeperOfThis || isEffectivePreview) && (
                             <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/40 rounded-2xl p-5 space-y-5 shadow-sm">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg" aria-hidden="true">🛡️</span>
@@ -1150,30 +1192,39 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
-                                        onClick={() => {
-                                            setPostModalMode('offer');
-                                            setPostRepeatable(true);
-                                            setPostError(null);
-                                        }}
-                                        className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <span>🏷️</span> Post Offer
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
-                                        onClick={() => {
-                                            setPostModalMode('need');
-                                            setPostRepeatable(false);
-                                            setPostError(null);
-                                        }}
-                                        className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <span>🤝</span> Post Need
-                                    </button>
+                                    {isEffectivePreview ? (
+                                        <>
+                                            <LocalCommunityAction feature="enterprises" label={t('Post Offer')} className="w-full" />
+                                            <LocalCommunityAction feature="enterprises" label={t('Post Need')} className="w-full" />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button
+                                                type="button"
+                                                disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
+                                                onClick={() => {
+                                                    setPostModalMode('offer');
+                                                    setPostRepeatable(true);
+                                                    setPostError(null);
+                                                }}
+                                                className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            >
+                                                <span>🏷️</span> Post Offer
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
+                                                onClick={() => {
+                                                    setPostModalMode('need');
+                                                    setPostRepeatable(false);
+                                                    setPostError(null);
+                                                }}
+                                                className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            >
+                                                <span>🤝</span> Post Need
+                                            </button>
+                                        </>
+                                    )}
                                     {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded-lg">
                                             Paused for the season — posting new listings is disabled.
@@ -1192,27 +1243,33 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </div>
 
                                 {/* Sweep Surplus */}
-                                <form onSubmit={handleSweep} className="flex gap-2 items-center pt-2">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        step="1"
-                                        placeholder="Sweep surplus…"
-                                        value={sweepAmount}
-                                        onChange={(e) => setSweepAmount(e.target.value)}
-                                        className="flex-1 bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2.5 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={sweeping || balance <= 0 || !sweepAmount}
-                                        className="py-2.5 px-4 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 font-extrabold text-sm disabled:opacity-40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors shrink-0"
-                                    >
-                                        {sweeping ? 'Sweeping…' : 'To Commons 🌱'}
-                                    </button>
-                                </form>
+                                {isEffectivePreview ? (
+                                    <div className="pt-2">
+                                        <LocalCommunityAction feature="enterprises" label={t('To Commons')} className="w-full" />
+                                    </div>
+                                ) : (
+                                    <form onSubmit={handleSweep} className="flex gap-2 items-center pt-2">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            placeholder="Sweep surplus…"
+                                            value={sweepAmount}
+                                            onChange={(e) => setSweepAmount(e.target.value)}
+                                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2.5 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={sweeping || balance <= 0 || !sweepAmount}
+                                            className="py-2.5 px-4 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 font-extrabold text-sm disabled:opacity-40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors shrink-0"
+                                        >
+                                            {sweeping ? 'Sweeping…' : 'To Commons 🌱'}
+                                        </button>
+                                    </form>
+                                )}
 
                                 {/* Map Pin (docs/the-commons.md §2.2) — public, so the picker leads with the warning */}
-                                {canSetMapPin && (
+                                {!isEffectivePreview && canSetMapPin && (
                                     <div data-testid="enterprise-map-pin-control" className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <div className="min-w-0">
@@ -1247,7 +1304,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 )}
 
                                 {/* Pending Bids on Needs */}
-                                {pendingBids.length > 0 && (
+                                {!isEffectivePreview && pendingBids.length > 0 && (
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
                                             <span>Pending Bids on Needs</span>
@@ -1297,7 +1354,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 )}
 
                                 {/* Active Deals */}
-                                {activeDeals.length > 0 && (
+                                {!isEffectivePreview && activeDeals.length > 0 && (
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
                                             <span>Active Deals</span>
@@ -1355,219 +1412,228 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <span>Season & Lifecycle Controls</span>
                                         </div>
 
-                                        {/* Action Confirmation Cards with Plain Words BEFORE the Tap */}
-                                        {confirmingPause && (
-                                            <div className="p-4 rounded-xl border-2 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/50 space-y-3">
-                                                <div className="font-bold text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
-                                                    <span>❄️</span>
-                                                    <span>Confirm Pause for Season</span>
-                                                </div>
-                                                <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
-                                                    Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any {kw.keeper} can resume at any time.
-                                                </p>
-                                                <div className="flex gap-2 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={handlePause}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                    >
-                                                        {lifecycleActionLoading ? 'Pausing…' : 'Confirm Season Pause'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={() => setConfirmingPause(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {confirmingResume && (
-                                            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
-                                                <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
-                                                    <span>▶️</span>
-                                                    <span>Confirm Resume {kw.Kind}</span>
-                                                </div>
-                                                <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                    Resuming reactivates all listings and restores the credit floor to normal daily calculation.
-                                                </p>
-                                                <div className="flex gap-2 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={handleResume}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                    >
-                                                        {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={() => setConfirmingResume(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {confirmingWindUp && (
-                                            <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
-                                                <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
-                                                    <span>⚠️</span>
-                                                    <span>Start {kw.Kind} Wind-Up</span>
-                                                </div>
-                                                <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                    Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} {keeperCount === 1 ? kw.keeper : kw.keepers}, and closes {name} for good. Any {kw.keeper} can stop this for the next 7 days.
-                                                </p>
-                                                {balance < 0 && (
-                                                    <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
-                                                        ⚠️ Cannot wind up {kw.kind === 'project' ? 'a project' : 'an enterprise'} in deficit ({balance} 🫘). Debt must be resolved or written off first.
-                                                    </p>
-                                                )}
-                                                <div className="flex gap-2 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading || balance < 0}
-                                                        onClick={handleInitiateWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                    >
-                                                        {lifecycleActionLoading ? 'Starting Wind-Up…' : 'Confirm Start Wind-Up'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={() => setConfirmingWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {confirmingCancelWindUp && (
-                                            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
-                                                <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
-                                                    <span>🛑</span>
-                                                    <span>Stop {kw.Kind} Wind-Up</span>
-                                                </div>
-                                                <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                    Cancelling wind-up restores {name} to active status immediately. {kw.Keepers} remain appointed and listings can resume.
-                                                </p>
-                                                <div className="flex gap-2 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={handleCancelWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                    >
-                                                        {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={() => setConfirmingCancelWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Keep Winding Up
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {confirmingFinaliseWindUp && (
-                                            <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
-                                                <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
-                                                    <span>🏁</span>
-                                                    <span>Finalise {kw.Kind} Wind-Up</span>
-                                                </div>
-                                                <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                    The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all {kw.keepers}, and closes {name} for good.
-                                                </p>
-                                                <div className="flex gap-2 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={handleFinaliseWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                    >
-                                                        {lifecycleActionLoading ? 'Finalising…' : 'Finalise Wind-Up'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={lifecycleActionLoading}
-                                                        onClick={() => setConfirmingFinaliseWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Buttons (when not confirming) */}
-                                        {!confirmingPause && !confirmingResume && !confirmingWindUp && !confirmingCancelWindUp && !confirmingFinaliseWindUp && (
+                                        {isEffectivePreview ? (
                                             <div className="grid grid-cols-2 gap-3">
-                                                {detail.status !== 'winding_up' && (
-                                                    detail.paused ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setConfirmingResume(true)}
-                                                            className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
-                                                        >
-                                                            <span>▶️</span> Resume {kw.Kind}
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setConfirmingPause(true)}
-                                                            className="py-2.5 px-3 rounded-xl border border-amber-500 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-xs shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-1.5"
-                                                        >
-                                                            <span>❄️</span> Pause for Season
-                                                        </button>
-                                                    )
-                                                )}
-
-                                                {detail.status === 'winding_up' ? (
-                                                    <>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setConfirmingCancelWindUp(true)}
-                                                            className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
-                                                        >
-                                                            <span>🛑</span> Stop Wind-Up
-                                                        </button>
-                                                        {windUpGraceEnded && (
+                                                <LocalCommunityAction feature="enterprises" label={t('Pause for season')} className="w-full" />
+                                                <LocalCommunityAction feature="enterprises" label={t('Start wind-up')} className="w-full" />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Action Confirmation Cards with Plain Words BEFORE the Tap */}
+                                                {confirmingPause && (
+                                                    <div className="p-4 rounded-xl border-2 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/50 space-y-3">
+                                                        <div className="font-bold text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                                                            <span>❄️</span>
+                                                            <span>Confirm Pause for Season</span>
+                                                        </div>
+                                                        <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
+                                                            Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any {kw.keeper} can resume at any time.
+                                                        </p>
+                                                        <div className="flex gap-2 pt-1">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setConfirmingFinaliseWindUp(true)}
-                                                                className="py-2.5 px-3 rounded-xl border border-bp-danger-fill bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={handlePause}
+                                                                className="flex-1 py-2 px-3 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                             >
-                                                                <span>🏁</span> Finalise Wind-Up
+                                                                {lifecycleActionLoading ? 'Pausing…' : 'Confirm Season Pause'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={() => setConfirmingPause(false)}
+                                                                className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {confirmingResume && (
+                                                    <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
+                                                        <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                                                            <span>▶️</span>
+                                                            <span>Confirm Resume {kw.Kind}</span>
+                                                        </div>
+                                                        <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
+                                                            Resuming reactivates all listings and restores the credit floor to normal daily calculation.
+                                                        </p>
+                                                        <div className="flex gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={handleResume}
+                                                                className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                            >
+                                                                {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={() => setConfirmingResume(false)}
+                                                                className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {confirmingWindUp && (
+                                                    <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
+                                                        <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
+                                                            <span>⚠️</span>
+                                                            <span>Start {kw.Kind} Wind-Up</span>
+                                                        </div>
+                                                        <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
+                                                            Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} {keeperCount === 1 ? kw.keeper : kw.keepers}, and closes {name} for good. Any {kw.keeper} can stop this for the next 7 days.
+                                                        </p>
+                                                        {balance < 0 && (
+                                                            <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
+                                                                ⚠️ Cannot wind up {kw.kind === 'project' ? 'a project' : 'an enterprise'} in deficit ({balance} 🫘). Debt must be resolved or written off first.
+                                                            </p>
+                                                        )}
+                                                        <div className="flex gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading || balance < 0}
+                                                                onClick={handleInitiateWindUp}
+                                                                className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                            >
+                                                                {lifecycleActionLoading ? 'Starting Wind-Up…' : 'Confirm Start Wind-Up'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={() => setConfirmingWindUp(false)}
+                                                                className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {confirmingCancelWindUp && (
+                                                    <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
+                                                        <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                                                            <span>🛑</span>
+                                                            <span>Stop {kw.Kind} Wind-Up</span>
+                                                        </div>
+                                                        <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
+                                                            Cancelling wind-up restores {name} to active status immediately. {kw.Keepers} remain appointed and listings can resume.
+                                                        </p>
+                                                        <div className="flex gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={handleCancelWindUp}
+                                                                className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                            >
+                                                                {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={() => setConfirmingCancelWindUp(false)}
+                                                                className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Keep Winding Up
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {confirmingFinaliseWindUp && (
+                                                    <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
+                                                        <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
+                                                            <span>🏁</span>
+                                                            <span>Finalise {kw.Kind} Wind-Up</span>
+                                                        </div>
+                                                        <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
+                                                            The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all {kw.keepers}, and closes {name} for good.
+                                                        </p>
+                                                        <div className="flex gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={handleFinaliseWindUp}
+                                                                className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                            >
+                                                                {lifecycleActionLoading ? 'Finalising…' : 'Finalise Wind-Up'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={lifecycleActionLoading}
+                                                                onClick={() => setConfirmingFinaliseWindUp(false)}
+                                                                className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Buttons (when not confirming) */}
+                                                {!confirmingPause && !confirmingResume && !confirmingWindUp && !confirmingCancelWindUp && !confirmingFinaliseWindUp && (
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {detail.status !== 'winding_up' && (
+                                                            detail.paused ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setConfirmingResume(true)}
+                                                                    className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                                >
+                                                                    <span>▶️</span> Resume {kw.Kind}
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setConfirmingPause(true)}
+                                                                    className="py-2.5 px-3 rounded-xl border border-amber-500 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-xs shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                                >
+                                                                    <span>❄️</span> Pause for Season
+                                                                </button>
+                                                            )
+                                                        )}
+
+                                                        {detail.status === 'winding_up' ? (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setConfirmingCancelWindUp(true)}
+                                                                    className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                                >
+                                                                    <span>🛑</span> Stop Wind-Up
+                                                                </button>
+                                                                {windUpGraceEnded && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setConfirmingFinaliseWindUp(true)}
+                                                                        className="py-2.5 px-3 rounded-xl border border-bp-danger-fill bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                                    >
+                                                                        <span>🏁</span> Finalise Wind-Up
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmingWindUp(true)}
+                                                                className="py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-bold text-xs shadow-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1.5"
+                                                            >
+                                                                <span>⚠️</span> Start Wind-Up
                                                             </button>
                                                         )}
-                                                    </>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setConfirmingWindUp(true)}
-                                                        className="py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-bold text-xs shadow-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1.5"
-                                                    >
-                                                        <span>⚠️</span> Start Wind-Up
-                                                    </button>
+                                                    </div>
                                                 )}
-                                            </div>
+                                            </>
                                         )}
                                     </div>
                                 )}
 
-                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                {!isEffectivePreview && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
                                     <div className="pt-4 border-t border-emerald-500/20">
                                         <button
                                             type="button"
@@ -1584,7 +1650,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* Pending Keeper Requests (for Lead Keeper / Sole Keeper / Admin) */}
-                        {isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
+                        {!isEffectivePreview && isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                                     <span aria-hidden="true">📬</span>
@@ -1645,7 +1711,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* Keeper changes waiting out the other keepers' 3-day objection window (answers A, M) */}
-                        {keeperChanges.length > 0 && (
+                        {!isEffectivePreview && keeperChanges.length > 0 && (
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-3 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
                                     {kw.Keeper} changes waiting ({keeperChanges.length})
@@ -1674,7 +1740,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
-                        {Boolean(leadInactivity?.isEligible ?? (leadInactivity as any)?.isEligibleForSuccession) && (
+                        {!isEffectivePreview && Boolean(leadInactivity?.isEligible ?? (leadInactivity as any)?.isEligibleForSuccession) && (
                             <div className="bg-amber-50/60 dark:bg-amber-950/30 border-2 border-amber-500/50 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="flex items-start gap-2.5">
                                     <span className="text-xl" aria-hidden="true">⚠️</span>
@@ -1770,7 +1836,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
-                        {viewerIsMember && !isKeeperOfThis && detail.status !== 'completed' && (
+                        {isEffectivePreview ? (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4">
+                                <div>
+                                    <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
+                                        <span aria-hidden="true">🤝</span>
+                                        <span>Ask to join as a {kw.keeper}</span>
+                                    </div>
+                                    <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
+                                        Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
+                                    </p>
+                                </div>
+                                <LocalCommunityAction feature="enterprises" label={t('Join as keeper')} className="w-full" />
+                            </div>
+                        ) : viewerIsMember && !isKeeperOfThis && detail.status !== 'completed' && (
                             myPendingRequest ? (
                                 <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
                                     <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
@@ -1897,7 +1976,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         );
                                     })}
                                 </div>
-                                {(removableKeepers.length > 0 || canStepDown(myPubkey, keeperList)) && (
+                                {!isEffectivePreview && (removableKeepers.length > 0 || canStepDown(myPubkey, keeperList)) && (
                                     <div className="flex flex-col gap-2 pt-1">
                                         {removableKeepers.map((k) => (
                                             <button
@@ -2083,8 +2162,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {posts.map((post: any) => (
                                         <div
                                             key={post.id}
-                                            onClick={() => onNavigatePost?.(post.id)}
-                                            className={`py-3 flex items-start justify-between gap-3 ${onNavigatePost ? 'cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800/40 rounded-lg px-2 -mx-2 transition-colors' : ''}`}
+                                            onClick={!isEffectivePreview ? () => onNavigatePost?.(post.id) : undefined}
+                                            className={`py-3 flex items-start justify-between gap-3 ${!isEffectivePreview && onNavigatePost ? 'cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800/40 rounded-lg px-2 -mx-2 transition-colors' : ''}`}
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-1.5 mb-1">
@@ -2249,13 +2328,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </div>
                             )}
 
-                            {!threadReadOnly && !viewerIsMember && !threadUnavailable && (
+                            {!threadReadOnly && !viewerIsMember && !threadUnavailable && !isEffectivePreview && (
                                 <p className="text-xs text-nature-500 dark:text-nature-400 italic" data-testid="thread-guest-note">
                                     Join the community to post here.
                                 </p>
                             )}
 
-                            {!threadReadOnly && viewerIsMember && (
+                            {!threadReadOnly && !isEffectivePreview && viewerIsMember && (
                                 <form onSubmit={handlePostThreadMessage} className="mt-2 space-y-2">
                                     {threadError && (
                                         <div className="text-xs text-rose-600 dark:text-rose-300 font-medium">
@@ -2286,15 +2365,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         </div>
 
                         {/* Report Enterprise Action */}
-                        <div className="pt-4 border-t border-nature-200 dark:border-nature-800 flex justify-center">
-                            <button
-                                type="button"
-                                onClick={() => setShowReportModal(true)}
-                                className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
-                            >
-                                <span aria-hidden="true">🛡️</span> Report {kw.Kind}
-                            </button>
-                        </div>
+                        {!isEffectivePreview && (
+                            <div className="pt-4 border-t border-nature-200 dark:border-nature-800 flex justify-center">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowReportModal(true)}
+                                    className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                                >
+                                    <span aria-hidden="true">🛡️</span> Report {kw.Kind}
+                                </button>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

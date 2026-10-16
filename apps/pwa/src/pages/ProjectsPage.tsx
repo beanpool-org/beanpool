@@ -20,7 +20,7 @@ import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import type { FeatureMode } from '@beanpool/core';
-import { CommonsPreview } from '../components/ShowcasePreviews';
+import { CommonsPreview, sampleTreasuries } from '../components/ShowcasePreviews';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -163,7 +163,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
                 membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
-            setTreasuries(tresData.treasuries || []);
+            setTreasuries(readsTreasuries ? (tresData.treasuries || []) : sampleTreasuries());
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
             setNodeSaysCanPropose((decData as { canPropose?: boolean | null }).canPropose ?? null);
@@ -386,7 +386,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
                 {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
-                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onOpenEnterprise={onOpenTreasury} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}

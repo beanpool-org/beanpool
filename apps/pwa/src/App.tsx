@@ -39,7 +39,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
+import { helpSheetFor, isSampleId, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -113,6 +113,7 @@ export function App() {
     const [activeTab, setActiveTab] = useState<Tab>('home');
     // Beans off here and the node shows previews (DESIGN-global-showcase-fable.md §4): the Ledger is Example Valley's.
     const beansMode = useFeatureMode('beans');
+    const enterprisesMode = useFeatureMode('enterprises');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
@@ -1035,6 +1036,7 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
+                            preview={enterprisesMode === 'preview' || isSampleId(openTreasuryPubkey)}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
                                 setOpenTreasuryPubkey(null);

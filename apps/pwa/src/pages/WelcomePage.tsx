@@ -1137,7 +1137,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             }
             const body = await res.json().catch(() => ({}));
             if (res.status === 409) {
-                const suggestions = await suggestCallsigns(name, member.publicKey, 3, MAX_JOIN_CALLSIGN);
+                const suggestions = await suggestCallsigns(name, member, 3, MAX_JOIN_CALLSIGN);
                 setNameSuggestions(suggestions);
                 setError(suggestions.length
                     ? t('"{name}" is already taken in this community. Pick one of the suggestions below, or choose another name.', { name })

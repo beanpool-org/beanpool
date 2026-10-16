@@ -117,9 +117,14 @@ export function NodeIdentityPanel({
                     }
                 }
 
-                // 2. Node Config (service radius, directory settings)
+                // 2. Node Config (service radius, directory settings). With the admin credential: the node gives an owner or
+                // admin the service area's exact centre, and anyone else that centre to ~1 km (public-routes audit NEW-1),
+                // which Save would then write back as the community's pin.
                 const configUrl = resolveNodeApiUrl(activeNode.url, '/api/node/config');
-                const configRes = await fetch(configUrl).catch(() => null);
+                const configRes = await fetch(configUrl, {
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    credentials: 'same-origin',
+                }).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
                     const cfg = await configRes.json().catch(() => ({}));
                     if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {

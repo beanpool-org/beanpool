@@ -593,8 +593,8 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
         const s = handleCreate();
         inOrder(s, [
             'const nameCheckTimer = setTimeout(() => nameCheck.abort(), NEXT_REQUEST_TIMEOUT_MS);',
-            'await checkCallsignAvailable(callsign.trim(), storedIdentity?.publicKey, nodeUrl, { signal: nameCheck.signal });',
-            'await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal });',
+            'await checkCallsignAvailable(callsign.trim(), nodeUrl, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });',
+            'await suggestCallsigns(callsign.trim(), 3, nodeUrl, MAX_JOIN_NAME, { signal: nameCheck.signal, signer: storedIdentity ?? undefined });',
             'clearTimeout(nameCheckTimer);',
         ]);
     });

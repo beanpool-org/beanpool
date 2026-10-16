@@ -27,9 +27,11 @@ const FUN_WORDS = [
 ];
 
 /**
- * Ask the active node whether `callsign` is free. `excludePublicKey` lets a rename
- * ignore the caller's own current name (so re-confirming your own name reads as
- * available). Returns 'unknown' when the node can't be reached — never blocks.
+ * Ask the active node whether `callsign` is free. Returns 'unknown' when the node can't be reached — never blocks.
+ * The caller's own current name reads as available (re-confirming your own name): the node takes whose name that is
+ * from the request's signature alone (public-routes audit NEW-2: a `?exclude=<key>` parameter told anyone the name
+ * behind any key, and the node ignores it). So a check about a key's own name is signed by that key: `signer`, or the
+ * app's fetch wrapper, which signs every GET to this phone's own community (utils/node-request-signing.ts).
  *
  * `signal` drops the request (and reads as 'unknown'): the global community's door stops a check
  * the member has walked away from, or that ran out of time (global-join.ts `checkNameAtDoor`).
@@ -40,7 +42,6 @@ const FUN_WORDS = [
  */
 export async function checkCallsignAvailable(
     callsign: string,
-    excludePublicKey?: string,
     anchorUrlOverride?: string,
     options: { signal?: AbortSignal; signer?: BeanPoolIdentity } = {},
 ): Promise<CallsignStatus> {
@@ -51,8 +52,7 @@ export async function checkCallsignAvailable(
         // anchor, so callers can pass it explicitly; otherwise use the active node.
         const anchorUrl = anchorUrlOverride || await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return 'unknown';
-        const qs = excludePublicKey ? `?exclude=${encodeURIComponent(excludePublicKey)}` : '';
-        const path = `/api/members/callsign-available/${encodeURIComponent(c)}${qs}`;
+        const path = `/api/members/callsign-available/${encodeURIComponent(c)}`;
         // Loaded when used: signing pulls in the app's crypto, which the wizard's plain checks never need.
         const signed = options.signer ? (await import('./node-post')).signedGet : null;
         // Stopped while that loaded: nothing is sent.
@@ -96,7 +96,6 @@ export function suggestionFor(base: string, word: string, maxLength = 32): strin
  */
 export async function suggestCallsigns(
     base: string,
-    excludePublicKey?: string,
     count = 3,
     anchorUrlOverride?: string,
     maxLength = 32,
@@ -116,7 +115,7 @@ export async function suggestCallsigns(
         const results = await Promise.all(
             chunk.map(async (cand) => ({
                 cand,
-                ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride, options)) === 'available',
+                ok: (await checkCallsignAvailable(cand, anchorUrlOverride, options)) === 'available',
             })),
         );
         for (const r of results) if (r.ok) available.push(r.cand);

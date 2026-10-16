@@ -82,7 +82,7 @@ export const LOCAL_COMMUNITY_STRIP = Object.freeze({
         beans: word('Help earns Beans, getting help spends them, so help can go round, not just back.'),
         escrow: word('A deal holds the Beans until the job is done. Neither side has to go first.'),
         enterprises: word('Neighbours pool Beans for shared enterprises, and vote on what the pool funds.'),
-        decisions: word('One member, one vote. A Decision that passes carries itself out.'),
+        decisions: word('Members decide together, and a Decision that passes carries itself out.'),
         invites: word('A member vouches for each newcomer, so neighbours know who\'s who.'),
     } satisfies Record<ShowcaseFeature, string>),
     /** The strip collapsed with ✕, remembered per node and feature on the device. One line at 320 px / 1.3×. */

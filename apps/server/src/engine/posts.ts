@@ -1375,7 +1375,7 @@ export function rsvpEvent(
     status: EventRsvpStatus | null,
     signature?: string,
     push?: PushFn,
-): { success: boolean; post: MarketplacePost } {
+): { success: boolean; post: MarketplacePost | null } {
     if (status !== null && status !== 'going' && status !== 'interested') {
         throw new Error("RSVP status must be 'going', 'interested' or null");
     }
@@ -1393,11 +1393,15 @@ export function rsvpEvent(
         || postOutOfSight(row, memberPublicKey)) {
         throw new Error('Event not found');
     }
-    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
+    // "Not going" takes a member's own name off the host's list whatever the event's state: a cancelled event keeps its
+    // guest list until the scrub, 30 days after the date it was cancelled from, which can be a year away (the photos/events
+    // audit check, 2026-10-17). Only Going or Interested needs an open event.
+    const withdrawing = status === null;
+    if (!withdrawing && (!row.active || row.status !== 'active' || row.event_state === 'cancelled')) {
         throw new Error('This event has been cancelled');
     }
     const nowIso = new Date().toISOString();
-    if (row.event_end_at && row.event_end_at <= nowIso) {
+    if (!withdrawing && row.event_end_at && row.event_end_at <= nowIso) {
         throw new Error('This event has ended');
     }
     if (row.audience_scope === 'group') {
@@ -1424,9 +1428,11 @@ export function rsvpEvent(
 
     db.transaction(() => {
         // Atomically re-check the event is still open and bump updated_at so delta sync carries the change.
-        const res = db.prepare(
-            "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
-        ).run(nowIso, postId, nowIso);
+        const res = withdrawing
+            ? db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(nowIso, postId)
+            : db.prepare(
+                "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
+            ).run(nowIso, postId, nowIso);
         if (res.changes === 0) {
             throw new Error('This event is no longer open');
         }
@@ -1477,7 +1483,13 @@ export function rsvpEvent(
     bumpPostsVersion();
     // Read for the member as their own reads are (where anyone can join, the neighbourhood: engine PostFilter.neighbourhood);
     // the broadcast puts each socket's own place in (state-engine.ts broadcast).
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true, neighbourhood: getProfileSwitches().openMembership || undefined })[0];
+    // Off a cancelled or ended event's list, the member reads it no more (getPosts: its hosts and the people Going): the
+    // host's list changes, and the answer carries no post.
+    if (!updatedPost) {
+        broadcast({ type: 'post_updated', id: postId }, audienceRecipients(row));
+        return { success: true, post: null };
+    }
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
     if (status === 'going' && row.event_host_lets_in === 1 && updatedPost.myLetIn === false
         && !isEventHost(db, row, memberPublicKey)) {

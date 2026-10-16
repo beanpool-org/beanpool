@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
@@ -583,8 +583,7 @@ export default function PostDetailModal() {
                         });
                 };
                 reload();
-                
-                const { DeviceEventEmitter } = require('react-native');
+
                 const sub = DeviceEventEmitter.addListener('sync_data_updated', reload);
                 // The by-id read found no such listing on the node (utils/db.ts). With no row on the phone either, the
                 // shown listing goes, and the not-found timer's text shows; a row the phone holds stays until the sync drops it.

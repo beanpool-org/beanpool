@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -494,7 +494,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "عدد محاولات خاطئة أكثر من اللازم، لذا لم يُرسل شيء. أنشئ رمزًا جديدًا وحاول مجددًا.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "انتهت صلاحية هذا الرمز، لذا لم يُرسل شيء. أنشئ رمزًا جديدًا وحاول مجددًا.",
   "That did not go through. Try again.": "لم تنجح العملية. حاول مجددًا.",
-  "Type the two digits your phone shows": "اكتب الرقمين اللذين يعرضهما هاتفك",
+  "Type the four digits your phone shows": "اكتب الأرقام الأربعة التي يعرضها هاتفك",
   "Confirm": "تأكيد",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "يُفتح حسابك هنا فقط بعد إدخال الرقمين الصحيحين. بعد ثلاث محاولات خاطئة لن يُرسل شيء.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "لم يصل شيء من هاتفك بعد. هذا الرمز من {host}. إذا قال هاتفك إنه من خادم لا يستخدمه، فافتح BeanPool على عنوان مجتمعك، أو انضم إلى {host} على هاتفك أولاً، ثم امسح مرة أخرى. إذا لم يعرض هاتفك أي أرقام، فحدّث تطبيق BeanPool عليه، ثم امسح مرة أخرى."

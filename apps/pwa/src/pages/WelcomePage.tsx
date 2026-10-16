@@ -700,7 +700,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingSession, setPairingSession] = useState<{ sessionId: string; privateKeyHex: string; publicKeyHex: string } | null>(null);
     const [pairingSecondsLeft, setPairingSecondsLeft] = useState(120);
     const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'decrypting' | 'success' | 'expired'>('idle');
-    /** The phone has sent: the relay holds it until this browser types the two digits the phone shows. */
+    /** The phone has sent: the relay holds it until this browser types the four digits the phone shows. */
     const [pairingConfirming, setPairingConfirming] = useState(false);
     const [pairingDigits, setPairingDigits] = useState('');
     const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
@@ -2492,24 +2492,25 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {pairingStatus === 'waiting' && pairingSession && pairingConfirming ? (
                                     <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 1rem', textAlign: 'center', maxWidth: '16rem' }}>
                                         <label htmlFor="pair-digits" style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '0.75rem' }}>
-                                            {t('Type the two digits your phone shows')}
+                                            {t('Type the four digits your phone shows')}
                                         </label>
+                                        {/* Four digits (SEC-INV-02): about 175 px of the box's 198 at 320 px and 130% text. */}
                                         <input
                                             id="pair-digits"
                                             inputMode="numeric"
                                             autoComplete="one-time-code"
-                                            pattern="[0-9]{2}"
-                                            maxLength={2}
+                                            pattern="[0-9]{4}"
+                                            maxLength={4}
                                             required
                                             autoFocus
                                             value={pairingDigits}
-                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
-                                            style={{ width: '5rem', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
+                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                                            style={{ width: '9.5rem', maxWidth: '100%', boxSizing: 'border-box', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
                                         />
                                         <button
                                             type="submit"
-                                            disabled={pairingDigits.length !== 2}
-                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 2 ? 1 : 0.6 }}
+                                            disabled={pairingDigits.length !== 4}
+                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 4 ? 1 : 0.6 }}
                                         >
                                             {t('Confirm')}
                                         </button>

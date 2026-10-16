@@ -201,6 +201,11 @@ async function call(base: string, method: 'GET' | 'POST', route: string, key: Ke
 }
 
 // The old code's rules, kept here as the oracle: what origin/main 09c2588d made of a value stored in members.avatar_url.
+// Since the public-routes audit's SEC-PUB-02 every node keys faces: a URL is the oracle's with its key after it (`&k=`, made
+// from the server's own secret), so each is compared without the key, and a photo's URL must carry one.
+const KEY_RE = /&k=[A-Za-z0-9_-]{22}$/;
+const unkeyed = (u: unknown) => (typeof u === 'string' ? u.replace(KEY_RE, '') : u);
+const keyedIfAvatar = (u: unknown) => typeof u !== 'string' || !u.startsWith('/api/avatar/') || KEY_RE.test(u);
 
 /** @beanpool/core avatarUrlFor (no member-only keys on this node). */
 function oldUrl(pk: string, stored: string | null): string | null {
@@ -269,8 +274,8 @@ async function main(): Promise<void> {
         assert(!crashed && full?.status === 200 && photoMembers.length === N && list.some((m) => m.publicKey === reader.pk),
             `the server answers the full list (${full?.status ?? failed}, ${list.length} members, ${((full?.bytes.length ?? 0) / 2 ** 20).toFixed(1)} MB, ${ms.toFixed(0)} ms)${fatal ? `: ${fatal}` : ''}`);
         assert(peak < BOUND_MB, `and its heap peaks at ${peak.toFixed(0)} MB while it does, under ${BOUND_MB} MB of its ${HEAP_MB} MB`);
-        assert(photoMembers.length === N && photoMembers.every((m) => /^\/api\/avatar\/[0-9a-f]{64}\?size=thumb&v=[0-9a-f]{8}$/.test(m.avatarUrl)),
-            'every member with a photo has its versioned URL');
+        assert(photoMembers.length === N && photoMembers.every((m) => /^\/api\/avatar\/[0-9a-f]{64}\?size=thumb&v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$/.test(m.avatarUrl)),
+            'every member with a photo has its versioned URL, with its key (faces are keyed on every node)');
     } finally {
         await heapServer.stop();
     }
@@ -316,10 +321,11 @@ async function main(): Promise<void> {
             const inFull = full.find((m) => m.publicKey === pk)?.avatarUrl;
             const inDelta = delta.find((m) => m.publicKey === pk)?.avatarUrl;
             const inCommunity = communityList.find((m) => m.publicKey === pk)?.avatarUrl;
-            assert(inFull === want && inDelta === want && inCommunity === want,
+            assert(unkeyed(inFull) === want && unkeyed(inDelta) === want && unkeyed(inCommunity) === want && [inFull, inDelta, inCommunity].every(keyedIfAvatar),
                 `${label}: the full list, the delta and the community list give ${want === null ? 'no URL' : 'its URL'}, as before (${inFull}, ${inDelta}, ${inCommunity})`);
             const was = oldAvatar(value);
-            const got = await call(server.base, 'GET', `/api/avatar/${pk}?size=thumb`, null);
+            // Asked as a member is handed it: the list's URL, with its key; with none, the bare address.
+            const got = await call(server.base, 'GET', typeof inFull === 'string' && inFull.startsWith('/api/avatar/') ? inFull : `/api/avatar/${pk}?size=thumb`, null);
             const same = got.status === was.status && (was.status !== 200
                 || (got.bytes.equals(was.bytes!) && got.headers.get('content-type') === was.type && got.headers.get('etag') === was.etag));
             assert(same, `${label}: the avatar route answers ${was.status}${was.status === 200 ? ' with the same bytes, type and ETag' : ''}, as before (${got.status} ${got.headers.get('content-type') ?? ''})`);
@@ -336,7 +342,7 @@ async function main(): Promise<void> {
         const listedUrl = async () => JSON.parse((await call(server.base, 'GET', '/api/members', member)).text).find((m: any) => m.publicKey === member.pk)?.avatarUrl ?? null;
         const deltaUrl = async (since: string) => JSON.parse((await call(server.base, 'GET', `/api/members?updatedAfter=${encodeURIComponent(since)}`, member)).text)
             .find((m: any) => m.publicKey === member.pk)?.avatarUrl;
-        const served = async () => await call(server.base, 'GET', `/api/avatar/${member.pk}?size=thumb`, null);
+        const served = async (url: string | null) => await call(server.base, 'GET', url ?? `/api/avatar/${member.pk}?size=thumb`, null);
         const steps: [string, string | null][] = [['sets a photo', dataUrl(jpeg(12_000, 11))], ['changes it', dataUrl(jpeg(15_000, 13))], ['removes it', null]];
         let lastUrl: string | null = null;
         for (const [label, avatar] of steps) {
@@ -344,9 +350,9 @@ async function main(): Promise<void> {
             const upd = await call(server.base, 'POST', '/api/profile/update', member, { avatar });
             const url = await listedUrl();
             const fromDelta = await deltaUrl(since);
-            const got = await served();
+            const got = await served(url);
             const want = avatar === null ? null : oldUrl(member.pk, avatar);
-            assert(upd.status === 200 && url === want && fromDelta === want && url !== lastUrl,
+            assert(upd.status === 200 && unkeyed(url) === want && unkeyed(fromDelta) === want && keyedIfAvatar(url) && fromDelta === url && url !== lastUrl,
                 `the member ${label}: the list's URL is ${want === null ? 'gone' : 'the new one'} at once (${url}), and the next delta carries it (${fromDelta})`);
             assert(avatar === null ? got.status === 404 : got.status === 200 && got.bytes.equals(Buffer.from(avatar.split(',')[1], 'base64')),
                 `and the avatar route serves ${avatar === null ? 'nothing (404)' : 'the new photo'} (${got.status}, ${got.bytes.length} bytes)`);

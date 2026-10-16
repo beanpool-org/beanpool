@@ -41,6 +41,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { withAvatarKey } from './avatar-test-url.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
@@ -632,8 +633,9 @@ function photoPathOf(postId: string, orderNum: number): string {
 }
 
 /** What an anonymous <img> gets. */
+/** An avatar path is asked as a member is handed it, with its key (faces are keyed on every node: avatar-test-url.ts). */
 async function fetchBytes(path: string): Promise<{ status: number; bytes: Buffer; type: string }> {
-    const res = await fetch(`${BASE}${path}`);
+    const res = await fetch(`${BASE}${withAvatarKey(path)}`);
     return { status: res.status, bytes: Buffer.from(await res.arrayBuffer()), type: res.headers.get('content-type') ?? '' };
 }
 

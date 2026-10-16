@@ -73,7 +73,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
-vi.mock('react-native-qrcode-svg', () => ({ default: () => null }));
+vi.mock('react-native-qrcode-svg', () => ({ default: (props: any) => createElement('div', { 'data-testid': 'qr-code', 'data-qr-value': props?.value }) }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: async () => {} }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
@@ -179,6 +179,56 @@ describe('Invites on the worldwide community, its profile on the phone', () => {
         expect(text()).toContain('Bring someone here');
         expect(text()).toContain(LOCAL_COMMUNITY_LINES.invites);
         expect(net.calls).not.toContain(`fetch ${INVITES}`);
+    });
+
+    it("renders the real invite screen fed sample invites, used invites, and community tree", async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(PeopleScreen));
+
+        // Sample pending invite
+        expect(text()).toContain('EXAMPLE-1234');
+        expect(text()).toContain('For: a neighbour');
+
+        // Sample redeemed invites
+        expect(text()).toContain('EXAMPLE-5678');
+        expect(text()).toContain('EXAMPLE-9012');
+
+        // Tree
+        expect(text()).toContain('Community Tree');
+        expect(text()).toContain('an example member');
+        expect(text()).toContain('a neighbour');
+
+        // Action markers
+        const actionButtons = host.querySelectorAll('[data-testid="local-community-action"]');
+        expect(actionButtons.length).toBeGreaterThanOrEqual(2); // Generate and Share
+
+        // Clicking an action button opens the local community sheet
+        const firstAction = actionButtons[0] as HTMLElement;
+        await act(async () => { firstAction.click(); });
+        await settle();
+        expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+    });
+
+    it("draws a QR code that encodes only EXAMPLE-1234 when toggled, refusing any URL prefix", async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(PeopleScreen));
+
+        // Find the QR toggle button (📱)
+        const qrButtons = Array.from(host.querySelectorAll('button')).filter(
+            (b) => b.getAttribute('aria-label') === 'Show QR code' || b.textContent?.includes('📱')
+        );
+        expect(qrButtons.length).toBeGreaterThan(0);
+
+        // Click QR button
+        await act(async () => { (qrButtons[0] as HTMLElement).click(); });
+        await settle();
+
+        // Check QR code rendered
+        const qr = host.querySelector('[data-testid="qr-code"]');
+        expect(qr).not.toBeNull();
+        expect(qr?.getAttribute('data-qr-value')).toBe('EXAMPLE-1234');
+        expect(qr?.getAttribute('data-qr-value')).not.toContain('http');
+        expect(qr?.getAttribute('data-qr-value')).not.toContain('?invite=');
     });
 });
 

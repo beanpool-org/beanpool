@@ -621,6 +621,7 @@ export default function ProjectsScreen() {
                                     <CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)} style={styles.statCardAmount} />
                                 </View>
                             </View>
+                            {showsDecide && !decisionsPreview && (
                             <View style={styles.statCard} testID="voice-credits-card">
                                 {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
                                     What the credits are for goes in the hint, which wraps freely. */}
@@ -632,6 +633,7 @@ export default function ProjectsScreen() {
                                         : 'For money votes · from completed trades · N votes cost N×N'}
                                 </Text>
                             </View>
+                            )}
                         </View>
                         )}
 

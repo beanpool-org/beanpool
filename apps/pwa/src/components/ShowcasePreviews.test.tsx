@@ -409,3 +409,18 @@ describe('the strip\'s ✕ is remembered, per node and feature, in this browser'
         onlyInfo();
     });
 });
+
+describe('sampleDecisions and samplePoolVoting match between web and phone (N5)', () => {
+    it('web and phone sample decisions and pool voting agree', async () => {
+        const PHONE_SAMPLE = '../../../native/components/showcase/sample-screens';
+        const phone = await import(/* @vite-ignore */ PHONE_SAMPLE) as { sampleDecisions: () => any[]; samplePoolVoting: () => any };
+        const webDecisions = sampleDecisions();
+        const phoneDecisions = phone.sampleDecisions();
+        expect(webDecisions).toHaveLength(phoneDecisions.length);
+        expect(webDecisions[0].id).toBe(phoneDecisions[0].id);
+        expect(webDecisions[0].title).toBe(phoneDecisions[0].title);
+        expect(webDecisions[0].description).toBe(phoneDecisions[0].description);
+        expect(webDecisions[0].tally).toEqual(phoneDecisions[0].tally);
+        expect(samplePoolVoting()).toEqual(phone.samplePoolVoting());
+    });
+});

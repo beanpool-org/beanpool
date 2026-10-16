@@ -189,6 +189,8 @@ describe('DecideSection voting answers', () => {
 });
 
 describe('DecideSection in preview mode', () => {
+    beforeEach(() => vi.mocked(castDecisionVote).mockClear());
+
     it('renders the sample decision, tags, turnout, tally, and marker actions opening the sheet without lock icons', async () => {
         const previewItem = {
             id: 'sample-decide-1',
@@ -248,6 +250,8 @@ describe('DecideSection in preview mode', () => {
         // Strip and Sample Header
         expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
         expect(screen.getByTestId('sample-header')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toHaveTextContent('582');
 
         // Sample decision card
         const card = screen.getByTestId('sample-decision');
@@ -268,12 +272,16 @@ describe('DecideSection in preview mode', () => {
         // Entire container has no lock icon
         expect(container.innerHTML).not.toMatch(/🔒|Locked|locked|Ʀ/);
 
-        // Marker actions open the sheet
+        // Marker actions open the sheet and never call castDecisionVote
         const actions = screen.getAllByTestId('local-community-action');
         expect(actions.length).toBeGreaterThanOrEqual(3); // Propose, Vote YES, Vote NO
-        fireEvent.click(actions[0]);
-        const sheet = await screen.findByTestId('local-community-sheet');
-        expect(sheet).toBeInTheDocument();
-        expect(sheet).toHaveTextContent('A vote binds a community');
+        for (const action of actions) {
+            fireEvent.click(action);
+            const sheet = await screen.findByTestId('local-community-sheet');
+            expect(sheet).toBeInTheDocument();
+            expect(sheet).toHaveTextContent('A vote binds a community');
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        }
+        expect(castDecisionVote).not.toHaveBeenCalled();
     });
 });

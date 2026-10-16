@@ -165,7 +165,7 @@ export function sampleCommonsBalance(): number {
  * The Commons in preview: the pool and an enterprise where enterprises are previewed (the real Decide screen
  * is drawn by DecideSection on the Decide tab).
  */
-export function CommonsPreview({ enterprises = true, decisions: _decisions = false, ...ways }: { enterprises?: boolean; decisions?: boolean } & LocalCommunityWays) {
+export function CommonsPreview({ enterprises = true, ...ways }: { enterprises?: boolean } & LocalCommunityWays) {
     const [commonsInfo, setCommonsInfo] = useState(false);
     const e = S.enterprises[0];
     if (!enterprises) return null;

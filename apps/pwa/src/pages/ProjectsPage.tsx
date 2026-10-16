@@ -60,8 +60,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // One Groups list holds projects, enterprises and chat groups (pick 7): a page asked for Enterprises opens on it.
     const [pickedSection, setActiveSection] = useState<'decide' | 'groups'>(initialSection === 'enterprises' ? 'groups' : initialSection);
     // Formal Decisions, where the node has them (lib/node-decisions.ts: off on the global node, which refuses every
-    // proposal and vote). Until the node has said, on, as on every node before the switch. Where they are off there is
-    // no Decide tab, and a page asked to open on Decide opens on Groups.
+    // proposal and vote, but shows Decide in preview mode). Until the node has said, on, as on every node before the switch.
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
@@ -400,14 +399,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
                 {enterprisesMode === 'preview' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
-                        <CommonsPreview enterprises={true} decisions={false} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                        <CommonsPreview enterprises={true} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}
-                {(enterprisesMode !== 'preview' || decisionsMode === 'preview') && (<>
+                {(enterprisesMode !== 'preview' || decisionsMode === 'live') && (
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     {enterprisesMode !== 'preview' && (
-                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3">
+                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${decisionsMode !== 'live' ? 'col-span-2' : ''}`}>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                 Commons Pool
                             </div>
@@ -416,25 +415,26 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </div>
                         </div>
                     )}
-                    <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                            Voice credits for money votes
+                    {decisionsMode === 'live' && (
+                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                Voice credits for money votes
+                            </div>
+                            <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
+                                {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
+                            </div>
+                            <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
+                                {myPoolVoting && !myPoolVoting.hasCompletedTrade
+                                    ? 'Opens after your first completed trade'
+                                    : 'From completed trades · N votes cost N×N'}
+                            </div>
                         </div>
-                        <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
-                            {Math.floor(effectiveMyPoolVoting?.voiceCredits ?? 0)}
-                        </div>
-                        <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
-                            {effectiveMyPoolVoting && !effectiveMyPoolVoting.hasCompletedTrade
-                                ? 'Opens after your first completed trade'
-                                : 'From completed trades · N votes cost N×N'}
-                        </div>
-                    </div>
+                    )}
                 </div>
-                </>)}
+                )}
             </header>
 
-            {/* Section Switcher: Decide vs Groups — the one sticky row. Only where there is a choice: with Decide off
-                (the global node) it would be one tab, Groups, which switches to nothing. */}
+            {/* Section Switcher: Decide vs Groups — the one sticky row, where Decide is available (live or preview). */}
             {hasDecide && (
             <div className="sticky top-0 z-40 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed

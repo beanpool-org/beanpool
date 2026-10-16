@@ -8,7 +8,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
-import { SampleHeader } from './ShowcasePreviews';
+import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
 
 interface Props extends LocalCommunityWays {
     decisions: DecisionWithTally[];
@@ -110,6 +110,19 @@ export function DecideSection({
         <div className="space-y-4" data-testid={preview ? 'decide-preview' : undefined}>
             {preview && <LocalCommunityStrip feature="decisions" {...ways} />}
             {preview && <SampleHeader />}
+            {preview && (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                        Voice credits for money votes
+                    </div>
+                    <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
+                        {Math.floor(samplePoolVoting().voiceCredits)}
+                    </div>
+                    <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
+                        From completed trades · N votes cost N×N
+                    </div>
+                </div>
+            )}
             {voteError && !preview && (
                 <div className="bg-red-50 dark:bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-sm p-3 rounded-xl flex items-center justify-between">
                     <span>{voteError}</span>

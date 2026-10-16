@@ -304,6 +304,8 @@ for (const scheme of ['light', 'dark'] as const) {
                 await press(b);
                 expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
             }
+            expect(host.querySelector('[data-testid="voice-credits-card"]')?.textContent).toContain('582');
+            expect(net.calls).toEqual([]);
         });
 
         it("My Deals in preview is the member's own sheet fed Example Valley: the deal waiting on you, the one held safely, the one sold; every press opens the sheet", async () => {

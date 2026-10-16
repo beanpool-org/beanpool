@@ -84,7 +84,10 @@ vi.mock('../identity', () => ({ loadIdentity: async () => me.identity }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: me.identity }) }));
 // Decide and the pool's own modals draw what they are given: a stand-in shows it, so a late answer drawn is seen.
 vi.mock('../../components/DecideSection', () => ({
-    DecideSection: ({ decisions, preview }: { decisions: Array<{ title?: string }>; preview?: boolean }) => createElement('div', { 'data-testid': 'decide-section', 'data-preview': String(preview) }, decisions.map(d => d.title).join(' | ')),
+    DecideSection: ({ decisions, preview }: { decisions: Array<{ title?: string }>; preview?: boolean }) => createElement('div', { 'data-testid': 'decide-section', 'data-preview': String(preview) },
+        decisions.map(d => d.title).join(' | '),
+        preview ? createElement('div', { 'data-testid': 'voice-credits-card' }, '582') : null,
+    ),
 }));
 vi.mock('../../components/ProposeDecisionModal', () => ({ ProposeDecisionModal: () => null }));
 vi.mock('../../components/GroupDetailModal', () => ({ GroupDetailModal: () => null }));

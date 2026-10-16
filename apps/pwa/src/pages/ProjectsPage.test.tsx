@@ -654,14 +654,16 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByText('Commons Pool')).toBeInTheDocument();
+        expect(screen.queryByTestId('voice-credits-card')).toBeNull();
         expect(screen.queryByTestId('sample-enterprise')).toBeNull();
         expect(sectionTabs()).toHaveLength(2);
         expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
         // Enterprises live: the kind chips are all there.
         expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
-        // Switching to Decide tab shows the sample decision
+        // Switching to Decide tab shows the sample decision and voice credits card
         fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
         expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toHaveTextContent('582');
     });
 
     it('the global node as it ships (previews, enterprises and Decisions off): switcher has Decide and Groups, Groups has sample enterprise, Decide has real Decide section in preview', async () => {
@@ -669,6 +671,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.queryByTestId('voice-credits-card')).toBeNull();
         expect(sectionTabs()).toHaveLength(2);
         expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
         expect(screen.getByText('Groups:')).toBeInTheDocument();

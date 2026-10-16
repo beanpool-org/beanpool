@@ -16,8 +16,10 @@ import {
     castDecisionVote,
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
+import { LOCAL_COMMUNITY_STRIP } from '@beanpool/core';
 import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
+import { samplePoolVoting } from './showcase/sample-screens';
 
 interface Props {
     decisions: DecisionWithTally[];
@@ -546,14 +548,49 @@ export function DecideSection({
             textAlign: 'center',
             lineHeight: 18,
         },
+        statCard: {
+            backgroundColor: colors.surface.card,
+            borderRadius: 14,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        statCardLabel: {
+            fontSize: 11,
+            color: colors.text.secondary,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 6,
+        },
+        statCardAmount: {
+            fontSize: 20,
+            color: colors.text.heading,
+            fontWeight: '800',
+        },
+        statCardHint: {
+            fontSize: 11,
+            color: colors.text.muted,
+            marginTop: 4,
+            lineHeight: 15,
+        },
     }));
 
     return (
         <View style={styles.container} testID={preview ? 'decide-preview' : undefined}>
             {preview && (
-                <View style={{ marginHorizontal: -16, marginBottom: 16 }}>
-                    <LocalCommunityMark variant="strip" feature="decisions" />
-                    <ExampleHeader text="Example Valley · an example member" />
+                <View style={{ marginBottom: 16 }}>
+                    <View style={{ marginHorizontal: -16 }}>
+                        <LocalCommunityMark variant="strip" feature="decisions" />
+                        <ExampleHeader text={LOCAL_COMMUNITY_STRIP.header} />
+                    </View>
+                    <View style={[styles.statCard, { marginTop: 12 }]} testID="voice-credits-card">
+                        <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits</Text>
+                        <Text style={styles.statCardAmount} numberOfLines={1}>{Math.floor(samplePoolVoting().voiceCredits)}</Text>
+                        <Text style={styles.statCardHint}>
+                            For money votes · from completed trades · N votes cost N×N
+                        </Text>
+                    </View>
                 </View>
             )}
             {/* View Switcher: Open Decisions vs History */}

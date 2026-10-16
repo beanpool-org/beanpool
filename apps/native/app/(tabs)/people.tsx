@@ -1191,36 +1191,41 @@ export default function PeopleScreen() {
                                 <View style={{ marginTop: 24 }}>
                                     <Text style={styles.pendingHeader}>⏳ PENDING ({pendingInvites.length})</Text>
                                     {pendingInvites.map((inv) => (
-                                        <View key={inv.code} style={styles.pendingCard}>
-                                            <View style={{ flex: 1 }}>
-                                                {inv.intendedFor ? (
-                                                    <Text style={styles.pendingFor}>For: {inv.intendedFor}</Text>
-                                                ) : null}
-                                                <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
-                                                    {inv.code}
-                                                </Text>
-                                            </View>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-                                                <Pressable
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={t('Show QR code')}
-                                                    style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8 }]}
-                                                    onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
-                                                >
-                                                    <Text style={styles.btnCopySmallText}>📱</Text>
-                                                </Pressable>
-                                                {invitesPreview ? (
-                                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
-                                                ) : (
+                                        <View key={inv.code} style={[styles.pendingCard, invitesPreview && { flexDirection: 'column', alignItems: 'stretch' }]}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <View style={{ flex: 1 }}>
+                                                    {inv.intendedFor ? (
+                                                        <Text style={styles.pendingFor}>For: {inv.intendedFor}</Text>
+                                                    ) : null}
+                                                    <Text style={styles.pendingCode} numberOfLines={1} ellipsizeMode="middle">
+                                                        {inv.code}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        style={[styles.btnCopySmall, { marginLeft: 0 }]}
-                                                        onPress={() => shareInvite(inv.code)}
+                                                        accessibilityLabel={t('Show QR code')}
+                                                        style={[styles.btnCopySmall, { marginLeft: 0, paddingHorizontal: 8 }]}
+                                                        onPress={() => setNewCode(newCode === inv.code ? '' : inv.code)}
                                                     >
-                                                        <Text style={styles.btnCopySmallText}>{t('Share')}</Text>
+                                                        <Text style={styles.btnCopySmallText}>📱</Text>
                                                     </Pressable>
-                                                )}
+                                                    {!invitesPreview && (
+                                                        <Pressable
+                                                            accessibilityRole="button"
+                                                            style={[styles.btnCopySmall, { marginLeft: 0 }]}
+                                                            onPress={() => shareInvite(inv.code)}
+                                                        >
+                                                            <Text style={styles.btnCopySmallText}>{t('Share')}</Text>
+                                                        </Pressable>
+                                                    )}
+                                                </View>
                                             </View>
+                                            {invitesPreview && (
+                                                <View style={{ marginTop: 10 }}>
+                                                    <LocalCommunityMark variant="action" feature="invites" label={t('Share')} />
+                                                </View>
+                                            )}
                                         </View>
                                     ))}
                                 </View>

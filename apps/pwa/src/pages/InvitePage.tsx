@@ -517,9 +517,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             >
                                                 📋
                                             </button>
-                                            {isPreview ? (
-                                                <LocalCommunityAction feature="invites" label={t('Share')} className="py-2 px-3 text-[12px]" {...waysForward} />
-                                            ) : (
+                                            {!isPreview && (
                                                 <button 
                                                     onClick={() => handleShare(inv.code)} 
                                                     className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
@@ -531,6 +529,11 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                             )}
                                         </div>
                                     </div>
+                                    {isPreview && (
+                                        <div className="mt-3">
+                                            <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-2 px-3 text-[12px] justify-center" {...waysForward} />
+                                        </div>
+                                    )}
                                     <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Created {new Date(inv.createdAt).toLocaleDateString()}
                                     </p>

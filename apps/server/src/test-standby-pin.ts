@@ -38,6 +38,10 @@
  *     no command output and no file but local-config; a code with one character changed is refused by its checksum,
  *     nothing written.
  *
+ * It runs to the end on a server without the pin (origin/main), reporting a count: the pin's module is loaded with a
+ * catch, the pairing code and the pin file are this suite's own reading of the design's format, and "the key a standby
+ * trusts" counts both the pin and any `mirror` link (what a standby trusted before it).
+ *
  * Run:
  *   SERVER_SUITES_ONLY=test-standby-pin node scripts/run-server-suites.mjs
  */
@@ -60,6 +64,27 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SRC = path.dirname(fileURLToPath(import.meta.url));
+const PIN_FILE = 'standby-main.json';
+
+/** The pin as the design writes it (D1), read and written here so this suite needs nothing of the module it tests. */
+function pinPath(dir = process.env.BEANPOOL_DATA_DIR!): string { return path.join(dir, PIN_FILE); }
+function readPin(dir?: string): any {
+    try { return JSON.parse(fs.readFileSync(pinPath(dir), 'utf8')); } catch { return null; }
+}
+function writePin(peerId: string, url: string | null, dir?: string): void {
+    fs.writeFileSync(pinPath(dir), JSON.stringify({ v: 1, peerId, communityId: null, url, pairedAt: Date.now(), how: 'shell' }), { mode: 0o600 });
+}
+function removePin(dir?: string): void { fs.rmSync(pinPath(dir), { force: true }); }
+/** The pairing code's format (D1): bpair1-<base64url JSON>-<first 6 hex of the sha256 of the base64url part>. */
+function makeCode(c: { url: string; communityId: string; peerId: string; token: string }): string {
+    const body = Buffer.from(JSON.stringify({ v: 1, ...c })).toString('base64url');
+    return `bpair1-${body}-${crypto.createHash('sha256').update(body).digest('hex').slice(0, 6)}`;
+}
+function parseCode(raw: unknown): { ok: true; code: { url: string; communityId: string; peerId: string; token: string } } | { ok: false } {
+    const m = typeof raw === 'string' ? /^bpair1-([A-Za-z0-9_-]+)-([0-9a-f]{6})$/.exec(raw.trim()) : null;
+    if (!m || crypto.createHash('sha256').update(m[1]).digest('hex').slice(0, 6) !== m[2]) return { ok: false };
+    try { return { ok: true, code: JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')) }; } catch { return { ok: false }; }
+}
 
 // ── f. the child: one node start on a prepared data folder (the migration and the connectors' load) ──
 if (process.argv.includes('--child-migrate')) {
@@ -79,14 +104,14 @@ if (process.argv.includes('--child-migrate')) {
     if (seed.includes('audit:')) {
         db.prepare('INSERT INTO sync_audit_log (origin_peer_id, origin_node_id) VALUES (?, ?)').run(seed.split('audit:')[1].split(',')[0], 'n');
     }
-    const { migrateStandbyMainAtBoot, readStandbyMain } = await import('./services/standby-main.js');
-    const outcome = await migrateStandbyMainAtBoot();
+    const sm: any = await import('./services/standby-main.js').catch(() => null);
+    const outcome = sm ? await sm.migrateStandbyMainAtBoot() : { kind: 'no migration on this server' };
     const { loadConnectors, getConnectors } = await import('./connector-manager.js');
     loadConnectors();
-    const { standbyPinConditions } = await import('./services/alerts.js');
-    const unpaired = standbyPinConditions().find((c) => c.key === 'standby.unpaired');
+    const alerts: any = await import('./services/alerts.js');
+    const unpaired = (alerts.standbyPinConditions?.() ?? []).find((c: any) => c.key === 'standby.unpaired');
     process.stdout.write(`${JSON.stringify({
-        outcome, pin: readStandbyMain(dir), connectors: getConnectors().map((c) => c.trustLevel), unpaired: unpaired?.active ? unpaired.detail : null,
+        outcome, pin: readPin(dir), connectors: getConnectors().map((c) => c.trustLevel), unpaired: unpaired?.active ? unpaired.detail : null,
         lines: lines.filter((l) => /\[Standby\]|\[Connectors\] Removed/.test(l)),
     })}\n`);
     process.exit(0);
@@ -158,7 +183,7 @@ async function main(): Promise<void> {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const { getConnectors, loadConnectors } = await import('./connector-manager.js');
+    const { getConnectors, loadConnectors, removeConnector } = await import('./connector-manager.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
@@ -167,10 +192,11 @@ async function main(): Promise<void> {
     const { setSyncCursor, noteReplicaFormat } = await import('./engine/sync.js');
     const { readCopyRecord, standbyReport } = await import('./services/standby-copy-record.js');
     const { standbyReportHeader, parseStandbyReport } = await import('./services/standby-report.js');
-    const { standbyPinConditions } = await import('./services/alerts.js');
+    const alertsMod: any = await import('./services/alerts.js');
+    const pinConditions = (): Array<{ key: string; active: boolean; detail: string }> => alertsMod.standbyPinConditions?.() ?? [];
     const { noteStandbyReport, checkStandbyHealth, getStandbyHealthBanner, setStandbyHealthClockForTests, forgetStandby } = await import('./services/standby-health.js');
-    const { makePairingCode, parsePairingCode, readStandbyMain, startPairRequestWatch, stopPairRequestWatch, STANDBY_MAIN_FILE } = await import('./services/standby-main.js');
-    const { pinMainServerForTests, unpinMainServerForTests } = await import('./standby-pin-test-helper.js');
+    // The module under test, when this server has it: its node half takes `beanpool pair`'s request.
+    const sm: any = await import('./services/standby-main.js').catch(() => null);
     const { signerCheck } = await import('./services/sealed-backup.js');
     const { takeRestorePoint, RESTORE_POINT_SERVER_TAR } = await import('./services/restore-points.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
@@ -230,27 +256,30 @@ async function main(): Promise<void> {
     const short = (r: { status: number; text: string }) => `${r.status} ${r.text.slice(0, 160)}`;
     const tfa = turnOn2faForTests(PW);
     const pwCode = (): Record<string, string> => ({ 'x-admin-session': createPasswordSession().sessionId });
-    const pinFile = path.join(dataDir, STANDBY_MAIN_FILE);
+    const pinFile = path.join(dataDir, PIN_FILE);
     const copied = () => JSON.stringify(tableContentHashes());
-    startPairRequestWatch(dataDir);
+    sm?.startPairRequestWatch(dataDir);
+    /** The keys this standby trusts as its main server: the pin, and any `mirror` link (before the pin, the anchor). */
+    const trusted = () => JSON.stringify([sha(pinFile), ...getConnectors().filter((c: any) => c.trustLevel === 'mirror').map((c: any) => c.address)]);
 
     try {
         // ── j (part). The pairing code, made on the main server ──
         console.log('\n── j. the pairing code: made from this server\'s own key, shown once, no-store ──');
         const made = await call('POST', '/api/local/admin/replication-token/generate', asPhone(), {});
         const code1: string = made.json?.pairingCode;
-        const parsed1 = parsePairingCode(code1);
+        const parsed1 = parseCode(code1);
         assert(made.status === 200 && made.cache === 'no-store' && parsed1.ok && parsed1.code.peerId === K1 && parsed1.code.communityId === community
             && parsed1.code.token === made.json?.token && parsed1.code.url === base,
             `j. generate answers { token, pairingCode } with no-store, the code holding this server's own key, its community and address (${made.status} ${made.cache})`);
         const TOKEN = made.json?.token as string;
         const forged = await call('POST', '/api/local/admin/replication-token/generate', asPhone(), { peerId: K4, communityId: 'c0ffee00c0ffee00' });
-        const pf = parsePairingCode(forged.json?.pairingCode);
+        const pf = parseCode(forged.json?.pairingCode);
         assert(forged.status === 200 && pf.ok && pf.code.peerId === K1 && pf.code.communityId === community,
             'j. a key or community in the request is never the code\'s: it holds this server\'s own');
         // The code made last is the one that copies (one token per server).
-        const code = forged.json.pairingCode as string;
-        const token = forged.json.token as string;
+        const token = String(forged.json?.token ?? '');
+        // A server with no pairing code (origin/main): the code it would have made, so the rows below still run.
+        const code = String(forged.json?.pairingCode ?? makeCode({ url: base, communityId: community, peerId: K1, token }));
 
         // ── i. mirror is gone ──
         console.log('\n── i. `mirror` is no trust level ──');
@@ -274,9 +303,9 @@ async function main(): Promise<void> {
 
         // ── c. Honest pairing ──
         console.log('\n── c. an unpaired standby, paired from its shell ──');
-        unpinMainServerForTests(dataDir);
+        removePin();
         updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null } as any);
-        const unpairedNow = standbyPinConditions().find((c) => c.key === 'standby.unpaired');
+        const unpairedNow = pinConditions().find((c) => c.key === 'standby.unpaired');
         assert(unpairedNow?.active === true && /not paired with a main server, so it copies nothing/.test(unpairedNow.detail) && /beanpool pair/.test(unpairedNow.detail),
             `c. unpaired: standby.unpaired is raised, with the next step (${unpairedNow?.detail})`);
         const fromSettings = await call('POST', '/api/local/admin/replication-config/save', asPhone(), { pairingCode: code });
@@ -297,7 +326,7 @@ async function main(): Promise<void> {
         fs.writeFileSync(codeFile, `${code}\n`, { mode: 0o600 });
         setSyncCursor('backup:primary', new Date(Date.now() - 3600_000).toISOString());
         const paired = await pairCli(['--code-file', codeFile]);
-        const pin = readStandbyMain(dataDir);
+        const pin = readPin();
         assert(paired.code === 0 && pin?.peerId === K1 && pin.how === 'shell' && pin.communityId === community && pin.url === base
             && (fs.statSync(pinFile).mode & 0o777) === 0o600,
             `c. beanpool pair --code-file → exit 0, the pin written (0600, how shell, K1) (${paired.out.trim().slice(-200)})`);
@@ -305,7 +334,7 @@ async function main(): Promise<void> {
             'c. it showed the main server, this standby (not paired yet) and the outcome');
         assert(getLocalConfig().backupPrimaryUrl === base && getLocalConfig().backupReplicationToken === token && savedPullCursor() === null,
             'c. the copy source and token are in local-config, and the cursor is dropped: the next copy is whole');
-        assert(!standbyPinConditions().find((c) => c.key === 'standby.unpaired')?.active, 'c. standby.unpaired is over');
+        assert(!pinConditions().find((c) => c.key === 'standby.unpaired')?.active, 'c. standby.unpaired is over');
         // That whole copy is built in the stager and swapped in at a restart (its own suites); here, as after that restart,
         // the standby holds a cursor and the copy's format (engine/sync.ts noteReplicaFormat), and copies on from it.
         setSyncCursor('backup:primary', new Date(Date.now() - 600_000).toISOString());
@@ -336,7 +365,7 @@ async function main(): Promise<void> {
 
         // ── b. The hostile copy source ──
         console.log('\n── b. a copy source that answers as another key: refused at the first page, loud on both servers ──');
-        pinMainServerForTests(K4, { dir: dataDir, url: base });
+        writePin(K4, base);
         const cursorBefore = new Date(Date.now() - 600_000).toISOString();
         setSyncCursor('backup:primary', cursorBefore);
         const tablesBefore = copied();
@@ -351,7 +380,7 @@ async function main(): Promise<void> {
         assert(report.why === 'signer-not-pinned' && report.pin === K4 && asOld.why === 'signature' && asOld.whyDetail === 'signer-not-pinned'
             && parseStandbyReport(header)?.why === 'signer-not-pinned' && parseStandbyReport(header)?.pin === K4,
             `b. the report: signer-not-pinned (signature + whyDetail for a main server from before), pin K4 (${header.slice(0, 120)})`);
-        const wrong = standbyPinConditions().find((c) => c.key === 'standby.source-not-main');
+        const wrong = pinConditions().find((c) => c.key === 'standby.source-not-main');
         assert(wrong?.active === true && /answers with a key that is not its main server's/.test(wrong.detail) && /pair this standby again from its shell/.test(wrong.detail),
             `b. standby.source-not-main is raised (${wrong?.detail})`);
         // The main server's watch (this server as the main one, its clock an hour on): silence, with the reason.
@@ -367,28 +396,28 @@ async function main(): Promise<void> {
         setStandbyHealthClockForTests(0);
         setNodeRole('backup');
         // Pointed back: the source is the main server again.
-        pinMainServerForTests(K1, { dir: dataDir, url: base });
+        writePin(K1, base);
         const back = await pullNow();
         assert(back.ok && readCopyRecord().lastOutcome === 'ok', `b. pointed back, the next copy lands (${back.error || (back.staged ? 'whole' : 'from the cursor')})`);
-        assert(!standbyPinConditions().find((c) => c.key === 'standby.source-not-main')?.active, 'b. standby.source-not-main is over');
+        assert(!pinConditions().find((c) => c.key === 'standby.source-not-main')?.active, 'b. standby.source-not-main is over');
 
         // ── a. The residual, closed ──
         console.log('\n── a. no session makes another key the pin ──');
-        pinMainServerForTests(K1, { dir: dataDir, url: base });
-        const pinBytes = sha(pinFile);
-        const k4Code = makePairingCode({ url: 'https://mallory.example.invalid', communityId: community, peerId: K4, token: 'b'.repeat(64) });
+        writePin(K1, base);
+        const pinBytes = trusted();
+        const k4Code = makeCode({ url: 'https://mallory.example.invalid', communityId: community, peerId: K4, token: 'b'.repeat(64) });
         for (const [who, headers, extra] of [
             ['a fresh phone hand-off', asPhone, () => ({})],
             ['the password with a current code', pwCode, () => ({ code: tfa.code() })],
         ] as Array<[string, () => Record<string, string>, () => Record<string, unknown>]>) {
             const link = await call('POST', '/api/local/connectors', headers(), { address: `/ip4/127.0.0.1/tcp/4002/p2p/${K4}`, trustLevel: 'mirror', ...extra() });
-            assert(link.status === 400 && sha(pinFile) === pinBytes, `a. ${who}: a mirror link → 400, the pin as it was (${short(link)})`);
+            assert(link.status === 400 && trusted() === pinBytes, `a. ${who}: a mirror link → 400, the keys it trusts as they were (${short(link)})`);
             const k4 = await call('POST', '/api/local/admin/replication-config/save', headers(), { pairingCode: k4Code, ...extra() });
-            assert(k4.status === 409 && k4.json?.pairOnShell === true && k4.json?.mainServer === K1 && sha(pinFile) === pinBytes
+            assert(k4.status === 409 && k4.json?.pairOnShell === true && k4.json?.mainServer === K1 && trusted() === pinBytes
                 && new RegExp(K4.slice(-8)).test(k4.json?.error || '') && /--follow-new-server/.test(k4.json?.error || ''),
                 `a. ${who}: K4's pairing code in Live Backup Server → 409 pairOnShell, naming both keys (${short(k4)})`);
             const urlAndToken = await call('POST', '/api/local/admin/replication-config/save', headers(), { primaryUrl: 'https://mallory.example.invalid', primaryToken: 'b'.repeat(64), ...extra() });
-            assert(urlAndToken.status === 200 && sha(pinFile) === pinBytes && readStandbyMain(dataDir)?.peerId === K1,
+            assert(urlAndToken.status === 200 && trusted() === pinBytes && readPin()?.peerId === K1,
                 `a. ${who}: K4's address and a token → 200, and the pin byte for byte as it was (${short(urlAndToken)})`);
         }
         updateLocalConfig({ backupPrimaryUrl: base, backupReplicationToken: token } as any);
@@ -422,7 +451,7 @@ async function main(): Promise<void> {
         const posing = await upload(await sealedBy(K1), asPhone());
         assert(posing.status === 400 && posing.json?.badSignature === true, `a. a file naming K1 that K1 never signed → 400 altered (${posing.status})`);
         assert(JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()) === rolesBefore
-            && fs.readdirSync(dataDir).sort().join(',') === filesBefore && sha(pinFile) === pinBytes,
+            && fs.readdirSync(dataDir).sort().join(',') === filesBefore && trusted() === pinBytes,
             'a. nothing moved: the roles, the pin, no restore point, no file kept for a phone');
 
         // ── g. No route writes the pin ──
@@ -440,7 +469,11 @@ async function main(): Promise<void> {
                 ['POST', '/api/local/admin/replication-resync'], ['GET', '/api/local/connectors']] as Array<[string, string]>) {
                 await call(m, route, headers(), bait);
                 sent++;
-                if (sha(pinFile) !== pinBytes) { changedBy.push(`${who}: ${m} ${route}`); pinMainServerForTests(K1, { dir: dataDir, url: base }); }
+                if (trusted() !== pinBytes) {
+                    changedBy.push(`${who}: ${m} ${route}`);
+                    for (const c of getConnectors()) if ((c as any).trustLevel === 'mirror') removeConnector(c.address);
+                    writePin(K1, base);
+                }
             }
         }
         assert(sent === creds.length * 8 && changedBy.length === 0, `g. ${sent} requests: standby-main.json byte for byte after each (${changedBy.join(' | ') || 'none changed it'})`);
@@ -450,10 +483,10 @@ async function main(): Promise<void> {
 
         // ── e. Promotion needs no re-pair ──
         console.log('\n── e. a code from a promoted standby (the same key) is taken in Live Backup Server ──');
-        const promotedCode = makePairingCode({ url: 'https://promoted.example.invalid', communityId: community, peerId: K1, token: 'd'.repeat(64) });
+        const promotedCode = makeCode({ url: 'https://promoted.example.invalid', communityId: community, peerId: K1, token: 'd'.repeat(64) });
         const followed = await call('POST', '/api/local/admin/replication-config/save', asPhone(), { pairingCode: promotedCode });
         assert(followed.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://promoted.example.invalid' && getLocalConfig().backupReplicationToken === 'd'.repeat(64)
-            && sha(pinFile) === pinBytes, `e. the same key's code → 200, its address and token taken, the pin unchanged (${short(followed)})`);
+            && trusted() === pinBytes, `e. the same key's code → 200, its address and token taken, the pin unchanged (${short(followed)})`);
         const noProof = await call('POST', '/api/local/admin/replication-config/save', asComputer(), { pairingCode: promotedCode });
         assert(noProof.status === 403, `e. …with the fresh proof only: the owner's computer session → 403 (${short(noProof)})`);
         updateLocalConfig({ backupPrimaryUrl: base, backupReplicationToken: token } as any);
@@ -462,27 +495,27 @@ async function main(): Promise<void> {
         console.log('\n── d. a different main server: only with --follow-new-server, from the shell ──');
         const k2CodeFile = path.join(work, 'k2-code');
         // The code's address is this server, which answers as K1: the amber line.
-        fs.writeFileSync(k2CodeFile, makePairingCode({ url: base, communityId: community, peerId: K2, token: 'e'.repeat(64) }));
+        fs.writeFileSync(k2CodeFile, makeCode({ url: base, communityId: community, peerId: K2, token: 'e'.repeat(64) }));
         const cursorKept = new Date(Date.now() - 300_000).toISOString();
         setSyncCursor('backup:primary', cursorKept);
         const refusedRepair = await pairCli(['--code-file', k2CodeFile]);
         assert(refusedRepair.code === 1 && /This standby follows …/.test(refusedRepair.out) && /--follow-new-server/.test(refusedRepair.out)
-            && sha(pinFile) === pinBytes && getLocalConfig().backupReplicationToken === token && savedPullCursor() === cursorKept,
+            && trusted() === pinBytes && getLocalConfig().backupReplicationToken === token && savedPullCursor() === cursorKept,
             `d. a K2 code on the K1 standby → exit 1, nothing changed (${refusedRepair.out.trim().slice(-160)})`);
         const secBefore = printed.length;
         const repaired = await pairCli(['--code-file', k2CodeFile, '--follow-new-server']);
-        assert(repaired.code === 0 && readStandbyMain(dataDir)?.peerId === K2 && savedPullCursor() === null && getLocalConfig().backupReplicationToken === 'e'.repeat(64),
+        assert(repaired.code === 0 && readPin()?.peerId === K2 && savedPullCursor() === null && getLocalConfig().backupReplicationToken === 'e'.repeat(64),
             `d. --follow-new-server → exit 0, the pin is K2, the cursor dropped: the next copy is built from nothing (${repaired.out.trim().slice(-200)})`);
         assert(/answers as another key/.test(repaired.out) && /paired anyway/.test(repaired.out),
             `d. the code's address answering as another key: the amber line, paired anyway (${repaired.out.trim().slice(-200)})`);
         assert(printed.slice(secBefore).some((l) => /now follows a different main server/.test(l) && l.includes(K2)), 'd. the security log line says it');
         // Back to K1, and a K1 code on the K1 standby: address and token, no copy from nothing.
-        pinMainServerForTests(K1, { dir: dataDir, url: base });
+        writePin(K1, base);
         setSyncCursor('backup:primary', cursorKept);
         const sameFile = path.join(work, 'same-code');
-        fs.writeFileSync(sameFile, makePairingCode({ url: base, communityId: community, peerId: K1, token }));
+        fs.writeFileSync(sameFile, makeCode({ url: base, communityId: community, peerId: K1, token }));
         const same = await pairCli(['--code-file', sameFile]);
-        assert(same.code === 0 && readStandbyMain(dataDir)?.peerId === K1 && savedPullCursor() === cursorKept && /already follows/.test(same.out) && !/answers as another key/.test(same.out),
+        assert(same.code === 0 && readPin()?.peerId === K1 && savedPullCursor() === cursorKept && /already follows/.test(same.out) && !/answers as another key/.test(same.out),
             `d. a K1 code on the K1 standby → address and token updated, the cursor kept (${same.out.trim().slice(-160)})`);
 
         // ── h. Restore points and a new install ──
@@ -490,10 +523,10 @@ async function main(): Promise<void> {
         const point = takeRestorePoint('restore');
         const tar = path.join(dataDir, 'restore-points', point.name, RESTORE_POINT_SERVER_TAR);
         const listedTar = fs.existsSync(tar) ? execFileSync('tar', ['-tzf', tar], { encoding: 'utf8' }) : '';
-        assert(listedTar.split('\n').some((l) => l.replace(/^\.\//, '') === STANDBY_MAIN_FILE), `h. the restore point's tar holds ${STANDBY_MAIN_FILE} (${listedTar.split('\n').join(' ')})`);
+        assert(listedTar.split('\n').some((l) => l.replace(/^\.\//, '') === PIN_FILE), `h. the restore point's tar holds ${PIN_FILE} (${listedTar.split('\n').join(' ')})`);
         const onlyPin = fs.mkdtempSync(path.join(work, 'only-pin-'));
-        fs.copyFileSync(pinFile, path.join(onlyPin, STANDBY_MAIN_FILE));
-        assert(notABrandNewInstall(onlyPin) === `it has ${STANDBY_MAIN_FILE}`, `h. notABrandNewInstall names it (${notABrandNewInstall(onlyPin)})`);
+        fs.copyFileSync(pinFile, path.join(onlyPin, PIN_FILE));
+        assert(notABrandNewInstall(onlyPin) === `it has ${PIN_FILE}`, `h. notABrandNewInstall names it (${notABrandNewInstall(onlyPin)})`);
 
         // ── f. Migration ──
         console.log('\n── f. a start on this version: today\'s standbys move themselves where the record is clear ──');
@@ -514,10 +547,10 @@ async function main(): Promise<void> {
             && m1.pin?.url === 'https://main.example.invalid' && JSON.stringify(m1.connectors) === '["peer"]' && m1.unpaired === null
             && m1.lines.some((l: string) => /Pinned this standby's main server/.test(l)) && m1.lines.some((l: string) => /Removed the mirror link/.test(l)),
             `f. one mirror link and a copy taken → pinned (how migrated), connectors.json without the link, no banner (${JSON.stringify(m1).slice(0, 300)})`);
-        const pinAfter1 = sha(path.join(today, STANDBY_MAIN_FILE));
+        const pinAfter1 = sha(path.join(today, PIN_FILE));
         const connAfter1 = sha(path.join(today, 'connectors.json'));
         const m2 = await childStart(today, standbyEnv);
-        assert(m2?.outcome?.kind === 'paired-already' && sha(path.join(today, STANDBY_MAIN_FILE)) === pinAfter1 && sha(path.join(today, 'connectors.json')) === connAfter1,
+        assert(m2?.outcome?.kind === 'paired-already' && sha(path.join(today, PIN_FILE)) === pinAfter1 && sha(path.join(today, 'connectors.json')) === connAfter1,
             `f. a second start rewrites nothing (${m2?.outcome?.kind})`);
         const audited = newDir([{ peer: K4 }]);
         const m3 = await childStart(audited, { ...standbyEnv, PIN_SEED: `audit:${K1}` });
@@ -550,7 +583,7 @@ async function main(): Promise<void> {
         setStandbyHealthClockForTests(0);
         setNodeRole('backup');
     } finally {
-        stopPairRequestWatch();
+        sm?.stopPairRequestWatch();
         try { await node.stop(); } catch { /* stopped */ }
         registrar.close();
         fs.rmSync(work, { recursive: true, force: true });

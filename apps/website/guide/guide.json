@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 137,
-  "hash": "1f5ed0d80915dd9d5ccea02487d046542062da80fc9dd50fcd0dca95d1327c49",
+  "version": 138,
+  "hash": "238f64f53498fe52e995c1cd4cc9197c39478dbabb585fdb70fccfa1e0667d0e",
   "sections": [
     {
       "id": "about",
@@ -5988,7 +5988,7 @@
         {
           "type": "ul",
           "items": [
-            "**On your community:** nothing of your posts. Its listings, and their photos, are for its members. Each photo opens only from the link that comes with its listing, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.",
+            "**On your community:** nothing of your posts. Its listings, and their photos, are for its members, and so is your profile photo. Each photo opens only from the link that comes with its listing or with your name in the app, so someone outside sees one only if a member passes that link on. Someone who opens your community's address without joining is shown the way to the global community instead.",
             "**On the global community:** anyone can look at its listings before joining, but they see only the words, the photos and roughly where each one is, never your name, your face or the exact spot.",
             "Anything you share to the Pulse can be seen by anyone who opens it. See \"Sharing your channels\"."
           ]

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 129,
-  "hash": "0f2793305eab426bd5e0e2bfde3b84f5816ec7f7bd51fce08eceabf092a213c5",
+  "version": 130,
+  "hash": "a28afafa73f92ad4ad7b0372e5f9af713a6be8bd726f63427c7c9f5e950af23d",
   "sections": [
     {
       "id": "setup",
@@ -3039,6 +3039,7 @@
             "If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. With the recovery code, the standby looks in the older copies it held for a token before giving up; a phone opens only the newest copy.",
             "Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.",
             "Keep making file backups.",
+            "Members' faces (their profile pictures) get new links, because each server makes its own: until a phone next syncs, the faces it saved show initials, and that sync brings the new links.",
             "Automation tokens and connected AI assistants stay on the old server. Make new tokens from an owner's phone, put them where they were used (manager-nodes.json too), and connect any assistant again."
           ]
         },
@@ -3975,7 +3976,7 @@
         },
         {
           "type": "p",
-          "text": "Either way, members' faces may change address with the restart. Phones that already hold the community fetch the new addresses at their next sync, so faces don't disappear."
+          "text": "Members' faces keep their addresses either way: on every server, a face opens only from the address the server gave its members."
         },
         {
           "type": "p",

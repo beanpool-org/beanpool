@@ -434,18 +434,23 @@ export function sampleEnterpriseCards(now = Date.now()): [SampleEnterpriseCard, 
 /** The project's id, or else the enterprise's: the one an enterprise page in preview draws. */
 const isSampleProject = (id: string | undefined) => id === SAMPLE_COMMUNITY.projects[0].id;
 
+/** Its recent activity as the page lists it: the P&L's rows, newest first. */
+function sampleFlow(rows: readonly SamplePnlRow[], now: number) {
+    return rows.map(r => ({ id: r.id, memo: t(r.what), amount: Math.abs(r.amount), incoming: r.amount > 0, timestamp: at(now, -r.daysAgo) }));
+}
+
 /** One enterprise or project as the enterprise page reads it (GET /api/treasury/:key): the project's for its id, else the Bakery's. */
 export function sampleEnterpriseDetail(id: string | undefined, now = Date.now()) {
     const [enterprise, project] = sampleEnterpriseCards(now);
     if (isSampleProject(id)) {
         const p = SAMPLE_COMMUNITY.projects[0];
-        return { ...project, id: p.id, description: project.purpose, backersCount: p.backers, posts: [], flow: [], pendingBids: [], activeDeals: [], deferredClaims: [] };
+        return { ...project, id: p.id, description: project.purpose, backersCount: p.backers, posts: [], flow: sampleFlow(p.rows, now), pendingBids: [], activeDeals: [], deferredClaims: [] };
     }
     const e = SAMPLE_COMMUNITY.enterprises[0];
     return {
         ...enterprise, id: e.id, description: enterprise.purpose,
         posts: e.listings.map(l => ({ id: l.id, title: t(l.title), type: l.type, credits: l.price, price: l.price, description: '', repeatable: true })),
-        flow: [], pendingBids: [], activeDeals: [], deferredClaims: [],
+        flow: sampleFlow(e.pnl.rows, now), pendingBids: [], activeDeals: [], deferredClaims: [],
     };
 }
 

@@ -180,6 +180,11 @@ describe('treasury-detail on global node (preview mode)', () => {
         expect(host.querySelector('[data-testid="enterprise-decisions"]')).toBeNull();
         expect(text()).not.toContain('Report Enterprise');
         expect(host.querySelector('input')).toBeNull();
+        // The thread says where talk happens, not "Start the conversation!"; Recent activity is the P&L's rows (N4).
+        expect(host.querySelector('[data-testid="thread-preview"]')?.textContent).toContain('In a local community');
+        expect(text()).not.toContain('Start the conversation');
+        expect(text()).not.toContain('No transactions yet.');
+        expect(text().split('Sourdough orders').length - 1).toBeGreaterThanOrEqual(2);
         expect(net.calls).toEqual([]);
         expect(nav.pushes).toEqual([]);
     });

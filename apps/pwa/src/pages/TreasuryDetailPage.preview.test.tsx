@@ -82,6 +82,11 @@ describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
         expect(screen.queryByTestId('enterprise-decisions')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Report/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+        // The thread says where talk happens, not "Start the conversation!"; Recent Activity is the P&L's rows (N4).
+        expect(screen.getByTestId('thread-preview')).toHaveTextContent('In a local community');
+        expect(screen.queryByText(/Start the conversation/)).toBeNull();
+        expect(screen.queryByText('No recent activity.')).toBeNull();
+        expect(screen.getAllByText('Sourdough orders').length).toBeGreaterThanOrEqual(2);
         await askedNothing();
     });
 

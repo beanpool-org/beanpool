@@ -2297,6 +2297,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2" data-testid="thread-members-only">
                                     The discussion is open to members.
                                 </p>
+                            ) : isEffectivePreview ? (
+                                // Example Valley's: no thread to start here, so no "Start the conversation!" (review N4).
+                                <div className="py-2" data-testid="thread-preview">
+                                    <LocalCommunityLine feature="enterprises" text={t('🏘️ In a local community its keepers and members talk it over here ›')} {...ways} />
+                                </div>
                             ) : threadMessages.length === 0 ? (
                                 <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2">
                                     {viewerIsMember ? 'No messages yet. Start the conversation!' : 'No messages yet.'}

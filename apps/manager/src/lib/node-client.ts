@@ -1906,9 +1906,11 @@ export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?:
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
-    // The node's real schedule or an error: never a made-up default shown as if it were the node's.
+    // The node's real schedule or an error: never a made-up default shown as if it were the node's. The error in words,
+    // never a bare HTTP status (opus-1984 N4).
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(statusSentence(res.status, data, t('The node did not say its backup schedule. Try again in a minute.')));
     }
     const data = await res.json();
     if (!data?.config) throw new Error("The node didn't say its backup schedule");
@@ -1937,7 +1939,7 @@ export async function updateNodeSnapshotSchedule(
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throwIfFreshProof(res.status, data);
-        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(statusSentence(res.status, data, t('The backup schedule was not saved. Try again in a minute.')));
     }
     const data = await res.json();
     return data.config;
@@ -1979,6 +1981,7 @@ export async function updateNodeReplicationCadence(
     }
 }
 
+/** Start a standby's copy over. A refusal says what happened in words, never a bare HTTP status (opus-1984 N4). */
 export async function forceNodeResync(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-resync');
     const res = await fetch(endpoint, {
@@ -1987,7 +1990,8 @@ export async function forceNodeResync(nodeUrl: string, adminPassword?: string, t
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(statusSentence(res.status, data, t('The copy did not start again. Try again in a minute.')));
     }
 }
 

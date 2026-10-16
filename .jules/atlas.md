@@ -225,3 +225,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `isModeratorSession`, `sectionTargetFor`, and `endKeySession` helper functions in `apps/manager/src/lib/key-session.ts` were untested directly.
 **Learning:** Testing `sectionTargetFor` verified that moderator sessions are strictly routed to the moderation section (`{ tab: 'people', subTab: 'moderation' }`) regardless of requested section, while `endKeySession` confirmed CSRF header inclusion and network exception handling.
 **Action:** Continue identifying untested helper functions and edge cases across `apps/manager/src/lib/`.
+
+## 2026-10-16 - [manager tests] fresh-proof utility unit tests
+**Gap:** `freshProofRefusal`, `freshProofRefusalOf`, `throwIfFreshProof`, `refusalOf`, `proofField`, `proofHeader`, and `statusSentence` in `apps/manager/src/lib/fresh-proof.ts` lacked dedicated unit test coverage.
+**Learning:** Testing `freshProofRefusal` verified status 401/403 discriminator matching (TOTP, `phone_required`, `step_up_required`, `fresh_proof_needs_2fa`) vs `checkAdminAuth` second factor requests (`SECOND_FACTOR_ASK`), and `proofField`/`proofHeader` verified code pattern matching and trimming.
+**Action:** Continue identifying remaining untested helper utilities and React components in `apps/manager/`.

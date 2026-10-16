@@ -23,6 +23,7 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
+import { tooManyPixels } from '../storage/image-metadata.js';
 import {
     ssrfSafeFetch,
     SsrfSecurityError,
@@ -55,6 +56,16 @@ export const THUMBNAIL_BACKOFF_STEPS_MS = [
 /** Outbound thumbnail fetches allowed in flight at once during a batch ingest. */
 export const INGEST_CONCURRENCY = 3;
 export const MAX_NEGATIVE_CACHE_ENTRIES = 1000;
+
+/**
+ * Why a thumbnail's bytes are refused for having more pixels than a node stores (storage/image-metadata.ts
+ * MAX_STORED_PIXELS), or null. A channel's owner chooses the thumbnail, and every member's phone that shows the feed
+ * decodes it whole: a 49 KB PNG can be 20,000 × 20,000 (#2079 review NB1). Refused as 413, which the backoff remembers.
+ */
+export function thumbnailPixelsRefusal(buffer: Buffer): string | null {
+    const size = tooManyPixels(buffer);
+    return size ? `Thumbnail has more pixels than a node stores (${size.width} x ${size.height})` : null;
+}
 
 export const ALLOWED_IMAGE_CONTENT_TYPES = [
     'image/jpeg',
@@ -727,6 +738,11 @@ export class PulseThumbnailService {
                                 const mimeType = rawType.split(';')[0].trim().toLowerCase();
                                 if (ALLOWED_IMAGE_CONTENT_TYPES.includes(mimeType)) {
                                     const buffer = await imgRes.buffer();
+                                    const pixels = thumbnailPixelsRefusal(buffer);
+                                    if (pixels) {
+                                        this.cache.setNegative(itemId, 413, pixels);
+                                        return { status: 413, error: pixels };
+                                    }
                                     if (buffer.length <= this.maxEntryBytes) {
                                         try {
                                             const info = db.prepare(
@@ -819,7 +835,8 @@ export class PulseThumbnailService {
         // 3. Check persistent disk store
         if (this.diskStore) {
             const diskEntry = await this.diskStore.get(itemId);
-            if (diskEntry) {
+            // One kept before thumbnails were held to the pixel cap is never served: the fetch below refuses it.
+            if (diskEntry && !thumbnailPixelsRefusal(diskEntry.buffer)) {
                 this.cache.set(itemId, diskEntry.buffer, diskEntry.contentType);
                 if (options.ifNoneMatch && options.ifNoneMatch === diskEntry.etag) {
                     return { status: 304 };
@@ -888,6 +905,11 @@ export class PulseThumbnailService {
                 if (buf.length > this.maxEntryBytes) {
                     this.cache.setNegative(itemId, 413, 'Thumbnail exceeds maximum size');
                     return { status: 413, error: 'Thumbnail exceeds maximum size' };
+                }
+                const pixels = thumbnailPixelsRefusal(buf);
+                if (pixels) {
+                    this.cache.setNegative(itemId, 413, pixels);
+                    return { status: 413, error: pixels };
                 }
                 const entry = this.cache.set(itemId, buf, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
@@ -965,6 +987,11 @@ export class PulseThumbnailService {
                     const error = `Thumbnail body ${buffer.length} bytes exceeds maximum limit of ${this.maxEntryBytes} bytes`;
                     return this.refuse(itemId, rawUrl, 413, error);
                 }
+                const pixels = thumbnailPixelsRefusal(buffer);
+                if (pixels) {
+                    logger.warn('SYS', `[PulseThumbnail] ${pixels} for item ${itemId}`);
+                    return this.refuse(itemId, rawUrl, 413, pixels);
+                }
 
                 const entry = this.cache.set(itemId, buffer, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
@@ -1041,7 +1068,7 @@ export class PulseThumbnailService {
         }
         if (this.diskStore) {
             const diskEntry = await this.diskStore.get(itemId);
-            if (diskEntry) {
+            if (diskEntry && !thumbnailPixelsRefusal(diskEntry.buffer)) {
                 this.cache.set(itemId, diskEntry.buffer, diskEntry.contentType);
                 return { status: 200, buffer: diskEntry.buffer, contentType: diskEntry.contentType, etag: diskEntry.etag };
             }
@@ -1076,6 +1103,8 @@ export class PulseThumbnailService {
                 if (buf.length > this.maxEntryBytes) {
                     return { status: 413, error: 'Thumbnail exceeds maximum size' };
                 }
+                const pixels = thumbnailPixelsRefusal(buf);
+                if (pixels) return { status: 413, error: pixels };
                 const entry = this.cache.set(itemId, buf, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
@@ -1142,6 +1171,11 @@ export class PulseThumbnailService {
             const buffer = await res.buffer();
             if (buffer.length > this.maxEntryBytes) {
                 return { status: 413, error: `Thumbnail body ${buffer.length} bytes exceeds limit` };
+            }
+            const pixels = thumbnailPixelsRefusal(buffer);
+            if (pixels) {
+                logger.warn('SYS', `[PulseThumbnail] ${pixels} at ingest for item ${itemId}`);
+                return { status: 413, error: pixels };
             }
 
             const entry = this.cache.set(itemId, buffer, mimeType);

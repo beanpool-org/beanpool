@@ -632,8 +632,7 @@ function photoPathOf(postId: string, orderNum: number): string {
     return postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope);
 }
 
-/** What an anonymous <img> gets. */
-/** An avatar path is asked as a member is handed it, with its key (faces are keyed on every node: avatar-test-url.ts). */
+/** What an anonymous <img> gets. An avatar path is asked as a member is handed it, with its key (faces are keyed on every node: avatar-test-url.ts). */
 async function fetchBytes(path: string): Promise<{ status: number; bytes: Buffer; type: string }> {
     const res = await fetch(`${BASE}${withAvatarKey(path)}`);
     return { status: res.status, bytes: Buffer.from(await res.arrayBuffer()), type: res.headers.get('content-type') ?? '' };

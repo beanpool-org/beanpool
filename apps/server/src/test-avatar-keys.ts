@@ -200,7 +200,6 @@ async function main(): Promise<void> {
     assert(listedRes?.status === 200, `and that URL opens unsigned (got ${listedRes?.status})`);
 
     // With correct k parameter
-    // With correct k parameter
     const validKeyRes = await fetch(`${baseUrl}/api/avatar/${pubkey}?k=${validKey}`);
     assert(validKeyRes.status === 200, `GET /api/avatar/:pubkey with valid ?k= returns 200 OK (got ${validKeyRes.status})`);
     const validKeyType = validKeyRes.headers.get('content-type');

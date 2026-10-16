@@ -21,7 +21,7 @@
  * - Every node, whatever its profile or read auth (safe by default for self-hosters: no switch turns it off).
  * - A phone keeps the face URLs it was handed in its own copy of the members, and between its hourly whole reads asks
  *   only for the members changed since its cursor (apps/native services/pillar-sync.ts, `/api/members?updatedAfter=`).
- *   Keying faces or no longer keying them (`guestListingsOnly` or a private preview switched), or a new secret, changes
+ *   Keying faces where they were plain (the update that keyed every node), or a new secret (a take-over), changes
  *   every member's URL and no member's row, so the URLs such a phone holds would stop opening until its next whole read
  *   (review of #1645). So the boot that changes the URLs' shape records when (`node_config.avatarKeysSince`, beside
  *   `avatarKeysShape`, what they were), and a delta from a phone with no sync since then is answered with the whole

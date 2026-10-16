@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
 import { dmNotLockedLine } from '../lib/dm-lock';
@@ -104,6 +104,8 @@ vi.mock('../lib/api', () => ({
     // A group's chat on a node from before locked chats (no `encryption`), unless a test says otherwise.
     getGroupChat: vi.fn(async (groupId: string) => ({ conversation: mockConversationDetails[groupId], messages: mockMessagesByConv[groupId] || [], canPost: true })),
     getGroupMembers: vi.fn(async () => []),
+    // Groups' New group: the Commons form, opened on Messages.
+    createGroup: vi.fn(),
     groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
 }));
 
@@ -483,13 +485,140 @@ describe('MessagesPage conversation filters at 320px with 1.3x text', () => {
         mockConversations = [];
     });
 
-    it('wraps All / Transactions / Direct onto a second line instead of hiding Direct behind a scrollbar', async () => {
+    it('wraps All / Transactions / Direct / Groups onto a second line instead of hiding any behind a scrollbar', async () => {
         render(<MessagesPage identity={mockIdentity} />);
 
         const row = await screen.findByTestId('conversation-filter-chips');
         expect(row).toHaveStyle({ flexWrap: 'wrap' });
         expect(row).toHaveClass('scrollbar-none');
-        expect(Array.from(row.querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct']);
+        expect(Array.from(row.querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct', 'Groups']);
+    });
+});
+
+describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \"no group button at the top\")", () => {
+    const dm = (id: string, extra: Partial<Conversation> = {}): Conversation => ({
+        id, type: 'dm', name: null, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+        peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-10-14T00:00:00Z', ...extra,
+    });
+    const group = (id: string, name: string, unreadCount = 0): Conversation => ({
+        id, type: 'group_thread', name, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+        unreadCount, createdAt: '2026-10-15T00:00:00Z',
+    });
+    const chipRow = () => screen.findByTestId('conversation-filter-chips');
+    const chip = async (name: string) => within(await chipRow()).getByText(name).closest('button')!;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockConversationDetails = {};
+        mockMessagesByConv = {};
+        mockConversations = [
+            dm('dm-1'),
+            dm('trade-1', { postId: 'post-1', postTitle: 'Lemons', peerCallsign: 'Carol' }),
+            group('grp-1', 'Garden crew', 2),
+            group('grp-2', 'Street choir', 3),
+            { ...group('evt-1', 'Working bee'), type: 'event_thread' },
+        ];
+    });
+
+    it('Groups lists only the group, enterprise and event chats; Direct no longer lists them', async () => {
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Garden crew');
+
+        fireEvent.click(await chip('Groups'));
+        expect(screen.getByText('Garden crew')).toBeInTheDocument();
+        expect(screen.getByText('Street choir')).toBeInTheDocument();
+        expect(screen.getByText('Working bee')).toBeInTheDocument();
+        expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+        expect(screen.queryByText('Lemons')).not.toBeInTheDocument();
+
+        fireEvent.click(await chip('Direct'));
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(screen.queryByText('Garden crew')).not.toBeInTheDocument();
+        expect(screen.queryByText('Working bee')).not.toBeInTheDocument();
+
+        fireEvent.click(await chip('Transactions'));
+        expect(screen.getByText('Lemons')).toBeInTheDocument();
+        expect(screen.queryByText('Garden crew')).not.toBeInTheDocument();
+
+        fireEvent.click(await chip('All'));
+        expect(screen.getByText('Garden crew')).toBeInTheDocument();
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
+
+    it("the Groups chip carries the groups' unread total and says it to a screen reader", async () => {
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Garden crew');
+
+        expect(screen.getByTestId('conversation-filter-count-groups')).toHaveTextContent('5');
+        expect(await chip('Groups')).toHaveAttribute('aria-label', 'Groups, 5 unread');
+        expect(screen.queryByTestId('conversation-filter-count-direct')).not.toBeInTheDocument();
+    });
+
+    it('with groups, the Groups view offers Find groups and New group in place of New DM', async () => {
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Garden crew');
+        expect(screen.getByText('✉️ New DM')).toBeInTheDocument();
+        expect(screen.queryByText('New group')).not.toBeInTheDocument();
+
+        fireEvent.click(await chip('Groups'));
+        expect(screen.queryByText('✉️ New DM')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Find groups/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /New group/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('groups-empty')).not.toBeInTheDocument();
+    });
+
+    it('with none, the Groups view says what a group is and offers the two', async () => {
+        mockConversations = [dm('dm-1')];
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Bob');
+
+        fireEvent.click(await chip('Groups'));
+        const empty = screen.getByTestId('groups-empty');
+        expect(within(empty).getByText('No groups yet')).toBeInTheDocument();
+        expect(within(empty).getByText(/A group is a chat for some people rather than everyone/)).toBeInTheDocument();
+        expect(within(empty).getByRole('button', { name: /New group/ })).toBeInTheDocument();
+        expect(within(empty).getByRole('button', { name: 'Find a group to join →' })).toBeInTheDocument();
+        // The empty view has its own two: none at the top as well.
+        expect(screen.getAllByRole('button', { name: /New group/ })).toHaveLength(1);
+        expect(screen.queryByTestId('conversation-filter-count-groups')).not.toBeInTheDocument();
+    });
+
+    it('Find groups and Find a group to join open Commons, which opens on its Groups', async () => {
+        const onNavigate = vi.fn();
+        render(<MessagesPage identity={mockIdentity} onNavigate={onNavigate} />);
+        await screen.findByText('Garden crew');
+        fireEvent.click(await chip('Groups'));
+
+        fireEvent.click(screen.getByRole('button', { name: /Find groups/ }));
+        expect(onNavigate).toHaveBeenCalledWith('projects');
+
+        cleanup();
+        onNavigate.mockClear();
+        mockConversations = [];
+        render(<MessagesPage identity={mockIdentity} onNavigate={onNavigate} />);
+        fireEvent.click(await chip('Groups'));
+        fireEvent.click(screen.getByRole('button', { name: 'Find a group to join →' }));
+        expect(onNavigate).toHaveBeenCalledWith('projects');
+    });
+
+    it("New group opens the Commons form, and a group made there opens straight into its chat (the phone's decision 8)", async () => {
+        vi.mocked(createGroup).mockResolvedValue({ id: 'grp-new', name: 'Bike fixers' } as any);
+        mockConversations = [];
+        render(<MessagesPage identity={mockIdentity} />);
+        fireEvent.click(await chip('Groups'));
+
+        fireEvent.click(within(screen.getByTestId('groups-empty')).getByRole('button', { name: /New group/ }));
+        const dialog = await screen.findByRole('dialog');
+        // The Beans hand-off belongs to Commons, where the project and enterprise forms are.
+        expect(within(dialog).queryByTestId('create-group-with-beans')).not.toBeInTheDocument();
+        const nameField = dialog.querySelector('input')!;
+        fireEvent.change(nameField, { target: { value: 'Bike fixers' } });
+        fireEvent.submit(nameField.closest('form')!);
+
+        await waitFor(() => expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({ name: 'Bike fixers' })));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        await waitFor(() => expect(getGroupChat).toHaveBeenCalledWith('grp-new'));
+        expect(screen.getByText('Bike fixers')).toBeInTheDocument();
     });
 });
 

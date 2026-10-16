@@ -841,6 +841,8 @@ export interface Conversation {
     peerAvatar?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
+    /** The member's mute on this chat (set on the phone), null when not muted. */
+    mute?: { mutedUntil: string | null; always: boolean } | null;
 }
 
 export enum SystemMessageType {

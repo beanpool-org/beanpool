@@ -11,7 +11,7 @@ import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
-import { CommonsPreview, DealsPreviewDialog } from './ShowcasePreviews';
+import { CommonsPreview, DealsPreviewDialog, sampleInvites, sampleInviteTree } from './ShowcasePreviews';
 import { LedgerPage } from '../pages/LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -261,6 +261,26 @@ describe('modes from the node\'s info', () => {
         expect(modeFor('beans', null)).toBe('hidden');
         expect(modeFor('beans', { ...GLOBAL_INFO, features: { beans: false } } as CommunityInfo)).toBe('hidden');
         expect(modeFor('beans', { ...GLOBAL_INFO, features: {} } as CommunityInfo)).toBe('live');
+    });
+});
+
+describe('sample invites and tree adapters', () => {
+    it('sampleInvites provides the pending EXAMPLE-1234 code and the two used codes', () => {
+        const invites = sampleInvites();
+        expect(invites.map(i => i.code)).toEqual(['EXAMPLE-1234', 'EXAMPLE-5678', 'EXAMPLE-9012']);
+        expect(invites[0].usedBy).toBeNull();
+        expect(invites[0].intendedFor).toBe('a neighbour');
+        expect(invites[1].usedBy).toBe('sample-member-second');
+        expect(invites[2].usedBy).toBe('sample-member-first');
+    });
+
+    it('sampleInviteTree provides the root example member and two invited members', () => {
+        const tree = sampleInviteTree('my-key');
+        expect(tree).toHaveLength(1);
+        expect(tree[0].publicKey).toBe('my-key');
+        expect(tree[0].callsign).toBe('an example member');
+        expect(tree[0].children).toHaveLength(2);
+        expect(tree[0].children.map(c => c.callsign)).toEqual(['a neighbour', 'a neighbour']);
     });
 });
 

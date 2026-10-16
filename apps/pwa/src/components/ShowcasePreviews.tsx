@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
-import type { BalanceInfo } from '../lib/api';
+import type { BalanceInfo, InviteCode } from '../lib/api';
 
 const S = SAMPLE_COMMUNITY;
 
@@ -98,6 +98,54 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
             amount: Math.abs(x.amount),
         })),
     };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Example Valley's invitations in the shape InvitePage reads (design §1 row 8, Marty's 16 Oct pick):
+ * - one pending invite (EXAMPLE-1234), waiting on a neighbour;
+ * - two used invites (EXAMPLE-5678, EXAMPLE-9012), by the two members the example member brought in.
+ */
+export function sampleInvites(now: number = Date.now()): InviteCode[] {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    return S.invites.map((inv) => ({
+        code: inv.code,
+        createdBy: 'sample-member-example',
+        createdAt: at(inv.daysAgo),
+        usedBy: inv.status === 'used' ? (inv.usedBy ?? 'sample-member-second') : null,
+        usedAt: inv.status === 'used' ? at(inv.usedDaysAgo ?? inv.daysAgo) : null,
+        intendedFor: inv.intendedFor ? t(inv.intendedFor) : undefined,
+    }));
+}
+
+export interface SampleTreeNode {
+    publicKey: string;
+    callsign: string;
+    joinedAt: string;
+    inviteCode: string;
+    children: SampleTreeNode[];
+}
+
+/**
+ * The community invite tree for Example Valley (InvitePage): the example member at the root, and the two members they brought in.
+ */
+export function sampleInviteTree(viewerKey?: string, now: number = Date.now()): SampleTreeNode[] {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    const tree = S.inviteTree;
+    return [{
+        publicKey: viewerKey ?? tree.id,
+        callsign: t(tree.who),
+        joinedAt: at(tree.joinedDaysAgo),
+        inviteCode: 'EXAMPLE-ROOT',
+        children: tree.invited.map((child) => ({
+            publicKey: child.id,
+            callsign: t(child.who),
+            joinedAt: at(child.joinedDaysAgo),
+            inviteCode: child.id === 'sample-member-second' ? 'EXAMPLE-5678' : 'EXAMPLE-9012',
+            children: [],
+        })),
+    }];
 }
 
 /**

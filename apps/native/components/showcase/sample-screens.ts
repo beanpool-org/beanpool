@@ -6,7 +6,7 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
-import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote, t } from '@beanpool/core';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
 
@@ -95,3 +95,41 @@ export function sampleEscrowTotal(): number {
 /** The member's header over a preview: "Example Valley · an example member". */
 export const SAMPLE_MEMBER_HEADER = `${SAMPLE_COMMUNITY.name} · ${SAMPLE_COMMUNITY.member}`;
 export const SAMPLE_MEMBER = SAMPLE_COMMUNITY.member;
+
+/**
+ * Example Valley's invitations in the shape people.tsx reads (design §1 row 8, Marty's 16 Oct pick):
+ * - one pending invite (EXAMPLE-1234), waiting on a neighbour;
+ * - two used invites (EXAMPLE-5678, EXAMPLE-9012), by the two members the example member brought in.
+ */
+export function sampleInvites(now: number = Date.now()) {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    return SAMPLE_COMMUNITY.invites.map((inv) => ({
+        code: inv.code,
+        createdBy: 'sample-member-example',
+        createdAt: at(inv.daysAgo),
+        usedBy: inv.status === 'used' ? (inv.usedBy ?? 'sample-member-second') : null,
+        usedAt: inv.status === 'used' ? at(inv.usedDaysAgo ?? inv.daysAgo) : null,
+        intendedFor: inv.intendedFor ? t(inv.intendedFor) : undefined,
+    }));
+}
+
+/**
+ * The community invite tree for Example Valley: the example member at the root, and the two members they brought in.
+ */
+export function sampleInviteTree(viewerKey?: string, now: number = Date.now()) {
+    const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
+    const tree = SAMPLE_COMMUNITY.inviteTree;
+    return [{
+        publicKey: viewerKey ?? tree.id,
+        callsign: t(tree.who),
+        joinedAt: at(tree.joinedDaysAgo),
+        inviteCode: 'EXAMPLE-ROOT',
+        children: tree.invited.map((child) => ({
+            publicKey: child.id,
+            callsign: t(child.who),
+            joinedAt: at(child.joinedDaysAgo),
+            inviteCode: child.id === 'sample-member-second' ? 'EXAMPLE-5678' : 'EXAMPLE-9012',
+            children: [],
+        })),
+    }];
+}

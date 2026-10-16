@@ -35,6 +35,7 @@ import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
@@ -342,26 +343,37 @@ export function ApplianceSection({
         }
     };
 
-    const handleSaveSchedule = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!scheduleKnown || !scheduleConfig) return;
+    // Keeping fewer snapshots, or turning them off, asks an owner's fresh proof (server snapshotsLessened decides which).
+    const scheduleProof = useFreshProof();
+
+    /** Sends this schedule; after the node asked the proof, the same schedule again with the code. */
+    const sendSchedule = async (config: SnapshotScheduleConfig, code?: string) => {
         setSavingSchedule(true);
         setScheduleStatusMsg(null);
         try {
             const updated = await updateNodeSnapshotSchedule(
                 activeNode.url,
-                scheduleConfig,
+                config,
                 nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id)
+                getTfaSessionToken(activeNode.id),
+                ...(code ? [code] : [])
             );
+            scheduleProof.close();
             setScheduleConfig(updated);
             setScheduleKnown(true);
             setScheduleStatusMsg('Backup schedule updated successfully.');
         } catch (e: unknown) {
+            if (scheduleProof.checkError(e, (c) => sendSchedule(config, c), code)) return;
             setScheduleStatusMsg(e instanceof Error ? e.message : 'Failed to update schedule');
         } finally {
             setSavingSchedule(false);
         }
+    };
+
+    const handleSaveSchedule = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!scheduleKnown || !scheduleConfig) return;
+        void sendSchedule(scheduleConfig);
     };
 
     const handleVerifyDatabase = async (snapshotName?: string) => {
@@ -1221,6 +1233,9 @@ export function ApplianceSection({
                                     </div>
                                 </div>
                             </form>
+                        )}
+                        {scheduleKnown && scheduleConfig && (
+                            <FreshProofBox proof={scheduleProof} testId="schedule-proof" />
                         )}
                     </div>
 

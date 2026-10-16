@@ -1907,22 +1907,28 @@ export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?:
     return data.config;
 }
 
+/**
+ * Save the snapshot schedule. A shorter span of snapshots (fewer kept, more often with as many kept, or none) asks an
+ * owner's fresh proof; the node decides which (server snapshotsLessened), so a change is sent without one first and
+ * `code` carries it only after the node asked (a refusal that asks throws FreshProofRequiredError). Keeping more asks
+ * nothing.
+ */
 export async function updateNodeSnapshotSchedule(
     nodeUrl: string,
     config: Partial<SnapshotScheduleConfig>,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<SnapshotScheduleConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...config, ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...config, ...passwordField(adminPassword), ...proofField(code) }),
     });
-    // The node's own sentence: a shorter span of snapshots (fewer kept, more often with as many kept, or none) asks a fresh
-    // proof (a current code, or Manage on the phone).
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     const data = await res.json();

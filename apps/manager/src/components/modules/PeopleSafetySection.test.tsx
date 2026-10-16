@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import React from 'react';
+import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -158,11 +159,12 @@ describe('PeopleSafetySection Component', () => {
         expect(screen.getByText('Malformed report 2')).toBeInTheDocument();
     });
 
-    function renderModeration(reports: any[], onRefresh = vi.fn()) {
+    function renderModeration(reports: any[], onRefresh = vi.fn(), extra: Partial<React.ComponentProps<typeof PeopleSafetySection>> = {}, posts: any[] = []) {
         render(
             <PeopleSafetySection
+                {...extra}
                 activeNode={mockProfile}
-                nodeData={{ reports, members: mockMembers }}
+                nodeData={{ reports, members: mockMembers, posts }}
                 nodeDataLoading={false}
                 onRefresh={onRefresh}
                 onFreezeUser={vi.fn()}
@@ -179,7 +181,8 @@ describe('PeopleSafetySection Component', () => {
     it('shows a Pulse-item report with its title, platform and link, and removes it from the Pulse', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
         vi.stubGlobal('fetch', fetchMock);
-        vi.stubGlobal('confirm', vi.fn(() => true));
+        const confirmSpy = vi.fn(() => true);
+        vi.stubGlobal('confirm', confirmSpy);
 
         const onRefresh = renderModeration([{
             id: 'rep_pulse',
@@ -197,6 +200,13 @@ describe('PeopleSafetySection Component', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Remove from the Pulse' }));
         });
+        // Asked in the page, never with window.confirm(); nothing is sent before the answer.
+        expect(confirmSpy).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog')).toHaveTextContent('Remove this item from the Pulse?');
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Remove it' }));
+        });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const [url, init] = fetchMock.mock.calls[0];
@@ -204,6 +214,45 @@ describe('PeopleSafetySection Component', () => {
         expect(JSON.parse(init.body)).toMatchObject({ removePulseItem: true });
         expect(init.body).not.toContain('suspendUser');
         expect(onRefresh).toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+
+    // Bulk delete is an owner's (design case 18 D1): the server refuses an admin, so an admin sees no such card; an owner is
+    // asked in the page, with the count, before anything is sent.
+    it('bulk delete: hidden for an admin viewer, shown to an owner', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
+        renderModeration([], vi.fn(), { rolesViewer: { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' } });
+        expect(screen.queryByTestId('bulk-cleanup-card')).toBeNull();
+        expect(screen.queryByRole('button', { name: /prune stale posts/i })).toBeNull();
+        cleanup();
+        renderModeration([], vi.fn(), { rolesViewer: { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' } });
+        expect(screen.getByTestId('bulk-cleanup-card')).toBeInTheDocument();
+        cleanup();
+        renderModeration([]);
+        expect(screen.getByRole('button', { name: /prune stale posts/i })).toBeInTheDocument();
+        vi.unstubAllGlobals();
+    });
+
+    it('bulk delete asks in the page with the count, sends nothing on Cancel, and the batch on "Delete them"', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, deleted: 2 }) });
+        vi.stubGlobal('fetch', fetchMock);
+        const confirmSpy = vi.fn(() => true);
+        vi.stubGlobal('confirm', confirmSpy);
+        const old = new Date(Date.now() - 90 * 86_400_000).toISOString();
+        const fresh = new Date().toISOString();
+        renderModeration([], vi.fn(), {}, [{ id: 'p-old-1', createdAt: old }, { id: 'p-old-2', createdAt: old }, { id: 'p-new', createdAt: fresh }]);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /prune stale posts/i })); });
+        expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete 2 posts older than 30 days?');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); });
+        expect(screen.queryByRole('alertdialog')).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /prune stale posts/i })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete them' })); });
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(String(url)).toContain('/api/local/admin/posts/bulk-delete');
+        expect(JSON.parse(init.body).postIds).toEqual(['p-old-1', 'p-old-2']);
+        expect(confirmSpy).not.toHaveBeenCalled();
         vi.unstubAllGlobals();
     });
 

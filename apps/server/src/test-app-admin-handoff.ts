@@ -334,6 +334,21 @@ async function main() {
         // The option can only shorten it.
         const longer = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken, Date.now(), { idleTtlMs: 48 * 60 * MIN });
         assert(longer.ok === true && longer.idleExpiresAt! - Date.now() <= SESSION_IDLE_TTL_MS, 'an idle limit longer than 2 hours is never granted');
+
+        // AUTH-06 (2026-10-16): a new hand-off ends the session the browser already held, as a password sign-in does.
+        const held1 = await exchange((await requestLink(admin)).body.handshakeToken);
+        assert(held1.status === 200 && validateAdminSession(held1.sessionId!).valid === true, 'a first hand-off signs in');
+        const replaced = await postJson('/api/local/admin/auth/exchange', { token: (await requestLink(admin)).body.handshakeToken },
+            { Cookie: `admin_session=${held1.sessionId}` });
+        const replacedId = (replaced.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
+        assert(replaced.status === 200 && !!replacedId && replacedId !== held1.sessionId && validateAdminSession(replacedId!).valid === true,
+            `a second hand-off from the same browser signs in (got ${replaced.status})`);
+        assert(validateAdminSession(held1.sessionId!).valid === false, '/exchange: the session the browser held is ended');
+        const legacy2 = await fetch(`${BASE}/settings?token=${(await requestLink(admin)).body.handshakeToken}`,
+            { redirect: 'manual', headers: { Cookie: `admin_session=${replacedId}` } });
+        const legacy2Id = (legacy2.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
+        assert(legacy2.status === 302 && !!legacy2Id && validateAdminSession(legacy2Id!).valid === true, `GET /settings?token= from that browser signs in (got ${legacy2.status})`);
+        assert(validateAdminSession(replacedId!).valid === false, 'GET /settings?token=: the session the browser held is ended');
     }
 
     // ── 5. Owner-only changes from the phone need a recent unlock (decision D2's step-up, 2026-10-03) ──

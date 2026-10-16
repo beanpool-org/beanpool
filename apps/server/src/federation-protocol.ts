@@ -7,7 +7,9 @@
  */
 
 import type { Libp2p } from 'libp2p';
-import { isPeerTrusted } from './connector-manager.js';
+import { isPeerTrusted, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
+import { peerHomeUrl, isLocalMemberKey } from './federation-origin.js';
+import { assertDmLineFits, WriterLimitError } from './engine/writer-bounds.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
 import { getMember, createConversation, sendMessage, registerVisitor } from './state-engine.js';
@@ -24,25 +26,42 @@ import type { SettlementReceipt } from './federation-receipt.js';
 import type { ReceiptStatus } from './federation-settlement-state.js';
 
 const PROTOCOL = '/beanpool/federation/1.0.0';
+
+/** FED-06: what a node with ENABLE_PEER_CONNECTORS off refuses (the settlement ones too, as FEDERATION_SETTLEMENT does). */
+const PEER_ONLY_ACTIONS = new Set(['verify_member', 'relay_message', 'list_listings', 'settle_purchase']);
+export const PEERS_OFF_ERROR = 'Peer connectors are switched off on this node';
+/** FED-02: a peer whose connector record here has no public URL cannot be named as anyone's home. */
+export const NO_PEER_HOME_ERROR = 'This node holds no public address for your node, so it cannot name a sender\'s home';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
  * Read data from a stream by polling readBuffer until data arrives.
  */
-function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
+function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_SIZE): Promise<string> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error('Read timeout'));
-        }, timeoutMs);
+        const chunks: Uint8Array[] = [];
+        let settled = false;
+        // FED-05: a timeout or an oversize used to REJECT and leave the stream open, and the `for await` below
+        // kept every chunk the sender wrote until it chose to close: a stranger with no connector held ~10 MB per
+        // stream for as long as it liked (measured: still open at +130 s). Now both paths drop what was read and
+        // ABORT the stream, which ends the loop and frees its buffers.
+        const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            chunks.length = 0;
+            try { stream.abort?.(err); } catch { /* already closed */ }
+            reject(err);
+        };
+        const timer = setTimeout(() => fail(new Error('Read timeout')), timeoutMs);
 
         (async () => {
-            const chunks: Uint8Array[] = [];
             let totalLength = 0;
-            const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
-
             try {
                 for await (const chunk of stream) {
+                    if (settled) return;
                     let parsedChunk: Uint8Array;
                     if (chunk instanceof Uint8Array) {
                         parsedChunk = chunk;
@@ -53,22 +72,22 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
                     }
 
                     totalLength += parsedChunk.length;
-                    if (totalLength > MAX_PAYLOAD_SIZE) {
-                        clearTimeout(timer);
-                        reject(new Error('Payload size exceeded maximum limit of 10MB'));
+                    if (totalLength > maxBytes) {
+                        fail(new Error(`Payload size exceeded maximum limit of ${maxBytes} bytes`));
                         return;
                     }
 
                     chunks.push(parsedChunk);
                 }
+                if (settled) return;
 
                 // A2-12: decode once after the write side closes (caller parses),
                 // instead of an O(n²) re-decode + JSON.parse on every chunk.
+                settled = true;
                 clearTimeout(timer);
                 resolve(decoder.decode(Buffer.concat(chunks)));
             } catch (err) {
-                clearTimeout(timer);
-                reject(err);
+                fail(err instanceof Error ? err : new Error(String(err)));
             }
         })();
     });
@@ -248,7 +267,15 @@ export function registerFederationHandler(node: Libp2p): void {
             // 3. Route Action
             let response: any = { error: 'Unknown action' };
 
-            if (request.action === 'verify_member') {
+            // FED-06: ENABLE_PEER_CONNECTORS off means peer connectors do not function at all
+            // (docs/federation-connector.md), inbound as well as outbound. Before this the flag stopped only our own
+            // dialling: a configured connector's member lookups, relays and listing pulls were still answered.
+            // settle_receipt and settle_receipt_status stay open, as under FEDERATION_SETTLEMENT (settlementGateRefusal):
+            // they finish trades already in flight, and refusing them would strand Beans mid-trade.
+            if (!ENABLE_PEER_CONNECTORS && PEER_ONLY_ACTIONS.has(request.action)) {
+                response = { error: PEERS_OFF_ERROR };
+            }
+            else if (request.action === 'verify_member') {
                 const { publicKey } = request;
                 // ⚡ O(1) indexed lookup instead of loading all members and scanning
                 const member = getMember(publicKey);
@@ -265,7 +292,8 @@ export function registerFederationHandler(node: Libp2p): void {
                 }
             } 
             else if (request.action === 'relay_message') {
-                const { id, senderPublicKey, senderCallsign, senderNodeUrl, recipientPublicKey, ciphertext, nonce, metadata } = request;
+                // No `senderNodeUrl`: the payload's word for the sender's home is ignored (FED-02, below).
+                const { id, senderPublicKey, senderCallsign, recipientPublicKey, ciphertext, nonce, metadata } = request;
 
                 if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
                     response = { error: 'Missing required payload fields' };
@@ -274,11 +302,15 @@ export function registerFederationHandler(node: Libp2p): void {
                     // is no remote sender (it passed the impersonation guard below, and got a visitor's row of its own).
                     response = { error: BAD_KEY_ERROR };
                 } else {
+                    // FED-02: a new sender's home is THIS peer's, from our connector record for the authenticated
+                    // connection, never the payload's `senderNodeUrl`. A sender whose row already names a home keeps it
+                    // (federation-origin.ts): a member of two communities, or a peer whose URL the operator corrected.
+                    const peerHome = peerHomeUrl(remotePeerId);
                     // Verify recipient exists locally (O(1) indexed lookup)
                     const recipient = getMember(recipientPublicKey);
                     if (!recipient) {
                         response = { error: 'Recipient not found on this node' };
-                    } else if ((() => { const s = getMember(senderPublicKey); return s && !s.homeNodeUrl; })()) {
+                    } else if (isLocalMemberKey(senderPublicKey)) {
                         // A2-28: the connection is trusted (a `peer` connector), but that
                         // authorizes the CONNECTION, not the asserted sender authorship —
                         // a compromised/malicious federation peer can set senderPublicKey
@@ -288,15 +320,18 @@ export function registerFederationHandler(node: Libp2p): void {
                         // peer cannot forge messages "from" a local identity into an inbox.
                         // (Full origin authenticity needs per-message sender signatures —
                         // a protocol change; tracked. The relay path is gated by
-                        // ENABLE_PEER_CONNECTORS, off by default.)
+                        // ENABLE_PEER_CONNECTORS, off by default — at the top of this
+                        // handler since FED-06; before that the comment was not true.)
                         console.warn(`[Federation] Rejected relay impersonating local member ${senderPublicKey.slice(0, 8)} from peer ${remotePeerId.slice(-8)}`);
                         response = { error: 'Sender impersonates a local member' };
+                    } else if (!peerHome) {
+                        response = { error: NO_PEER_HOME_ERROR };
                     } else {
                         // Origin is asserted by the relaying node (a trusted peer connector),
                         // NOT cryptographically verified per-message — treat as
                         // remote/unverified-origin. registerVisitor tags it with the
                         // sender's home node so it is never confused with a local member.
-                        registerVisitor(senderPublicKey, senderCallsign, senderNodeUrl);
+                        registerVisitor(senderPublicKey, senderCallsign, peerHome);
                         
                         const conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
                         if (conversation) {
@@ -306,9 +341,13 @@ export function registerFederationHandler(node: Libp2p): void {
                             let refusal: string | null = null;
                             try {
                                 // Under the sender's own id: the line is sealed to it (relayedMessageId).
-                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id));
+                                // FED-09: the member send route's 64 KB line limit, as the line would be stored. A
+                                // peer relayed 1 MB lines before; a refusal is answered, not rethrown, so the peer
+                                // hears why instead of waiting out its read.
+                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id),
+                                    (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
                             } catch (e: any) {
-                                if (!(e instanceof MessagingError)) throw e;
+                                if (!(e instanceof MessagingError) && !(e instanceof WriterLimitError)) throw e;
                                 refusal = e.message;
                             }
                             if (refusal) {
@@ -541,6 +580,30 @@ export async function settleCrossNodePurchase(
 /**
  * Initiator (Sender) side: Relay a message over Libp2p
  */
+/**
+ * Relay a member's line to its recipient's community (routes/messaging.ts sends without waiting) and log the outcome
+ * when it is not a stored line. A peer that refuses ANSWERS `{ error }` rather than throwing: peers off (FED-06), no
+ * address for us (FED-02), the 64 KB line limit (FED-09), a recipient it does not know. The route caught only a throw,
+ * so each refusal reached the sender as a line sent, with nothing in either node's log (#2039 review B1, N2). The log
+ * names the line, the peer and the peer's reason, never the line's text.
+ */
+export async function relayLineToPeer(
+    node: Libp2p,
+    targetPeerId: any,
+    peerName: string | null,
+    payload: Parameters<typeof federatedRelayMessage>[2],
+): Promise<void> {
+    const peer = peerName || String(targetPeerId).slice(-8);
+    try {
+        const answer = await federatedRelayMessage(node, targetPeerId, payload);
+        if (answer && typeof answer === 'object' && 'error' in answer) {
+            console.warn(`[Federation] ${peer} refused relayed line ${payload.id ?? '(no id)'}: ${JSON.stringify(String(answer.error).slice(0, 200))}`);
+        }
+    } catch (e: any) {
+        console.warn(`[Federation] Failed to relay line ${payload.id ?? '(no id)'} to ${peer}:`, e?.message || e);
+    }
+}
+
 export async function federatedRelayMessage(
     node: Libp2p, 
     targetPeerId: any, 

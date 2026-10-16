@@ -18,12 +18,13 @@
  *      would): an encoded separator, a double encoding, a backslash, a dot or empty segment outside /api and /ws is
  *      404 with no document; /ws and /api spellings never reach the static files; whatever else reaches index.html
  *      (a case variant on a case-insensitive disk, a query, a fragment) has the app document's policy
- *   4. the pages that need the older header still get it and render: the old settings.html (/settings-legacy is gone),
- *      the /auth/ pages, the invite page and the Apple probe; Settings (and its deep links and its index.html) and the
- *      manager render under the app document's policy; the PWA's assets are still served, and /api routes still take
- *      an encoded `/` in a value
+ *   4. the pages that need the older header still get it and render: the /auth/ pages, the invite page and the Apple
+ *      probe; that header names no other host (the old Settings page, /settings-legacy, is gone with the hosts only it
+ *      loaded from: web-surface review F3, design case 18 D9), and a settings.html left in public/ is under the app
+ *      document's policy; Settings (and its deep links and its index.html) and the manager render under the app
+ *      document's policy; the PWA's assets are still served, and /api routes still take an encoded `/` in a value
  *   5. the two rules underneath, on their own: which spellings are refused, and which public/ files keep the older
- *      header
+ *      header (auth/ only; settings.html no longer)
  *
  * The node serves a stand-in web app from a temporary public/ folder (process.chdir before https-server loads), so
  * the documents answer 200 whether or not a PWA build is present.
@@ -54,8 +55,14 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-/** The header every document had before G11, which the old Settings page, the /auth/ pages and the invite page keep. */
-const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self'; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
+/**
+ * The older header the /auth/ pages, the invite page and the Apple probe keep (their own inline scripts). Shrunk with the
+ * old Settings page (web-surface review F3, design case 18 D9): no unpkg.com, static.cloudflareinsights.com or
+ * api.qrserver.com, which only that page loaded from.
+ */
+const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
+/** Hosts only the old Settings page loaded from: no header this node sends names them. */
+const OLD_SETTINGS_PAGE_HOSTS = ['unpkg.com', 'static.cloudflareinsights.com', 'api.qrserver.com'];
 
 /** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today. */
 const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
@@ -319,7 +326,6 @@ async function main(): Promise<void> {
     // ── 4. the pages that keep the older header ───────────────────────────────────────────────────
     console.log('\n── 4. the pages that need the older header still get it; Settings and the manager do not ──');
     const pages: Array<[string, string]> = [
-        ['/settings.html', 'window.page = "old settings"'],
         ['/auth/facebook.html', 'window.page = "facebook"'],
         ['/?invite=BP-TEST-0002', '<script>'], ['/apple-probe', '<script>'],
     ];
@@ -330,6 +336,17 @@ async function main(): Promise<void> {
         assert(res.csp === TODAYS_DOCUMENT_CSP && res.referrer === null,
             `GET ${pagePath} keeps today's header, which lets that script run, and no Referrer-Policy (got ${policyName(res.csp)}, ${res.referrer})`);
     }
+    // The older header names no host the old Settings page loaded from (web-surface review F3), on any page that has it.
+    for (const [pagePath] of pages) {
+        const res = await rawGet(pagePath);
+        const named = OLD_SETTINGS_PAGE_HOSTS.filter((h) => (res.csp || '').includes(h));
+        assert(named.length === 0, `GET ${pagePath}: its header names none of ${OLD_SETTINGS_PAGE_HOSTS.join(', ')} (named: ${named.join(', ') || 'none'})`);
+    }
+    // A copy of the old page left in public/ is no longer one of the pages that keep the older header: under the app
+    // document's policy its inline script never runs.
+    const stray = await rawGet('/settings.html');
+    assert(stray.csp === APP_DOCUMENT_CSP && stray.referrer === 'strict-origin-when-cross-origin',
+        `GET /settings.html (a copy of the old page in public/) is under the app document's policy, so its inline script never runs (got ${stray.status}, ${policyName(stray.csp)})`);
     // The legacy settings page and its script are gone (design case 18, D9): no document, no script, under any header.
     for (const gone of ['/settings-legacy', '/settings.js']) {
         const res = await rawGet(gone);
@@ -365,10 +382,10 @@ async function main(): Promise<void> {
     for (const p of [...refused.map(r => r.split(/[?#]/)[0]), '/%', '/a/.', '/a/%2e']) {
         assert(isNonCanonicalSpelling(p), `${p} is refused as a spelling`);
     }
-    for (const f of ['settings.html', 'auth/facebook.html', 'auth/facebook.html.gz']) {
+    for (const f of ['auth/facebook.html', 'auth/facebook.html.gz']) {
         assert(isDocumentPolicyFile(f), `public/${f} keeps the older header`);
     }
-    for (const f of ['index.html', 'index.html.gz', 'index.html.br', 'assets/index.html', 'auth/../index.html', 'auth/x/index.html', 'settings/assets/app.js', 'manager/other.html', 'INDEX.HTML',
+    for (const f of ['settings.html', 'settings.html.gz', 'index.html', 'index.html.gz', 'index.html.br', 'assets/index.html', 'auth/../index.html', 'auth/x/index.html', 'settings/assets/app.js', 'manager/other.html', 'INDEX.HTML',
         'settings/index.html', 'settings/index.html.gz', 'manager/index.html']) {
         assert(!isDocumentPolicyFile(f), `public/${f} gets the app document's policy`);
     }

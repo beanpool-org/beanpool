@@ -10,9 +10,10 @@
  * - Single-use guarantee with 15s resilience window for transient network drops.
  * - Zero-knowledge: the server only relays opaque ciphertext (XChaCha20-Poly1305).
  * - Number matching (fable-security-signin finding 1, as the Settings QR sign-in does it): the phone's payload is held
- *   with two digits the phone shows, and released only to the browser that opened the session (its binding secret, an
+ *   with four digits the phone shows, and released only to the browser that opened the session (its binding secret, an
  *   httpOnly cookie set at init) once that browser types them. Someone who only sent a member the QR never sees the
- *   phone. Three wrong tries burn the session and its payload.
+ *   phone. Three wrong tries burn the session and its payload: 3 guesses in 10,000, 0.03% (with two digits it was 3%,
+ *   SEC-INV-02 of the invite/join audit).
  */
 
 import crypto from 'node:crypto';
@@ -35,7 +36,7 @@ interface PairingSession {
     payload?: PairingPayload;
     /** sha256 of the binding secret only the opening browser holds. */
     secretHash: Buffer;
-    /** The two digits the phone shows, until the browser types them. */
+    /** The four digits the phone shows, until the browser types them. */
     confirmCode?: string;
     confirmTries: number;
     timer?: NodeJS.Timeout;
@@ -69,6 +70,10 @@ const MAX_CIPHERTEXT_HEX_LEN = 4_096;
 const RELAY_BUSY = 'Pairing relay at capacity. Please try again shortly.';
 /** Wrong digits before the session and its payload are burned. */
 const CONFIRM_TRIES = 3;
+/** How many digits the phone shows and the browser types. A phone says it shows four (`confirm: 'four-digits'`). */
+const CONFIRM_DIGITS = 4;
+/** The only answer that can be right: exactly CONFIRM_DIGITS digits. Anything else is a wrong try. */
+const CONFIRM_CODE = new RegExp(`^\\d{${CONFIRM_DIGITS}}$`);
 
 const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest();
 
@@ -79,6 +84,7 @@ export const PAIRING_RELAY_LIMITS = {
     ttlMs: PAIRING_TTL_MS,
     graceMs: COLLECT_GRACE_MS,
     confirmTries: CONFIRM_TRIES,
+    confirmDigits: CONFIRM_DIGITS,
 } as const;
 
 const sessions = new Map<string, PairingSession>();
@@ -206,7 +212,7 @@ export function transferPairingPayload(
         nonceHex,
         ciphertextHex,
     };
-    session.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
+    session.confirmCode = String(crypto.randomInt(10 ** CONFIRM_DIGITS)).padStart(CONFIRM_DIGITS, '0');
     session.confirmTries = 0;
     held.add(sessionId);
 
@@ -224,8 +230,9 @@ export type ConfirmResult =
     | { result: 'burned' | 'wrong-browser' | 'expired' | 'not-confirming' };
 
 /**
- * The browser types the two digits the phone shows. Right digits release the payload to its next poll; three wrong
- * burn the session and drop the payload. A browser without the binding secret changes nothing.
+ * The browser types the four digits the phone shows. Right digits release the payload to its next poll; three wrong
+ * burn the session and drop the payload. An answer that isn't four digits (two, an old page's) is a wrong try. A
+ * browser without the binding secret changes nothing.
  */
 export function confirmPairingTransfer(sessionId: string, secret: string | undefined, digits: unknown): ConfirmResult {
     const session = typeof sessionId === 'string' ? liveSession(sessionId) : undefined;
@@ -233,9 +240,9 @@ export function confirmPairingTransfer(sessionId: string, secret: string | undef
     if (!bound(session, secret)) return { result: 'wrong-browser' };
     if (session.status === 'burned') return { result: 'burned' };
     if (session.status !== 'confirming' || !session.confirmCode) return { result: 'not-confirming' };
-    const given = Buffer.from(String(digits ?? '').trim().padEnd(2, ' ').slice(0, 8));
-    const want = Buffer.from(session.confirmCode);
-    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+    const typed = typeof digits === 'string' ? digits.trim() : '';
+    const right = CONFIRM_CODE.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(session.confirmCode));
+    if (!right) {
         session.confirmTries++;
         if (session.confirmTries >= CONFIRM_TRIES) {
             session.status = 'burned';

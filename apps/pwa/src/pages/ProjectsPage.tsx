@@ -18,7 +18,7 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { modeFor, readerFeaturesOnce } from '../lib/features';
+import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import type { FeatureMode } from '@beanpool/core';
 import { CommonsPreview } from '../components/ShowcasePreviews';
 
@@ -46,6 +46,8 @@ const localToday = (): string => {
 
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
+    // The reader's balance is Beans: where they are in preview (the global node) it is never asked (lib/features readsOwn).
+    const readsBalance = useReadsOwn('beans', canLoadBalance);
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
     // Avatar URLs that failed to load; those cards show the no-avatar placeholder instead of alt text.
     const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
@@ -149,10 +151,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         try {
             setLoading(true);
             setError(null);
+            // Enterprises and Decisions in preview (the global node) are Example Valley's: their lists, the reader's voice
+            // credits and the pool the Decide tab spends are not asked (lib/features readsOwn). Elsewhere, as before.
+            const [readsTreasuries, readsDecisions] = await Promise.all([readsOwn('enterprises'), readsOwn('decisions')]);
             const [tresData, decData, commonsData, membersData] = await Promise.all([
-                getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
-                getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
-                getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
+                readsTreasuries && getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
+                readsDecisions && getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
+                readsDecisions && getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
                 // members list below keeps who it had, and the next fetch reads them again.
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
@@ -199,14 +204,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // The viewer's balance (only earnedCredit, for proposing a Decision) is a member's alone. App learns
     // membership after mount, so this waits for it and a guest never asks the node.
     useEffect(() => {
-        if (!canLoadBalance || !identity || !getBalance) {
+        if (!canLoadBalance || !identity || !getBalance || !readsBalance) {
             if (isMember === false) setBalanceInfo(null);
             return;
         }
         let cancelled = false;
         getBalance(identity.publicKey).then(b => { if (!cancelled) setBalanceInfo(b); }).catch(() => {});
         return () => { cancelled = true; };
-    }, [identity?.publicKey, canLoadBalance]);
+    }, [identity?.publicKey, canLoadBalance, readsBalance]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;

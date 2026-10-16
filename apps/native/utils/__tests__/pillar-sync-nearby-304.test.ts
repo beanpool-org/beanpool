@@ -354,22 +354,31 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
         await control('postsSql', { q: "INSERT INTO conversation_participants (conversation_id, public_key) VALUES ('conv-off', ?), ('conv-off', ?)", p: [me.publicKey, K] });
         await control('deal', { post: 'held-off', buyer: me.publicKey, seller: K, status: 'cancelled', at: dayAgo });
         await control('holiday', { key: K });
-        const { getPosts } = await import('../db');
-        const onMarket = async () => (await getPosts()).some((p: any) => p.id === 'held-off');
-        const log: { reads: string; status: string | null; onMarket: boolean }[] = [];
-        for (let i = 1; i <= 4; i++) {
-            if (i === 3) resetSyncFingerprints(); // the app started again: every table is applied again, the deal heal too
-            await control('limiters');
-            await sync();
-            log.push({
-                reads: postsReads().map(r => `${r.status}${r.ifNoneMatch ? ' (tag)' : ''}`).join(','),
-                status: (sql.prepare("SELECT status FROM posts WHERE id = 'held-off'").get() as { status: string } | undefined)?.status ?? null,
-                onMarket: await onMarket(),
-            });
+        // A deal on the worldwide community is a member's for whom deals are live there (escrow per reader, design §4): the
+        // phone reads the member's deals only where they are not in preview (utils/reads-own.ts), so this member's own set,
+        // as the node last answered it, says so.
+        const { readerFeaturesHeld, readerFeaturesKey } = await import('../reads-own');
+        readerFeaturesHeld.set(readerFeaturesKey(URL_BASE, me.publicKey), { features: { escrow: true }, at: Date.now(), freshMs: 3_600_000 });
+        try {
+            const { getPosts } = await import('../db');
+            const onMarket = async () => (await getPosts()).some((p: any) => p.id === 'held-off');
+            const log: { reads: string; status: string | null; onMarket: boolean }[] = [];
+            for (let i = 1; i <= 4; i++) {
+                if (i === 3) resetSyncFingerprints(); // the app started again: every table is applied again, the deal heal too
+                await control('limiters');
+                await sync();
+                log.push({
+                    reads: postsReads().map(r => `${r.status}${r.ifNoneMatch ? ' (tag)' : ''}`).join(','),
+                    status: (sql.prepare("SELECT status FROM posts WHERE id = 'held-off'").get() as { status: string } | undefined)?.status ?? null,
+                    onMarket: await onMarket(),
+                });
+            }
+            // Each cycle after one that applied the deals (cycle 1; the cold start, cycle 3) is a 200 that sends it paused again.
+            expect(log[1]).toMatchObject({ reads: '200', status: 'paused', onMarket: false });
+            expect(log[3]).toMatchObject({ reads: '200', status: 'paused', onMarket: false });
+        } finally {
+            readerFeaturesHeld.delete(readerFeaturesKey(URL_BASE, me.publicKey));
         }
-        // Each cycle after one that applied the deals (cycle 1; the cold start, cycle 3) is a 200 that sends it paused again.
-        expect(log[1]).toMatchObject({ reads: '200', status: 'paused', onMarket: false });
-        expect(log[3]).toMatchObject({ reads: '200', status: 'paused', onMarket: false });
     }, START_MS);
 
     it('a pushed listing outside the set (an author the member blocked) displaces one in it: the next cycle is a 200 that puts the phone back on the set', async () => {

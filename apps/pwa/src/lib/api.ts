@@ -2763,7 +2763,7 @@ export async function initPairingApi(sessionId: string, desktopPubHex: string): 
 }
 
 /**
- * The two digits the phone shows (number matching). The relay holds the phone's account until this browser, the one
+ * The four digits the phone shows (number matching). The relay holds the phone's account until this browser, the one
  * holding the session's binding cookie, types them: 'released', 'wrong' (tries left), or 'burned' after three wrong.
  */
 export async function confirmPairingApi(sessionId: string, code: string): Promise<{ result: 'released' | 'wrong' | 'burned' | 'wrong-browser' | 'expired' | 'not-confirming'; triesLeft?: number }> {

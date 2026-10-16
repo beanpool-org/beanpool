@@ -5,7 +5,7 @@
  *
  * The order (design §4.2, 2026-09-27):
  *   1. the key's spelling (engine/member-key.ts);
- *   2. freshness;
+ *   2. freshness, then the nonce's length (1 to MAX_NONCE_LENGTH characters, else 400: AUTH-03);
  *   3. the signature, over the format-2 bytes when the request names a host (X-Signed-For, or `for=` with `v=2` on a
  *      socket), over the old bytes when it names none;
  *   4. format 2: the host is one of this community's (engine/own-addresses.ts), or 421 wrong_community;
@@ -205,6 +205,16 @@ export const NONCE_SWEEP_ABOVE = 10_000;
 /** The nonces of signed requests and `/ws` connect tokens, one store for the process. */
 export const requestNonces = new NonceStore(SIGNATURE_FRESHNESS_MS);
 
+/**
+ * The longest nonce a signed request or `/ws` token may carry (AUTH-03, 2026-10-16). Every app sends 32 hex characters
+ * (core and native freshNonce) or a 36-character UUID (the old web app). Each spent nonce is held up to ~10 minutes,
+ * and one address can spend ~1,800 a minute even with keys that are members of nothing, so a 15 KB nonce let a few
+ * addresses hold the whole 512 MB heap. Refused by length, before the signature is checked, never by evicting live
+ * nonces (that would re-open replay).
+ */
+export const MAX_NONCE_LENGTH = 128;
+export const BAD_NONCE_CODE = 'bad_nonce';
+
 // ─── Verifying ──────────────────────────────────────────────────────────────────────────────
 
 export interface SignedRequestParts {
@@ -335,7 +345,11 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
         return { ok: false, status: 401, error: 'Request timestamp is stale or invalid' };
     }
 
-    const fields = { method: parts.method, path: parts.path, timestamp: parts.timestamp, nonce: parts.nonce, body: parts.body };
+    if (typeof parts.nonce !== 'string' || parts.nonce.length < 1 || parts.nonce.length > MAX_NONCE_LENGTH) {
+        return { ok: false, status: 400, error: `The request nonce must be 1 to ${MAX_NONCE_LENGTH} characters`, code: BAD_NONCE_CODE };
+    }
+
+    const fields ={ method: parts.method, path: parts.path, timestamp: parts.timestamp, nonce: parts.nonce, body: parts.body };
     const bound = parts.signedFor !== null;
     const text = bound ? signedRequestText({ host: parts.signedFor as string, ...fields }) : unboundRequestText(fields);
     if (!ed25519Verify(bytesOfSignedText(text), parts.signature, signer, 'base64')) {

@@ -46,6 +46,7 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { listPhotoUrl, removedRunText, t, tn } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
+import { readsOwn } from '../lib/features';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -502,8 +503,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return c;
             });
             setConversations(filtered);
-            const txs = await getMyMarketplaceTransactions(identity.publicKey);
-            setUserTransactions(txs);
+            // The member's own deals only where deals are not in preview (lib/features readsOwn).
+            if (await readsOwn('escrow')) setUserTransactions(await getMyMarketplaceTransactions(identity.publicKey));
             setActiveConv(prev => {
                 if (!prev) return null;
                 const fresh = held.find(c => c.id === prev.id);

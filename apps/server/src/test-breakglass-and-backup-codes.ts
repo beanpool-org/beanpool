@@ -25,7 +25,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
-import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
+import { buildBoundRequestHeaders, ed25519Signer, unboundRequestText } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -225,6 +225,20 @@ async function main() {
         assert(noStore(m), 'a refusal (a member, 403) is never cached either');
         const a = await signedPost(APP_ISSUE, {}, admin);
         assert(a.status === 403 && !a.body?.breakGlassCode && hashOf(admin.pub) === null, `an admin is refused (${a.status})`);
+        // AUTH-01 (2026-10-16): the old format names no community, so a request an owner sent to another community could
+        // be replayed here and hand back a code. Refused with 426 app_too_old, and no code is made or stored.
+        const beforeOld = hashOf(owner2.pub);
+        const ts = String(Date.now());
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const oldText = unboundRequestText({ method: 'POST', path: APP_ISSUE, timestamp: ts, nonce, body: '{}' });
+        const oldHeaders = {
+            'X-Public-Key': owner2.pub, 'X-Timestamp': ts, 'X-Nonce': nonce,
+            'X-Signature': crypto.sign(null, Buffer.from(oldText, 'utf-8'), owner2.priv).toString('base64'),
+        };
+        const old = await post(APP_ISSUE, {}, oldHeaders);
+        assert(old.status === 426 && old.body?.code === 'app_too_old' && !old.body?.breakGlassCode && hashOf(owner2.pub) === beforeOld,
+            `an owner's old-format (unbound) request is refused 426 app_too_old, no code made (${old.status} ${JSON.stringify(old.body)})`);
+        assert(noStore(old), 'a refusal (the old format, 426) is never cached either');
         const before = hashOf(owner2.pub);
         const o = await signedPost(APP_ISSUE, {}, owner2);
         assert(o.status === 200 && BG_SHAPE.test(o.body?.breakGlassCode) && o.body?.memberPubkey === owner2.pub, `an owner gets a code for their own key (${o.status} ${JSON.stringify(o.body)})`);

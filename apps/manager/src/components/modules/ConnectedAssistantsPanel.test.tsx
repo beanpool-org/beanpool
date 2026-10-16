@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import type { NodeProfile } from '../../lib/profiles';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 const node: NodeProfile = { id: 'local-node', name: 'Mullumbimby Node', url: 'http://localhost:8080' };
 
@@ -170,9 +171,12 @@ describe('ConnectedAssistantsPanel', () => {
 
     it('Disconnect asks, then disconnects that assistant', async () => {
         const calls = fakeNode({ grants: [grant()] });
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Disconnect Claude on my laptop' }));
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent('Disconnect "Claude on my laptop"?');
+        await answerInPageConfirm('Disconnect');
+        expect(confirmSpy).not.toHaveBeenCalled();
         await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/agent/grants/0123456789ab/revoke'))).toBe(true));
         expect(await screen.findByText('None connected.')).toBeInTheDocument();
     });

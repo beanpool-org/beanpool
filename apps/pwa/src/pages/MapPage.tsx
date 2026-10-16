@@ -53,7 +53,7 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { marked, useCommunityInfo, useFeatureMode } from '../lib/features';
+import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
@@ -328,9 +328,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     // A guest has no balance on the node, so it is only asked once App knows the viewer is a member.
     const canLoadBalance = isMember !== false && isMember !== null;
+    // Gate 1 is a Beans rule and keeperOf an enterprises one: where both are in preview (the global node) the member's
+    // balance is never asked (lib/features readsOwn).
+    const readsBalance = useReadsOwn('beans', canLoadBalance && !!identity);
+    const readsKeeperOf = useReadsOwn('enterprises', canLoadBalance && !!identity);
 
     useEffect(() => {
-        if (!canLoadBalance || !identity) return;
+        if (!canLoadBalance || !identity || !(readsBalance || readsKeeperOf)) return;
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => {
@@ -342,7 +346,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity?.publicKey, canLoadBalance]);
+    }, [identity?.publicKey, canLoadBalance, readsBalance, readsKeeperOf]);
 
     const needBlocked = postRules.offerFirst && blockedFromTrading && newPostType === 'need';
     const photoRequired = newPostType !== 'need' || postRules.needPhoto;

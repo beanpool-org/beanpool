@@ -7,6 +7,7 @@ import { monthlyCirculation } from '../circulation.js';
 import { parseInviteTicketText } from '../request-signing.js';
 import {
     LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SHOWCASE_FEATURES, featureMode, featureModeFor,
+    readsOwnData,
 } from '../features.js';
 
 /** Every [path, value] in a value, depth first. */
@@ -314,6 +315,17 @@ describe('feature modes (design §4): live, preview, read-only, hidden', () => {
         // An old server's features without decisions or invites: on, as the apps read them.
         expect(featureModeFor('decisions', { beans: true })).toBe('live');
         expect(featureModeFor('invites', null)).toBe('live');
+    });
+});
+
+describe('readsOwnData: a marked feature reads nothing of the reader\'s (design §6 W2)', () => {
+    it('reads once the mode is known, except in preview', () => {
+        expect(readsOwnData(undefined)).toBe(false);
+        expect(readsOwnData('preview')).toBe(false);
+        // Live, read-only and hidden read as before: a local node makes the same requests.
+        expect(readsOwnData('live')).toBe(true);
+        expect(readsOwnData('read-only')).toBe(true);
+        expect(readsOwnData('hidden')).toBe(true);
     });
 });
 

@@ -29,17 +29,21 @@ process.env.ENABLE_PEER_CONNECTORS = 'true';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import * as cm from './connector-manager.js';
+import { registerHandshakeHandler } from './handshake.js';
 import { createLibp2p } from 'libp2p';
 import { tcp } from '@libp2p/tcp';
 import { noise } from '@libp2p/noise';
 import { yamux } from '@libp2p/yamux';
 import { identify } from '@libp2p/identify';
+import { generateKeyPair } from '@libp2p/crypto/keys';
 
 let PORT = 0;
 let BASE = '';
@@ -92,8 +96,9 @@ async function dialOverHttp(address: string): Promise<{ status: number; json: an
     return { status: res.status, json };
 }
 
-async function makeNode(port = 0) {
+async function makeNode(port = 0, privateKey?: any) {
     const node = await createLibp2p({
+        privateKey: privateKey ?? await generateKeyPair('Ed25519'),
         addresses: { listen: [`/ip4/127.0.0.1/tcp/${port}`] },
         transports: [tcp()],
         connectionEncrypters: [noise()],
@@ -102,6 +107,71 @@ async function makeNode(port = 0) {
     });
     await node.start();
     return node;
+}
+
+async function rpc(node: any, target: any, protocol: string, obj: object, timeout = 6000): Promise<any> {
+    const s = await node.dialProtocol(target, protocol);
+    const chunks: Uint8Array[] = [];
+    const reader = (async () => {
+        for await (const c of s) {
+            chunks.push(c instanceof Uint8Array ? c : (c as any).subarray());
+        }
+    })().catch(() => {});
+    s.send(new TextEncoder().encode(JSON.stringify(obj)));
+    await s.close();
+    await Promise.race([reader, new Promise(r => setTimeout(r, timeout))]);
+    const raw = Buffer.concat(chunks).toString();
+    return raw ? JSON.parse(raw) : { __noAnswer: true, status: s.status };
+}
+
+async function child() {
+    const childIdx = process.argv.indexOf('--child');
+    const dir = process.argv[childIdx + 1];
+    const port = process.argv[childIdx + 2];
+    const xId = process.argv[childIdx + 3];
+    const yId = process.argv[childIdx + 4];
+
+    const { initStateEngine } = await import('./state-engine.js');
+    const cm = await import('./connector-manager.js');
+    initStateEngine();
+    const v = await makeNode(0);
+    cm.initConnectorManager(v);
+
+    const addr = `127.0.0.1:${port}`;
+    const before = cm.getConnectorByAddress(addr);
+    if (!before || before.pinnedPeerId !== xId || before.peerId !== xId) {
+        console.error('Child check failed before dial', before);
+        process.exit(10);
+    }
+    if (!cm.isPeerTrusted(xId).trusted || cm.isPeerTrusted(yId).trusted) {
+        console.error('Child trust check failed before dial');
+        process.exit(11);
+    }
+
+    const ok = await cm.connectToAddress(addr);
+    if (ok !== false) {
+        console.error('Child dial should have returned false, got', ok);
+        process.exit(12);
+    }
+
+    const after = cm.getConnectorByAddress(addr);
+    if (after?.error !== 'A different node answered at this address' || after?.pinnedPeerId !== xId) {
+        console.error('Child check failed after dial', after);
+        process.exit(13);
+    }
+    if (!cm.isPeerTrusted(xId).trusted || cm.isPeerTrusted(yId).trusted) {
+        console.error('Child trust check failed after dial');
+        process.exit(14);
+    }
+
+    const disk = JSON.parse(fs.readFileSync(path.join(dir, 'connectors.json'), 'utf8'));
+    if (disk[0]?.pinnedPeerId !== xId) {
+        console.error('Child disk check failed', disk);
+        process.exit(15);
+    }
+
+    await v.stop();
+    process.exit(0);
 }
 
 function proxy(plan: Array<{ port: number; delay: number }>): Promise<{ port: number; close: () => void }> {
@@ -137,6 +207,7 @@ async function main() {
 
     const localNode = await makeNode(0);
     cm.initConnectorManager(localNode);
+    registerHandshakeHandler(localNode);
 
     const loaded = cm.getConnectorByAddress(legacyHostPort);
     assert(loaded !== null && loaded.pinnedPeerId === undefined,
@@ -149,7 +220,8 @@ async function main() {
     tfa = turnOn2faForTests(PW);
 
     // ── 2. Add 127.0.0.1:<port> as a peer connector and dial node X ──
-    const nodeX = await makeNode(0);
+    const kx = await generateKeyPair('Ed25519');
+    const nodeX = await makeNode(0, kx);
     const portX = Number(nodeX.getMultiaddrs()[0].toString().split('/tcp/')[1].split('/')[0]);
     const peerIdX = nodeX.peerId.toString();
     const hostPortAddr = `127.0.0.1:${portX}`;
@@ -193,6 +265,14 @@ async function main() {
     assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
         `2j. save with oldAddress === address keeps pinnedPeerId`);
 
+    await postConnector({ address: hostPortAddr, trustLevel: 'blocked', callsign: 'BlockedNodeX' });
+    assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
+        `2k. panel add form re-submitted with blocked keeps pinnedPeerId`);
+
+    await postConnector({ address: hostPortAddr, trustLevel: 'peer', callsign: 'NodeX' });
+    assert(cm.getConnectorByAddress(hostPortAddr)?.pinnedPeerId === peerIdX,
+        `2l. panel save back to peer keeps pinnedPeerId`);
+
     // ── 3. Stop X, start node Y (different key) on the same port, dial again ──
     await nodeX.stop();
 
@@ -214,6 +294,39 @@ async function main() {
         `3e. node Y is NOT linked or trusted (isPeerTrusted is false)`);
     assert(afterDial2?.pinnedPeerId === peerIdX,
         `3f. node X is STILL the recorded pinnedPeerId`);
+
+    // ── 3b. Inbound dials (Y dials in; X dials in from a new address) ──
+    const localAddr = localNode.getMultiaddrs()[0];
+    const resY = await rpc(nodeY, localAddr, '/beanpool/handshake/1.0.0', {
+        type: 'handshake_req',
+        ts: Date.now(),
+        youAreTrusted: true,
+        trustLevel: 'peer',
+        active: true,
+    });
+    assert(resY?.youAreTrusted === false, `3g. inbound handshake from node Y refused (youAreTrusted is false)`);
+
+    const stAfterYInbound = cm.getConnectorByAddress(hostPortAddr);
+    assert(stAfterYInbound?.connected === false && stAfterYInbound?.mutualTrust === false,
+        `3h. connector status unchanged after Y inbound (connected: ${stAfterYInbound?.connected}, mutualTrust: ${stAfterYInbound?.mutualTrust})`);
+
+    const nodeX2 = await makeNode(0, kx);
+    const resX = await rpc(nodeX2, localAddr, '/beanpool/handshake/1.0.0', {
+        type: 'handshake_req',
+        ts: Date.now(),
+        youAreTrusted: true,
+        trustLevel: 'peer',
+        active: true,
+    });
+    assert(resX?.youAreTrusted === true, `3i. inbound handshake from node X (new port) accepted (youAreTrusted is true)`);
+
+    const stAfterXInbound = cm.getConnectorByAddress(hostPortAddr);
+    assert(stAfterXInbound?.connected === true && stAfterXInbound?.mutualTrust === true,
+        `3j. connector status marked connected and mutualTrust true after X inbound`);
+
+    await localNode.hangUp(nodeX2.peerId).catch(() => {});
+    await nodeX2.stop();
+    await cm.disconnectFromAddress(hostPortAddr);
 
     // ── 4. Remove and add again (changing address is remove + add): fresh record links Y ──
     const removeRes = await removeConnectorOverHttp(hostPortAddr);
@@ -330,6 +443,39 @@ async function main() {
     assert(diskAfterMigration[0]?.pinnedPeerId === undefined,
         `8d. stale pinnedPeerId was removed from disk on migration`);
 
+    // ── 9. Restart: fresh process reads the record and refuses Y ──
+    const childDir = fs.mkdtempSync(path.join(DATA_DIR, 'restart-test-'));
+    fs.writeFileSync(path.join(childDir, 'connectors.json'), JSON.stringify([{
+        address: hostPortAddr,
+        trustLevel: 'peer',
+        enabled: true,
+        callsign: 'Partner',
+        addedAt: 1,
+        pinnedPeerId: peerIdX,
+    }], null, 2));
+
+    const here = fileURLToPath(import.meta.url);
+    const childExitCode = await new Promise<number>((resolve) => {
+        const c = spawn(process.execPath, [
+            ...process.execArgv,
+            here,
+            '--child',
+            childDir,
+            String(portX),
+            peerIdX,
+            peerIdY,
+        ], {
+            env: {
+                ...process.env,
+                BEANPOOL_DATA_DIR: childDir,
+                ENABLE_PEER_CONNECTORS: 'true',
+            },
+            stdio: ['ignore', 'inherit', 'inherit'],
+        });
+        c.on('exit', (code) => resolve(code ?? 1));
+    });
+    assert(childExitCode === 0, `9a. fresh process restart correctly loaded pinnedPeerId, refused node Y, and kept pinnedPeerId (exit ${childExitCode})`);
+
     // Cleanup
     await localNode.stop();
     await nodeY.stop();
@@ -339,7 +485,14 @@ async function main() {
     process.exit(0);
 }
 
-main().catch((err) => {
-    console.error('Test failed with error:', err);
-    process.exit(1);
-});
+if (process.argv.includes('--child')) {
+    child().catch((err) => {
+        console.error('Child failed:', err);
+        process.exit(1);
+    });
+} else {
+    main().catch((err) => {
+        console.error('Test failed with error:', err);
+        process.exit(1);
+    });
+}

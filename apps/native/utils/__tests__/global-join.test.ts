@@ -572,9 +572,10 @@ describe('one identity per device', () => {
     it('never takes a key other than the one this join made', async () => {
         const made = await joinKeyForThisPhone();
         await commitJoinKey(made, 'Sam');
-        // Something else put another key on the phone meanwhile.
+        // Something else put another key on the phone meanwhile: a restore the member confirmed, the only write that may
+        // replace a different account (identity.ts StoredKeyDiffersError).
         const other = await draftIdentity('Other');
-        await importIdentity(other);
+        await importIdentity(other, { replaceUnreadable: true });
         expect(await releaseJoinKey(made)).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
     });

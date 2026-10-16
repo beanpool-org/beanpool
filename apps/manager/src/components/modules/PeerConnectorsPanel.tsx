@@ -4,6 +4,8 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { proofField } from '../../lib/fresh-proof';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 export interface PeerConnector {
     address: string;
@@ -38,6 +40,8 @@ export function PeerConnectorsPanel({
     const [connectors, setConnectors] = useState<PeerConnector[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
+    // A `mirror` link's add, change, disconnect and remove ask an owner's fresh proof (server community.ts, S2b D2).
+    const proof = useFreshProof();
 
     // Add connector form state
     const [newAddress, setNewAddress] = useState('');
@@ -103,8 +107,8 @@ export function PeerConnectorsPanel({
     }, [confirmModal.isOpen]);
 
     // Handle Add Connector / Peer
-    const handleAddConnector = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAddConnector = async (e: React.FormEvent | null, code?: string) => {
+        e?.preventDefault();
         const address = newAddress.trim();
         if (!address) {
             setStatusMsg({ text: 'Address is required', isError: true });
@@ -130,8 +134,10 @@ export function PeerConnectorsPanel({
                     callsign: newCallsign.trim() || undefined,
                     enabled: newMode === 'active',
                     publicUrl: newPublicUrl.trim() || undefined,
+                    ...proofField(code),
                 }),
             });
+            if (await proof.check(res, (c) => handleAddConnector(null, c), code)) return;
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -207,7 +213,7 @@ export function PeerConnectorsPanel({
     };
 
     // Disconnect from peer
-    const handleDisconnect = async (address: string) => {
+    const handleDisconnect = async (address: string, code?: string) => {
         setActionInProgress((prev) => ({ ...prev, [address]: 'disconnecting' }));
         setStatusMsg(null);
         try {
@@ -221,8 +227,10 @@ export function PeerConnectorsPanel({
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
                     address,
+                    ...proofField(code),
                 }),
             });
+            if (await proof.check(res, (c) => handleDisconnect(address, c), code)) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 throw new Error(err.error || 'Disconnect failed');
@@ -244,7 +252,7 @@ export function PeerConnectorsPanel({
     };
 
     // Toggle active / passive mode
-    const handleToggleMode = async (connector: PeerConnector) => {
+    const handleToggleMode = async (connector: PeerConnector, code?: string) => {
         const address = connector.address || connector.url || '';
         if (!address) {
             setStatusMsg({ text: 'Unable to toggle mode: connector address is missing', isError: true });
@@ -268,8 +276,10 @@ export function PeerConnectorsPanel({
                     callsign: connector.callsign || undefined,
                     enabled: makeActive,
                     publicUrl: connector.publicUrl || undefined,
+                    ...proofField(code),
                 }),
             });
+            if (await proof.check(res, (c) => handleToggleMode(connector, c), code)) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 throw new Error(err.error || 'Failed to update connector mode');
@@ -304,8 +314,9 @@ export function PeerConnectorsPanel({
     };
 
     // Execute confirmed remove
-    const handleConfirmRemove = async () => {
-        const address = confirmModal.address;
+    const handleConfirmRemove = async (retry?: { address: string; code: string }) => {
+        const address = retry?.address ?? confirmModal.address;
+        const code = retry?.code;
         setConfirmModal({ isOpen: false, address: '', callsign: '' });
         if (!address) return;
 
@@ -322,8 +333,10 @@ export function PeerConnectorsPanel({
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
                     address,
+                    ...proofField(code),
                 }),
             });
+            if (await proof.check(res, (c) => handleConfirmRemove({ address, code: c }), code)) return;
             const data = await res.json().catch(() => ({}));
             if (!res.ok || data.success === false) {
                 throw new Error(data.error || 'Remove failed');
@@ -375,6 +388,7 @@ export function PeerConnectorsPanel({
             </div>
 
             {/* Status Message */}
+            <FreshProofBox proof={proof} testId="connector-proof" />
             {statusMsg && (
                 <div
                     role="status"
@@ -634,7 +648,7 @@ export function PeerConnectorsPanel({
                     Add New Connector
                 </h4>
 
-                <form onSubmit={handleAddConnector} className="space-y-3">
+                <form onSubmit={(e) => handleAddConnector(e)} className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label htmlFor="new-connector-addr" className="block text-xs font-bold text-nature-300 mb-1">
@@ -764,7 +778,7 @@ export function PeerConnectorsPanel({
                             </button>
                             <button
                                 type="button"
-                                onClick={handleConfirmRemove}
+                                onClick={() => handleConfirmRemove()}
                                 className="px-4 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all min-h-[44px]"
                             >
                                 Remove Connector

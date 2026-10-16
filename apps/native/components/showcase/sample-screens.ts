@@ -6,7 +6,7 @@
  *
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
-import { SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, TIER_LEVELS, sampleRowNote } from '@beanpool/core';
 
 const when = (daysAgo: number) => (daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`);
 
@@ -38,14 +38,14 @@ export function sampleBalance() {
     };
 }
 
-/** The Ledger's transaction rows, newest first: "a neighbour", what it was for, and when. */
+/** The Ledger's transaction rows, newest first: "a neighbour", what it was for (a hold: "Held in trust · …"), and when. */
 export function sampleTransactions() {
     return SAMPLE_COMMUNITY.transactions.map(t => ({
         id: t.id,
         type: t.amount < 0 ? 'debit' : 'credit',
         amount: Math.abs(t.amount),
         peer: t.who,
-        memo: t.what,
+        memo: sampleRowNote(t),
         timestamp: when(t.daysAgo),
     }));
 }
@@ -56,22 +56,40 @@ const SAMPLE_NEIGHBOUR = 'sample-member-neighbour';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * My Deals fed Example Valley: the deal waiting on you (Beans held safely, In Progress) and the one done (History, with
- * Review). In the shapes MyDealsSheet reads from `getPosts`/`getMyPosts` and `getMarketplaceTransactions`.
+ * My Deals fed Example Valley, in the shapes MyDealsSheet reads from `getPosts`/`getMyPosts` and
+ * `getMarketplaceTransactions`, each deal in the state the fixture names:
+ * - waiting on you (`requested`): the member's Need, a neighbour offered to do it, and Approve & Commit is the member's
+ *   (In Progress: "Action Required");
+ * - held (`pending`): the member asked a neighbour's offer, and the Beans are held until the job is done ("Held in Trust");
+ * - done (`completed`): the member SOLD it, so History reads "+ 30", as the Ledger's "Mending a jacket +30" row does.
  */
 export function sampleDeals(now: number = Date.now()) {
     const me = SAMPLE_DEALS_ME.publicKey;
     const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
-    const posts = SAMPLE_COMMUNITY.deals.filter(d => d.status === 'waiting-on-you').map(d => ({
-        id: `${d.id}-post`, title: d.what, type: 'need', status: 'pending', author_pubkey: me, accepted_by: SAMPLE_NEIGHBOUR,
-        credits: d.amount, photos: '[]', created_at: at(d.daysAgo),
-    }));
-    const transactions = SAMPLE_COMMUNITY.deals.map(d => ({
-        id: d.id, postId: `${d.id}-post`, postTitle: d.what, status: d.status === 'done' ? 'completed' : 'pending',
-        buyerPublicKey: me, buyerCallsign: SAMPLE_COMMUNITY.member, sellerPublicKey: SAMPLE_NEIGHBOUR, sellerCallsign: d.who,
-        credits: d.amount, createdAt: at(d.daysAgo), ratedByBuyer: false, ratedBySeller: false,
-    }));
+    const posts = SAMPLE_COMMUNITY.deals.filter(d => d.state !== 'completed').map(d => d.state === 'requested'
+        ? {
+            id: `${d.id}-post`, title: d.what, type: 'need', status: 'active', author_pubkey: me, accepted_by: null,
+            credits: d.amount, photos: '[]', created_at: at(d.daysAgo),
+        }
+        : {
+            id: `${d.id}-post`, title: d.what, type: 'offer', status: 'pending', author_pubkey: SAMPLE_NEIGHBOUR, accepted_by: me,
+            credits: d.amount, photos: '[]', created_at: at(d.daysAgo),
+        });
+    const transactions = SAMPLE_COMMUNITY.deals.map(d => {
+        const bought = d.side === 'bought';
+        return {
+            id: d.id, postId: `${d.id}-post`, postTitle: d.what, status: d.state,
+            buyerPublicKey: bought ? me : SAMPLE_NEIGHBOUR, buyerCallsign: bought ? SAMPLE_COMMUNITY.member : d.who,
+            sellerPublicKey: bought ? SAMPLE_NEIGHBOUR : me, sellerCallsign: bought ? d.who : SAMPLE_COMMUNITY.member,
+            credits: d.amount, createdAt: at(d.daysAgo), ratedByBuyer: false, ratedBySeller: false,
+        };
+    });
     return { posts, transactions };
+}
+
+/** The Wallet's In Escrow in preview: the Beans the member's held deals hold (the fixture's `inEscrow`). */
+export function sampleEscrowTotal(): number {
+    return SAMPLE_COMMUNITY.deals.filter(d => d.state === 'pending' && d.side === 'bought').reduce((sum, d) => sum + d.amount, 0);
 }
 
 /** The member's header over a preview: "Example Valley · an example member". */

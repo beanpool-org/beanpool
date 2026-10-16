@@ -44,6 +44,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
+import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -60,65 +61,6 @@ interface Props {
     onBack?: () => void;
     /** `/api/community/info` as the lobby already read it, so the page doesn't ask again. */
     initialInfo?: CommunityInfo;
-}
-
-// ===================== INVITE CODE FORMATTING =====================
-
-function extractInviteToken(raw: string): string {
-    const inviteMatch = raw.match(/[?&]invite=([^&]+)/);
-    if (inviteMatch) {
-        return decodeURIComponent(inviteMatch[1]);
-    }
-    return raw;
-}
-
-/** Strip everything except alphanumeric, uppercase, and format as BP-XXXX-XXXX */
-function formatInviteCode(raw: string): string {
-    const extracted = extractInviteToken(raw);
-    const trimmed = extracted.trim();
-    if (trimmed.length > 20 && trimmed.startsWith('BP-')) {
-        return trimmed; // It's an offline cryptographic ticket. Just return it cleanly.
-    }
-
-    // Strip non-alphanumeric
-    const clean = extracted.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    
-    // Legacy support for Node Genesis invites
-    if (clean.startsWith('INV')) {
-        const body = clean.slice(3);
-        if (body.length === 0) return '';
-        if (body.length <= 4) return `INV-${body}`;
-        return `INV-${body.slice(0, 4)}-${body.slice(4, 8)}`;
-    }
-
-    const withoutPrefix = clean.startsWith('BP') ? clean.slice(2) : clean;
-    const body = withoutPrefix.slice(0, 8);
-
-    if (body.length === 0) return '';
-    if (body.length <= 4) return `BP-${body}`;
-    return `BP-${body.slice(0, 4)}-${body.slice(4)}`;
-}
-
-/** Normalise any input to the canonical format for API submission */
-function normaliseInviteCode(raw: string): string {
-    const extracted = extractInviteToken(raw);
-    const trimmed = extracted.trim();
-    if (trimmed.length > 20 && trimmed.startsWith('BP-')) {
-        return trimmed; // Offline cryptographic bulk token
-    }
-
-    const clean = extracted.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    
-    if (clean.startsWith('INV')) {
-        const body = clean.slice(3);
-        if (body.length < 8) return extracted.trim().toUpperCase();
-        return `INV-${body.slice(0, 4)}-${body.slice(4, 8)}`;
-    }
-
-    const withoutPrefix = clean.startsWith('BP') ? clean.slice(2) : clean;
-    const body = withoutPrefix.slice(0, 8);
-    if (body.length < 8) return extracted.trim().toUpperCase(); // partial — return as-is
-    return `BP-${body.slice(0, 4)}-${body.slice(4)}`;
 }
 
 /** What an invite-sent record keeps of the code or ticket a key went with: its SHA-256, never the code itself. */
@@ -700,7 +642,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingSession, setPairingSession] = useState<{ sessionId: string; privateKeyHex: string; publicKeyHex: string } | null>(null);
     const [pairingSecondsLeft, setPairingSecondsLeft] = useState(120);
     const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'decrypting' | 'success' | 'expired'>('idle');
-    /** The phone has sent: the relay holds it until this browser types the two digits the phone shows. */
+    /** The phone has sent: the relay holds it until this browser types the four digits the phone shows. */
     const [pairingConfirming, setPairingConfirming] = useState(false);
     const [pairingDigits, setPairingDigits] = useState('');
     const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
@@ -2486,30 +2428,35 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
                                     margin: '0 auto 1.25rem',
                                     width: 'fit-content',
+                                    maxWidth: '100%',
+                                    boxSizing: 'border-box',
                                     position: 'relative',
                                 }}
                             >
                                 {pairingStatus === 'waiting' && pairingSession && pairingConfirming ? (
-                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 1rem', textAlign: 'center', maxWidth: '16rem' }}>
+                                    <form onSubmit={handleConfirmPairingDigits} style={{ padding: '1.25rem 0', textAlign: 'center', width: '100%', maxWidth: '16rem', boxSizing: 'border-box' }}>
                                         <label htmlFor="pair-digits" style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '0.75rem' }}>
-                                            {t('Type the two digits your phone shows')}
+                                            {t('Type the four digits your phone shows')}
                                         </label>
+                                        {/* Four digits (SEC-INV-02). The box shrinks with the card (100%, at most 9.5rem) and the card with the page: at 320 px and
+                                            130% text four Inter digits at 0.3em take 153 px of the box's 162 inside, and the page stays 320 wide
+                                            (#2041 fix round 1; the widths are in WelcomePage.pairDigits.test.tsx). */}
                                         <input
                                             id="pair-digits"
                                             inputMode="numeric"
                                             autoComplete="one-time-code"
-                                            pattern="[0-9]{2}"
-                                            maxLength={2}
+                                            pattern="[0-9]{4}"
+                                            maxLength={4}
                                             required
                                             autoFocus
                                             value={pairingDigits}
-                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
-                                            style={{ width: '5rem', fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
+                                            onChange={(e) => setPairingDigits(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                                            style={{ width: '100%', maxWidth: '9.5rem', boxSizing: 'border-box', fontSize: '2rem', letterSpacing: '0.3em', textAlign: 'center', padding: '0.4rem', borderRadius: 8, border: '2px solid #6b7280', color: '#111827', background: '#ffffff' }}
                                         />
                                         <button
                                             type="submit"
-                                            disabled={pairingDigits.length !== 2}
-                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 2 ? 1 : 0.6 }}
+                                            disabled={pairingDigits.length !== 4}
+                                            style={{ display: 'block', margin: '0.85rem auto 0', minHeight: 44, padding: '0.5rem 1.5rem', borderRadius: 8, border: 'none', fontWeight: 700, background: '#047857', color: '#ffffff', opacity: pairingDigits.length === 4 ? 1 : 0.6 }}
                                         >
                                             {t('Confirm')}
                                         </button>

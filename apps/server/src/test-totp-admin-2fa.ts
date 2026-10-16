@@ -13,7 +13,7 @@
  * I. otpauth URI formatting preserves unencoded colon label separator (#135 CR2)
  */
 import assert from 'node:assert';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode, forgetUsedTotpCodesForTests, forgetTotpStepsInMemoryForTests, useTotpCode } from './totp.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { initStateEngine } from './state-engine.js';
@@ -155,6 +155,17 @@ resetAdminAuthTarpit();
     const okPendingCheck = await checkAdminAuth(ctxPendingCheck);
     assert.strictEqual(okPendingCheck, true, 'H. Active secret must still authenticate while a new setup is pending');
     console.log('  H. Pending setup secret does NOT disarm currently active 2FA');
+
+    // I. A restart does not reopen a used code (AUTH-07, 2026-10-16): the last accepted step is kept in local-config.
+    resetAdminAuthTarpit();
+    forgetTotpStepsInMemoryForTests(); // what a restart forgets
+    const ctxAfterRestart = mockCtx({ 'x-admin-password': testPass, 'x-admin-totp': currentActiveCode });
+    const okAfterRestart = await checkAdminAuth(ctxAfterRestart);
+    assert.strictEqual(okAfterRestart, false, 'I. The code H used is refused after a restart');
+    assert.strictEqual(typeof getLocalConfig().totpLastAcceptedStep, 'number', 'I. local-config holds the step number');
+    assert.ok(!JSON.stringify(getLocalConfig()).includes(`"${currentActiveCode}"`), 'I. …and never the code');
+    assert.strictEqual(useTotpCode(currentActiveCode, secret), 'reused', 'I. useTotpCode calls it reused');
+    console.log('  I. A used code stays used across a restart');
 
     // G. Disabling 2FA returns to the step 7c refusal of the password alone
     updateLocalConfig({

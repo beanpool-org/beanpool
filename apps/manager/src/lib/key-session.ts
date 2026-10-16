@@ -124,8 +124,9 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
     const { token, section } = parseHandoffFragment(hash);
     if (hash && /(^|[#&])(handoff|section|from)=/.test(hash)) {
         // Out of the address bar (and so out of history, bookmarks and screenshots) before anything else.
-        // `from` (lib/came-from.ts, read before this runs) goes with it.
-        win.history.replaceState(null, '', win.location.pathname + win.location.search);
+        // `from` (lib/came-from.ts, read before this runs) goes with it. The entry's state stays: a link reaching the
+        // page already open must not take the open modals' mark (ModalBackdrop) or the screen's off it (opus-2028 B3).
+        win.history.replaceState(win.history.state ?? null, '', win.location.pathname + win.location.search);
     }
 
     let refused: string | null = null;

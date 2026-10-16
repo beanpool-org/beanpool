@@ -76,7 +76,7 @@ import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -692,7 +692,9 @@ router.post('/api/local/connectors/credit-cap', async (ctx) => {
 /**
  * The link enterprises, one per capped peer (#143 step 3).
  *
- * A PUBLIC read, deliberately. §7: "Members see the energy balance, on the link's card" — "we have
+ * A MEMBERS' read (FED-10, https-server.ts MEMBERS_ONLY_READS_EXACT): it was public, but balances are members'
+ * business (Marty, 2026-09-28), and a stranger read every capped link's balance here. §7: "Members see the energy
+ * balance, on the link's card" — "we have
  * delivered 480 beans of work to Byron and had none back" is a governance-grade fact about a community's
  * own economy, and the thing that makes anyone call a favour in. Hiding it behind the admin password would
  * keep a community from seeing its own position, which is the failure mode the operator-only alternative
@@ -1719,6 +1721,12 @@ router.post('/api/ledger/transfer', async (ctx) => {
     if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
         ctx.body = { error: 'to and a positive amount are required' };
+        return;
+    }
+    // To the cent, as a pledge and a payment to the Commons are (LED-05).
+    if (!isWholeCents(parsedAmount)) {
+        ctx.status = 400;
+        ctx.body = { error: WHOLE_CENTS_ERROR };
         return;
     }
 

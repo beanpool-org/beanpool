@@ -119,17 +119,22 @@ describe('My Deals in preview: every way forward closes My Deals before it route
     };
     const buttonIn = (scope: string, label: string) =>
         Array.from(host.querySelectorAll(`${scope} button`)).find(b => b.textContent === label)!;
-    const expectClosedThenRouted = () => {
-        // Told to close once, before the one route was pushed.
+    // Where each way forward goes (review of #2035, N5): Start a community, Communities near you, and How it works on deals.
+    const routeOf = (label: string): unknown =>
+        label === LOCAL_COMMUNITY_SHEET.start ? SHEET_ROUTES.start
+            : label === LOCAL_COMMUNITY_SHEET.nearYou ? SHEET_ROUTES.nearYou
+                : { pathname: '/guide/[slug]', params: { slug: LOCAL_COMMUNITY_SHEET.guide.escrow } };
+    const expectClosedThenRouted = (label: string) => {
+        // Told to close once, before the one route was pushed, and that route is the button's own.
         expect(closedWhenPushed).toEqual([0]);
-        expect(routes.pushed).toHaveLength(1);
+        expect(routes.pushed).toEqual([routeOf(label)]);
     };
 
     for (const label of [LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou]) {
         it(`the strip's "${label}"`, async () => {
             await openDeals();
             await press(buttonIn('[data-testid="local-community-strip"]', label));
-            expectClosedThenRouted();
+            expectClosedThenRouted(label);
         });
     }
 
@@ -138,7 +143,7 @@ describe('My Deals in preview: every way forward closes My Deals before it route
             await openDeals();
             await press(host.querySelector('[data-testid="local-community-strip"] [aria-label$="why?"]')!);
             await press(buttonIn('[data-testid="local-community-sheet"]', label));
-            expectClosedThenRouted();
+            expectClosedThenRouted(label);
             expect(host.querySelector('[data-testid="local-community-sheet"]')).toBeNull();
         });
 
@@ -147,7 +152,7 @@ describe('My Deals in preview: every way forward closes My Deals before it route
             const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
             await press(Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(waiting.what)).pop()!);
             await press(buttonIn('[data-testid="local-community-sheet"]', label));
-            expectClosedThenRouted();
+            expectClosedThenRouted(label);
             expect(host.querySelector('[data-testid="local-community-sheet"]')).toBeNull();
         });
     }

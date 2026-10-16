@@ -9,35 +9,14 @@
  */
 
 import { WORDLIST } from './bip39-wordlist';
-import { lowercaseRecoveryWords, toEd25519Pkcs8 } from '@beanpool/core';
+import { RECOVERY_ENTROPY_LEN, lowercaseRecoveryWords, recoveryWordsFromEntropy, toEd25519Pkcs8 } from '@beanpool/core';
 
 /**
  * Generate a new 12-word mnemonic from cryptographically secure random entropy.
- * Standard BIP-39: 128 bits of entropy → 12 words.
+ * Standard BIP-39: 128 bits of entropy → 12 words, made by core as the phone makes them.
  */
 export function generateMnemonic(): string[] {
-    // 128 bits of entropy = 16 bytes
-    const entropy = new Uint8Array(16);
-    crypto.getRandomValues(entropy);
-
-    // SHA-256 hash for checksum (synchronous via manual implementation)
-    // We only need first 4 bits of the hash, so we use a simpler approach
-    const checkBits = computeChecksum(entropy);
-
-    // Combine entropy + checksum into a bit string
-    let bits = '';
-    for (const byte of entropy) {
-        bits += byte.toString(2).padStart(8, '0');
-    }
-    bits += checkBits;
-
-    // Split into 12 x 11-bit indices
-    const words: string[] = [];
-    for (let i = 0; i < 12; i++) {
-        const index = parseInt(bits.slice(i * 11, (i + 1) * 11), 2);
-        words.push(WORDLIST[index]);
-    }
-    return words;
+    return recoveryWordsFromEntropy(crypto.getRandomValues(new Uint8Array(RECOVERY_ENTROPY_LEN)));
 }
 
 /**
@@ -125,22 +104,6 @@ async function derivePublicKey(privateKey: CryptoKey): Promise<CryptoKey> {
         true,
         ['verify']
     );
-}
-
-/**
- * Simple checksum for BIP-39: first 4 bits of SHA-256 of entropy.
- * Uses a synchronous calculation approach.
- */
-function computeChecksum(entropy: Uint8Array): string {
-    // We need the SHA-256 hash, but crypto.subtle is async.
-    // For mnemonic generation, we use a simple deterministic hash.
-    // This is compatible with BIP-39 validation.
-    let h = 0x6a09e667;
-    for (let i = 0; i < entropy.length; i++) {
-        h = ((h << 5) - h + entropy[i]) | 0;
-    }
-    // Return 4 bits as binary string
-    return ((h >>> 28) & 0xf).toString(2).padStart(4, '0');
 }
 
 export function bytesToHex(bytes: Uint8Array): string {

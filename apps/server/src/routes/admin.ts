@@ -251,6 +251,10 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
 
     // The session's id goes in the httpOnly cookie and nowhere else: in the body, a script on the page could read it
     // and use it from anywhere, without the cookie or a CSRF token (Fable's web review, L3).
+    // The session this browser held is ended, as a password sign-in ends it (AUTH-06): replaced here, it would otherwise
+    // stay valid until its idle limit.
+    const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
+    if (held) revokeAdminSession(held);
     setAdminSessionCookie(ctx, res.sessionId!);
     if (res.csrfToken) {
         ctx.set('X-CSRF-Token', res.csrfToken);

@@ -251,6 +251,25 @@ async function main() {
         assert(urlCarriesSampleId(path, query) === want, `url ${label}: ${want ? 'refused' : 'passed'}`);
     }
 
+    // Every id kind the sample community carries (core sample-community.ts: rows, deals, the enterprise and its listing,
+    // the project, the Decision and whom it grants to, the invites and who used one, the invite tree), under the keys a
+    // screen would send it as and in a path: each one refused.
+    const { SAMPLE_COMMUNITY, isSampleId } = await import('@beanpool/core');
+    const sampleIds: string[] = [];
+    const collect = (v: unknown): void => {
+        if (typeof v === 'string') { if (isSampleId(v)) sampleIds.push(v); return; }
+        if (v && typeof v === 'object') for (const c of Object.values(v)) collect(c);
+    };
+    collect(SAMPLE_COMMUNITY);
+    const kinds = new Set(sampleIds.map(id => id.split('-')[1]));
+    assert(['community', 'tx', 'deal', 'enterprise', 'listing', 'project', 'decision', 'invite', 'member'].every(k => kinds.has(k)),
+        `the sample's id kinds are all here (${[...kinds].sort().join(', ')})`);
+    for (const id of new Set(sampleIds)) {
+        const bodies = [{ id }, { postId: id }, { treasuryId: id }, { projectId: id }, { decisionId: id }, { inviteId: id }, { listingId: id }, { memberId: id }, { subject: id }, { usedBy: id }];
+        assert(bodies.every(b => bodyCarriesSampleId(b)) && urlCarriesSampleId(`/api/x/${id}`, {}) && urlCarriesSampleId('/api/x', { id }),
+            `the sample's ${id}: refused in a body under any id key, in a path and in a query`);
+    }
+
     console.log('\n── 2. the sweep: every write route, through the real middleware ──');
     const { db } = await import('./db/db.js');
     const { initStateEngine } = await import('./state-engine.js');
@@ -288,6 +307,67 @@ async function main() {
     };
     const call = (method: string, url: string, body?: unknown) => callRaw(method, url, body === undefined ? undefined : JSON.stringify(body));
     const refused = (r: { status: number; code?: string }) => r.status === 400 && r.code === SAMPLE_ID_REFUSAL;
+
+    // An example invitation's code (core SAMPLE_COMMUNITY.invites, EXAMPLE-1234) is no code here: not the shape a node
+    // mints (sanitize-message INVITE_CODE_PATTERN, engine generateShortCode), not a ticket, and the check every app runs
+    // before a join, through the real middleware, answers that it is not valid.
+    {
+        const { INVITE_CODE_PATTERN } = await import('./sanitize-message.js');
+        const { checkInvite } = await import('./state-engine.js');
+        const { SAMPLE_COMMUNITY } = await import('@beanpool/core');
+        const codes = SAMPLE_COMMUNITY.invites.map(i => i.code);
+        assert(codes.length === 3, `the sample has three example invitations (${codes.join(', ')})`);
+        for (const code of codes) {
+            INVITE_CODE_PATTERN.lastIndex = 0;
+            assert(!INVITE_CODE_PATTERN.test(code) && !code.startsWith('BP-'), `${code}: not the shape of a node's invite code or a ticket`);
+            const direct = checkInvite(code);
+            assert(direct.valid === false && direct.reason === 'invalid', `${code}: the node's own check refuses it (${direct.reason})`);
+            for (const spelt of [code, code.toLowerCase(), ` ${code} `, code.replace('-', '')]) {
+                resetGatewayRateLimit();
+                const res = await localFetch(`${BASE}/api/invite/check?code=${encodeURIComponent(spelt)}`, { signal: AbortSignal.timeout(5000) });
+                const json = await res.json().catch(() => null) as { valid?: boolean; reason?: string } | null;
+                assert(res.status === 200 && json?.valid === false && json?.reason === 'invalid',
+                    `GET /api/invite/check "${spelt}": not valid (${res.status} ${json?.reason})`);
+            }
+        }
+        // The check works: a real-shaped code the node holds is found (its maker is no member here, so `unknown_inviter`),
+        // so `invalid` above means there is no such code, not that the route refuses everything.
+        const real = 'INV-2345-6789';
+        db.prepare('INSERT INTO invite_codes (code, created_by, created_at) VALUES (?, ?, ?)').run(real, 'cd'.repeat(32), new Date().toISOString());
+        resetGatewayRateLimit();
+        const res = await localFetch(`${BASE}/api/invite/check?code=${encodeURIComponent(real)}`, { signal: AbortSignal.timeout(5000) });
+        const json = await res.json().catch(() => null) as { valid?: boolean; reason?: string } | null;
+        assert(res.status === 200 && json?.reason === 'unknown_inviter', `the control: a real-shaped code the node holds is found (${json?.reason})`);
+        db.prepare('DELETE FROM invite_codes WHERE code = ?').run(real);
+    }
+
+    // The sample Decision is one this node could make (core sample-community.ts SampleDecision): its effect touches what
+    // it says, its franchise is the one createDecision gives that touch (franchiseForTouch: a pool Decision is quadratic),
+    // its quorum and threshold are its effect's, and its numbers are tallyDecision's: voters for turnout, weights for the
+    // tally, and each vote's voice credits what castVote charges (N² for N votes when quadratic, 1 otherwise).
+    {
+        const { franchiseForTouch, TOUCHES_FOR_EFFECT, quorumRatioForEffect, thresholdForEffect, getQuorumRequired } = await import('./decisions-engine.js');
+        const { SAMPLE_COMMUNITY } = await import('@beanpool/core');
+        assert(SAMPLE_COMMUNITY.decisions.length > 0, `the sample has a Decision (${SAMPLE_COMMUNITY.decisions.length})`);
+        for (const d of SAMPLE_COMMUNITY.decisions) {
+            assert(TOUCHES_FOR_EFFECT[d.effect] === d.touches, `${d.id}: ${d.effect} touches the ${TOUCHES_FOR_EFFECT[d.effect]} (the sample says ${d.touches})`);
+            assert(franchiseForTouch(d.touches) === d.franchise, `${d.id}: the node gives a ${d.touches} Decision ${franchiseForTouch(d.touches)} (the sample says ${d.franchise})`);
+            assert(quorumRatioForEffect(d.effect, d.touches) === d.quorumRatio && thresholdForEffect(d.effect, d.touches) === d.thresholdRequired,
+                `${d.id}: the quorum share and threshold are its effect's (${quorumRatioForEffect(d.effect, d.touches)}, ${thresholdForEffect(d.effect, d.touches)})`);
+            const quorumRequired = getQuorumRequired({ effect: d.effect, touches: d.touches }, undefined, d.electorate);
+            assert(quorumRequired === d.quorumRequired, `${d.id}: ${quorumRequired} voters needed of ${d.electorate} (the sample says ${d.quorumRequired})`);
+            const quadratic = franchiseForTouch(d.touches) === 'quadratic_trade';
+            assert(d.votes.every(v => Number.isInteger(v.weight) && v.weight >= 1 && (quadratic ? v.creditsUsed === v.weight ** 2 : v.weight === 1 && v.creditsUsed === 1)),
+                `${d.id}: each vote costs what castVote charges (${quadratic ? 'N² voice credits for N votes' : 'one vote, one credit'})`);
+            const yesWeight = d.votes.filter(v => v.support === 1).reduce((n, v) => n + v.weight, 0);
+            const noWeight = d.votes.filter(v => v.support === 0).reduce((n, v) => n + v.weight, 0);
+            const quorumMet = d.votes.length >= quorumRequired;
+            const total = yesWeight + noWeight;
+            const passed = quorumMet && total > 0 && yesWeight / total >= d.thresholdRequired && yesWeight > noWeight;
+            assert(d.totalVoters === d.votes.length && d.quorumMet === quorumMet && d.yesWeight === yesWeight && d.noWeight === noWeight && d.passed === passed,
+                `${d.id}: tallied as tallyDecision does: ${d.votes.length} voters (quorum ${quorumMet ? 'met' : 'unmet'}), Yes ${yesWeight} · No ${noWeight}, ${passed ? 'passes' : 'fails'}`);
+        }
+    }
 
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('event_reminders_sent')").all() as { name: string }[]).map(t => t.name);
     const counts = () => Object.fromEntries(tables.map(t => [t, (db.prepare(`SELECT COUNT(*) AS c FROM "${t}"`).get() as { c: number }).c]));

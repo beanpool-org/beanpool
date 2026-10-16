@@ -22,7 +22,7 @@ import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
-import { marked, readsOwn, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -52,7 +52,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
-    getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
+    getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
@@ -629,7 +629,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
-                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
+                let statusesError: unknown = null;
+                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch((e) => { statusesError = e; return null; });
                 // Online events have no place, so a read by radius never meets them: read beside it where the feed asks for
                 // events (DESIGN-event-times §9).
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
@@ -639,8 +640,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     getMarketplacePosts({ ...filter, ...nearParams(near) }),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
-                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
-                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] }))),
+                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock),
+                    // and never where enterprises are a preview or off (lib/features treasuriesFallback).
+                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : treasuriesFallback(statusesError)),
                     near && wantsEvents ? getMarketplacePosts({ ...filter, online: true }).catch(() => []) : Promise.resolve([]),
                 ]);
 

@@ -255,11 +255,10 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                 // PUBLIC_URL_RULES.buyerHomeNode) — the peer records it so its own members can see which community a
                 // visiting buyer belongs to. A config read never stops a purchase: one that fails is null.
                 //
-                // Sent as a courtesy, not as the source of truth. `handlePurchaseRequest` prefers to derive our
-                // URL from its own connector record for us, because that comes from the authenticated
-                // connection whereas this is just a string we sent. Null when no address has been claimed, and
-                // that is fine: the peer's fallback covers it, and only if BOTH are absent does the purchase
-                // refuse with `unknown_home_node`.
+                // Sent as a courtesy, not as the source of truth: `handlePurchaseRequest` takes our URL ONLY from
+                // its own connector record for us (M3, the FED-02 binding), because that comes from the authenticated
+                // connection whereas this is just a string we sent. Null when no address has been claimed, and that
+                // is fine; the peer refuses with `unknown_home_node` only when its connector for us has no URL.
                 buyerHomeNode: resolvePublicNodeUrl(PUBLIC_URL_RULES.buyerHomeNode),
                 sellerPublicKey,
                 postId: postIdOrNull,

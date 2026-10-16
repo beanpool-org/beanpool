@@ -207,13 +207,15 @@ else
 fi
 run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 
+# e2e/fresh-proof.mjs (owner-delete S4a): an owner's fresh-proof box is on screen at the press, survives a second Manage
+# press, and never offers a spent code.
 # Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every
 # screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
 # e2e/in-page-confirm.mjs: every in-page question is on top and answerable, from a modal (Keepers → Revoke) or the page.
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:in-page-confirm'
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:fresh-proof && pnpm --filter @beanpool/manager test:in-page-confirm'
 
 # The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
 # fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for

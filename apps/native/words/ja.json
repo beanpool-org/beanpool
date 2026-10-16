@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -105,11 +105,11 @@
   "Confirm it is you to send your account to another device.": "別端末にアカウントを送信するために、本人確認を行ってください。",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "端末の画面ロックが設定されていないため、BeanPoolはアカウントを送信できません。端末の「設定」の「セキュリティ」でPIN、パターン、またはパスワードを設定してから、もう一度お試しください。",
   "The phone's unlock did not pass, so nothing was sent.": "端末のロック解除が行われなかったため、何も送信されませんでした。",
-  "Your community's server runs an older BeanPool that can't ask for the two digits, so nothing was sent. Ask its host to update it.": "コミュニティのサーバーが古いBeanPoolを実行しているため2桁の数字を要求できず、何も送信されませんでした。管理者にアップデートを依頼してください。",
+  "Your community's server runs an older BeanPool that can't ask for the four digits, so nothing was sent. Ask its host to update it.": "コミュニティのサーバーが古いBeanPoolを実行しているため4桁の数字を要求できず、何も送信されませんでした。管理者にアップデートを依頼してください。",
   "That code has expired, so nothing was sent. Make a new code on the other device and scan it again.": "そのコードは有効期限が切れたため、何も送信されませんでした。もう一方の端末で新しいコードを生成し、再度スキャンしてください。",
-  "Your community's server did not ask for the two digits. Ask its host to update BeanPool before you try again.": "コミュニティのサーバーから2桁の数字が要求されませんでした。管理者にBeanPoolのアップデートを依頼してから、もう一度お試しください。",
-  "Type these two digits on the other device": "もう一方の端末でこの2桁の数字を入力してください",
-  "The two digits are {digits}": "2桁の数字は {digits} です",
+  "Your community's server did not ask for the four digits. Ask its host to update BeanPool before you try again.": "コミュニティのサーバーから4桁の数字が要求されませんでした。管理者にBeanPoolのアップデートを依頼してから、もう一度お試しください。",
+  "Type these four digits on the other device": "もう一方の端末でこの4桁の数字を入力してください",
+  "The four digits are {digits}": "4桁の数字は {digits} です",
   "Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.": "正しい数字が入力されて初めて、あちらでアカウントが開きます。目の前の画面で要求した覚えがない場合は、「キャンセル」をタップしてください。もう一方の端末には何も送信されません。",
   "Done": "完了",
   "Send your whole account to another device?": "アカウント全体を別の端末に送信しますか？",
@@ -287,5 +287,7 @@
   "Link a device": "端末をリンク",
   "🌍 Join the global community": "🌍 グローバルコミュニティに参加",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "これはリンクから開かれました。自分の画面に表示されたコードにたった今カメラを向けた場合にのみ、先に進んでください。",
-  "Copies your own account to a browser, to use BeanPool there as you": "あなた自身のアカウントをブラウザにコピーし、そこであなたとしてBeanPoolを使えるようにします"
+  "Copies your own account to a browser, to use BeanPool there as you": "あなた自身のアカウントをブラウザにコピーし、そこであなたとしてBeanPoolを使えるようにします",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPoolはこのスマートフォンのアカウントを読み取れません。再起動してもう一度お試しいただくか、12の単語で復元してください。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "キーボードのクリップボード履歴や、ほかのデバイスと共有しているクリップボードには、BeanPoolが消去できないコピーが残ることがあります。"
 }

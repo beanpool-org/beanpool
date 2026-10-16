@@ -29,6 +29,7 @@ import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blockl
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import { fetchMembership } from '../../utils/membership-probe';
+import { remoteOwnTransactionCount } from '../../utils/diagnostics-own-count';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -803,19 +804,9 @@ export default function SettingsScreen() {
                         await recordRequestSigning(cleanUrl, data);
                         let remoteTxCount = data.transactionCount || 0;
                         
-                        if (identity?.publicKey) {
-                            try {
-                                const txRes = await fetch(`${cleanUrl}/api/ledger/transactions?publicKey=${identity.publicKey}&limit=200&_t=${Date.now()}`);
-                                if (txRes.ok) {
-                                    const txData = await txRes.json();
-                                    if (Array.isArray(txData)) {
-                                        remoteTxCount = txData.length;
-                                    }
-                                }
-                            } catch (e) {
-                                console.warn('[Diagnostics] Failed fetching remote personal transactions count:', e);
-                            }
-                        }
+                        // The member's own ledger is Beans: never asked where they are a preview (the global node).
+                        const ownCount = await remoteOwnTransactionCount(cleanUrl, data, identity?.publicKey);
+                        if (ownCount !== null) remoteTxCount = ownCount;
 
                         setRemoteStats({
                             members: data.memberCount || 0,
@@ -1037,6 +1028,19 @@ export default function SettingsScreen() {
                 });
             });
         }
+    }, [mode]);
+
+    // Chat memory lists the communities on this phone from the same list. Advanced reads it above, so before this a
+    // visit straight to Chat memory showed "No communities on this phone yet." and no reset, the way out
+    // DM_PIN_STORE_UNREAD_TEXT names. Read here too, keeping what Advanced already knows of each (status, size).
+    React.useEffect(() => {
+        if (mode !== 'chatMemory') return;
+        let live = true;
+        getSavedNodes().then((nodes) => {
+            if (!live) return;
+            setSavedNodes((prev) => nodes.map((node) => prev.find((p) => p.url === node.url) ?? { ...node, status: 'pinging' as const, sizeBytes: 0 }));
+        }).catch(() => {});
+        return () => { live = false; };
     }, [mode]);
     
 

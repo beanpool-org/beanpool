@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,8 +458,9 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "തെറ്റായ അക്കങ്ങൾ കൂടുതൽ തവണ നൽകിയതിനാൽ ഒന്നും അയച്ചില്ല. ഒരു പുതിയ കോഡ് ഉണ്ടാക്കി വീണ്ടും ശ്രമിക്കുക.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "ആ കോഡിന്റെ കാലാവധി കഴിഞ്ഞു, അതിനാൽ ഒന്നും അയച്ചില്ല. ഒരു പുതിയ കോഡ് ഉണ്ടാക്കി വീണ്ടും ശ്രമിക്കുക.",
   "That did not go through. Try again.": "അത് വിജയകരമായി പൂർത്തിയായില്ല. വീണ്ടും ശ്രമിക്കുക.",
-  "Type the two digits your phone shows": "നിങ്ങളുടെ ഫോൺ കാണിക്കുന്ന രണ്ട് അക്കങ്ങൾ ടൈപ്പ് ചെയ്യുക",
+  "Type the four digits your phone shows": "നിങ്ങളുടെ ഫോൺ കാണിക്കുന്ന നാല് അക്കങ്ങൾ ടൈപ്പ് ചെയ്യുക",
   "Confirm": "സ്ഥിരീകരിക്കുക",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "ശരിയായ അക്കങ്ങൾ നൽകിയാൽ മാത്രമേ നിങ്ങളുടെ അക്കൗണ്ട് ഇവിടെ തുറക്കൂ. മൂന്ന് തവണ തെറ്റിയാൽ ഒന്നും അയക്കില്ല.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "നിങ്ങളുടെ ഫോണിൽ നിന്ന് ഇതുവരെ ഒന്നും വന്നിട്ടില്ല. ഈ കോഡ് {host}ൽ നിന്നുള്ളതാണ്. ഫോൺ ഉപയോഗിക്കാത്ത സെർവറിൽ നിന്നുള്ളതാണെന്ന് ഫോൺ പറയുന്നുണ്ടെങ്കിൽ, നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയുടെ വിലാസത്തിൽ BeanPool തുറക്കുക, അല്ലെങ്കിൽ ആദ്യം ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക. ഫോണിൽ അക്കങ്ങളൊന്നും കാണിക്കുന്നില്ലെങ്കിൽ, അതിലെ BeanPool ആപ്പ് അപ്ഡേറ്റ് ചെയ്യുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "നിങ്ങളുടെ ഫോണിൽ നിന്ന് ഇതുവരെ ഒന്നും വന്നിട്ടില്ല. ഈ കോഡ് {host}ൽ നിന്നുള്ളതാണ്. ഫോൺ ഉപയോഗിക്കാത്ത സെർവറിൽ നിന്നുള്ളതാണെന്ന് ഫോൺ പറയുന്നുണ്ടെങ്കിൽ, നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയുടെ വിലാസത്തിൽ BeanPool തുറക്കുക, അല്ലെങ്കിൽ ആദ്യം ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക. ഫോണിൽ അക്കങ്ങളൊന്നും കാണിക്കുന്നില്ലെങ്കിൽ, അതിലെ BeanPool ആപ്പ് അപ്ഡേറ്റ് ചെയ്യുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "ഒരു കീബോർഡിന്റെ ക്ലിപ്പ്ബോർഡ് ചരിത്രമോ നിങ്ങളുടെ മറ്റ് ഉപകരണങ്ങളുമായി പങ്കിടുന്ന ക്ലിപ്പ്ബോർഡോ BeanPool-ന് മായ്ക്കാൻ കഴിയാത്ത ഒരു പകർപ്പ് സൂക്ഷിച്ചേക്കാം."
 }

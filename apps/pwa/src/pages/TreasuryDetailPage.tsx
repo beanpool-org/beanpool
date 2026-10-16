@@ -25,7 +25,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { groupKindLine, keeperWords } from '@beanpool/core';
+import { groupKindLine, isWholeCents, keeperWords, t } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
@@ -319,6 +319,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         const amt = Number(pledgeAmount);
         if (isNaN(amt) || amt <= 0) {
             setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
+            return;
+        }
+        // To the cent, as the node takes it (core isWholeCents).
+        if (!isWholeCents(amt)) {
+            setActionFeedback({ type: 'error', message: t('The amount is a number of Beans above 0, to the cent.') });
             return;
         }
         try {

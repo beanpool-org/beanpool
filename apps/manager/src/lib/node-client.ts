@@ -4,6 +4,7 @@
 
 import { audienceOf } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
+import { freshProofRefusal, proofField, proofHeader, statusSentence, t, throwIfFreshProof, type FreshProofRefusal } from './fresh-proof';
 
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
@@ -809,20 +810,28 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     return res.json();
 }
 
+/**
+ * Save the gateway settings: an owner's, with the fresh proof each time (server admin.ts gateway, amendment 1 to design
+ * case 18). `code` carries it; a refusal that asks for it throws FreshProofRequiredError, and any other refusal says
+ * what happened in words, never a bare HTTP status (opus-1984 N4).
+ */
 export async function updateGatewayConfig(
     nodeUrl: string,
     updates: Partial<GatewayConfig>,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<GatewayConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...updates, ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...updates, ...passwordField(adminPassword), ...proofField(code) }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
+        throw new Error(statusSentence(res.status, data, t('The gateway settings were not saved. Try again in a minute.')));
     }
     const data = await res.json();
     return data.gateway || data;
@@ -1026,31 +1035,38 @@ export async function freezeNodeUser(
     return res.json();
 }
 
+/**
+ * Remove a member. Removing an owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it; a refusal
+ * that asks for it throws FreshProofRequiredError.
+ */
 export async function pruneNodeUser(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean }> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...proofField(code) }),
     });
-    // The node's own sentence: removing an owner asks a fresh proof (a current code, or Manage on the phone).
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
 
+/** Remove a member and everyone they invited. A branch with an owner in it asks the fresh proof, as pruneNodeUser. */
 export async function pruneInviteBranch(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; error?: string }> {
     if (!pubkey || typeof pubkey !== 'string' || !pubkey.trim()) {
         throw new Error('Valid public key is required to prune an invite branch');
@@ -1059,10 +1075,11 @@ export async function pruneInviteBranch(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...proofField(code) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -1537,40 +1554,49 @@ export async function fetchNodeRoles(
     return data.roles || [];
 }
 
+/**
+ * Give a node role. Granting owner or admin (or changing an owner's or admin's role) asks an owner's fresh proof
+ * (server roleChangeProof): `code` carries it; a refusal that asks for it throws FreshProofRequiredError.
+ */
 export async function grantNodeRoleApi(
     nodeUrl: string,
     pubkey: string,
     role: 'owner' | 'admin' | 'moderator',
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; message?: string }> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
     const res = await fetch(url, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ pubkey, role }),
+        body: JSON.stringify({ pubkey, role, ...proofField(code) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+        throwIfFreshProof(res.status, data);
         throw new Error(data.error || 'Failed to grant node role');
     }
     return data;
 }
 
+/** Take a node role away. An owner's or admin's asks the fresh proof; a DELETE has no body, so it travels as X-Fresh-Proof. */
 export async function revokeNodeRoleApi(
     nodeUrl: string,
     pubkey: string,
     role: 'owner' | 'admin' | 'moderator',
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; message?: string }> {
     const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/node-roles/${encodeURIComponent(pubkey)}/${encodeURIComponent(role)}`);
     const res = await fetch(url, {
         method: 'DELETE',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(code) },
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+        throwIfFreshProof(res.status, data);
         throw new Error(data.error || 'Failed to revoke node role');
     }
     return data;
@@ -1868,32 +1894,40 @@ export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?:
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
-    // The node's real schedule or an error: never a made-up default shown as if it were the node's.
+    // The node's real schedule or an error: never a made-up default shown as if it were the node's. The error in words,
+    // never a bare HTTP status (opus-1984 N4).
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(statusSentence(res.status, data, t('The node did not say its backup schedule. Try again in a minute.')));
     }
     const data = await res.json();
     if (!data?.config) throw new Error("The node didn't say its backup schedule");
     return data.config;
 }
 
+/**
+ * Save the snapshot schedule. A shorter span of snapshots (fewer kept, more often with as many kept, or none) asks an
+ * owner's fresh proof; the node decides which (server snapshotsLessened), so a change is sent without one first and
+ * `code` carries it only after the node asked (a refusal that asks throws FreshProofRequiredError). Keeping more asks
+ * nothing.
+ */
 export async function updateNodeSnapshotSchedule(
     nodeUrl: string,
     config: Partial<SnapshotScheduleConfig>,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<SnapshotScheduleConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...config, ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...config, ...passwordField(adminPassword), ...proofField(code) }),
     });
-    // The node's own sentence: a shorter span of snapshots (fewer kept, more often with as many kept, or none) asks a fresh
-    // proof (a current code, or Manage on the phone).
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+        throwIfFreshProof(res.status, data);
+        throw new Error(statusSentence(res.status, data, t('The backup schedule was not saved. Try again in a minute.')));
     }
     const data = await res.json();
     return data.config;
@@ -1935,6 +1969,7 @@ export async function updateNodeReplicationCadence(
     }
 }
 
+/** Start a standby's copy over. A refusal says what happened in words, never a bare HTTP status (opus-1984 N4). */
 export async function forceNodeResync(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-resync');
     const res = await fetch(endpoint, {
@@ -1943,7 +1978,8 @@ export async function forceNodeResync(nodeUrl: string, adminPassword?: string, t
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(statusSentence(res.status, data, t('The copy did not start again. Try again in a minute.')));
     }
 }
 
@@ -2276,9 +2312,18 @@ export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, t
     return lock && typeof lock.locked === 'boolean' && typeof lock.message === 'string' ? lock : null;
 }
 
-/** Make the recovery code, or with `replace` a new one in place of the current one. Owners only. */
-export async function makeRecoveryCode(nodeUrl: string, replace: boolean, adminPassword?: string, tfaToken?: string): Promise<MadeRecoveryCode> {
-    const json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code', { replace }, adminPassword, tfaToken);
+/**
+ * Make the recovery code, or with `replace` a new one in place of the current one. Owners only. Replacing asks an owner's
+ * fresh proof (server A11): `proof` carries it; a refusal that asks for it throws FreshProofRequiredError.
+ */
+export async function makeRecoveryCode(nodeUrl: string, replace: boolean, adminPassword?: string, tfaToken?: string, proof?: string): Promise<MadeRecoveryCode> {
+    let json: Record<string, unknown>;
+    try {
+        json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code', { replace, ...proofField(proof) }, adminPassword, tfaToken);
+    } catch (e) {
+        if (e instanceof TakeoverRequestError) throwIfFreshProof(e.status, e.body);
+        throw e;
+    }
     if (typeof json.code !== 'string' || !json.code) throw new TakeoverRequestError('The node did not return a code.', 500, {});
     return json as unknown as MadeRecoveryCode;
 }
@@ -2401,6 +2446,7 @@ async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adm
     });
     if (!res.ok) {
         const err = await res.json().catch(() => null) as { error?: string } | null;
+        throwIfFreshProof(res.status, err);
         throw Object.assign(new Error(err?.error || `HTTP ${res.status}: ${res.statusText}`), { status: res.status });
     }
     return res.json();
@@ -2452,10 +2498,15 @@ export function getOffboxStatus(nodeUrl: string, adminPassword?: string, tfaToke
     return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/status', {}, adminPassword, tfaToken);
 }
 
+/**
+ * Removing a destination, changing one, or keeping backups fewer days asks an owner's fresh proof (server
+ * offbox-backups.ts); adding one or keeping them longer asks nothing. The node decides which: `code` goes only after it
+ * asked (a refusal that asks throws FreshProofRequiredError).
+ */
 export function saveOffboxSettings(
-    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string,
+    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string, code?: string,
 ): Promise<{ success: boolean; status: OffboxStatus }> {
-    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', update, adminPassword, tfaToken);
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', { ...update, ...proofField(code) }, adminPassword, tfaToken);
 }
 
 /** Send one now to every destination. Answers at once; `status.running` says when it is done. */
@@ -2719,7 +2770,11 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
         body: JSON.stringify({ ...body, ...passwordField(adminPassword) }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    if (!res.ok) {
+        // A refusal asking an owner's fresh proof keeps its sentence as the message, so a screen without the box is unchanged.
+        throwIfFreshProof(res.status, data);
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
     return data as T;
 }
 
@@ -2786,16 +2841,18 @@ export async function haltDecision(nodeUrl: string, decisionId: string, reason: 
 
 /**
  * Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" Decision. If members
- * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision.
+ * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision. Suspending an
+ * owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it.
  */
 export async function emergencySuspendMember(
     nodeUrl: string,
     pubkey: string,
     reason: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<{ success: boolean; decision?: { id: string; closesAt: string; params?: { noVote?: boolean } } }> {
-    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason }, adminPassword, tfaToken);
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason, ...proofField(code) }, adminPassword, tfaToken);
 }
 
 /** Lift a suspension by hand; an open "Keep this suspension?" vote about it closes with it. */
@@ -2883,9 +2940,12 @@ export interface CompleteRekeyResponse {
     signInCopiesRemoved?: number;
 }
 
-/** A refused bind by number: the node's short code (`wrong_number`, `code_stopped`, …) and the tries left. */
+/**
+ * A refused bind by number: the node's short code (`wrong_number`, `code_stopped`, …) and the tries left; `refusal` when
+ * the node asked an owner's fresh proof instead (the wizard opens the box: fresh-proof.ts refusalOf).
+ */
 export class RekeyBindError extends Error {
-    constructor(message: string, readonly code?: string, readonly triesLeft?: number) {
+    constructor(message: string, readonly code?: string, readonly triesLeft?: number, readonly refusal?: FreshProofRefusal) {
         super(message);
     }
 }
@@ -2931,19 +2991,26 @@ export async function fetchRekeyStatusApi(
     return res.json();
 }
 
+/**
+ * Make a re-key code. An owner's or admin's asks an owner's fresh proof (server rekeyProof): `code` carries it in the
+ * body; a refusal that asks for it throws FreshProofRequiredError.
+ */
 export async function issueRekeyCodeApi(
     nodeUrl: string,
     pubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<IssueRekeyCodeResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify(proofField(code)),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -2989,7 +3056,9 @@ export async function declineRekeyProposalApi(
 /**
  * Binds the member's new phone by the number on it (#1783 review B2): the node binds the live, undeclined phone that shows
  * those two digits. A number no waiting phone shows is a wrong try, and the third stops the code (RekeyBindError's code
- * `code_stopped`).
+ * `code_stopped`). An owner's or admin's asks an owner's fresh proof (server rekeyProof): the body's `code` is the re-key
+ * code, so `proof` travels as the X-Fresh-Proof header; a refusal that asks for it throws FreshProofRequiredError (the
+ * node checks it before the number, so no try is counted).
  */
 export async function bindRekeyByMatchApi(
     nodeUrl: string,
@@ -2997,38 +3066,42 @@ export async function bindRekeyByMatchApi(
     code: string,
     match: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    proof?: string
 ): Promise<CompleteRekeyResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(proof) },
         body: JSON.stringify({ code, match }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined);
+        throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined,
+            freshProofRefusal(res.status, body) ?? undefined);
     }
     return res.json();
 }
 
-/** "Paste a key instead": binds a pasted key, for a phone that can't ask on the code. */
+/** "Paste a key instead": binds a pasted key, for a phone that can't ask on the code. The fresh proof as bindRekeyByMatchApi. */
 export async function completeRekeyApi(
     nodeUrl: string,
     pubkey: string,
     code: string,
     newPubkey: string,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    proof?: string
 ): Promise<CompleteRekeyResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
+        headers: { ...buildAdminHeaders(adminPassword, tfaToken), ...proofHeader(proof) },
         body: JSON.stringify({ code, newPubkey }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -3049,6 +3122,7 @@ export async function fetchOffboardPreviewApi(
     return res.json();
 }
 
+/** Offboard a member. Offboarding an owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it. */
 export async function executeOffboardApi(
     nodeUrl: string,
     pubkey: string,
@@ -3057,16 +3131,18 @@ export async function executeOffboardApi(
         giftRecipientPubkey?: string;
     },
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<OffboardResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...proofField(code) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
         const err: any = new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
         err.code = body.code;
         err.status = res.status;

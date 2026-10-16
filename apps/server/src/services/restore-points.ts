@@ -164,14 +164,17 @@ export function takeRestorePoint(why: RestorePointWhy, now = Date.now()): Restor
     return info;
 }
 
-/** The server files a point kept, as point.json names them (the tar is the bytes). */
-export function restorePointServerFiles(pointDir: string): string[] {
+/**
+ * The server files a point kept, as point.json names them (the tar is the bytes). Null when point.json cannot be read or
+ * names no list: a roll-back then cannot tell a file the point never held from one it lost, and must not move any aside.
+ */
+export function restorePointServerFiles(pointDir: string): string[] | null {
     try {
         const meta = JSON.parse(fs.readFileSync(path.join(pointDir, RESTORE_POINT_META), 'utf-8'));
-        const listed = Array.isArray(meta?.serverFiles) ? meta.serverFiles : [];
-        return RESTORE_POINT_SERVER_FILES.filter((f) => listed.includes(f));
+        if (!Array.isArray(meta?.serverFiles)) return null;
+        return RESTORE_POINT_SERVER_FILES.filter((f) => meta.serverFiles.includes(f));
     } catch {
-        return [];
+        return null;
     }
 }
 

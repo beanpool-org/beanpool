@@ -1133,7 +1133,8 @@ async function main(): Promise<void> {
         entPosts(shop, rex.pk, W.enterprisePostsPerDay - postsAs(shop) - 1);
         const rexPosts = await entOffer(rex, shop);
         moneyActs(shop, rex.pk, M.enterprisePaymentsPerDay - actsAs(shop, 'payment') - 1, 'payment');
-        const rexSweeps = await sweep(rex, shop, 0.0001);
+        // A cent, the least a keeper can sweep: a sweep is to the cent, as every payment a member makes is (LED-05).
+        const rexSweeps = await sweep(rex, shop, 0.01);
         moneyActs(shop, rex.pk, M.enterpriseMarketRequestsPerDay - actsAs(shop, 'request') - 1, 'request');
         const rexApproves = await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: plantRequest(offer, bea.pk, shop) });
         resetGatewayRateLimit();
@@ -1180,7 +1181,7 @@ async function main(): Promise<void> {
         ownPosts(rex.pk, W.postsPerDay - 1);
         ownActs(rex.pk, M.paymentsPerDay - 1, 'payment');
         ownActs(rex.pk, M.marketRequestsPerDay - 1, 'request');
-        const [rexPost100, rexSweep100, rexDeal100] = [await entOffer(rex, shop), await sweep(rex, shop, 0.0001),
+        const [rexPost100, rexSweep100, rexDeal100] = [await entOffer(rex, shop), await sweep(rex, shop, 0.01),
             await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: plantRequest(offer, bea.pk, shop) })];
         assert(rexPost100.status === 200 && rexSweep100.status === 200 && rexDeal100.status === 200,
             `Rex, 1 short of his own 100 posts, payments and deals, makes each one more for the shop (${show(rexPost100)}, ${show(rexSweep100)}, ${show(rexDeal100)})`);
@@ -1188,7 +1189,7 @@ async function main(): Promise<void> {
         before = books();
         const his = (words: string) => new RegExp(`${words}[^]*${spentNote('Leah Linens').source}`);
         refused(await entOffer(rex, shop), 'posts_per_day', his('You can put up 100 new posts'), before, 'then his post for it is refused in his own words');
-        refused(await sweep(rex, shop, 0.0001), 'money_payments_day', his('You can make 100 payments'), before, 'his sweep');
+        refused(await sweep(rex, shop, 0.01), 'money_payments_day', his('You can make 100 payments'), before, 'his sweep');
         refused(await call('POST', rex, `/api/treasury/${shop}/approve`, { transactionId: beaAgain }), 'money_requests_day', his('You can ask for, accept or approve 100 deals'), before, 'and his approval');
         assert(shopDay() === spent, `and the shop's own day took none of theirs (${spent} → ${shopDay()})`);
 

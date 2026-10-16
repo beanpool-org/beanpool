@@ -1,7 +1,7 @@
 ---
 slug: troubleshooting
 title: When things go wrong
-summary: The server has stopped answering, an update stopped part-way, members see "too many requests", the disk is full, or you cannot sign in.
+summary: The server has stopped answering, an update stopped part-way, members see "too many requests", the disk is full, you cannot sign in, Settings will not open and you need to restore, or you want to start again.
 related: updates-and-health, rate-limits, backups-and-replicas, signing-in
 ---
 
@@ -44,6 +44,16 @@ Run it again: a data folder it had moved out of the way is put back before the s
 - Lost the password: see Signing in.
 - Lost the two-factor code: see Access and security.
 - Settings keeps signing you out: a sign-in from the app's Manage button ends after 15 minutes unused (press Manage again to come straight back). A computer signed in by scanning a code ends after 2 hours unused. Both end after 12 hours at most, and when the server restarts.
+
+## Settings will not open and you need to restore
+
+- First try to sign in another way: the app's Manage button, a computer signed in with your phone, a second owner, or beanpool recover on the server (Signing in).
+- If the community needs a backup back and Settings still will not open, restore it on the server, with the node stopped: put the file in the data folder, then in the server folder run docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, then docker compose up -d. It asks for the recovery code. An old backup that is not locked restores with beanpool restore --unlocked /data/FILE.tar.gz instead, database and photos only. A restore point of the server as it was is kept first: docker compose exec beanpool-node beanpool restore-point list shows them, and docker compose run --rm beanpool-node beanpool restore-point roll-back NAME, with the node stopped, puts one back (then docker compose up -d). See Backups and replicas.
+
+## Start again
+
+- There is no button and no command that wipes a server. To start over, see Starting over in Access and security: move data/local-config.json aside to clear the settings and keep members, posts, deals and Beans, or move the whole data folder away to start the community again from nothing.
+- Keep what you moved until you are sure.
 
 ## Members cannot join
 

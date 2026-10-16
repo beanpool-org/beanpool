@@ -272,6 +272,31 @@ async function coversScreen(page, where, testId = 'local-community-sheet') {
     check(full && onScreen && r.onTop, `${where}: it covers the screen, on top${full && onScreen && r.onTop ? '' : ` (${JSON.stringify(r)})`}`);
 }
 
+/** Tab and Shift+Tab through an open sheet: focus never leaves it. */
+async function tabTrappedInSheet(page, where, testId = 'local-community-sheet') {
+    const count = await page.evaluate((id) => {
+        const sheet = document.querySelector(`[data-testid="${id}"]`);
+        return sheet ? sheet.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])').length : 0;
+    }, testId);
+    check(count > 0, `${where}: sheet has focusable controls`);
+    for (let i = 0; i < count + 2; i++) {
+        await page.keyboard.press('Tab');
+        const inside = await page.evaluate((id) => {
+            const sheet = document.querySelector(`[data-testid="${id}"]`);
+            return sheet ? sheet.contains(document.activeElement) : false;
+        }, testId);
+        check(inside, `${where}: Tab forward ${i + 1} stayed inside sheet`);
+    }
+    for (let i = 0; i < count + 2; i++) {
+        await page.keyboard.press('Shift+Tab');
+        const inside = await page.evaluate((id) => {
+            const sheet = document.querySelector(`[data-testid="${id}"]`);
+            return sheet ? sheet.contains(document.activeElement) : false;
+        }, testId);
+        check(inside, `${where}: Shift+Tab backward ${i + 1} stayed inside sheet`);
+    }
+}
+
 async function tab(page, label) {
     await page.locator('[data-testid="mobile-bottom-nav"] button', { hasText: label }).first().click();
 }
@@ -307,6 +332,7 @@ async function globalMember(browser, root, dark) {
         await page.getByRole('button', { name: /Send Beans/ }).click();
         await page.getByTestId('local-community-sheet').waitFor();
         await coversScreen(page, 'Ledger, Send Beans: the sheet');
+        await tabTrappedInSheet(page, 'Ledger, Send Beans: the sheet');
         await noSideScroll(page, 'the sheet');
         await targetsAtLeast44(page, 'the sheet');
         await shot(page, `sheet-${scheme}`);

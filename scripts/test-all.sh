@@ -311,7 +311,7 @@ run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 # The website follows the visitor's light or dark setting (Marty, 15 Oct 2026). Its every colour is in style.css's two
 # sets, and each light value is its role in core's brand-colours.ts (it reads core's dist, so it starts once build has
 # finished; instant). Then every page in headless Chromium, both themes, 320 and 1280 px: words under 4.5:1 (3:1 large)
-# fail in light, and in dark any but the pairs pinned as they were. No network; about a minute.
+# fail, in light and in dark. No network; about a minute.
 run_website_colours() {
   while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
   node --test scripts/website-colours.test.mjs

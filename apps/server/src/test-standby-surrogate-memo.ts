@@ -25,7 +25,7 @@ delete process.env.CF_ZONE_ID;
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
-import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -122,7 +122,7 @@ async function main(): Promise<void> {
             assert(result?.newTransactions === notes.length && Number(result?.conflictsSkipped) >= 2,
                 `the import wrote exactly the ${notes.length} real sends and skipped the two changed ones (${JSON.stringify({ n: result?.newTransactions, s: result?.conflictsSkipped })})`);
         } finally {
-            removeConnector(trustedAddr);
+            unpinMainServerForTests();
         }
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

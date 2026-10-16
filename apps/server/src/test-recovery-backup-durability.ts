@@ -32,7 +32,7 @@ import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
-import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -115,7 +115,7 @@ async function run() {
         const emptyShares = db.prepare(`SELECT COUNT(*) as count FROM recovery_shares`).get() as { count: number };
         assert(emptyShares.count === 0, 'a whole copy starts without recovery_shares');
 
-        // Set role to backup and configure trusted mirror
+        // Set role to backup and pin the signer as its main server
         setNodeRole('backup');
         pinMainServerForTests(trustedAddr);
 
@@ -128,7 +128,7 @@ async function run() {
         assert(importedShares[0].holder_type === 'hub' && importedShares[0].encrypted_share === 'plain-hub-fragment-A', 'Backup mirror holds Hub share A');
         assert(importedShares[1].holder_type === 'sso' && importedShares[1].sso_lookup_hash === 'hash-lookup-123', 'Backup mirror holds SSO share B');
 
-        removeConnector(trustedAddr);
+        unpinMainServerForTests();
         setNodeRole('primary');
 
         console.log(`\n${testsPassed}/${testsRun} recovery backup durability checks passed.`);

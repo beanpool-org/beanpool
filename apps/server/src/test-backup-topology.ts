@@ -11,8 +11,8 @@
  *
  * Covers, in order:
  *   1. DEFAULT role is 'primary' and importRemoteState refuses even a valid,
- *      mirror-trusted payload (the role guard, before any signature work).
- *   2. As a 'backup' with the signer configured as a trusted mirror, the SAME
+ *      payload from a pinned main server (the role guard, before any signature work).
+ *   2. As a 'backup' with the signer pinned as its main server, the SAME
  *      signed snapshot is imported (this is the HTTPS-pull semantics: fetch the
  *      primary's exportSyncState() output, then importRemoteState locally).
  *   3. A snapshot from a NON-mirror (peer) signer is still rejected as a backup
@@ -32,7 +32,7 @@ import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -79,7 +79,7 @@ async function run() {
         assert(getNodeRole() === 'primary', 'default NODE_ROLE is primary (fail-safe)');
         pinMainServerForTests(trustedAddr);
         const primaryErr = await assertRejects(() => importRemoteState(snapshot),
-            'PRIMARY refuses to import a valid, mirror-trusted snapshot');
+            'PRIMARY refuses to import a valid snapshot from a pinned main server');
         assert(/primary|imports no remote state/i.test(primaryErr),
             'rejection cites the primary role / one-directional topology (not a sig/trust failure)');
 
@@ -125,12 +125,12 @@ async function run() {
             assert(onStandby.encrypted_share !== dep.sealed.encryptedShare && onStandby.kdf_params !== dep.sealed.kdfParams,
                 `2b. …never the client's`);
         }
-        // 3. Safety net intact: a non-mirror (peer) signer is still rejected as a backup.
-        removeConnector(trustedAddr);
+        // 3. Safety net intact: a signer that is only a peer link, not the pinned main server, is still rejected as a backup.
+        unpinMainServerForTests();
         addConnector(trustedAddr, 'peer', 'self-test-peer');
         const peerErr = await assertRejects(() => importRemoteState(snapshot),
-            'SRV-20 safety net: a peer (non-mirror) snapshot is rejected even on a backup');
-        assert(/mirror/i.test(peerErr), 'rejection cites the mirror-only requirement');
+            'SRV-20 safety net: a snapshot from a peer link (no pin) is rejected even on a backup');
+        assert(/not paired with a main server/i.test(peerErr), 'rejection cites the pin (data/standby-main.json)');
         removeConnector(trustedAddr);
         pinMainServerForTests(trustedAddr);
 
@@ -145,7 +145,7 @@ async function run() {
         assert(/primary|imports no remote state/i.test(repromotedErr),
             'promoted-primary rejection cites the role guard');
 
-        removeConnector(trustedAddr);
+        unpinMainServerForTests();
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
         if (testsPassed !== testsRun) {

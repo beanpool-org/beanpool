@@ -2173,6 +2173,15 @@ export async function rsvpEvent(postId: string, status: EventRsvpStatus | null) 
     }
     const json = await res.json();
     if (json?.post) await persistEventView(json.post, identity.publicKey);
+    else if (json?.success && status === null) {
+        // 'Not going' on a cancelled or ended event answers post:null: the phone's own copy forgets the member's place too.
+        try {
+            const database = await waitForInit();
+            await database.runAsync(`DELETE FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?`, [postId, identity.publicKey]);
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to forget the RSVP locally:', dbErr);
+        }
+    }
     return json as { success: boolean; post: any };
 }
 

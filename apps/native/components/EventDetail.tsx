@@ -167,6 +167,9 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                     return {
                         ...base,
                         myRsvp: null,
+                        // Going-only content goes with the member's place: the note for people who are going, and the link.
+                        eventPrivateNote: undefined,
+                        eventLink: undefined,
                         goingCount,
                         event_going_count: goingCount,
                         interestedCount,

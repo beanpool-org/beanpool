@@ -151,7 +151,7 @@ describe('cancelled event RSVP withdrawal on native (PR #2078 gap)', () => {
 
         await act(async () => {
             root.render(createElement(EventDetail, {
-                post: cancelledEvent,
+                post: { ...cancelledEvent, eventPrivateNote: 'Meet at the back gate, code 4411' },
             }) as unknown as Parameters<Root['render']>[0]);
             await new Promise((r) => setTimeout(r, 0));
         });
@@ -171,5 +171,7 @@ describe('cancelled event RSVP withdrawal on native (PR #2078 gap)', () => {
         const goingAfter = button('Going');
         expect(goingAfter).toBeTruthy();
         expect(goingAfter?.getAttribute('aria-disabled')).toBe('true');
+        // The note for people who are going goes with the member's place.
+        expect(host.textContent).not.toContain('Meet at the back gate');
     });
 });

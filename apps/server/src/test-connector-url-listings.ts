@@ -26,6 +26,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import * as cm from './connector-manager.js';
+import { addWsClient } from './state-engine.js';
 import { cacheRemoteListings, pullAllPeerListings, REMOTE_ID_PREFIX } from './federation-listings.js';
 
 let PORT = 0;
@@ -134,7 +135,13 @@ async function main() {
     assert(cm.getConnectorByAddress(addrA)?.publicUrl === urlA2, '3b. Connector manager reflects new publicUrl');
 
     // ── 4. Second pull: listings must carry on under the new address urlA2 ───────────────────────────
+    // An open board hears the move: it buys through origin_node, so a stale address would refuse every Buy.
+    const heard: string[] = [];
+    addWsClient({ _memberPubkey: 'f'.repeat(64), readyState: 1, send: (m: string) => heard.push(m) });
+    const tick = () => new Promise(r => setImmediate(r));
+    const doorbells = () => heard.filter(m => JSON.parse(m).type === 'post_updated').length;
     const pull2 = await pullAllPeerListings(fakeNode);
+    await tick();
     const peerRes2 = pull2.find(r => r.peerId === peerA);
     assert(peerRes2?.ok === true && peerRes2?.cached === 2 && peerRes2?.dropped === 0,
         `4a. Second pull after URL edit caches 2 listings without dropping (cached=${peerRes2?.cached}, dropped=${peerRes2?.dropped})`);
@@ -147,6 +154,10 @@ async function main() {
         '4d. Old address urlA1 no longer holds orphaned listings');
     assert(listingsAtNewUrl.some(p => p.title === 'Peer A organic apples') && listingsAtNewUrl.some(p => p.title === 'Peer A honey'),
         '4e. Listing titles preserved under new address');
+    assert(doorbells() === 1, `4f. The move rings open boards once (post_updated ×${doorbells()})`);
+    await pullAllPeerListings(fakeNode);
+    await tick();
+    assert(doorbells() === 1, `4g. The same answer at the same address rings nobody (post_updated ×${doorbells()})`);
 
     // ── 5. Identity change: a peer whose identity CHANGED must not inherit the old one's listings ────
     const peerB = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();

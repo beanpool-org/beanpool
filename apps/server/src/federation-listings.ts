@@ -147,6 +147,7 @@ export function cacheRemoteListings(
     const incoming = Array.isArray(listings) ? listings : [];
     let cached = 0, dropped = 0;
 
+    // Assumed unique per peer: two peers whose ids share their last 12 characters would replace each other's cache (~70 bits apart).
     const peerPrefix = `${REMOTE_ID_PREFIX}${peerId.slice(-12)}:`;
 
     let deletedCount = 0;
@@ -156,7 +157,7 @@ export function cacheRemoteListings(
     // as well as any listings currently tied to this originNode (so a new peer identity at this address
     // never inherits a previous peer's listings). An exact prefix compare, not LIKE: LIKE ignores case, and peer ids do not.
     const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
-        updated_at, active, status, reach FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
+        updated_at, active, status, reach, origin_node FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
     let changed = false;
     db.transaction(() => {
         const before = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode));

@@ -293,7 +293,7 @@ async function main() {
     const localPost = createPost('offer', 'other', 'Local loaf', 'd', 5, 'fixed', localAuthor);
     cacheRemoteListings(BYRON, BYRON_URL, [listing({ title: 'Fresh byron' })]);
     assert(cachedFor(BRISBANE_URL).length === brisbaneBefore,
-        '5a. re-caching byron did not touch brisbane\'s cache — the delete is scoped by origin_node');
+        '5a. re-caching byron did not touch brisbane\'s cache — the delete is scoped to byron (its id prefix and its address)');
     assert(getPosts({ id: localPost!.id }).length === 1,
         '5b. and it did not touch a LOCAL listing, which is the one that would really hurt');
 

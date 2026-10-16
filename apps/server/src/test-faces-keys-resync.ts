@@ -274,6 +274,9 @@ async function main(): Promise<void> {
             node = await boot(LOCAL, 'local');
             const rec = await node.send('records');
             assert(typeof rec.shape === 'string' && rec.shape.startsWith('keyed:'), `the face URLs' shape is recorded as keyed (${rec.shape})`);
+            // Keyed from its first boot, when no member had a face, and the same across the restart: no phone holds a URL
+            // that stopped opening, so no delta is answered whole (review of #2049, N2).
+            assert(Date.parse(rec.since) === 0, `no face had changed shape: no delta is answered whole (${rec.since})`);
             const dir = await signed(node, alice, '/api/members');
             keyedFaces = faces(dir);
             assert(dir.status === 200 && keyedFaces.length === 4 && keyedFaces.every(keyed), `every face at a keyed URL (${keyedFaces[0]})`);

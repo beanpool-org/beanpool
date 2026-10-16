@@ -36,6 +36,7 @@ import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField } from '../../lib/fresh-proof';
 import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
@@ -54,7 +55,7 @@ interface ApplianceSectionProps {
     gatewaySaving: boolean;
     nodeLogs: LogEntry[];
     onChangeGateway: (updated: GatewayConfig) => void;
-    onSaveGateway: () => void;
+    onSaveGateway: (code?: string) => void | Promise<void>;
     onRefreshDiag: () => void;
     onRefreshLogs: () => void;
     onDownloadBackup: () => Promise<void>;
@@ -581,6 +582,9 @@ export function ApplianceSection({
         }
     };
 
+    // Making a break-glass code asks an owner's fresh proof each time (server admin.ts break-glass/issue, C7).
+    const breakGlassProof = useFreshProof();
+
     // A key session makes a code for its own key; the password names the owner (the node refuses a key without the role).
     const handleIssueBreakGlass = async () => {
         setBreakGlassMessage('');
@@ -589,13 +593,19 @@ export function ApplianceSection({
             setBreakGlassMessage("Paste the owner's member key the code is for.");
             return;
         }
+        await sendBreakGlassIssue(rolesViewer.kind === 'password' ? { memberPubkey } : {});
+    };
+
+    /** Sends this request; after the node asked the proof, the same one again with the code. */
+    const sendBreakGlassIssue = async (request: { memberPubkey?: string }, code?: string) => {
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/break-glass/issue');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify(rolesViewer.kind === 'password' ? { memberPubkey } : {}),
+                body: JSON.stringify({ ...request, ...proofField(code) }),
             });
+            if (await breakGlassProof.check(res, (c) => sendBreakGlassIssue(request, c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.breakGlassCode) {
                 setBreakGlassShown(data.breakGlassCode);
@@ -1731,6 +1741,7 @@ export function ApplianceSection({
                             ) : (
                                 <p className="text-[11px] text-nature-400 m-0">Only an owner has a break-glass code.</p>
                             )}
+                            <FreshProofBox proof={breakGlassProof} testId="break-glass-proof" />
                             {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>

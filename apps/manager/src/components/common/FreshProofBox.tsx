@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { FRESH_PROOF_WORDS as W, FreshProofRequiredError, freshProofRefusalOf, t, type FreshProofRefusal } from '../../lib/fresh-proof';
+import { FRESH_PROOF_WORDS as W, freshProofRefusalOf, refusalOf, t, type FreshProofRefusal } from '../../lib/fresh-proof';
 
 /**
  * An owner's fresh proof on a manager screen (lib/fresh-proof.ts; server admin-auth.ts requireFreshProof). A screen's
@@ -45,7 +45,7 @@ export function useFreshProof(): FreshProof {
         open(await freshProofRefusalOf(res), retry, sentCode), [open]);
 
     const checkError = useCallback((err: unknown, retry: (code: string) => Promise<unknown>, sentCode?: string) =>
-        open(err instanceof FreshProofRequiredError ? err.refusal : null, retry, sentCode), [open]);
+        open(refusalOf(err), retry, sentCode), [open]);
 
     const submit = useCallback(async (code: string) => {
         const retry = retryRef.current;

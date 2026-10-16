@@ -4,7 +4,7 @@
 
 import { audienceOf } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
-import { proofField, proofHeader, throwIfFreshProof } from './fresh-proof';
+import { freshProofRefusal, proofField, proofHeader, statusSentence, t, throwIfFreshProof, type FreshProofRefusal } from './fresh-proof';
 
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
@@ -810,20 +810,28 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     return res.json();
 }
 
+/**
+ * Save the gateway settings: an owner's, with the fresh proof each time (server admin.ts gateway, amendment 1 to design
+ * case 18). `code` carries it; a refusal that asks for it throws FreshProofRequiredError, and any other refusal says
+ * what happened in words, never a bare HTTP status (opus-1984 N4).
+ */
 export async function updateGatewayConfig(
     nodeUrl: string,
     updates: Partial<GatewayConfig>,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    code?: string
 ): Promise<GatewayConfig> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...updates, ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...updates, ...passwordField(adminPassword), ...proofField(code) }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, data);
+        throw new Error(statusSentence(res.status, data, t('The gateway settings were not saved. Try again in a minute.')));
     }
     const data = await res.json();
     return data.gateway || data;
@@ -2446,6 +2454,7 @@ async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adm
     });
     if (!res.ok) {
         const err = await res.json().catch(() => null) as { error?: string } | null;
+        throwIfFreshProof(res.status, err);
         throw Object.assign(new Error(err?.error || `HTTP ${res.status}: ${res.statusText}`), { status: res.status });
     }
     return res.json();
@@ -2497,10 +2506,15 @@ export function getOffboxStatus(nodeUrl: string, adminPassword?: string, tfaToke
     return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/status', {}, adminPassword, tfaToken);
 }
 
+/**
+ * Removing a destination, changing one, or keeping backups fewer days asks an owner's fresh proof (server
+ * offbox-backups.ts); adding one or keeping them longer asks nothing. The node decides which: `code` goes only after it
+ * asked (a refusal that asks throws FreshProofRequiredError).
+ */
 export function saveOffboxSettings(
-    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string,
+    nodeUrl: string, update: OffboxSettingsUpdate, adminPassword?: string, tfaToken?: string, code?: string,
 ): Promise<{ success: boolean; status: OffboxStatus }> {
-    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', update, adminPassword, tfaToken);
+    return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/settings', { ...update, ...proofField(code) }, adminPassword, tfaToken);
 }
 
 /** Send one now to every destination. Answers at once; `status.running` says when it is done. */
@@ -2934,9 +2948,12 @@ export interface CompleteRekeyResponse {
     signInCopiesRemoved?: number;
 }
 
-/** A refused bind by number: the node's short code (`wrong_number`, `code_stopped`, …) and the tries left. */
+/**
+ * A refused bind by number: the node's short code (`wrong_number`, `code_stopped`, …) and the tries left; `refusal` when
+ * the node asked an owner's fresh proof instead (the wizard opens the box: fresh-proof.ts refusalOf).
+ */
 export class RekeyBindError extends Error {
-    constructor(message: string, readonly code?: string, readonly triesLeft?: number) {
+    constructor(message: string, readonly code?: string, readonly triesLeft?: number, readonly refusal?: FreshProofRefusal) {
         super(message);
     }
 }
@@ -3068,8 +3085,8 @@ export async function bindRekeyByMatchApi(
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throwIfFreshProof(res.status, body);
-        throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined);
+        throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined,
+            freshProofRefusal(res.status, body) ?? undefined);
     }
     return res.json();
 }

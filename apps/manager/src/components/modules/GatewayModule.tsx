@@ -1,6 +1,7 @@
 import React from 'react';
 import type { GatewayConfig } from '../../lib/node-client';
 import { usePausablePoll } from '../../lib/activity-pause';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 interface GatewayModuleProps {
     gateway: GatewayConfig | null;
@@ -9,7 +10,8 @@ interface GatewayModuleProps {
     gatewaySaving?: boolean;
     activeWsConnections?: number;
     onChangeGateway: (updated: GatewayConfig) => void;
-    onSaveGateway: () => void;
+    /** Rejects with FreshProofRequiredError when the node asks an owner's fresh proof (the box opens here). */
+    onSaveGateway: (code?: string) => void | Promise<void>;
     onAuthenticate?: (password: string) => void;
 }
 
@@ -23,6 +25,17 @@ export function GatewayModule({
     onSaveGateway,
     onAuthenticate,
 }: GatewayModuleProps) {
+    // Saving the gateway asks an owner's fresh proof each time (server admin.ts gateway).
+    const proof = useFreshProof();
+    const save = async (code?: string) => {
+        try {
+            await onSaveGateway(...(code ? [code] : []));
+            proof.close();
+        } catch (e) {
+            // Anything but the proof was already said by the caller.
+            proof.checkError(e, (c) => save(c), code);
+        }
+    };
     const [adminInput, setAdminInput] = React.useState('');
     const [showAdminInput, setShowAdminInput] = React.useState(false);
 
@@ -558,7 +571,7 @@ export function GatewayModule({
                     Changes take effect immediately on target node after saving.
                 </div>
                 <button
-                    onClick={onSaveGateway}
+                    onClick={() => void save()}
                     disabled={gatewaySaving}
                     aria-busy={gatewaySaving}
                     className="px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -567,6 +580,7 @@ export function GatewayModule({
                     <span>{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>
                 </button>
             </div>
+            <FreshProofBox proof={proof} testId="gateway-proof" />
         </div>
     );
 }

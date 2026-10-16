@@ -71,6 +71,7 @@ import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
 import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
+import { FreshProofRequiredError } from './lib/fresh-proof';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
@@ -1091,17 +1092,19 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         refreshAll();
     }, [activeProfileId]);
 
-    const handleSaveGateway = async () => {
+    /** Rejects with FreshProofRequiredError when the node asks an owner's fresh proof: GatewayModule opens the box. */
+    const handleSaveGateway = async (code?: string) => {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         setGatewaySaving(true);
         try {
-            const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), ...(code ? [code] : []));
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
             gatewaySuccessTimer.schedule(() => setGatewaySuccess(null), 3000);
         } catch (e: unknown) {
+            if (e instanceof FreshProofRequiredError) throw e;
             alert('Failed to update gateway: ' + (e instanceof Error ? e.message : String(e)));
         } finally {
             setGatewaySaving(false);

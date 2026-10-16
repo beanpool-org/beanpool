@@ -57,9 +57,13 @@ export async function freshProofRefusalOf(res: Response): Promise<FreshProofRefu
     return freshProofRefusal(res.status, body);
 }
 
-/** Thrown by node-client helpers when the server asks the fresh proof, so a screen can open the box. */
+/**
+ * Thrown by node-client helpers when the server asks the fresh proof, so a screen can open the box. It keeps what the
+ * helpers' errors carried before (the node's sentence as the message, its `status` and its short `code`), so a screen
+ * without the box still says the node's words.
+ */
 export class FreshProofRequiredError extends Error {
-    constructor(readonly refusal: FreshProofRefusal) {
+    constructor(readonly refusal: FreshProofRefusal, readonly status?: number, readonly code?: string) {
         super(refusal.error || 'This change asks for a fresh proof');
         this.name = 'FreshProofRequiredError';
     }
@@ -68,7 +72,23 @@ export class FreshProofRequiredError extends Error {
 /** Throws FreshProofRequiredError when `status`/`body` is a fresh-proof refusal. */
 export function throwIfFreshProof(status: number, body: unknown): void {
     const refusal = freshProofRefusal(status, body);
-    if (refusal) throw new FreshProofRequiredError(refusal);
+    if (!refusal) return;
+    const code = body && typeof (body as Record<string, unknown>).code === 'string' ? (body as Record<string, string>).code : undefined;
+    throw new FreshProofRequiredError(refusal, status, code);
+}
+
+const REFUSAL_KINDS: ReadonlyArray<FreshProofRefusal['kind']> = ['code', 'step-up', 'phone', 'needs-2fa'];
+
+/**
+ * The fresh-proof refusal a thrown error carries: a FreshProofRequiredError's, or a helper's own error class that holds
+ * one in `refusal` (node-client RekeyBindError, whose callers read its `code` and `triesLeft` too).
+ */
+export function refusalOf(err: unknown): FreshProofRefusal | null {
+    if (err instanceof FreshProofRequiredError) return err.refusal;
+    const r = err && typeof err === 'object' ? (err as { refusal?: unknown }).refusal : undefined;
+    if (!r || typeof r !== 'object') return null;
+    const { kind, error } = r as { kind?: unknown; error?: unknown };
+    return REFUSAL_KINDS.includes(kind as FreshProofRefusal['kind']) ? { kind, error: typeof error === 'string' ? error : '' } as FreshProofRefusal : null;
 }
 
 /**

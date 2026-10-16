@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Σύνδεση συσκευής",
   "🌍 Join the global community": "🌍 Εγγραφή στην παγκόσμια κοινότητα",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Αυτό άνοιξε από σύνδεσμο. Συνεχίστε μόνο αν μόλις στρέψατε την κάμερά σας σε έναν κωδικό στη δική σας οθόνη.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Αντιγράφει τον δικό σας λογαριασμό σε ένα πρόγραμμα περιήγησης, για να χρησιμοποιείτε το BeanPool εκεί ως εσείς"
+  "Copies your own account to a browser, to use BeanPool there as you": "Αντιγράφει τον δικό σας λογαριασμό σε ένα πρόγραμμα περιήγησης, για να χρησιμοποιείτε το BeanPool εκεί ως εσείς",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "Το BeanPool δεν μπορεί να διαβάσει τον λογαριασμό σε αυτό το τηλέφωνο. Κάνε επανεκκίνηση και δοκίμασε ξανά, ή κάνε επαναφορά με τις 12 λέξεις σου.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Το ιστορικό προχείρου ενός πληκτρολογίου ή ένα πρόχειρο κοινό με τις άλλες συσκευές σου μπορεί να κρατήσει ένα αντίγραφο που το BeanPool δεν μπορεί να σβήσει."
 }

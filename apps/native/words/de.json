@@ -2,7 +2,7 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Gerät verknüpfen",
   "🌍 Join the global community": "🌍 Der globalen Gemeinschaft beitreten",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Dies wurde über einen Link geöffnet. Mach nur weiter, wenn du gerade deine Kamera auf einen Code auf deinem eigenen Bildschirm gerichtet hast.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Kopiert dein eigenes Konto in einen Browser, damit du BeanPool dort als du selbst nutzt"
+  "Copies your own account to a browser, to use BeanPool there as you": "Kopiert dein eigenes Konto in einen Browser, damit du BeanPool dort als du selbst nutzt",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool kann das Konto auf diesem Telefon nicht lesen. Starte neu und versuche es noch einmal, oder stelle es mit deinen 12 Wörtern wieder her.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Der Zwischenablage-Verlauf einer Tastatur oder eine mit deinen anderen Geräten geteilte Zwischenablage kann eine Kopie behalten, die BeanPool nicht löschen kann."
 }

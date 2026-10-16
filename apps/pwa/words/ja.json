@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -452,5 +452,6 @@
   "Type the two digits your phone shows": "端末に表示されている2桁の数字を入力してください",
   "Confirm": "確認",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "正しい数字を入力した場合にのみ、ここでアカウントが開きます。3回間違えると何も送信されません。",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "まだスマートフォンから何も届いていません。このコードは{host}のものです。スマートフォンに「使用していないサーバーのコード」と表示された場合は、自分のコミュニティのアドレスでBeanPoolを開くか、先にスマートフォンで{host}に参加してから、もう一度スキャンしてください。スマートフォンに数字が表示されない場合は、BeanPoolアプリを更新してから、もう一度スキャンしてください。"
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "まだスマートフォンから何も届いていません。このコードは{host}のものです。スマートフォンに「使用していないサーバーのコード」と表示された場合は、自分のコミュニティのアドレスでBeanPoolを開くか、先にスマートフォンで{host}に参加してから、もう一度スキャンしてください。スマートフォンに数字が表示されない場合は、BeanPoolアプリを更新してから、もう一度スキャンしてください。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "キーボードのクリップボード履歴や、ほかのデバイスと共有しているクリップボードには、BeanPoolが消去できないコピーが残ることがあります。"
 }

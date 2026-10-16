@@ -2,7 +2,7 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Collega un dispositivo",
   "🌍 Join the global community": "🌍 Unisciti alla comunità globale",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Si è aperto da un link. Continua solo se hai appena puntato la fotocamera su un codice sul tuo schermo.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Copia il tuo account in un browser, per usare BeanPool lì come te"
+  "Copies your own account to a browser, to use BeanPool there as you": "Copia il tuo account in un browser, per usare BeanPool lì come te",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool non riesce a leggere l'account su questo telefono. Riavvia e riprova, oppure ripristinalo con le tue 12 parole.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "La cronologia degli appunti di una tastiera o degli appunti condivisi con gli altri tuoi dispositivi può conservare una copia che BeanPool non può cancellare."
 }

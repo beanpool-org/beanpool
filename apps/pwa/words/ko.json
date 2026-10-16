@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -452,5 +452,6 @@
   "Type the two digits your phone shows": "휴대폰에 표시된 두 자리 숫자를 입력하세요",
   "Confirm": "확인",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "올바른 숫자를 입력해야만 계정이 열려요. 세 번 잘못 입력하면 아무것도 전송되지 않아요.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "아직 휴대폰에서 아무것도 오지 않았어요. 이 코드는 {host}의 코드예요. 휴대폰에 사용하지 않는 서버의 코드라고 나오면, 내 커뮤니티 주소에서 BeanPool을 열거나 먼저 휴대폰에서 {host}에 가입한 뒤 다시 스캔하세요. 휴대폰에 숫자가 나오지 않으면 휴대폰의 BeanPool 앱을 업데이트한 뒤 다시 스캔하세요."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "아직 휴대폰에서 아무것도 오지 않았어요. 이 코드는 {host}의 코드예요. 휴대폰에 사용하지 않는 서버의 코드라고 나오면, 내 커뮤니티 주소에서 BeanPool을 열거나 먼저 휴대폰에서 {host}에 가입한 뒤 다시 스캔하세요. 휴대폰에 숫자가 나오지 않으면 휴대폰의 BeanPool 앱을 업데이트한 뒤 다시 스캔하세요.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "키보드의 클립보드 기록이나 다른 기기와 공유되는 클립보드에 BeanPool이 지울 수 없는 사본이 남을 수 있습니다."
 }

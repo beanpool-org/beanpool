@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Mag-link ng device",
   "🌍 Join the global community": "🌍 Sumali sa pandaigdigang komunidad",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Nabuksan ito mula sa isang link. Magpatuloy lang kung kakatutok mo lang ng camera mo sa isang code sa sarili mong screen.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Kinokopya ang sarili mong account sa isang browser, para magamit mo roon ang BeanPool bilang ikaw"
+  "Copies your own account to a browser, to use BeanPool there as you": "Kinokopya ang sarili mong account sa isang browser, para magamit mo roon ang BeanPool bilang ikaw",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "Hindi mabasa ng BeanPool ang account sa teleponong ito. I-restart at subukang muli, o i-restore gamit ang iyong 12 salita.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Ang clipboard history ng isang keyboard o isang clipboard na kahati ng iba mong device ay maaaring magtago ng kopya na hindi kayang burahin ng BeanPool."
 }

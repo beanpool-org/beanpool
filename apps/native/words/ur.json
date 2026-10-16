@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "ڈیوائس جوڑیں",
   "🌍 Join the global community": "🌍 عالمی کمیونٹی میں شامل ہوں",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "یہ ایک لنک سے کھلا ہے۔ آگے صرف تب بڑھیں جب آپ نے ابھی ابھی اپنا کیمرہ اپنی ہی اسکرین پر کسی کوڈ کی طرف کیا ہو۔",
-  "Copies your own account to a browser, to use BeanPool there as you": "آپ کا اپنا اکاؤنٹ ایک براؤزر میں کاپی کرتا ہے، تاکہ آپ وہاں خود کے طور پر BeanPool استعمال کریں"
+  "Copies your own account to a browser, to use BeanPool there as you": "آپ کا اپنا اکاؤنٹ ایک براؤزر میں کاپی کرتا ہے، تاکہ آپ وہاں خود کے طور پر BeanPool استعمال کریں",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool اس فون پر موجود اکاؤنٹ نہیں پڑھ سکتا۔ دوبارہ شروع کریں اور پھر کوشش کریں، یا اپنے 12 الفاظ سے بحال کریں۔",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "کی بورڈ کی کلپ بورڈ ہسٹری یا آپ کے دوسرے آلات کے ساتھ مشترکہ کلپ بورڈ ایک ایسی کاپی رکھ سکتا ہے جسے BeanPool مٹا نہیں سکتا۔"
 }

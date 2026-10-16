@@ -82,5 +82,10 @@ export function NoScreenLockNote({ style }: { style?: StyleProp<TextStyle> }): R
 export function CopyClearsNote({ style }: { style?: StyleProp<TextStyle> }): React.JSX.Element | null {
     const { t } = useWords();
     if (Platform.OS === 'web') return null;
-    return <Text style={style}>{COPY_CLEARS_LINE} {t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</Text>;
+    return (
+        <Text style={style}>
+            {COPY_CLEARS_LINE}{' '}
+            <Text>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</Text>
+        </Text>
+    );
 }

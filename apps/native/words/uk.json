@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -299,5 +299,7 @@
   "Link a device": "Під’єднати пристрій",
   "🌍 Join the global community": "🌍 Приєднатися до глобальної спільноти",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Це відкрилося за посиланням. Продовжуйте, лише якщо ви щойно навели камеру на код на власному екрані.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Копіює ваш власний обліковий запис у браузер, щоб користуватися BeanPool там від свого імені"
+  "Copies your own account to a browser, to use BeanPool there as you": "Копіює ваш власний обліковий запис у браузер, щоб користуватися BeanPool там від свого імені",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool не може прочитати обліковий запис на цьому телефоні. Перезапустіть застосунок і спробуйте ще раз або відновіть його за допомогою 12 слів.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Історія буфера обміну клавіатури або буфер обміну, спільний з іншими вашими пристроями, може зберегти копію, яку BeanPool не може видалити."
 }

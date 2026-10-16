@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -452,5 +452,6 @@
   "Type the two digits your phone shows": "輸入手機上顯示的兩位數字",
   "Confirm": "確認",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "只有輸入正確的數字後，你的帳號才會在此開啟。嘗試錯誤三次後將不會傳送任何內容。",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "你的手機尚未傳來任何內容。此代碼來自 {host}。如果你的手機顯示它來自手機未使用的伺服器，請在你自己社群的網址開啟 BeanPool，或先在手機上加入 {host}，然後重新掃描。如果你的手機沒有顯示數字，請更新手機上的 BeanPool 應用程式，然後重新掃描。"
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "你的手機尚未傳來任何內容。此代碼來自 {host}。如果你的手機顯示它來自手機未使用的伺服器，請在你自己社群的網址開啟 BeanPool，或先在手機上加入 {host}，然後重新掃描。如果你的手機沒有顯示數字，請更新手機上的 BeanPool 應用程式，然後重新掃描。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "鍵盤的剪貼簿記錄，或與你其他裝置共用的剪貼簿，可能會保留一份 BeanPool 無法清除的副本。"
 }

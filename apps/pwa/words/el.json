@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -461,5 +461,6 @@
   "Type the two digits your phone shows": "Πληκτρολογήστε τα δύο ψηφία που δείχνει το τηλέφωνό σας",
   "Confirm": "Επιβεβαίωση",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ο λογαριασμός σας ανοίγει εδώ μόνο μετά τα σωστά ψηφία. Τρεις λάθος προσπάθειες και δεν αποστέλλεται τίποτα.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Δεν έχει έρθει τίποτα ακόμη από το τηλέφωνό σας. Αυτός ο κωδικός προέρχεται από τον {host}. Αν το τηλέφωνό σας λέει ότι είναι από διακομιστή που δεν χρησιμοποιεί, ανοίξτε το BeanPool στη διεύθυνση της δικής σας κοινότητας ή εγγραφείτε πρώτα στον {host} από το τηλέφωνό σας και μετά σαρώστε ξανά. Αν το τηλέφωνό σας δεν δείχνει ψηφία, ενημερώστε την εφαρμογή BeanPool σε αυτό και μετά σαρώστε ξανά."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Δεν έχει έρθει τίποτα ακόμη από το τηλέφωνό σας. Αυτός ο κωδικός προέρχεται από τον {host}. Αν το τηλέφωνό σας λέει ότι είναι από διακομιστή που δεν χρησιμοποιεί, ανοίξτε το BeanPool στη διεύθυνση της δικής σας κοινότητας ή εγγραφείτε πρώτα στον {host} από το τηλέφωνό σας και μετά σαρώστε ξανά. Αν το τηλέφωνό σας δεν δείχνει ψηφία, ενημερώστε την εφαρμογή BeanPool σε αυτό και μετά σαρώστε ξανά.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Το ιστορικό προχείρου ενός πληκτρολογίου ή ένα πρόχειρο κοινό με τις άλλες συσκευές σου μπορεί να κρατήσει ένα αντίγραφο που το BeanPool δεν μπορεί να σβήσει."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -287,5 +287,7 @@
   "Link a device": "端末をリンク",
   "🌍 Join the global community": "🌍 グローバルコミュニティに参加",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "これはリンクから開かれました。自分の画面に表示されたコードにたった今カメラを向けた場合にのみ、先に進んでください。",
-  "Copies your own account to a browser, to use BeanPool there as you": "あなた自身のアカウントをブラウザにコピーし、そこであなたとしてBeanPoolを使えるようにします"
+  "Copies your own account to a browser, to use BeanPool there as you": "あなた自身のアカウントをブラウザにコピーし、そこであなたとしてBeanPoolを使えるようにします",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPoolはこのスマートフォンのアカウントを読み取れません。再起動してもう一度お試しいただくか、12の単語で復元してください。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "キーボードのクリップボード履歴や、ほかのデバイスと共有しているクリップボードには、BeanPoolが消去できないコピーが残ることがあります。"
 }

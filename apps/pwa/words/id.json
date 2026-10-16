@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -452,5 +452,6 @@
   "Type the two digits your phone shows": "Ketik dua digit yang ditampilkan ponselmu",
   "Confirm": "Konfirmasi",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Akunmu terbuka di sini hanya setelah digit yang benar dimasukkan. Tiga kali salah dan tidak ada yang dikirim.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Belum ada yang datang dari ponselmu. Kode ini berasal dari {host}. Jika ponselmu mengatakan kode ini dari server yang tidak digunakannya, buka BeanPool di alamat komunitasmu sendiri, atau gabung dulu ke {host} di ponselmu, lalu pindai lagi. Jika ponselmu tidak menampilkan angka, perbarui aplikasi BeanPool di ponsel itu, lalu pindai lagi."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Belum ada yang datang dari ponselmu. Kode ini berasal dari {host}. Jika ponselmu mengatakan kode ini dari server yang tidak digunakannya, buka BeanPool di alamat komunitasmu sendiri, atau gabung dulu ke {host} di ponselmu, lalu pindai lagi. Jika ponselmu tidak menampilkan angka, perbarui aplikasi BeanPool di ponsel itu, lalu pindai lagi.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Riwayat papan klip keyboard atau papan klip yang dibagikan dengan perangkat Anda yang lain dapat menyimpan salinan yang tidak bisa dihapus oleh BeanPool."
 }

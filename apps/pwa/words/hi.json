@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -461,5 +461,6 @@
   "Type the two digits your phone shows": "वे दो अंक दर्ज करें जो आपका फ़ोन दिखाता है",
   "Confirm": "पुष्टि करें",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "सही अंक दर्ज करने के बाद ही आपका खाता यहाँ खुलेगा। तीन गलत प्रयासों के बाद कुछ भी नहीं भेजा जाता है।",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "आपके फ़ोन से अभी तक कुछ नहीं आया है। यह कोड {host} का है। अगर आपका फ़ोन कहता है कि यह ऐसे सर्वर का है जिसका वह उपयोग नहीं करता, तो अपने समुदाय के पते पर BeanPool खोलें, या पहले अपने फ़ोन पर {host} से जुड़ें, फिर दोबारा स्कैन करें। अगर आपका फ़ोन कोई अंक नहीं दिखाता, तो उस पर BeanPool ऐप अपडेट करें, फिर दोबारा स्कैन करें।"
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "आपके फ़ोन से अभी तक कुछ नहीं आया है। यह कोड {host} का है। अगर आपका फ़ोन कहता है कि यह ऐसे सर्वर का है जिसका वह उपयोग नहीं करता, तो अपने समुदाय के पते पर BeanPool खोलें, या पहले अपने फ़ोन पर {host} से जुड़ें, फिर दोबारा स्कैन करें। अगर आपका फ़ोन कोई अंक नहीं दिखाता, तो उस पर BeanPool ऐप अपडेट करें, फिर दोबारा स्कैन करें।",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "कीबोर्ड का क्लिपबोर्ड इतिहास या आपके दूसरे डिवाइसों के साथ साझा क्लिपबोर्ड एक ऐसी कॉपी रख सकता है जिसे BeanPool मिटा नहीं सकता।"
 }

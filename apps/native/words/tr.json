@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Cihaz bağla",
   "🌍 Join the global community": "🌍 Küresel topluluğa katıl",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Bu bir bağlantıdan açıldı. Yalnızca kameranızı az önce kendi ekranınızdaki bir koda tuttuysanız devam edin.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Kendi hesabınızı bir tarayıcıya kopyalar; böylece BeanPool'u orada kendiniz olarak kullanırsınız"
+  "Copies your own account to a browser, to use BeanPool there as you": "Kendi hesabınızı bir tarayıcıya kopyalar; böylece BeanPool'u orada kendiniz olarak kullanırsınız",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool bu telefondaki hesabı okuyamıyor. Yeniden başlatıp tekrar deneyin ya da 12 kelimenizle geri yükleyin.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Bir klavyenin pano geçmişi veya diğer cihazlarınızla paylaşılan bir pano, BeanPool'un silemeyeceği bir kopya tutabilir."
 }

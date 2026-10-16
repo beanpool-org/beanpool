@@ -1430,7 +1430,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </button>
                                 <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
                                     {WEB_COPY_CLEARS_LINE}{' '}
-                                    {t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}
+                                    <span>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</span>
                                 </p>
                             </>
                         ) : (

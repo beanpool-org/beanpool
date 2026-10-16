@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "சாதனத்தை இணைக்கவும்",
   "🌍 Join the global community": "🌍 உலகளாவிய சமூகத்தில் சேரவும்",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "இது ஒரு இணைப்பிலிருந்து திறந்தது. உங்கள் சொந்தத் திரையில் உள்ள ஒரு குறியீட்டை நோக்கி இப்போதுதான் கேமராவைக் காட்டியிருந்தால் மட்டுமே தொடரவும்.",
-  "Copies your own account to a browser, to use BeanPool there as you": "உங்கள் சொந்தக் கணக்கை ஒரு உலாவிக்கு நகலெடுக்கிறது, அங்கே நீங்களாகவே BeanPool-ஐப் பயன்படுத்த"
+  "Copies your own account to a browser, to use BeanPool there as you": "உங்கள் சொந்தக் கணக்கை ஒரு உலாவிக்கு நகலெடுக்கிறது, அங்கே நீங்களாகவே BeanPool-ஐப் பயன்படுத்த",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "இந்த ஃபோனில் உள்ள கணக்கை BeanPool-ஆல் படிக்க முடியவில்லை. மறுதொடக்கம் செய்து மீண்டும் முயலவும், அல்லது உங்கள் 12 சொற்களைக் கொண்டு மீட்டெடுக்கவும்.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "ஒரு விசைப்பலகையின் கிளிப்போர்டு வரலாறு அல்லது உங்கள் மற்ற சாதனங்களுடன் பகிரப்படும் கிளிப்போர்டு, BeanPool-ஆல் அழிக்க முடியாத ஒரு நகலை வைத்திருக்கலாம்."
 }

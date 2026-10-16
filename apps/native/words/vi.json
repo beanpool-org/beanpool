@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -287,5 +287,7 @@
   "Link a device": "Liên kết thiết bị",
   "🌍 Join the global community": "🌍 Tham gia cộng đồng toàn cầu",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Mục này được mở từ một liên kết. Chỉ tiếp tục nếu bạn vừa hướng máy ảnh vào một mã trên màn hình của chính bạn.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Sao chép tài khoản của chính bạn sang trình duyệt, để dùng BeanPool ở đó với tư cách là bạn"
+  "Copies your own account to a browser, to use BeanPool there as you": "Sao chép tài khoản của chính bạn sang trình duyệt, để dùng BeanPool ở đó với tư cách là bạn",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool không đọc được tài khoản trên điện thoại này. Hãy khởi động lại và thử lần nữa, hoặc khôi phục bằng 12 từ của bạn.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Lịch sử bộ nhớ tạm của bàn phím hoặc bộ nhớ tạm dùng chung với các thiết bị khác của bạn có thể giữ một bản sao mà BeanPool không xóa được."
 }

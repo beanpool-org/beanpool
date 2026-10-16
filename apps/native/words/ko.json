@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -287,5 +287,7 @@
   "Link a device": "기기 연결",
   "🌍 Join the global community": "🌍 글로벌 커뮤니티 가입",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "링크에서 열렸어요. 방금 내 화면에 있는 코드에 카메라를 직접 비췄을 때만 계속하세요.",
-  "Copies your own account to a browser, to use BeanPool there as you": "내 계정을 브라우저로 복사해, 그곳에서 나로서 BeanPool을 사용해요"
+  "Copies your own account to a browser, to use BeanPool there as you": "내 계정을 브라우저로 복사해, 그곳에서 나로서 BeanPool을 사용해요",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool이 이 휴대폰의 계정을 읽을 수 없습니다. 다시 시작한 후 다시 시도하거나, 12개 단어로 복원하세요.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "키보드의 클립보드 기록이나 다른 기기와 공유되는 클립보드에 BeanPool이 지울 수 없는 사본이 남을 수 있습니다."
 }

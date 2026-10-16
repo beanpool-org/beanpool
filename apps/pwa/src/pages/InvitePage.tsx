@@ -448,7 +448,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     {newCode && showQR && (
                         <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all" data-testid={isPreview ? 'invite-qr-card' : undefined}>
                             <p className="text-nature-600 dark:text-nature-400 text-[14px] font-medium mb-3">Share this code with someone you trust</p>
-                            <p className="font-mono text-xl font-bold text-nature-950 dark:text-white tracking-widest break-all mb-4" title={newCode}>
+                            <p className={`font-mono font-bold text-nature-950 dark:text-white break-all mb-4 ${isPreview ? 'text-base sm:text-xl tracking-wider sm:tracking-widest' : 'text-xl tracking-widest'}`} title={newCode}>
                                 {newCode.length > 20 ? `${newCode.substring(0, 16)}...` : newCode.toUpperCase()}
                             </p>
                             {/* Preview: the QR and both markers fit the card at 320 px with 1.3x text (review of #2057, B2). */}

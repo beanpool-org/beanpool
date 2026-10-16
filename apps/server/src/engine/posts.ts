@@ -1464,6 +1464,7 @@ export function rsvpEvent(
             ? new Date(Date.parse(prev.ts) + 1).toISOString()
             : nowIso;
         if (status === null) {
+            letInPushSentAt.delete(rowKey);
             const del = db.prepare("DELETE FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?").run(postId, memberPublicKey);
             if (del.changes > 0) {
                 db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('event_rsvps', ?, ?)`).run(rowKey, writeAt);

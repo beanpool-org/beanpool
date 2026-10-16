@@ -193,21 +193,39 @@ export const REPEAT_DEAL_PUSH_EVERY_MS = 60 * 60 * 1000;
 const dealPushSentAt = new Map<string, number>();
 /** Deals whose start pushed nobody (repeatDealPushDue): their buyer's cancel pushes nobody either. */
 const quietDeals = new Set<string>();
+/** When each member last cancelled their own deal on each listing (`<post id>|<member>`): only a deal made after one folds. */
+const dealCancelledAt = new Map<string, number>();
+/** The maker of a deal cancelled it: their next one on this listing within the hour of the last push is a repeat. */
+function noteDealCancelled(postId: string, maker: string): void {
+    if (dealCancelledAt.size >= 10_000) {
+        const now = Date.now();
+        for (const [k, t] of dealCancelledAt) if (now - t >= REPEAT_DEAL_PUSH_EVERY_MS) dealCancelledAt.delete(k);
+    }
+    dealCancelledAt.set(`${postId}|${maker}`, Date.now());
+}
 
 /** For a suite: forget when each author was last told, as a restart does. */
 export function resetRepeatDealPushes(): void {
     dealPushSentAt.clear();
     quietDeals.clear();
+    dealCancelledAt.clear();
 }
 
-/** Whether deal `txId`, just made by `from` on `postId`, pushes the listing's author now; when not, it is a quiet deal. */
-function repeatDealPushDue(postId: string, from: string, txId: string): boolean {
+/**
+ * Whether a deal just made by `from` on `postId` pushes the listing's author now. A 1-step accept passes its `txId`: when
+ * not, it is a quiet deal, and its buyer's cancel is quiet too. A request never is: it reaches cancelPostTransaction only
+ * after its author has approved it, and that cancel is news to the other side (on a Need, the author is the one cancelling).
+ */
+function repeatDealPushDue(postId: string, from: string, txId?: string): boolean {
     const now = Date.now();
     const key = `${postId}|${from}`;
     const last = dealPushSentAt.get(key);
-    if (last !== undefined && now - last < REPEAT_DEAL_PUSH_EVERY_MS) {
-        if (quietDeals.size >= 10_000) quietDeals.clear();
-        quietDeals.add(txId);
+    const cancelled = dealCancelledAt.get(key);
+    if (last !== undefined && now - last < REPEAT_DEAL_PUSH_EVERY_MS && cancelled !== undefined && cancelled >= last) {
+        if (txId) {
+            if (quietDeals.size >= 10_000) quietDeals.clear();
+            quietDeals.add(txId);
+        }
         return false;
     }
     if (dealPushSentAt.size >= 10_000) {
@@ -350,7 +368,7 @@ export function requestPost(
     // it holds no Beans and carries no words of the requester's, and refusing it would tell the requester they are blocked.
     // So does the requester's next one within the hour (repeatDealPushDue).
     cb.dispatchPushNotification(
-        hasBlocked(post.author_pubkey, requesterPublicKey) || !repeatDealPushDue(post.id, requesterPublicKey, tx.id) ? [] : [post.author_pubkey],
+        hasBlocked(post.author_pubkey, requesterPublicKey) || !repeatDealPushDue(post.id, requesterPublicKey) ? [] : [post.author_pubkey],
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
@@ -609,6 +627,7 @@ export function cancelPostRequest(
 
     db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
     db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
+    noteDealCancelled(row.post_id, requesterPublicKey);
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_cancelled', transaction: tx }, tradeRecipients(cb, tx));
@@ -1152,6 +1171,7 @@ export function cancelPostTransaction(
     // Nor a buyer's cancel of a deal that started with no push (repeatDealPushDue).
     const silenced = cancellerPublicKey === row.buyer_pubkey && (hasBlocked(row.seller_pubkey, row.buyer_pubkey) || quietDeals.has(row.id));
     quietDeals.delete(row.id);
+    if (cancellerPublicKey === row.buyer_pubkey) noteDealCancelled(row.post_id, row.buyer_pubkey);
     cb.dispatchPushNotification(
         silenced ? [] : [otherParty],
         cancellerPublicKey,

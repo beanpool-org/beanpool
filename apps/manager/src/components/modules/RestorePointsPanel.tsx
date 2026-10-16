@@ -170,7 +170,10 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
                                     </p>
                                     {/* TODO(S4a): switch this field to S4a's shared fresh-proof component (its brief, item 1: the code
                                         field for a password viewer, "press Manage again" / "from your phone" for a key viewer). Until
-                                        then: the code field for a password viewer, and the server's own words for every refusal. */}
+                                        then: the code field for a password viewer, and the server's own words for every refusal.
+                                        A computer's key session still sees Roll back (the server answers 403 phone_required): hiding
+                                        it behind "Do this from your phone" (design §5) needs /api/local/admin/auth/session to say
+                                        phone hand-off or computer, which it does not yet (PR #2029 review, N3). */}
                                     {viewer.kind === 'password' ? (
                                         <>
                                             <label htmlFor={`roll-back-code-${p.name}`} className="block text-nature-200">

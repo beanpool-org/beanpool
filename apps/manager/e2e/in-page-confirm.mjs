@@ -20,7 +20,7 @@
  *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
-/* global console, process, document, window -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, document, window, URL -- Node, plus page.evaluate callbacks run in the browser */
 import { startServer, launch, openSettings, openModal, settle, ALL_MODALS, CSP_VIOLATIONS } from './harness.mjs';
 
 const SIZES = [{ width: 1280, textScale: 1 }, { width: 320, textScale: 1.3 }];

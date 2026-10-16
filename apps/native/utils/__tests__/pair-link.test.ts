@@ -242,6 +242,15 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         expect(src.indexOf("{scannedData?.source === 'link' && (")).toBeLessThan(src.indexOf('onPress={handleConfirmLink}'));
     });
 
+    it('the sheet scrolls, starting at its title: at 320 dp and 1.3x text it is taller than the screen (emulator, fix round 1)', () => {
+        const src = pair();
+        const sheet = slice(src, '<View style={styles.sheet}>', '</Modal>');
+        expect(sheet.indexOf('<ScrollView bounces={false} contentContainerStyle={styles.sheetContent}>')).toBeGreaterThan(-1);
+        expect(sheet.indexOf('<ScrollView')).toBeLessThan(sheet.indexOf("t('Send your whole account to another device?')"));
+        expect(sheet.indexOf('</ScrollView>')).toBeGreaterThan(sheet.indexOf('onPress={handleDismissSheet}'));
+        expect(slice(src, 'sheet: {', '},')).toContain("maxHeight: '90%'");
+    });
+
     it('the sheet shows whether or not BeanPool may use the camera: a link needs none', () => {
         expect(pair().split('{sheet}').length - 1).toBe(3);
     });

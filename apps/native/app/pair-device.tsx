@@ -20,6 +20,7 @@ import {
     Pressable,
     ActivityIndicator,
     SafeAreaView,
+    ScrollView,
     Platform,
     Modal,
     Linking,
@@ -251,6 +252,9 @@ export default function PairDeviceScreen() {
                 backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff',
                 borderTopLeftRadius: 24,
                 borderTopRightRadius: 24,
+                maxHeight: '90%',
+            },
+            sheetContent: {
                 padding: 24,
                 paddingBottom: Platform.OS === 'ios' ? 44 : 24,
             },
@@ -509,6 +513,8 @@ export default function PairDeviceScreen() {
         >
             <View style={styles.modalOverlay}>
                 <View style={styles.sheet}>
+                    {/* Scrolls when taller than the screen (320 dp at 1.3x text): it starts at the title and the warning, never hides them. */}
+                    <ScrollView bounces={false} contentContainerStyle={styles.sheetContent}>
                     {confirmCode ? (
                         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
                             <Text style={styles.sheetTitle}>{t('Type these two digits on the other device')}</Text>
@@ -610,6 +616,7 @@ export default function PairDeviceScreen() {
                             </Pressable>
                         </>
                     )}
+                    </ScrollView>
                 </View>
             </View>
         </Modal>

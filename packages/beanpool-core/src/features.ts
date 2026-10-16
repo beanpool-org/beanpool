@@ -12,7 +12,7 @@
  * - **The marker** never greys, dims, locks or talks tiers; every variant opens the same sheet, which says why the
  *   feature lives in a local community and offers Start a community, Communities near you and How it works.
  */
-import { t } from './words.js';
+import { t, word } from './words.js';
 
 export type FeatureMode = 'live' | 'preview' | 'read-only' | 'hidden';
 
@@ -42,23 +42,23 @@ export function featureModeFor(feature: ShowcaseFeature, node: FeatureSet, reade
 
 /** The marker itself: the pill, and the emoji every line starts with. */
 export const LOCAL_COMMUNITY_EMOJI = '🏘️';
-export const LOCAL_COMMUNITY_MARK = 'Local community';
+export const LOCAL_COMMUNITY_MARK = word('Local community');
 
 /** The sheet every marker variant opens. */
 export const LOCAL_COMMUNITY_SHEET = Object.freeze({
-    title: 'Why this lives in a local community',
+    title: word('Why this lives in a local community'),
     /** One line per feature, then the common line. */
     features: Object.freeze({
-        beans: 'Beans are a promise between people who can be found again. Here anyone may join with 12 words, so nobody can yet vouch for who\'s who.',
-        escrow: 'A deal holds Beans safely until the job is done.',
-        enterprises: 'An enterprise is kept by people its community knows, and spends from a shared pool.',
-        decisions: 'A vote binds a community where one person has one voice. Here one person could hold several accounts.',
-        invites: 'Someone vouches for each newcomer. Here the door is open, so there are no invites.',
+        beans: word('Beans are a promise between people who can be found again. Here anyone may join with 12 words, so nobody can yet vouch for who\'s who.'),
+        escrow: word('A deal holds Beans safely until the job is done.'),
+        enterprises: word('An enterprise is kept by people its community knows, and spends from a shared pool.'),
+        decisions: word('A vote binds a community where one person has one voice. Here one person could hold several accounts.'),
+        invites: word('Someone vouches for each newcomer. Here the door is open, so there are no invites.'),
     } satisfies Record<ShowcaseFeature, string>),
-    common: 'In a local community all of this is live today. Here it switches on, feature by feature, once this community can check who\'s who.',
-    start: 'Start a community',
-    nearYou: 'Communities near you',
-    howItWorks: 'How it works',
+    common: word('In a local community all of this is live today. Here it switches on, feature by feature, once this community can check who\'s who.'),
+    start: word('Start a community'),
+    nearYou: word('Communities near you'),
+    howItWorks: word('How it works'),
     /** The guide page How it works opens, per feature. */
     guide: Object.freeze({
         beans: 'beans-and-the-global-community',
@@ -72,39 +72,39 @@ export const LOCAL_COMMUNITY_SHEET = Object.freeze({
 /** The strip across the top of a preview screen: a one-line bold lead per feature, then that feature's own body (≤ 3 lines at 320 px / 1.3×). */
 export const LOCAL_COMMUNITY_STRIP = Object.freeze({
     lead: Object.freeze({
-        beans: 'An example ledger.',
-        escrow: 'Example deals.',
-        enterprises: 'An example Commons.',
-        decisions: 'An example Decision.',
-        invites: 'An example invitation.',
+        beans: word('An example ledger.'),
+        escrow: word('Example deals.'),
+        enterprises: word('An example Commons.'),
+        decisions: word('An example Decision.'),
+        invites: word('An example invitation.'),
     } satisfies Record<ShowcaseFeature, string>),
     body: Object.freeze({
-        beans: 'Help earns Beans, getting help spends them, so help can go round, not just back.',
-        escrow: 'A deal holds the Beans until the job is done. Neither side has to go first.',
-        enterprises: 'Neighbours pool Beans for shared enterprises, and vote on what the pool funds.',
-        decisions: 'One member, one vote. A Decision that passes carries itself out.',
-        invites: 'A member vouches for each newcomer, so neighbours know who\'s who.',
+        beans: word('Help earns Beans, getting help spends them, so help can go round, not just back.'),
+        escrow: word('A deal holds the Beans until the job is done. Neither side has to go first.'),
+        enterprises: word('Neighbours pool Beans for shared enterprises, and vote on what the pool funds.'),
+        decisions: word('One member, one vote. A Decision that passes carries itself out.'),
+        invites: word('A member vouches for each newcomer, so neighbours know who\'s who.'),
     } satisfies Record<ShowcaseFeature, string>),
     /** The strip collapsed with ✕, remembered per node and feature on the device. One line at 320 px / 1.3×. */
-    collapsed: '🏘️ An example · Why? ›',
+    collapsed: word('🏘️ An example · Why? ›'),
     /** The header over the preview, with the Example chip. */
-    header: 'Example Valley · an example member',
+    header: word('Example Valley · an example member'),
 });
 
 /** The one-sentence `line` variant, where a local community differs, and the other fixed words of the design's §1. */
 export const LOCAL_COMMUNITY_LINES = Object.freeze({
-    price: '🏘️ In a local community this is a price in Beans ›',
-    poll: '🏘️ In a local community a Decision binds ›',
-    invites: '🏘️ A local community grows by invitation: a member vouches for each newcomer ›',
-    profile: '🏘️ Trust badges and Beans are earned in a local community ›',
+    price: word('🏘️ In a local community this is a price in Beans ›'),
+    poll: word('🏘️ In a local community a Decision binds ›'),
+    invites: word('🏘️ A local community grows by invitation: a member vouches for each newcomer ›'),
+    profile: word('🏘️ Trust badges and Beans are earned in a local community ›'),
     /** The `action` variant on a listing's deal button. */
-    dealAction: 'Request · Beans held safely 🏘️',
+    dealAction: word('Request · Beans held safely 🏘️'),
     /** The Market's no-Beans terms, in place of "There are no Beans here…". */
-    noBeansTerms: 'No Beans here yet. In a local community the price is in Beans, and the ledger remembers who helped whom.',
+    noBeansTerms: word('No Beans here yet. In a local community the price is in Beans, and the ledger remembers who helped whom.'),
     /** Home's first step and the Your Beans preview card. */
-    firstStep: 'See how Beans work ›',
-    yourBeansCard: 'In a local community, help earns Beans and getting help spends them.',
-    yourBeansLink: 'See an example ledger ›',
+    firstStep: word('See how Beans work ›'),
+    yourBeansCard: word('In a local community, help earns Beans and getting help spends them.'),
+    yourBeansLink: word('See an example ledger ›'),
 });
 
 /** Where Start a community leads when the node names nowhere else (node_config `startCommunityUrl`). */

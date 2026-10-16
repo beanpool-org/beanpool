@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId } from '../sample-community.js';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, earnedCreditFromValue, memberLevel, tierIndexForCredit } from '../protocol.js';
+import { monthlyCirculation } from '../circulation.js';
+import { parseInviteTicketText } from '../request-signing.js';
 import {
     LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SHOWCASE_FEATURES, featureMode, featureModeFor,
 } from '../features.js';
@@ -26,13 +28,13 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
         expect(SAMPLE_COMMUNITY.balance).toBe(85);
     });
 
-    it('holds the design\'s numbers: 85 Beans, room 285 down to −200, level 2 of 4, six rows, two deals, pool 640', () => {
+    it('holds the design\'s numbers: 85 Beans, room 285 down to −200, level 2 of 4, six rows, three deals, pool 640', () => {
         const s = SAMPLE_COMMUNITY;
         expect(s.name).toBe('Example Valley');
         expect([s.balance, s.floor, s.roomToSpend, s.liveOffers, s.level, s.levels, s.pool]).toEqual([85, -200, 285, 1, 2, 4, 640]);
         expect(s.roomToSpend).toBe(s.balance - s.floor);
-        expect(s.transactions.map(t => t.amount)).toEqual([12, -40, 30, -0.9, 5, -18]);
-        expect(s.deals.map(d => d.status).sort()).toEqual(['done', 'waiting-on-you']);
+        expect(s.transactions.map(t => t.amount)).toEqual([12, -40, 30, 8, 5, -18]);
+        expect(s.deals.map(d => d.status).sort()).toEqual(['done', 'held', 'waiting-on-you']);
         expect(s.enterprises).toHaveLength(1);
         expect(s.enterprises[0]).toMatchObject({ name: 'Example Valley Bakery', keepers: 3, season: 120 });
         expect(s.decisions[0]).toMatchObject({ fromPool: 40, closesInDays: 3, votesFor: 12, votesAgainst: 2 });
@@ -59,7 +61,7 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
 
     it('every id is a sample id, and every sample id is unique', () => {
         const ids = walk(SAMPLE_COMMUNITY).filter(([p]) => /\.id$/.test(p)).map(([, v]) => v);
-        expect(ids.length).toBe(1 + 6 + 2 + 1 + 1);
+        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 2 + 3);
         for (const id of ids) {
             expect(typeof id === 'string' && id.startsWith(SAMPLE_ID_PREFIX), String(id)).toBe(true);
             expect(isSampleId(id), String(id)).toBe(true);
@@ -76,8 +78,8 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
             expect(v, path).not.toMatch(/[0-9a-f]{32,}/i);
             expect(v, path).not.toMatch(/[A-Za-z0-9+/]{40,}={0,2}/);
         }
-        // Who a row is with, and whose ledger it is: never a person's name.
-        const PEOPLE = new Set(['a neighbour', 'the Commons', 'the Example Valley Bakery']);
+        // Who a row is with, whose ledger it is, and who is in the invite tree: never a person's name.
+        const PEOPLE = new Set(['a neighbour', 'the Commons', 'the Example Valley Bakery', 'an example member']);
         for (const [path, v] of all.filter(([p]) => /\.who$/.test(p))) expect(PEOPLE.has(v), `${path}: ${v}`).toBe(true);
         expect(SAMPLE_COMMUNITY.member).toBe('an example member');
         // No capitalised word but the sentence's first and the sample's own, so nothing reads as a person or a place.
@@ -85,6 +87,124 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
         for (const [path, v] of all.filter(([p]) => !/\.id$/.test(p))) {
             const words = v.split(/\s+/).slice(1).filter(w => /^[A-Z]/.test(w));
             for (const w of words) expect(ALLOWED.has(w.replace(/[^A-Za-z]/g, '')), `${path}: "${w}" in "${v}"`).toBe(true);
+        }
+    });
+});
+
+describe('the sample agrees with itself and with the real screens\' rules (global-previews audit, fix 10; PHONE §3 item 4)', () => {
+    const s = SAMPLE_COMMUNITY;
+
+    it('no circulation fee row: a member at 85 Beans never pays one', () => {
+        expect(monthlyCirculation(s.balance)).toBe(0);
+        for (const t of s.transactions) expect((t as { kind: string }).kind, t.id).not.toBe('fee');
+        expect(s.transactions.some(t => /fee/i.test(t.what))).toBe(false);
+        expect(s.transactions).toHaveLength(6);
+    });
+
+    it('deals and ledger agree: the done deal the member sold is the Ledger\'s +30 row; one waits on them (requested); one holds their Beans', () => {
+        const byStatus = Object.fromEntries(s.deals.map(d => [d.status, d]));
+        expect(byStatus['waiting-on-you']).toMatchObject({ state: 'requested', side: 'bought' });
+        expect(byStatus.held).toMatchObject({ state: 'pending', side: 'bought' });
+        expect(byStatus.done).toMatchObject({ state: 'completed', side: 'sold' });
+        const row = s.transactions.find(t => t.what === byStatus.done.what)!;
+        expect(row).toBeDefined();
+        expect(row.amount).toBe(byStatus.done.amount);
+        expect(row.kind).toBe('deal');
+        expect(row.daysAgo).toBe(byStatus.done.daysAgo);
+        // In Escrow is what the held deal holds, and only that: a requested deal holds nothing yet.
+        expect(s.inEscrow).toBe(byStatus.held.amount);
+        expect(s.inEscrow).toBe(s.deals.filter(d => d.state === 'pending' && d.side === 'bought').reduce((n, d) => n + d.amount, 0));
+    });
+
+    it('the Decision carries everything the Decide card draws, and its numbers add up', () => {
+        const d = s.decisions[0];
+        expect(d).toMatchObject({ touches: 'pool', effect: 'grant_enterprise', franchise: '1m1v', closesInDays: 3 });
+        // Turnout: votes cast against the quorum, by the node's rule (decisions-engine getQuorumRequired: at least 3).
+        const cast = d.votesFor + d.votesAgainst;
+        expect(d.quorumRequired).toBe(Math.max(3, Math.ceil(d.quorumRatio * d.electorate)));
+        expect(cast).toBeLessThanOrEqual(d.electorate);
+        expect(cast >= d.quorumRequired).toBe(true); // Met
+        // Tally: Yes 12 (86%) · No 2 · Needs 60%.
+        expect(d.thresholdRequired).toBe(0.6);
+        expect(Math.round((d.votesFor / cast) * 100)).toBe(86);
+        expect(d.votesFor / cast).toBeGreaterThanOrEqual(d.thresholdRequired);
+        // The grant goes to the sample project, from the pool, and is what the project still needs.
+        const p = s.projects.find(x => x.id === d.subject)!;
+        expect(p).toBeDefined();
+        expect(d.fromPool).toBeLessThanOrEqual(s.pool);
+        expect(p.pledged + d.fromPool).toBe(p.goal);
+    });
+
+    it('voice credits are the value traded, as the node counts them', () => {
+        expect(s.voiceCredits).toBe(s.valueTraded);
+        expect(Math.floor(Math.sqrt(s.voiceCredits))).toBe(24);
+    });
+
+    it('the enterprise: credit line, live offers, surplus, ceiling, P&L, a listing, and a lifecycle with pause and wind-up', () => {
+        const e = s.enterprises[0];
+        expect(e.pnl).toEqual({ days: 30, cameIn: 180, wentOut: 60, net: 120 });
+        expect(e.pnl.net).toBe(e.pnl.cameIn - e.pnl.wentOut);
+        expect(e.season).toBe(e.pnl.net);
+        expect(e.liveOffers).toBe(e.listings.length);
+        expect(e.listings[0]).toMatchObject({ type: 'offer', price: 12 });
+        expect(e.earnedSurplus).toBeLessThanOrEqual(e.balance);
+        expect(e.balance).toBeLessThanOrEqual(e.capitalCeiling);
+        expect(e.creditLine).toBeGreaterThan(0);
+        expect(e.lifecycle).toEqual({ status: 'active', mayPause: true, mayWindUp: true });
+        expect(e.keepers).toBe(3);
+    });
+
+    it('one crowdfund project for the Projects chip: a goal, what is pledged, days to go', () => {
+        expect(s.projects).toHaveLength(1);
+        const p = s.projects[0];
+        expect(p.pledged).toBeLessThan(p.goal);
+        expect(p.daysToGo).toBeGreaterThan(0);
+        expect(p.backers).toBeGreaterThan(0);
+    });
+
+    it('invites: one waiting, one used by a member in the tree; two example members under "an example member"', () => {
+        expect(s.invites.map(i => i.status)).toEqual(['pending', 'used']);
+        const used = s.invites.find(i => i.status === 'used')!;
+        const tree = s.inviteTree;
+        expect(tree.who).toBe(s.member);
+        expect(tree.invited).toHaveLength(2);
+        for (const m of tree.invited) expect(m.invited).toEqual([]);
+        expect(tree.invited.map(m => m.id)).toContain(used.usedBy);
+        const joiner = tree.invited.find(m => m.id === used.usedBy)!;
+        expect(used.usedDaysAgo).toBe(joiner.joinedDaysAgo);
+        expect(used.usedDaysAgo!).toBeLessThanOrEqual(used.daysAgo);
+        // An invite lasts 30 days: the waiting one is still good.
+        expect(s.invites.find(i => i.status === 'pending')!.daysAgo).toBeLessThan(30);
+        // Every reference to another sample object is a sample id too.
+        for (const v of [used.usedBy, s.decisions[0].subject]) expect(isSampleId(v), String(v)).toBe(true);
+    });
+
+    it('an example invite code is obviously not a code: no node mints or reads its shape, and it names no address', () => {
+        const codes = s.invites.map(i => i.code);
+        expect(new Set(codes).size).toBe(codes.length);
+        for (const code of codes) {
+            expect(code).toMatch(/^EXAMPLE-\d{4}$/);
+            // Not the node's code (@beanpool/engine generateShortCode: INV- and two groups of 4 from an alphabet with
+            // no 0, 1, I or O), not an offline ticket (BP-), and not a ticket's signed text.
+            expect(code).not.toMatch(/^(INV|BP)-/i);
+            expect(code).not.toMatch(/(?:INV|BP)-[A-Z0-9]{4}-[A-Z0-9]{4}/i);
+            expect(parseInviteTicketText(code)).toBeNull();
+            // 8 letters and digits once the dashes go would read as INV-XXXX-XXXX in the apps' normaliser: never 8.
+            expect(code.replace(/[^a-zA-Z0-9]/g, '').length).not.toBe(8);
+            expect(code).not.toMatch(/[/:.?=&#@]/);
+            expect(isSampleId(code)).toBe(false);
+        }
+    });
+
+    it('every sentence a screen draws is marked for translation, and is still the English it was', async () => {
+        const src = readFileSync(fileURLToPath(new URL('../sample-community.ts', import.meta.url)), 'utf8');
+        const words = new Set([...src.matchAll(/word\('((?:[^'\\]|\\.)*)'\)/g)].map(m => m[1].replace(/\\'/g, '\'')));
+        const drawn = strings(SAMPLE_COMMUNITY).filter(([p]) => /\.(name|member|what|who|question|title|intendedFor)$/.test(p));
+        expect(drawn.length).toBeGreaterThan(20);
+        for (const [path, v] of drawn) expect(words.has(v), `${path}: "${v}" is not marked with word()`).toBe(true);
+        // Ids and codes are not words.
+        for (const [path, v] of strings(SAMPLE_COMMUNITY).filter(([p]) => /\.(id|code|subject|usedBy)$/.test(p))) {
+            expect(words.has(v), path).toBe(false);
         }
     });
 });

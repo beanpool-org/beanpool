@@ -6,11 +6,15 @@ import path from 'node:path';
  * Owner-delete S4b, item 6: an action that removes or replaces data, keys or roles is confirmed in the page
  * (components/common/InPageConfirm.tsx), never with the browser's window.confirm(). The one window.confirm() kept is a
  * question about this tab's memory before a very large download (lib/node-client.ts): it removes nothing.
+ *
+ * Counted per file, so a second call in a kept file fails; and any `confirm(` that is not the end of a longer name counts,
+ * whatever is before it (`window.`, `globalThis.`, `self.`, a plain call): PR #2029's review, N1.
  */
 const SRC = path.resolve(__dirname);
-const KEPT: Record<string, string> = {
-    'lib/node-client.ts': 'asks before holding a download of several GB in this tab\'s memory; a read, nothing is removed',
+const KEPT: Record<string, { calls: number; why: string }> = {
+    'lib/node-client.ts': { calls: 1, why: 'asks before holding a download of several GB in this tab\'s memory; a read, nothing is removed' },
 };
+const CONFIRM_CALL = /(^|[^\w])confirm\s*\(/g;
 
 function sources(dir: string): string[] {
     return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -28,9 +32,11 @@ function code(file: string): string {
 describe('no window confirm() for a destructive action', () => {
     const files = sources(SRC).map((f) => ({ rel: path.relative(SRC, f).split(path.sep).join('/'), text: code(f) }));
 
-    it('calls confirm() only where the kept list says why', () => {
-        const calling = files.filter((f) => /(^|[^\w.])(window\.)?confirm\s*\(/.test(f.text)).map((f) => f.rel).sort();
-        expect(calling).toEqual(Object.keys(KEPT).sort());
+    it('calls confirm() only where the kept list says why, and only as often as it says', () => {
+        const calls = Object.fromEntries(files
+            .map((f) => [f.rel, (f.text.match(CONFIRM_CALL) ?? []).length] as const)
+            .filter(([, n]) => n > 0));
+        expect(calls).toEqual(Object.fromEntries(Object.entries(KEPT).map(([rel, k]) => [rel, k.calls])));
     });
 
     it('every in-page question is awaited (an un-awaited promise is truthy and would never ask)', () => {

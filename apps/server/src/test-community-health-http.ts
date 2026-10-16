@@ -600,6 +600,19 @@ async function main(): Promise<void> {
         && typeof rpSummary9.body?.reportCount === 'number' && rpSummary9.body.reportCount >= 1
         && !rpText9.includes(ada.pk) && !rpText9.includes(reportTarget9) && !rpText9.includes('T9 reason') && logRows() === rpBefore9,
         `the summary carries each report's id (the reports /admin/data lists) and no reporter, member or reason, and writes no line (${rpSummary9.status} ${rpText9.slice(0, 160)})`);
+    // Public-routes audit SEC-PUB-03: the pending reports' count is the admins' only. Someone who just harassed a member could
+    // watch it go up on the public health answer and guess they were reported. Two pending reports now.
+    const reportId9b = 't9-report-' + crypto.randomBytes(4).toString('hex');
+    db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason) VALUES (?, ?, ?, 'T9 second reason')")
+        .run(reportId9b, ada.pk, reportTarget9);
+    const publicHealth9 = await call('GET', null, '/api/community/health');
+    const adminCount9 = await call('POST', null, '/api/local/admin/alerts-summary', {}, adaSession);
+    assert(publicHealth9.status === 200 && publicHealth9.body && typeof publicHealth9.body === 'object' && !('reportCount' in publicHealth9.body)
+        && !JSON.stringify(publicHealth9.body).includes(reportId9b),
+        `an unsigned /api/community/health carries no reportCount (${publicHealth9.status} reportCount ${JSON.stringify(publicHealth9.body?.reportCount)})`);
+    assert(adminCount9.status === 200 && adminCount9.body?.reportCount >= 2 && adminCount9.body?.reportIds?.includes(reportId9b),
+        `the admins' alerts summary still counts the pending reports (${adminCount9.body?.reportCount})`);
+    db.prepare('DELETE FROM abuse_reports WHERE id = ?').run(reportId9b);
     db.prepare('DELETE FROM abuse_reports WHERE id = ?').run(reportId9);
     // An escrow left stuck by a member's removal on an older node: reading the list is a look, logged like the disputes.
     // It gets a line of its own (stranded_escrows_read), so the log says which view the admin opened.

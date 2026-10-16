@@ -507,6 +507,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const lastGatewayFetchRef = useRef<Record<string, number>>({});
     const dataInFlightRef = useRef<Record<string, boolean>>({});
     const gatewayInFlightRef = useRef<Record<string, boolean>>({});
+    /**
+     * The gateway form holds edits not saved yet. A refresh (the poll, or the one a second Manage press starts after a
+     * stale refusal) must not put the node's old values back under the owner's hands, or the next Save would send them
+     * and say it worked (opus-2028 B3). Cleared by a Save that went through, and by a change of node.
+     */
+    const gatewayEditedRef = useRef(false);
     const diagInFlightRef = useRef<Record<string, boolean>>({});
 
     /** The newest data payload per profile, readable from callbacks the poll captured. */
@@ -914,7 +920,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         const requestedFor = activeNode.id;
         try {
             const data = await fetchGatewayConfig(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
-            if (requestedFor === activeNodeIdRef.current) {
+            if (requestedFor === activeNodeIdRef.current && !gatewayEditedRef.current) {
                 setGateway(data);
             }
         } catch (e: unknown) {
@@ -1094,6 +1100,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     useEffect(() => {
         setDiag(null);
+        gatewayEditedRef.current = false;
         setGateway(null);
         setNodeData(null);
         setNodeLogs([]);
@@ -1107,6 +1114,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setGatewaySaving(true);
         try {
             const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), ...(code ? [code] : []));
+            gatewayEditedRef.current = false;
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
@@ -1671,7 +1679,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         gatewaySuccess={gatewaySuccess}
                                         gatewaySaving={gatewaySaving}
                                         nodeLogs={nodeLogs}
-                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onChangeGateway={(updated) => { gatewayEditedRef.current = true; setGateway(updated); }}
                                         onSaveGateway={handleSaveGateway}
                                         onRefreshDiag={() => loadDiagnostics()}
                                         onRefreshLogs={() => loadLogs()}
@@ -1728,7 +1736,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         gatewaySuccess={gatewaySuccess}
                                         gatewaySaving={gatewaySaving}
                                         activeWsConnections={diag?.activeWsConnections || 3}
-                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onChangeGateway={(updated) => { gatewayEditedRef.current = true; setGateway(updated); }}
                                         onSaveGateway={handleSaveGateway}
                                         onAuthenticate={(pwd) => {
                                             if (activeNode) {

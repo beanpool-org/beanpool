@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { carriesHandoff } from '../../lib/key-session';
 
 /**
  * The dimmed overlay every Settings modal and wizard sits in. It closes the modal the ways a phone user expects, not
@@ -11,6 +12,11 @@ import React, { useEffect, useRef } from 'react';
  *
  * `dismissable={false}` holds the modal open while it cannot be left (a request in flight): the backdrop and Escape do
  * nothing, and Back leaves it where it is.
+ *
+ * A new Manage link reaching the open page (`/settings#handoff=…`, the second press a stale hand-off asks for) is a
+ * fragment navigation: a new entry with no state, and a `popstate` that looks like Back. It is not Back: the modals stay
+ * open with what was typed or ticked in them, and the new entry is marked as theirs (lib/key-session.ts keeps the mark
+ * when it takes the link out of the address bar) (opus-2028 B3).
  */
 type ModalBackdropProps = React.HTMLAttributes<HTMLDivElement> & {
     onClose: () => void;
@@ -28,6 +34,8 @@ let historySyncQueued = false;
 /** A `history.go` of ours has not landed yet: the entry on top is a closed modal's and must not be reused. */
 let traversalPending = false;
 let traversalListener = false;
+/** The state of the top modal's entry, to mark a hand-off link's new entry with (the screen's `bpSettings` too). */
+let modalEntryState: Record<string, unknown> | null = null;
 
 function modalDepth(state: unknown): number {
     const d = (state as { bpModal?: unknown } | null)?.bpModal;
@@ -69,7 +77,10 @@ export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDo
         const inside = openModals.findIndex((m) => Boolean(me.el && m.el && me.el.contains(m.el)));
         if (inside >= 0) openModals.splice(inside, 0, me); else openModals.push(me);
         const depthOf = () => openModals.indexOf(me) + 1;
-        const pushEntry = (depth: number) => window.history.pushState({ ...(window.history.state ?? {}), bpModal: depth }, '');
+        const pushEntry = (depth: number) => {
+            modalEntryState = { ...(window.history.state ?? {}), bpModal: depth };
+            window.history.pushState(modalEntryState, '');
+        };
         // A modal opened as another closes (in the same click) takes over its entry, unless we are already going back
         // past that entry, in which case it needs one of its own.
         if (traversalPending || modalDepth(window.history.state) < openModals.length) pushEntry(openModals.length);
@@ -80,6 +91,13 @@ export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDo
         };
         const onPop = (e: PopStateEvent) => {
             if (modalDepth(e.state) >= depthOf()) return;
+            if (carriesHandoff(window.location.hash)) {
+                // A new Manage link, not Back: stay open, and make the link's entry the open modals'.
+                if (modalDepth(window.history.state) < openModals.length) {
+                    window.history.replaceState({ ...(modalEntryState ?? {}), ...(window.history.state ?? {}), bpModal: openModals.length }, '');
+                }
+                return;
+            }
             if (dismissableRef.current) onCloseRef.current();
             else pushEntry(depthOf());
         };

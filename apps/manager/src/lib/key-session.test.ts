@@ -83,6 +83,15 @@ describe('endKeySession', () => {
 });
 
 describe('startKeySession', () => {
+    it('takes the link out of the address bar but keeps the entry\'s state: the open modals\' mark and the screen (opus-2028 B3)', async () => {
+        const replaceState = vi.fn();
+        const state = { bpSettings: { tab: 'people', sub: 'directory' }, bpModal: 2 };
+        const win = { location: { hash: `#handoff=${TOKEN}`, pathname: '/settings', search: '' } as Location, history: { replaceState, state } as unknown as History };
+        vi.stubGlobal('fetch', vi.fn(async () => reply(200, { success: true, memberPubkey: 'ab'.repeat(32), role: 'owner', csrfToken: 'csrf1' })));
+        await startKeySession(win);
+        expect(replaceState).toHaveBeenCalledWith(state, '', '/settings');
+    });
+
     it('wipes the token from the address bar BEFORE posting it, then exchanges it once', async () => {
         const { win, replaceState } = fakeWindow(`#handoff=${TOKEN}&section=disputes`);
         const order: string[] = [];

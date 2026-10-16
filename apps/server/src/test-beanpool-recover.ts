@@ -169,6 +169,7 @@ async function main() {
     //    DCS, an APC, an 8-bit DCS or a charset designation goes whole, with no "P1$r0m\" or "(0" left as text.
     const name = 'point\x1bP1$r0m\x1b\\\x1b(0-\x1b_apc\x1b\\\x90q\x9c\x1b)B1';
     const hostile = cli('restore-point', 'roll-back', name);
+    // eslint-disable-next-line no-control-regex -- the characters it looks for
     const C0_C1 = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/;
     assert(hostile.code === 1 && hostile.out === 'There is no restore point point-1. beanpool restore-point list shows them. Nothing was changed.\n',
         `9. a restore-point name with a DCS, an APC and charset designations prints as point-1, nothing else (${JSON.stringify(hostile.out)})`);

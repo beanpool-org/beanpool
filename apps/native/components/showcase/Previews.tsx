@@ -56,7 +56,7 @@ export function CommonsPreview() {
             <View style={s.card}>
                 <Text style={s.heading} accessibilityRole="header">Decide</Text>
                 <Text style={s.body}>{d.question}</Text>
-                <Text style={s.muted}>{beansText(d.fromPool)} from the pool · closes in {d.closesInDays} days · {d.votesFor} for, {d.votesAgainst} against</Text>
+                <Text style={s.muted}>{beansText(d.fromPool)} from the pool · closes in {d.closesInDays} days · {d.yesWeight} for, {d.noWeight} against</Text>
                 <LocalCommunityMark variant="action" feature="decisions" label="Vote" />
             </View>
             <View style={{ marginHorizontal: 16 }}>

@@ -6,7 +6,8 @@
  * (design §1 row 3), so it is rendered here whole, both tabs, with the real api module under the fetch spy.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { createRequire } from 'node:module';
+import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
@@ -16,6 +17,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { modeFor } from '../lib/features';
 import type { CommunityInfo } from '../lib/api';
+import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
 
 const GLOBAL_INFO = {
     name: 'A worldwide community', profile: 'global', commonsBalance: 0,
@@ -135,11 +137,38 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('My Deals: two sample deals; Approve and release opens the sheet', async () => {
+    it('My Deals: each sample deal says where it stands by name (waiting on you holds nothing yet, held in trust, sold +30); both Approves open the sheet', async () => {
         render(<DealsPreviewDialog onClose={() => {}} />);
-        expect(screen.getAllByText(/Beans$/).length).toBeGreaterThanOrEqual(SAMPLE_COMMUNITY.deals.length);
-        fireEvent.click(screen.getByRole('button', { name: /Approve and release/ }));
-        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+        // Each deal, found by its name, says its own line: a deal in any other state would say none of these.
+        const LINES: Record<string, { line: string; amount: string; action?: RegExp }> = {
+            'Putting up two shelves': { line: 'A neighbour offered to do this. Approve to hold the Beans safely.', amount: '40 Beans', action: /^Approve and hold in trust/ },
+            'Fixing a bike puncture': { line: 'Held in trust until the job is done.', amount: '20 Beans', action: /^Approve and release/ },
+            'Mending a jacket': { line: 'Done: you earned +30 Beans.', amount: '+30 Beans' },
+        };
+        expect(S.deals.map(d => d.what).sort()).toEqual(Object.keys(LINES).sort());
+        for (const d of S.deals) {
+            const want = LINES[d.what];
+            const card = screen.getByTestId(`sample-deal-${d.id}`);
+            expect(within(card).getByText(d.what)).toBeInTheDocument();
+            expect(within(card).getByTestId('sample-deal-line').textContent, d.what).toContain(want.line);
+            expect(within(card).getByText(want.amount)).toBeInTheDocument();
+            expect(card.textContent, d.what).not.toMatch(/the Beans were released|The work is done/);
+            const actions = within(card).queryAllByTestId('local-community-action');
+            if (want.action) {
+                expect(actions, d.what).toHaveLength(1);
+                expect(actions[0].textContent).toMatch(want.action);
+            } else {
+                expect(actions, d.what).toHaveLength(0);
+            }
+        }
+        // The sold deal's +30 is the Ledger's row for it.
+        const sold = S.deals.find(d => d.what === 'Mending a jacket')!;
+        expect(S.transactions.find(x => x.what === sold.what)?.amount).toBe(30);
+        for (const name of [/^Approve and hold in trust/, /^Approve and release/]) {
+            fireEvent.click(screen.getByRole('button', { name }));
+            expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.escrow);
+            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        }
         onlyInfo();
     });
 });
@@ -181,7 +210,19 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
             expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${Math.abs(tx.amount).toFixed(1)}`);
         }
         expect(wallet).toHaveTextContent('from a neighbour · yesterday');
-        expect(wallet).toHaveTextContent('to the Commons · 7 days ago');
+        // The held deal's row, as a node's escrow hold reads here: "Held in trust · Fixing a bike puncture", −20, yesterday.
+        const held = S.deals.find(d => d.state === 'pending')!;
+        const holdNote = within(wallet).getByText(`Held in trust · ${held.what}`);
+        const holdRow = holdNote.closest('div.rounded-xl') as HTMLElement;
+        expect(holdRow).toHaveTextContent(/↑ Sent/);
+        expect(holdRow).toHaveTextContent(`−${held.amount.toFixed(1)}`);
+        expect(within(holdRow).getByText('yesterday')).toBeInTheDocument();
+        expect(holdRow).not.toHaveTextContent('to a neighbour');
+        expect(held.amount).toBe(S.inEscrow);
+        expect(wallet).toHaveTextContent('to the Example Valley Bakery · 12 days ago');
+        // No circulation fee row: the Wallet itself says nothing goes to the Commons at 200 Beans or less, and the sample holds 85.
+        expect(wallet).not.toHaveTextContent('Circulation fee');
+        expect(wallet).not.toHaveTextContent('to the Commons ·');
         expect(wallet).not.toHaveTextContent('No transactions yet');
     });
 });
@@ -241,6 +282,70 @@ describe('the sample is imported by one web file only', () => {
             .map(f => relative(root, f))
             .sort();
         expect(naming).toEqual(['components/ShowcasePreviews.test.tsx', 'components/ShowcasePreviews.tsx']);
+    });
+});
+
+/**
+ * The sample's example invitations (EXAMPLE-1234) in the web's join box (lib/invite-code.ts, WelcomePage): the box
+ * rewrites any code that isn't INV- as an offline ticket, so each reads BP-EXAM-PLE1 and Join sends that. The node's own
+ * check (@beanpool/engine members.ts checkInvite, here on an in-memory invite_codes table) must never answer valid: a
+ * BP- ticket has to be signed, and a code is looked up exactly. The control: a real-shaped code the node holds, typed
+ * loosely, is found by the same path, so "not valid" means no such invitation, not a check that refuses everything.
+ */
+describe('an example invite code is no invitation in the web\'s join box', () => {
+    const engine = resolve(__dirname, '../../../../packages/beanpool-engine');
+    type Check = (db: unknown, code: string) => { valid: boolean; reason?: string };
+    const load = async () => {
+        const Database = createRequire(join(engine, 'package.json'))('better-sqlite3');
+        const db = new Database(':memory:');
+        db.exec('CREATE TABLE invite_codes (code TEXT PRIMARY KEY, created_by TEXT, created_at TEXT, used_by TEXT, used_at TEXT, intended_for TEXT)');
+        const { checkInvite } = await import(/* @vite-ignore */ join(engine, 'src/members.ts')) as { checkInvite: Check };
+        return { db, checkInvite };
+    };
+    /** Each way a member could bring one in: typed, pasted, with or without the dash, encoded, or opened as a join link. */
+    const spellings = (code: string) => [
+        code, code.toLowerCase(), ` ${code} `, `${code}\n`, code.replace('-', ''), code.replace('-', ' '), code.replace('-', '_'),
+        encodeURIComponent(code).replace('-', '%2D'), `/${code}`, `Join my community: ${code}`,
+        code.replace(/[A-Z0-9]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0xfee0)),
+        `https://example.org/app?invite=${code}&webjoin=1`, `?invite=${encodeURIComponent(code.toLowerCase())}`,
+    ];
+
+    it('every spelling of each example code, as the box shows it and as Join sends it, is refused by the node\'s own check', async () => {
+        const { db, checkInvite } = await load();
+        const codes = S.invites.map(i => i.code);
+        expect(codes).toEqual(['EXAMPLE-1234', 'EXAMPLE-5678', 'EXAMPLE-9012']);
+        const seen = new Set<string>();
+        for (const code of codes) {
+            for (const raw of spellings(code)) {
+                // Typed or pasted: the box shows formatInviteCode's answer, and Join sends normaliseInviteCode of what it
+                // shows. Opened as a link: the box starts from the link's ?invite= (WelcomePage's first state).
+                const fromLink = raw.includes('invite=') ? new URLSearchParams(raw.slice(raw.indexOf('?'))).get('invite') ?? '' : null;
+                const shown = [formatInviteCode(raw), ...(fromLink === null ? [] : [formatInviteCode(fromLink)])];
+                const sent = [...shown.map(normaliseInviteCode), normaliseInviteCode(raw)].filter(Boolean);
+                expect(sent.length, raw).toBeGreaterThan(0);
+                for (const s of sent) {
+                    seen.add(s);
+                    expect(s, raw).not.toMatch(/^INV-/i);
+                    const answer = checkInvite(db, s);
+                    expect(answer.valid, `${JSON.stringify(raw)} → ${s}`).toBe(false);
+                    expect(answer.reason, `${JSON.stringify(raw)} → ${s}`).toBe(s.startsWith('BP-') ? 'malformed' : 'invalid');
+                }
+            }
+        }
+        // What the box makes of them: ticket-shaped, as the fixture's header says, and refused as malformed above.
+        for (const s of ['BP-EXAM-PLE1', 'BP-EXAM-PLE5', 'BP-EXAM-PLE9']) expect(seen.has(s), s).toBe(true);
+    });
+
+    it('the control: a real-shaped code the node holds, typed loosely, is found by the same path', async () => {
+        const { db, checkInvite } = await load();
+        db.prepare('INSERT INTO invite_codes (code, created_by, created_at) VALUES (?, ?, ?)').run('INV-2345-6789', 'not-a-member', new Date().toISOString());
+        for (const raw of ['inv 2345 6789', 'INV23456789', 'https://example.org/app?invite=INV-2345-6789&webjoin=1']) {
+            const sent = normaliseInviteCode(formatInviteCode(raw));
+            expect(sent, raw).toBe('INV-2345-6789');
+            // Found: its maker is no member here, so the node says so, rather than that there is no such code.
+            expect(checkInvite(db, sent), raw).toEqual({ valid: false, reason: 'unknown_inviter' });
+        }
+        expect(checkInvite(db, 'INV-2345-6788')).toEqual({ valid: false, reason: 'invalid' });
     });
 });
 

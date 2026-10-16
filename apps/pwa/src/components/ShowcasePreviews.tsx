@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, t, tn } from '@beanpool/core';
+import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
 import type { BalanceInfo } from '../lib/api';
@@ -62,7 +62,7 @@ export interface LedgerRowView {
  * Example Valley's "example member" in the shapes LedgerPage reads, so the Ledger in preview is the member's own screen
  * fed the sample (design §1 row 3): the balance answer (85 Beans, floor −200, one live Offer, level 2 of 4 with the
  * sample's own trust, value traded, partners and rating, the figures the phone's Ledger reads too) and the recent rows,
- * newest first, each with who it was with and when.
+ * newest first, each with who it was with and when; the held deal's row says its Beans are held in trust, and when.
  */
 export function sampleLedger(): { member: string; balance: BalanceInfo; rows: LedgerRowView[] } {
     const c = SAMPLE_COMMUNITY;
@@ -90,8 +90,9 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
         rows: c.transactions.map(x => ({
             id: x.id,
             sent: x.amount < 0,
-            note: x.what,
-            when: x.amount < 0
+            note: sampleRowNote(x),
+            when: x.kind === 'hold' ? ago(x.daysAgo)
+                : x.amount < 0
                 ? t('to {who} · {when}', { who: x.who, when: ago(x.daysAgo) })
                 : t('from {who} · {when}', { who: x.who, when: ago(x.daysAgo) }),
             amount: Math.abs(x.amount),
@@ -137,7 +138,7 @@ export function CommonsPreview({ enterprises = true, decisions = true, ...ways }
             <section className={`${CARD} mb-4`} data-testid="sample-decision">
                 <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Decide · closes in {d.closesInDays} days</p>
                 <h3 className="font-bold text-nature-900 dark:text-nature-50">{d.question}</h3>
-                <p className="text-sm text-nature-600 dark:text-nature-300">{d.fromPool} Beans from the pool · {d.votesFor} for, {d.votesAgainst} against</p>
+                <p className="text-sm text-nature-600 dark:text-nature-300">{d.fromPool} Beans from the pool · {d.yesWeight} for, {d.noWeight} against</p>
                 <div className="mt-3">
                     <LocalCommunityAction feature="decisions" label="Vote" className="w-full" {...ways} />
                 </div>
@@ -148,6 +149,38 @@ export function CommonsPreview({ enterprises = true, decisions = true, ...ways }
     );
 }
 
+/**
+ * Where one sample deal stands, by its state as a node records it and the member's side, as the phone's My Deals reads
+ * the same three (Action Required, Held in Trust, the sold + 30): `requested` holds nothing yet, and the member's Approve
+ * is what holds the Beans; `pending` holds them until the job is done; `completed` and sold earned them, the Ledger's +30
+ * row. Each state has its own branch, so a deal in a new state is never drawn as done.
+ */
+function DealLine({ deal: d, ...ways }: { deal: SampleDeal } & LocalCommunityWays) {
+    const line = 'mb-2 text-sm text-nature-600 dark:text-nature-300';
+    switch (d.state) {
+        case 'requested':
+            return (
+                <div className="mt-3" data-testid="sample-deal-line">
+                    <p className={line}>{t('A neighbour offered to do this. Approve to hold the Beans safely.')}</p>
+                    <LocalCommunityAction feature="escrow" label={t('Approve and hold in trust')} className="w-full" {...ways} />
+                </div>
+            );
+        case 'pending':
+            return (
+                <div className="mt-3" data-testid="sample-deal-line">
+                    <p className={line}>{t('Held in trust until the job is done.')}</p>
+                    <LocalCommunityAction feature="escrow" label={t('Approve and release')} className="w-full" {...ways} />
+                </div>
+            );
+        case 'completed':
+            return (
+                <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400" data-testid="sample-deal-line">
+                    {d.side === 'sold' ? t('Done: you earned {beans}.', { beans: beans(d.amount) }) : t('Done: the Beans were released.')}
+                </p>
+            );
+    }
+}
+
 export function DealsPreview(ways: LocalCommunityWays) {
     return (
         <div data-testid="deals-preview">
@@ -155,22 +188,15 @@ export function DealsPreview(ways: LocalCommunityWays) {
             <SampleHeader />
             <ul className="flex flex-col gap-3">
                 {S.deals.map((d) => (
-                    <li key={d.id} className={CARD}>
+                    <li key={d.id} className={CARD} data-testid={`sample-deal-${d.id}`}>
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <p className="font-bold text-nature-900 dark:text-nature-50">{d.what}</p>
                                 <p className="text-xs text-nature-500 dark:text-nature-400">with {d.who} · {ago(d.daysAgo)}</p>
                             </div>
-                            <span className="shrink-0 font-bold tabular-nums text-nature-800 dark:text-nature-100">{d.amount} Beans</span>
+                            <span className="shrink-0 font-bold tabular-nums text-nature-800 dark:text-nature-100">{d.state === 'completed' && d.side === 'sold' ? beans(d.amount) : `${d.amount} Beans`}</span>
                         </div>
-                        {d.status === 'waiting-on-you' ? (
-                            <div className="mt-3">
-                                <p className="mb-2 text-sm text-nature-600 dark:text-nature-300">The work is done: the Beans are held safely until you say so.</p>
-                                <LocalCommunityAction feature="escrow" label="Approve and release" className="w-full" {...ways} />
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Done: the Beans were released.</p>
-                        )}
+                        <DealLine deal={d} {...ways} />
                     </li>
                 ))}
             </ul>

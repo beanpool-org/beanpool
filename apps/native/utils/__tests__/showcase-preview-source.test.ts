@@ -38,7 +38,7 @@ describe('the preview sources', () => {
         expect(ledger).not.toMatch(/LedgerPreview/);
         // Nothing until the mode is known (the phone's copy of the profile read), then the sample in preview; a live
         // answer lands only while its load is the latest, so one begun before the switch never draws over the sample.
-        expect(ledger).toMatch(/const loadData = \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(beansMode === undefined\) return;\s*if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); setEscrowTotal\(0\); setPledgeHistory\(\[\]\); setHeldSample\(true\); return; \}\s*if \(heldSample\) \{ setBalanceState\(NO_BALANCE\); setTxns\(NO_TXNS\); setHeldSample\(false\); \}/);
+        expect(ledger).toMatch(/const loadData = \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(beansMode === undefined\) return;\s*if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); setEscrowTotal\(sampleEscrowTotal\(\)\); setPledgeHistory\(\[\]\); setHeldSample\(true\); return; \}\s*if \(heldSample\) \{ setBalanceState\(NO_BALANCE\); setTxns\(NO_TXNS\); setEscrowTotal\(0\); setHeldSample\(false\); \}/);
         // What is held is drawn only in the mode it was loaded for (review of #1852, finding 2).
         expect(ledger).toContain('const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;');
         expect(ledger).toContain('const txns = heldSample === preview ? heldTxns : NO_TXNS;');

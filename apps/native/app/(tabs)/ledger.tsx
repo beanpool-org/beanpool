@@ -28,7 +28,7 @@ import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
-import { sampleBalance, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
+import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
@@ -132,7 +132,9 @@ export default function LedgerScreen() {
         if (scrollY.current > tabBarY.current) listRef.current?.scrollToOffset({ offset: tabBarY.current, animated: false });
     }, [activeTab]);
     const [selectedLevel, setSelectedLevel] = useState<number | null>(null); // Levels shelf: null → follows current tier
-    const [escrowTotal, setEscrowTotal] = useState(0);
+    const [heldEscrow, setEscrowTotal] = useState(0);
+    // The sample's In Escrow is held like its balance: never drawn as the member's own once the screen turns live.
+    const escrowTotal = heldSample === preview ? heldEscrow : 0;
     const [pledgeHistory, setPledgeHistory] = useState<any[]>([]);
     const [exporting, setExporting] = useState(false);
 
@@ -363,8 +365,8 @@ export default function LedgerScreen() {
     const loadData = () => {
         const gen = ++loadGen.current;
         if (beansMode === undefined) return;
-        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(0); setPledgeHistory([]); setHeldSample(true); return; }
-        if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setHeldSample(false); }
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(sampleEscrowTotal()); setPledgeHistory([]); setHeldSample(true); return; }
+        if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setEscrowTotal(0); setHeldSample(false); }
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);

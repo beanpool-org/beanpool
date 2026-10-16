@@ -288,12 +288,14 @@ describe('the enterprise page and the Commons card in preview: one adapter for b
     it('the ledger works back from what it holds: each running balance, the starting balance and the totals agree', () => {
         for (const [id, balance, rows] of [[e.id, e.balance, e.pnl.rows], [p.id, p.pledged, p.rows]] as const) {
             const l = sampleEnterpriseLedger(id, NOW);
-            expect(l.entries.map(x => x.id)).toEqual(rows.map(r => r.id));
+            // Oldest first, as the node sends a live ledger (state-engine ORDER BY timestamp ASC).
+            expect(l.entries.map(x => x.id)).toEqual([...rows].reverse().map(r => r.id));
+            for (let i = 1; i < l.entries.length; i++) expect(Date.parse(l.entries[i].timestamp)).toBeGreaterThanOrEqual(Date.parse(l.entries[i - 1].timestamp));
             expect(l.summary.endingBalance).toBe(balance);
-            expect(l.entries[0].runningBalance).toBe(balance);
-            for (let i = 1; i < l.entries.length; i++) expect(l.entries[i].runningBalance).toBe(l.entries[i - 1].runningBalance - l.entries[i - 1].netAmount);
-            const last = l.entries[l.entries.length - 1];
-            expect(l.summary.startingBalance).toBe(last.runningBalance - last.netAmount);
+            expect(l.entries[l.entries.length - 1].runningBalance).toBe(balance);
+            for (let i = 1; i < l.entries.length; i++) expect(l.entries[i].runningBalance).toBe(l.entries[i - 1].runningBalance + l.entries[i].netAmount);
+            const first = l.entries[0];
+            expect(l.summary.startingBalance).toBe(first.runningBalance - first.netAmount);
             expect(l.summary.startingBalance + l.summary.netChange).toBe(balance);
             expect(l.summary.transactionCount).toBe(rows.length);
             for (const x of l.entries) {

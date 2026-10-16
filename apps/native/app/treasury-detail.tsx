@@ -1850,7 +1850,7 @@ export default function TreasuryDetailScreen() {
                             {isEffectivePreview ? (
                                 // Example Valley's: no thread to start here, so no "Start the conversation!" (review N4).
                                 <View testID="thread-preview">
-                                    <LocalCommunityMark variant="line" feature="enterprises" text={t('🏘️ In a local community its keepers and members talk it over here ›')} />
+                                    <LocalCommunityMark variant="line" feature="enterprises" text={t('🏘️ In a local community its {keepers} and members talk it over here ›', { keepers: kw.keepers })} />
                                 </View>
                             ) : threadMessages.length === 0 ? (
                                 <Text style={styles.emptyNote}>No messages yet. Start the conversation!</Text>

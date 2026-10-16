@@ -455,9 +455,9 @@ export function sampleEnterpriseDetail(id: string | undefined, now = Date.now())
 }
 
 /**
- * Its Income & Spend as the enterprise page reads it (GET /api/enterprise/:key/ledger): the sample's rows, newest
- * first, each with a neighbour, the running balance worked back from what it holds now, so the rows, the totals, the
- * starting balance and the balance agree.
+ * Its Income & Spend as the enterprise page reads it (GET /api/enterprise/:key/ledger): the sample's rows, oldest
+ * first as the node sends them (each app orders them as it orders a live ledger), each with a neighbour and the balance
+ * after it, worked back from what it holds now, so the rows, the totals, the starting balance and the balance agree.
  */
 export function sampleEnterpriseLedger(id: string | undefined, now = Date.now()) {
     const project = isSampleProject(id);
@@ -476,7 +476,7 @@ export function sampleEnterpriseLedger(id: string | undefined, now = Date.now())
         };
         running -= r.amount;
         return entry;
-    });
+    }).reverse();
     return {
         enterprise: { publicKey: project ? p.id : e.id, name: project ? t(p.title) : t(e.name), purpose: project ? t(p.what) : t(e.what), status: project ? 'active' : e.lifecycle.status, paused: false, balance },
         period: { since: null, until: null },

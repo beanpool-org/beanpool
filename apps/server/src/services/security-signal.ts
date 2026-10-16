@@ -36,6 +36,9 @@ export const OWNER_ALERT_WORDS = {
     otherCommunityRefused: { one: 'A backup from another community was refused today.', many: '{n} backups from another community were refused today.' },
     addressOffline: "This community's address was taken offline, by an owner.",
     addressChanged: "This community's address was changed, by an owner.",
+    nameReleased: 'A name this community held unused was released, by an owner.',
+    /** The members' critical announcement when the address changes or goes (§7): the app follows it. */
+    membersAddressChanged: { title: "This community's address changed", body: "This community's address changed. Open the app to follow it." },
     tunnelKey: "A new tunnel key was made for this community's address, by an owner.",
     recoveryCodeReplaced: 'The recovery code was replaced, by an owner. Backups made before still open with the old one.',
     replicationTokenMade: 'A new replication token was made: a standby can copy this server with it.',

@@ -259,7 +259,7 @@ async function main(): Promise<void> {
     await sleep(100);
     alerts.setAlertsClockForTests(61 * 60_000);
     await alerts.checkServerAlerts();
-    let more1 = lines('sec.more');
+    const more1 = lines('sec.more');
     assert(lines('sec.restore').length === 1 && more1.length === 1 && /^2 more backups from another community were refused/.test(more1[0].detail) && !/see who|change/.test(more1[0].detail),
         `1e. past the bound the hour's line says refusals, not changes, and no "see who" (${JSON.stringify([...lines('sec.restore'), ...more1].map((e) => e.detail))})`);
     // A rolling day (#2033 N8): 23 h on the count goes on; 25 h after the first ones it starts again.
@@ -322,13 +322,15 @@ async function main(): Promise<void> {
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
     await call('/api/local/admin/public-address/offline', ownerPhone(), {});
     await sleep(100);
-    const pBefore = ownerPushes();
+    // The owners' push for it, by the words it holds (pushOwners: the row's title), not any push in the window.
+    const hijackNotices = () => (db.prepare(`SELECT COUNT(*) AS n FROM push_notices WHERE kind = 'owner.alert' AND title LIKE '%its address is not its own%'`).get() as { n: number }).n;
+    const pBefore = hijackNotices();
     alerts.setAlertsClockForTests(2 * 60 * 60_000);
     noteNameStandingForTests('lost-another-key', 'hijackvale.beanpool.org');
     await sleep(300);
     await alerts.checkServerAlerts();
     await sleep(300);
-    const hijackPushed = ownerPushes() - pBefore;
+    const hijackPushed = hijackNotices() - pBefore;
     const hijackActive = (book().active as any[]).some((a) => a.key === 'sec.name');
     noteNameStandingForTests('held', 'hijackvale.beanpool.org');
     alerts.setAlertsClockForTests(3 * 60 * 60_000);
@@ -538,6 +540,7 @@ async function main(): Promise<void> {
     const hostile = await call('/api/local/update-identity', asAdmin, { callsign: '\u001b[2J\u0007\u202eEVIL https://x.y' });
     await until(() => received.length > r9, 3000);
     const msgs9 = received.slice(r9);
+    // eslint-disable-next-line no-control-regex -- the control characters are what is looked for
     assert(hostile.status === 200 && msgs9.length >= 1 && msgs9.every((x) => !/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e]/.test(x.title + x.body)),
         `9. no control or bidi character reaches a title or body (${hostile.status} ${JSON.stringify(msgs9.map((x) => x.title))})`);
     await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY, callsign: 'RIVBND' });

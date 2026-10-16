@@ -52,8 +52,9 @@ interface MemberDetailModalProps {
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    /** `code`: an owner's fresh proof, when the node asked it for an owner's or admin's role (FreshProofRequiredError). */
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     /** Rejects with FreshProofRequiredError when removing this member (an owner) asks an owner's fresh proof. */
     onPrune?: (pubkey: string, code?: string) => void | Promise<void>;
     onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
@@ -204,16 +205,21 @@ export function MemberDetailModal({
         copiedPubkeyTimer.schedule(() => setCopiedPubkey(false), 2000);
     };
 
-    const handleGrantRole = async (targetRole: MemberNodeRole) => {
+    // Granting or taking an owner's or admin's role asks an owner's fresh proof each time (server roleChangeNeedsOwner).
+    const roleProof = useFreshProof();
+
+    const handleGrantRole = async (targetRole: MemberNodeRole, code?: string) => {
         if (!pubkey || !onGrantNodeRole) return;
         setRoleLoading(true);
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onGrantNodeRole(pubkey, targetRole);
+            await onGrantNodeRole(pubkey, targetRole, ...(code ? [code] : []));
+            roleProof.close();
             setLocalRole(targetRole);
             setRoleSuccess(`Granted ${targetRole} role successfully`);
         } catch (e: unknown) {
+            if (roleProof.checkError(e, (c) => handleGrantRole(targetRole, c), code)) return;
             const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
                 setRoleError('⚠️ Protocol Guard: Cannot remove or demote the last owner. Appoint another owner first.');
@@ -225,16 +231,18 @@ export function MemberDetailModal({
         }
     };
 
-    const handleRevokeRole = async () => {
-        if (!pubkey || !currentRole || !onRevokeNodeRole) return;
+    const handleRevokeRole = async (code?: string, role: MemberNodeRole | null = currentRole) => {
+        if (!pubkey || !role || !onRevokeNodeRole) return;
         setRoleLoading(true);
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onRevokeNodeRole(pubkey, currentRole);
+            await onRevokeNodeRole(pubkey, role, ...(code ? [code] : []));
+            roleProof.close();
             setLocalRole(null);
-            setRoleSuccess(`Revoked ${currentRole} role successfully`);
+            setRoleSuccess(`Revoked ${role} role successfully`);
         } catch (e: unknown) {
+            if (roleProof.checkError(e, (c) => handleRevokeRole(c, role), code)) return;
             const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
                 setRoleError('⚠️ Protocol Guard: Cannot remove the last owner. The community must have at least one owner. Appoint another owner before revoking.');
@@ -432,6 +440,8 @@ export function MemberDetailModal({
                         </div>
                     )}
 
+                    <FreshProofBox proof={roleProof} testId="member-role-proof" />
+
                     {roleSuccess && (
                         <div className="p-2.5 bg-emerald-950/60 border border-emerald-800 rounded-xl text-xs text-emerald-300 font-medium">
                             ✓ {roleSuccess}
@@ -480,7 +490,7 @@ export function MemberDetailModal({
                             <button
                                 type="button"
                                 disabled={roleLoading || isFrozen}
-                                onClick={handleRevokeRole}
+                                onClick={() => handleRevokeRole()}
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-bp-chip-danger-ink bg-bp-chip-danger-tint border border-red-800/80 hover:opacity-90 transition-all ml-auto"
                             >
                                 {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}

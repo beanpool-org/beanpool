@@ -1614,15 +1614,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onGrantNodeRole={async (pubkey, role) => {
+                                        onGrantNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
-                                        onRevokeNodeRole={async (pubkey, role) => {
+                                        onRevokeNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1779,15 +1779,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onGrantNodeRole={async (pubkey, role) => {
+                                        onGrantNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
-                                        onRevokeNodeRole={async (pubkey, role) => {
+                                        onRevokeNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}

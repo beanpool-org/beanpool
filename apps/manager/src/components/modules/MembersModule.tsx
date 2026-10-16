@@ -100,8 +100,8 @@ interface MembersModuleProps {
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
 }
 
 export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {

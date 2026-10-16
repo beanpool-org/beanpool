@@ -32,8 +32,8 @@ interface PeopleSafetySectionProps {
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     initialSubTab?: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles') => void;

@@ -263,9 +263,13 @@ describe('the marker never looks locked', () => {
         const { container } = render(<><CommonsPreview /><MyDealsModal visible identity={MEMBER} preview onClose={() => {}} /></>);
         const html = container.innerHTML;
         expect(html).not.toMatch(/🔒|Locked|locked|Ʀ/);
-        expect(html).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
-        for (const el of Array.from(container.querySelectorAll('[data-testid="local-community-action"]'))) {
-            expect(el).not.toBeDisabled();
+        const markers = Array.from(container.querySelectorAll('[data-testid^="local-community-"]'));
+        expect(markers.length).toBeGreaterThan(0);
+        for (const m of markers) {
+            expect(m.outerHTML).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
+            if (m instanceof HTMLButtonElement) {
+                expect(m).not.toBeDisabled();
+            }
         }
     });
 

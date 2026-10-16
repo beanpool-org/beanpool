@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MyDealsModal } from './MyDealsModal';
+import type { MarketplaceTransaction } from '../lib/api';
 
 describe('MyDealsModal Component & Keyboard Accessibility', () => {
     const mockIdentity = { publicKey: 'user-pubkey-123' };
@@ -297,6 +298,82 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
             expect(screen.queryByTestId('deals-preview-head')).not.toBeInTheDocument();
             expect(screen.getByTestId('deal-card-tx-1')).toBeInTheDocument();
+        });
+
+        it('local mode pins base tab contents, badge 4, raw status chip words and colours', () => {
+            const ana = { publicKey: 'pubkey-ana' };
+            const kofi = { publicKey: 'pubkey-kofi' };
+            const mere = { publicKey: 'pubkey-mere' };
+            const tama = { publicKey: 'pubkey-tama' };
+
+            const seededPosts = [
+                { id: 'p-couch', type: 'need' as const, title: 'Help moving a couch', authorPublicKey: ana.publicKey, authorCallsign: 'Ana', status: 'active' as const, credits: 30, photos: [], createdAt: '2026-10-10T00:00:00Z', category: 'services', description: '', priceType: 'fixed' as const, active: true, repeatable: false },
+                { id: 'p-bike', type: 'offer' as const, title: 'Bike tune-up', authorPublicKey: kofi.publicKey, authorCallsign: 'Kofi', status: 'pending' as const, acceptedBy: ana.publicKey, credits: 20, photos: [], createdAt: '2026-10-10T00:00:00Z', category: 'services', description: '', priceType: 'fixed' as const, active: true, repeatable: false },
+                { id: 'p-mend', type: 'offer' as const, title: 'Mending jackets', authorPublicKey: ana.publicKey, authorCallsign: 'Ana', status: 'active' as const, credits: 15, photos: [], createdAt: '2026-10-10T00:00:00Z', category: 'services', description: '', priceType: 'fixed' as const, active: true, repeatable: true },
+                { id: 'p-weed', type: 'need' as const, title: 'Weed the veggie patch', authorPublicKey: tama.publicKey, authorCallsign: 'Tama', status: 'pending' as const, acceptedBy: ana.publicKey, credits: 10, photos: [], createdAt: '2026-10-10T00:00:00Z', category: 'services', description: '', priceType: 'fixed' as const, active: true, repeatable: false },
+                { id: 'p-bread', type: 'offer' as const, title: 'Rye bread', authorPublicKey: mere.publicKey, authorCallsign: 'Mere', status: 'active' as const, credits: 8, photos: [], createdAt: '2026-10-10T00:00:00Z', category: 'services', description: '', priceType: 'fixed' as const, active: true, repeatable: false },
+            ];
+
+            const seededTransactions: MarketplaceTransaction[] = [
+                { id: 'tx-requested-mine', postId: 'p-couch', postTitle: 'Help moving a couch', buyerPublicKey: ana.publicKey, buyerCallsign: 'Ana', sellerPublicKey: kofi.publicKey, sellerCallsign: 'Kofi', credits: 30, status: 'requested', createdAt: '2026-10-16T00:00:00Z' },
+                { id: 'tx-pending-buy', postId: 'p-bike', postTitle: 'Bike tune-up', buyerPublicKey: ana.publicKey, buyerCallsign: 'Ana', sellerPublicKey: kofi.publicKey, sellerCallsign: 'Kofi', credits: 20, status: 'pending', createdAt: '2026-10-15T00:00:00Z' },
+                { id: 'tx-completed-sold', postId: 'p-mend', postTitle: 'Mending jackets', buyerPublicKey: mere.publicKey, buyerCallsign: 'Mere', sellerPublicKey: ana.publicKey, sellerCallsign: 'Ana', credits: 15, status: 'completed', createdAt: '2026-10-09T00:00:00Z' },
+                { id: 'tx-requested-theirs', postId: 'p-mend', postTitle: 'Mending jackets', buyerPublicKey: mere.publicKey, buyerCallsign: 'Mere', sellerPublicKey: ana.publicKey, sellerCallsign: 'Ana', credits: 15, status: 'requested', createdAt: '2026-10-16T12:00:00Z' },
+                { id: 'tx-pending-sell', postId: 'p-weed', postTitle: 'Weed the veggie patch', buyerPublicKey: tama.publicKey, buyerCallsign: 'Tama', sellerPublicKey: ana.publicKey, sellerCallsign: 'Ana', credits: 10, status: 'pending', createdAt: '2026-10-14T00:00:00Z' },
+                { id: 'tx-cancelled', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana.publicKey, buyerCallsign: 'Ana', sellerPublicKey: mere.publicKey, sellerCallsign: 'Mere', credits: 8, status: 'cancelled', createdAt: '2026-10-11T00:00:00Z' },
+                { id: 'tx-requested-asked', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana.publicKey, buyerCallsign: 'Ana', sellerPublicKey: mere.publicKey, sellerCallsign: 'Mere', credits: 8, status: 'requested', createdAt: '2026-10-16T18:00:00Z' },
+            ];
+
+            render(
+                <MyDealsModal
+                    visible={true}
+                    identity={ana}
+                    preview={false}
+                    onClose={vi.fn()}
+                    posts={seededPosts}
+                    transactions={seededTransactions}
+                />
+            );
+
+            // Badge for In Progress is 4 (2 pending posts + 2 pending txs)
+            const inProgressTab = screen.getByRole('button', { name: /In Progress/ });
+            expect(inProgressTab).toHaveTextContent('4');
+
+            // In Progress shows exactly the 2 pending transactions: Bike tune-up and Weed the veggie patch
+            expect(screen.getByText('Bike tune-up')).toBeInTheDocument();
+            expect(screen.getByText('Weed the veggie patch')).toBeInTheDocument();
+            // Requested deals do not show on In Progress
+            expect(screen.queryByText('Help moving a couch')).not.toBeInTheDocument();
+
+            // Status chip says raw "pending" (not Action Required or Held in Trust)
+            const chips = screen.getAllByText('pending');
+            expect(chips.length).toBe(2);
+
+            // Partner line is present on In Progress with bold callsign
+            expect(screen.getByText(/Bought from/)).toBeInTheDocument();
+            expect(screen.getByText('Kofi')).toHaveClass('font-bold');
+            expect(screen.getByText(/Sold to/)).toBeInTheDocument();
+            expect(screen.getByText('Tama')).toHaveClass('font-bold');
+
+            // Switch to My Posts tab
+            fireEvent.click(screen.getByRole('button', { name: /My Posts/ }));
+            // Shows active posts authored by Ana: Help moving a couch and Mending jackets
+            expect(screen.getByText('Help moving a couch')).toBeInTheDocument();
+            expect(screen.getByText('Mending jackets')).toBeInTheDocument();
+            // Does NOT show Rye bread (Ana only requested it)
+            expect(screen.queryByText('Rye bread')).not.toBeInTheDocument();
+            // Shows 🟢 Active, never Action Required or Awaiting Approval
+            expect(screen.getAllByText('🟢 Active')).toHaveLength(2);
+            expect(screen.queryByText(/Action Required/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/Awaiting Approval/)).not.toBeInTheDocument();
+
+            // Switch to History tab
+            fireEvent.click(screen.getByRole('button', { name: /History/ }));
+            // Completed and cancelled show in History
+            expect(screen.getByText('Mending jackets')).toBeInTheDocument();
+            expect(screen.getByText('Rye bread')).toBeInTheDocument();
+            expect(screen.getByText('completed')).toBeInTheDocument();
+            expect(screen.getByText('cancelled')).toBeInTheDocument();
         });
     });
 });

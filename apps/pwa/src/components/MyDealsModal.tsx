@@ -152,67 +152,75 @@ export function MyDealsModal({
     }, [initialTab, visible]);
 
     // ── Data derivation hooks (placed unconditionally before early return) ──
-    const activeTxsByPostId = useMemo(() => {
-        const map = new Map<string, MarketplaceTransaction[]>();
-        for (const t of effectiveTransactions) {
-            if (t.status === 'pending' || t.status === 'requested') {
-                const list = map.get(t.postId);
-                if (list) {
-                    list.push(t);
-                } else {
-                    map.set(t.postId, [t]);
-                }
-            }
-        }
-        return map;
-    }, [effectiveTransactions]);
-
+    // ⚡ Bolt: O(1) Set lookups for pending transaction post IDs to avoid O(P * T) nested scans in myPosts / pendingDeals filters
     const pendingTxPostIds = useMemo(() => {
         const set = new Set<string>();
-        for (const t of effectiveTransactions) {
-            if (t.status === 'pending' || t.status === 'requested') {
+        for (const t of transactions) {
+            if (t.status === 'pending') {
                 set.add(t.postId);
             }
         }
         return set;
-    }, [effectiveTransactions]);
+    }, [transactions]);
 
     const myPendingTxPostIds = useMemo(() => {
         const set = new Set<string>();
-        if (!effectiveIdentity) return set;
-        for (const t of effectiveTransactions) {
-            if ((t.status === 'pending' || t.status === 'requested') && (t.buyerPublicKey === effectiveIdentity.publicKey || t.sellerPublicKey === effectiveIdentity.publicKey)) {
+        if (!identity) return set;
+        for (const t of transactions) {
+            if (t.status === 'pending' && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey)) {
                 set.add(t.postId);
             }
         }
         return set;
-    }, [effectiveTransactions, effectiveIdentity]);
+    }, [transactions, identity]);
 
     if (!visible || !effectiveIdentity) return null;
 
-    const myPosts = effectivePosts.filter(p =>
-        p.authorPublicKey === effectiveIdentity.publicKey ||
-        p.acceptedBy === effectiveIdentity.publicKey ||
-        myPendingTxPostIds.has(p.id)
-    ).sort((a, b) => {
-        if (a.status === 'pending' && b.status !== 'pending') return -1;
-        if (b.status === 'pending' && a.status !== 'pending') return 1;
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (b.status === 'active' && a.status !== 'active') return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    const myPosts = preview
+        ? effectivePosts.filter(p => p.authorPublicKey === effectiveIdentity.publicKey)
+        : posts.filter(p =>
+            p.authorPublicKey === identity?.publicKey ||
+            p.acceptedBy === identity?.publicKey ||
+            myPendingTxPostIds.has(p.id)
+        ).sort((a, b) => {
+            if (a.status === 'pending' && b.status !== 'pending') return -1;
+            if (b.status === 'pending' && a.status !== 'pending') return 1;
+            if (a.status === 'active' && b.status !== 'active') return -1;
+            if (b.status === 'active' && a.status !== 'active') return 1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
 
-    const pendingCount = effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested').length;
+    const pendingDeals = preview
+        ? []
+        : posts.filter(p => {
+            if (p.status === 'pending' && (p.authorPublicKey === identity?.publicKey || p.acceptedBy === identity?.publicKey)) return true;
+            return pendingTxPostIds.has(p.id);
+        });
+
+    const pendingCount = preview
+        ? effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested').length
+        : pendingDeals.length + transactions.filter(t => t.status === 'pending').length;
 
     const getData = (): any[] => {
-        if (dealsTab === 'active') return myPosts.filter(p => p.status === 'active' || (preview && p.authorPublicKey === effectiveIdentity.publicKey));
+        if (preview) {
+            if (dealsTab === 'active') return myPosts;
+            if (dealsTab === 'pending') {
+                return effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested');
+            }
+            let txs = effectiveTransactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
+            if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === effectiveIdentity.publicKey);
+            if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === effectiveIdentity.publicKey);
+            return txs;
+        }
+        if (dealsTab === 'active') return myPosts.filter(p => p.status === 'active');
         if (dealsTab === 'pending') {
-            return effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested');
+            // Combine pending posts and pending transactions
+            return transactions.filter(t => t.status === 'pending');
         }
         // History
-        let txs = effectiveTransactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
-        if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === effectiveIdentity.publicKey);
-        if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === effectiveIdentity.publicKey);
+        let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
+        if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === identity?.publicKey);
+        if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === identity?.publicKey);
         return txs;
     };
 
@@ -306,7 +314,7 @@ export function MyDealsModal({
                     )}
                     {listData.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <span className="text-5xl text-nature-400 dark:text-nature-600 mb-4">{dealsTab === 'history' ? '📜' : dealsTab === 'pending' ? '🤝' : '📋'}</span>
+                            <span className="text-5xl opacity-30 mb-4">{dealsTab === 'history' ? '📜' : dealsTab === 'pending' ? '🤝' : '📋'}</span>
                             <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">
                                 {dealsTab === 'history' ? t('No history yet') : dealsTab === 'pending' ? t('No deals in progress') : t('No active posts')}
                             </h4>
@@ -320,9 +328,9 @@ export function MyDealsModal({
                             {dealsTab === 'active' && (
                                 <button
                                     onClick={() => { onClose(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                    className="px-6 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-colors"
+                                    className={preview ? "px-6 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-colors" : "px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm text-sm"}
                                 >
-                                    {t('+ Create a Post')}
+                                    {preview ? t('+ Create a Post') : 'Create a Post'}
                                 </button>
                             )}
                         </div>
@@ -331,44 +339,134 @@ export function MyDealsModal({
                             {listData.map((item: any) => {
                                 // Transaction view (History + Pending)
                                 if (dealsTab === 'history' || dealsTab === 'pending') {
-                                    const isBuyer = item.buyerPublicKey === effectiveIdentity.publicKey;
+                                    const isBuyer = item.buyerPublicKey === (preview ? effectiveIdentity.publicKey : identity?.publicKey);
                                     const isCompleted = item.status === 'completed';
                                     const isPending = item.status === 'pending';
                                     const isRequested = item.status === 'requested';
                                     const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
 
-                                    return (
-                                        <div
-                                            key={item.id}
-                                            data-testid={preview ? `sample-deal-${item.id}` : `deal-card-${item.id}`}
-                                            role={preview || isPending || isRequested ? 'button' : undefined}
-                                            tabIndex={preview || isPending || isRequested ? 0 : undefined}
-                                            aria-label={preview ? `${item.postTitle}` : (isPending || isRequested ? `View deal: ${item.postTitle}` : undefined)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    if (preview) {
-                                                        openMark();
-                                                    } else if ((isPending || isRequested) && onNavigateToPost) {
+                                    if (!preview) {
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                data-testid={`deal-card-${item.id}`}
+                                                role={isPending ? 'button' : undefined}
+                                                tabIndex={isPending ? 0 : undefined}
+                                                aria-label={isPending ? `View deal: ${item.postTitle}` : undefined}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        if (isPending && onNavigateToPost) {
+                                                            onClose();
+                                                            onNavigateToPost(item.postId, item.id);
+                                                        }
+                                                    }
+                                                }}
+                                                onClick={() => {
+                                                    if (isPending && onNavigateToPost) {
                                                         onClose();
                                                         onNavigateToPost(item.postId, item.id);
                                                     }
-                                                }
-                                            }}
-                                            onClick={() => {
-                                                if (preview) {
+                                                }}
+                                                className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
+                                                    isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                                    : isCompleted ? 'border-nature-200 dark:border-nature-800'
+                                                    : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
+                                                }`}
+                                            >
+                                                <div className="flex gap-3 mb-2">
+                                                    {item.coverImage ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
+                                                            }}
+                                                            onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
+                                                            aria-label={`View enlarged photo: ${item.postTitle}`}
+                                                            className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                        >
+                                                            <img src={listPhotoUrl(item.coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                        </button>
+                                                    ) : (
+                                                        <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                                                            <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                                    isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                                    : isPending ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
+                                                                    : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
+                                                                }`}>
+                                                                    {item.status}
+                                                                </span>
+                                                                <span className="text-[10px] text-nature-400 font-bold">
+                                                                    {new Date(item.createdAt).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center">
+                                                                <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
+                                                                    {isBuyer ? '- ' : '+ '}{item.credits}
+                                                                </span>
+                                                                <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                            </div>
+                                                        </div>
+                                                        <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
+                                                            {item.postTitle}
+                                                        </h4>
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-end">
+                                                    <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
+                                                        {isBuyer ? 'Bought from ' : 'Sold to '}
+                                                        <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
+                                                    </p>
+                                                    {needsReview && onPromptReview && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onPromptReview({
+                                                                    txId: item.id,
+                                                                    targetPubkey: isBuyer ? item.sellerPublicKey : item.buyerPublicKey,
+                                                                    targetCallsign: partnerCallsign,
+                                                                    targetRole: isBuyer ? 'provider' : 'receiver',
+                                                                });
+                                                            }}
+                                                            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
+                                                        >
+                                                            Leave Review
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    // Preview rendering
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            data-testid={`sample-deal-${item.id}`}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label={`${item.postTitle}`}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
                                                     openMark();
-                                                } else if ((isPending || isRequested) && onNavigateToPost) {
-                                                    onClose();
-                                                    onNavigateToPost(item.postId, item.id);
                                                 }
                                             }}
-                                            className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
-                                                preview ? 'cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ' + (isRequested ? 'border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30' : isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20' : 'border-nature-200 dark:border-nature-800')
-                                                : isPending || isRequested ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
-                                                : isCompleted ? 'border-nature-200 dark:border-nature-800'
-                                                : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
+                                            onClick={() => openMark()}
+                                            className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                                                isRequested
+                                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30'
+                                                    : isPending
+                                                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20'
+                                                    : 'border-nature-200 dark:border-nature-800'
                                             }`}
                                         >
                                             <div className="flex gap-3 mb-2">
@@ -396,20 +494,19 @@ export function MyDealsModal({
                                                             <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                 isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                 : isRequested ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
-                                                                : isPending ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
+                                                                : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             }`}>
-                                                                {isRequested ? t('Action Required') : isPending ? t('Held in trust') : item.status}
+                                                                {isRequested ? t('Action Required') : isPending ? t('Held in trust') : t('Completed')}
                                                             </span>
                                                             <span className="text-[10px] text-nature-400 font-bold">
                                                                 {new Date(item.createdAt).toLocaleDateString()}
                                                             </span>
                                                         </div>
-                                                        <div className="flex items-center">
-                                                            <span className={`font-black text-sm ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
+                                                        <div className="flex items-center shrink-0 whitespace-nowrap">
+                                                            <span className={`font-black text-sm whitespace-nowrap ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                                 {isBuyer ? '- ' : '+ '}{item.credits}
                                                             </span>
-                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt="B" />
                                                         </div>
                                                     </div>
                                                     <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
@@ -419,7 +516,7 @@ export function MyDealsModal({
                                             </div>
 
                                             {/* Per-state detail and action in preview */}
-                                            {preview && isRequested && (
+                                            {isRequested && (
                                                 <div className="mt-3" data-testid="sample-deal-line">
                                                     <p className="mb-2 text-sm text-nature-600 dark:text-nature-300">{t('A neighbour offered to do this. Approve to hold the Beans safely.')}</p>
                                                     <LocalCommunityAction
@@ -432,7 +529,7 @@ export function MyDealsModal({
                                                 </div>
                                             )}
 
-                                            {preview && isPending && (
+                                            {isPending && (
                                                 <div className="mt-3" data-testid="sample-deal-line">
                                                     <p className="mb-2 text-sm text-nature-600 dark:text-nature-300">{t('Held in trust until the job is done.')}</p>
                                                     <LocalCommunityAction
@@ -445,13 +542,12 @@ export function MyDealsModal({
                                                 </div>
                                             )}
 
-                                            {/* Bottom row (History / local reviews) */}
-                                            {(dealsTab === 'history' || (!preview && needsReview)) && (
+                                            {dealsTab === 'history' && (
                                                 <div className="flex justify-between items-end mt-2">
                                                     <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
                                                         {isBuyer ? t('Bought from {who}', { who: partnerCallsign }) : t('Sold to {who}', { who: partnerCallsign })}
                                                     </p>
-                                                    {preview && isCompleted ? (
+                                                    {isCompleted && (
                                                         <div data-testid="sample-deal-line">
                                                             <LocalCommunityAction
                                                                 feature="escrow"
@@ -461,22 +557,7 @@ export function MyDealsModal({
                                                                 onGuide={onGuide ? (slug) => { onClose(); onGuide(slug); } : undefined}
                                                             />
                                                         </div>
-                                                    ) : needsReview && onPromptReview ? (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onPromptReview({
-                                                                    txId: item.id,
-                                                                    targetPubkey: isBuyer ? item.sellerPublicKey : item.buyerPublicKey,
-                                                                    targetCallsign: partnerCallsign,
-                                                                    targetRole: isBuyer ? 'provider' : 'receiver',
-                                                                });
-                                                            }}
-                                                            className="px-3 py-1.5 bg-bp-chip-warn-tint hover:bg-bp-chip-warn-tint/80 text-bp-chip-warn-ink text-xs font-bold rounded-lg border border-bp-chip-warn-ink/20 transition-colors shadow-sm"
-                                                        >
-                                                            {t('Leave Review')}
-                                                        </button>
-                                                    ) : null}
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -484,54 +565,97 @@ export function MyDealsModal({
                                 }
 
                                 // Active Posts View
-                                const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
-                                const relatedTx = activeTxsByPostId.get(item.id)?.[0];
-                                let displayStatusText = t('Active');
-                                let isActionRequired = false;
-                                if (item.status === 'pending' || relatedTx?.status === 'pending') {
-                                    displayStatusText = t('Held in trust');
-                                } else if (relatedTx?.status === 'requested') {
-                                    if (item.authorPublicKey === effectiveIdentity?.publicKey) {
-                                        displayStatusText = t('Action Required');
-                                        isActionRequired = true;
-                                    } else {
-                                        displayStatusText = t('Awaiting Approval');
-                                    }
+                                if (!preview) {
+                                    const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            data-testid={`deal-card-${item.id}`}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label={`View post: ${item.title}`}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    if (onNavigateToPost) {
+                                                        onClose();
+                                                        onNavigateToPost(item.id);
+                                                    }
+                                                }
+                                            }}
+                                            onClick={() => {
+                                                if (onNavigateToPost) {
+                                                    onClose();
+                                                    onNavigateToPost(item.id);
+                                                }
+                                            }}
+                                            className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                                                item.status === 'pending' ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : ''
+                                            }`}
+                                        >
+                                            <div className="flex gap-4">
+                                                {coverImage ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
+                                                        }}
+                                                        onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
+                                                        aria-label={`View enlarged photo: ${item.title}`}
+                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                    >
+                                                        <img src={listPhotoUrl(coverImage)} alt="Cover" className="w-full h-full object-cover" />
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                                                        <span className="text-xl opacity-50">📦</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                            item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                            : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
+                                                        }`}>
+                                                            {item.type}
+                                                        </span>
+                                                        <div className="flex items-center">
+                                                            <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
+                                                                {item.credits ?? '?'}
+                                                            </span>
+                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                                                        </div>
+                                                    </div>
+                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
+                                                        {item.title}
+                                                    </h4>
+                                                    <p className="text-[11px] text-nature-500 dark:text-nature-400 font-bold uppercase tracking-wide">
+                                                        {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
                                 }
 
+                                // Active Posts View in Preview
+                                const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
                                 return (
                                     <div
                                         key={item.id}
-                                        data-testid={preview ? `sample-deal-${item.id}` : `deal-card-${item.id}`}
+                                        data-testid={`sample-deal-${item.id}`}
                                         role="button"
                                         tabIndex={0}
                                         aria-label={`View post: ${item.title}`}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' || e.key === ' ') {
                                                 e.preventDefault();
-                                                if (preview) {
-                                                    openMark();
-                                                } else if (onNavigateToPost) {
-                                                    onClose();
-                                                    onNavigateToPost(item.id);
-                                                }
-                                            }
-                                        }}
-                                        onClick={() => {
-                                            if (preview) {
                                                 openMark();
-                                            } else if (onNavigateToPost) {
-                                                onClose();
-                                                onNavigateToPost(item.id);
                                             }
                                         }}
-                                        className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-                                            isActionRequired
-                                                ? 'border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30'
-                                                : item.status === 'pending' || relatedTx?.status === 'pending'
-                                                ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
-                                                : 'border-nature-200 dark:border-nature-800'
-                                        }`}
+                                        onClick={() => openMark()}
+                                        className="bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 border-nature-300 dark:border-nature-700 bg-nature-50/50 dark:bg-nature-950/30"
                                     >
                                         <div className="flex gap-4">
                                             {coverImage ? (
@@ -570,8 +694,9 @@ export function MyDealsModal({
                                                 <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
                                                     {item.title}
                                                 </h4>
-                                                <p className={`text-[11px] font-bold uppercase tracking-wide ${isActionRequired ? 'text-bp-ink-warning' : 'text-nature-500 dark:text-nature-400'}`}>
-                                                    {isActionRequired ? `⚠️ ${displayStatusText}` : (item.status === 'pending' || relatedTx?.status === 'pending') ? `🤝 ${displayStatusText}` : `🟢 ${displayStatusText}`}
+                                                <p className="text-[11px] font-bold uppercase tracking-wide text-bp-ink-warning">
+                                                    <span aria-hidden="true">⚠️ </span>
+                                                    <span>{t('Action Required')}</span>
                                                 </p>
                                             </div>
                                         </div>

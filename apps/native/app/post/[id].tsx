@@ -35,6 +35,7 @@ import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
+import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
@@ -508,7 +509,9 @@ export default function PostDetailModal() {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;
                         try {
-                            const b = await getBalance(activeIdentity.publicKey);
+                            // Which enterprises the reader keeps: never asked where enterprises are in preview
+                            // (utils/reads-own.ts; the global node, where there are none).
+                            const b = await readsOwn('enterprises', activeIdentity.publicKey) ? await getBalance(activeIdentity.publicKey) : null;
                             const mine: string[] = Array.isArray((b as any)?.keeperOf) ? (b as any).keeperOf : [];
                             if (currentPost?.author_pubkey && mine.includes(currentPost.author_pubkey)) {
                                 isKeeper = true;
@@ -664,9 +667,13 @@ export default function PostDetailModal() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         let cancelled = false;
-        getBalance(identity.publicKey)
+        const key = identity.publicKey;
+        // Gate 1 is a Beans rule and keeperOf an enterprises one: where both are in preview (the global node) the
+        // reader's balance is never asked (utils/reads-own.ts).
+        Promise.all([readsOwn('beans', key), readsOwn('enterprises', key)])
+            .then(([beans, enterprises]) => (beans || enterprises ? getBalance(key) : null))
             .then(b => {
-                if (!cancelled) {
+                if (!cancelled && b) {
                     setBlockedFromTrading(!!(b as any).isBlockedFromTrading);
                     const mine: string[] = Array.isArray((b as any).keeperOf) ? (b as any).keeperOf : [];
                     setOperatedTreasuries(mine);

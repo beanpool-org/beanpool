@@ -23,6 +23,7 @@ import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
+import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
@@ -525,7 +526,8 @@ export default function PublicProfileScreen() {
         Promise.all([
             getMemberProfile(pubKeyStr).catch(() => null),
             getMemberPosts(pubKeyStr).catch(() => []),
-            isSelf ? getBalance(pubKeyStr).catch(() => null) : Promise.resolve(null),
+            // The reader's own balance (the trust card) is Beans: never asked where they are in preview (utils/reads-own.ts).
+            isSelf ? readsOwn('beans', pubKeyStr).then(reads => (reads ? getBalance(pubKeyStr) : null)).catch(() => null) : Promise.resolve(null),
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
         ]).then(([prof, posts, bal, friends]) => {
             // Never over a card the fetch by key (below) has already brought fresher.
@@ -560,8 +562,11 @@ export default function PublicProfileScreen() {
                 .catch(() => null)
                 .finally(() => setTrustLoading(false));
 
+            // The reader's own balance (the vouch button's): never asked where Beans are in preview (utils/reads-own.ts).
             if (identity?.publicKey) {
-                getBalance(identity.publicKey)
+                const viewer = identity.publicKey;
+                readsOwn('beans', viewer)
+                    .then(reads => (reads ? getBalance(viewer) : null))
                     .then(viewerBal => {
                         if (viewerBal) setViewerBalance(viewerBal);
                     })

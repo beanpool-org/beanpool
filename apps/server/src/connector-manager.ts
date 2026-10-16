@@ -736,7 +736,8 @@ export function removeConnector(address: string): boolean {
 
     const connector = connectors[idx];
     const status = statuses.get(address);
-    const peerId = status?.peerId ?? peerIdFromAddress(connector.address);
+    // The node it named or recorded (a host:port connector's first-dial record survives a restart; the status does not).
+    const peerId = status?.peerId ?? connector.pinnedPeerId ?? peerIdFromAddress(connector.address);
     const publicUrl = connector.publicUrl ?? derivePublicUrl(connector.address);
 
     connectors.splice(idx, 1);

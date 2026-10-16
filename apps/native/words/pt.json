@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Vincular um aparelho",
   "🌍 Join the global community": "🌍 Entrar na comunidade global",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Isto abriu a partir de um link. Continue só se você acabou de apontar sua câmera para um código na sua própria tela.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Copia sua própria conta para um navegador, para usar o BeanPool lá como você"
+  "Copies your own account to a browser, to use BeanPool there as you": "Copia sua própria conta para um navegador, para usar o BeanPool lá como você",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "O BeanPool não consegue ler a conta neste telemóvel. Reinicie e tente novamente, ou restaure-a com as suas 12 palavras.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "O histórico da área de transferência de um teclado, ou uma área de transferência partilhada com os seus outros dispositivos, pode guardar uma cópia que o BeanPool não consegue apagar."
 }

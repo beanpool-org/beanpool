@@ -2,7 +2,7 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -462,5 +462,6 @@
   "Type the four digits your phone shows": "Digita le quattro cifre mostrate sul telefono",
   "Confirm": "Conferma",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Il tuo account si aprirà qui solo dopo aver inserito le cifre corrette. Tre tentativi errati e non verrà inviato nulla.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Dal tuo telefono non è ancora arrivato nulla. Questo codice proviene da {host}. Se il tuo telefono dice che proviene da un server che non usa, apri BeanPool all'indirizzo della tua comunità, oppure unisciti prima a {host} dal tuo telefono, poi scansiona di nuovo. Se il tuo telefono non mostra cifre, aggiorna l'app BeanPool su di esso, poi scansiona di nuovo."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Dal tuo telefono non è ancora arrivato nulla. Questo codice proviene da {host}. Se il tuo telefono dice che proviene da un server che non usa, apri BeanPool all'indirizzo della tua comunità, oppure unisciti prima a {host} dal tuo telefono, poi scansiona di nuovo. Se il tuo telefono non mostra cifre, aggiorna l'app BeanPool su di esso, poi scansiona di nuovo.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "La cronologia degli appunti di una tastiera o degli appunti condivisi con gli altri tuoi dispositivi può conservare una copia che BeanPool non può cancellare."
 }

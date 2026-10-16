@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -452,5 +452,6 @@
   "Type the four digits your phone shows": "输入手机上显示的四位数字",
   "Confirm": "确认",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "只有输入正确的数字后，你的账户才会在此打开。尝试错误三次后将不会发送任何内容。",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "你的手机还没有传来任何内容。此代码来自 {host}。如果你的手机提示它来自一个手机不使用的服务器，请在你自己社区的地址打开 BeanPool，或先在手机上加入 {host}，然后重新扫描。如果你的手机没有显示数字，请更新手机上的 BeanPool 应用，然后重新扫描。"
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "你的手机还没有传来任何内容。此代码来自 {host}。如果你的手机提示它来自一个手机不使用的服务器，请在你自己社区的地址打开 BeanPool，或先在手机上加入 {host}，然后重新扫描。如果你的手机没有显示数字，请更新手机上的 BeanPool 应用，然后重新扫描。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "键盘的剪贴板历史记录，或与你其他设备共享的剪贴板，可能会保留一份 BeanPool 无法清除的副本。"
 }

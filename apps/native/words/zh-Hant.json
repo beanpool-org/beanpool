@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -287,5 +287,7 @@
   "Link a device": "連結裝置",
   "🌍 Join the global community": "🌍 加入全球社群",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "這是從連結開啟的。只有當你剛剛用相機對準自己螢幕上的代碼時，才繼續。",
-  "Copies your own account to a browser, to use BeanPool there as you": "將你自己的帳號複製到瀏覽器，以便在那裡以你的身分使用 BeanPool"
+  "Copies your own account to a browser, to use BeanPool there as you": "將你自己的帳號複製到瀏覽器，以便在那裡以你的身分使用 BeanPool",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool 無法讀取這支手機上的帳戶。請重新啟動後再試，或用你的 12 個字詞還原。",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "鍵盤的剪貼簿記錄，或與你其他裝置共用的剪貼簿，可能會保留一份 BeanPool 無法清除的副本。"
 }

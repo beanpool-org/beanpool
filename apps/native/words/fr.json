@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Lier un appareil",
   "🌍 Join the global community": "🌍 Rejoindre la communauté mondiale",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Ceci s'est ouvert depuis un lien. Ne continuez que si vous venez de pointer votre appareil photo vers un code sur votre propre écran.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Copie votre propre compte dans un navigateur, pour y utiliser BeanPool en votre nom"
+  "Copies your own account to a browser, to use BeanPool there as you": "Copie votre propre compte dans un navigateur, pour y utiliser BeanPool en votre nom",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool ne peut pas lire le compte sur ce téléphone. Redémarrez et réessayez, ou restaurez-le avec vos 12 mots.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "L'historique du presse-papiers d'un clavier, ou un presse-papiers partagé avec vos autres appareils, peut garder une copie que BeanPool ne peut pas effacer."
 }

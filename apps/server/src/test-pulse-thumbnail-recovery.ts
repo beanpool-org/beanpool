@@ -86,7 +86,7 @@ const FRESH_CDN_URL = 'https://scontent-syd2-1.cdninstagram.com/v/t51.2885-15/fi
  *  mock can tell the dead thumbnail apart from the fresh one the embed page yields. */
 const STALE_THUMBNAIL_URL = 'https://images.example.org/expired-signed-thumbnail.jpg';
 
-const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const sampleJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64') // a real 1 x 1 JPEG: the node refuses bytes whose size it cannot read;
 
 // ── Mock upstream ────────────────────────────────────────────────────────────
 interface FetchState {

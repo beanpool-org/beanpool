@@ -168,7 +168,7 @@ async function main(): Promise<void> {
 
     // 1. Mock fetcher tracking call count
     let upstreamFetchCount = 0;
-    const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    const sampleJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64') // a real 1 x 1 JPEG: the node refuses bytes whose size it cannot read;
     const pngChunk = (type: string, data: Buffer) => {
         const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
         const td = Buffer.concat([Buffer.from(type, 'latin1'), data]);
@@ -424,6 +424,13 @@ async function main(): Promise<void> {
     const dataBombItemId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/png;base64,${pixelBomb.toString('base64')}` });
     const resDataBomb = await callRouter(router, 'GET', `/api/pulse/items/${dataBombItemId}/thumbnail`);
     assert(resDataBomb.status === 413 && thumbnailService.cache.get(dataBombItemId) === null, `As a data URI, it is refused and not cached (got ${resDataBomb.status})`);
+    // Bytes whose size the node cannot read are refused too: a browser draws a BMP sent as image/png, and an RLE BMP of
+    // 20000 x 20000 fits in a few hundred bytes (#2079 confirmation N1).
+    const bmpHeader = Buffer.alloc(54); bmpHeader.write('BM', 0); bmpHeader.writeUInt32LE(54, 10); bmpHeader.writeUInt32LE(40, 14);
+    bmpHeader.writeInt32LE(20000, 18); bmpHeader.writeInt32LE(20000, 22); bmpHeader.writeUInt16LE(1, 26); bmpHeader.writeUInt16LE(8, 28); bmpHeader.writeUInt32LE(1, 30);
+    const bmpItemId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/png;base64,${bmpHeader.toString('base64')}` });
+    const resBmp = await callRouter(router, 'GET', `/api/pulse/items/${bmpItemId}/thumbnail`);
+    assert(resBmp.status === 413 && thumbnailService.cache.get(bmpItemId) === null, `A BMP sent as image/png is refused and not cached (got ${resBmp.status})`);
 
     // ──────────────────────────────────────────────────────────────────────────
     // Strict Content-Type enforcement (refuses non-image types)
@@ -630,7 +637,7 @@ async function main(): Promise<void> {
     // ──────────────────────────────────────────────────────────────────────────
     // Base64 Data URI handling
     // ──────────────────────────────────────────────────────────────────────────
-    const dataUriJpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const dataUriJpeg = `data:image/jpeg;base64,${sampleJpeg.toString('base64')}`;
     const dataUriItemId = makePulseItem(chan, alice, {
         thumbnailUrl: dataUriJpeg,
     });

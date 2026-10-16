@@ -23,7 +23,7 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
-import { tooManyPixels } from '../storage/image-metadata.js';
+import { imageSize, tooManyPixels } from '../storage/image-metadata.js';
 import {
     ssrfSafeFetch,
     SsrfSecurityError,
@@ -63,6 +63,9 @@ export const MAX_NEGATIVE_CACHE_ENTRIES = 1000;
  * decodes it whole: a 49 KB PNG can be 20,000 × 20,000 (#2079 review NB1). Refused as 413, which the backoff remembers.
  */
 export function thumbnailPixelsRefusal(buffer: Buffer): string | null {
+    // A size we cannot read counts as too big: a browser draws BMP, ICO or AVIF bytes sent under an allowed type, and a
+    // 382-byte RLE BMP can be 20,000 × 20,000 (#2079 confirmation N1).
+    if (!imageSize(buffer)) return 'Thumbnail is not an image whose size this node can read';
     const size = tooManyPixels(buffer);
     return size ? `Thumbnail has more pixels than a node stores (${size.width} x ${size.height})` : null;
 }
@@ -704,7 +707,7 @@ export class PulseThumbnailService {
 
     private async attemptThumbnailRecovery(
         itemId: string,
-        row: { platform?: string; url?: string | null; external_id?: string | null },
+        row: { platform?: string; url?: string | null; external_id?: string | null; thumbnail_url?: string | null },
         options: { ifNoneMatch?: string } = {}
     ): Promise<ThumbnailResult | null> {
         // 1. Instagram post recovery via public embed page
@@ -740,8 +743,9 @@ export class PulseThumbnailService {
                                     const buffer = await imgRes.buffer();
                                     const pixels = thumbnailPixelsRefusal(buffer);
                                     if (pixels) {
-                                        this.cache.setNegative(itemId, 413, pixels);
-                                        return { status: 413, error: pixels };
+                                        // The backoff too, keyed as getActive reads it, so the stale URL, the embed page and the
+                                        // image are not fetched again each time the negative cache expires (confirmation N2).
+                                        return this.refuse(itemId, row.thumbnail_url?.trim() || null, 413, pixels);
                                     }
                                     if (buffer.length <= this.maxEntryBytes) {
                                         try {

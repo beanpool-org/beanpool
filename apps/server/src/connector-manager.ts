@@ -544,10 +544,18 @@ export async function connectToAddress(address: string): Promise<boolean> {
 
         const currentConnector = connectors.find(c => c.address === address);
         if (currentConnector?.pinnedPeerId && remotePeerId !== currentConnector.pinnedPeerId) {
-            await p2pNode.hangUp(conn.remotePeer).catch(() => {});
-            status.connected = false;
-            status.error = 'A different node answered at this address';
-            logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
+            // Hang up on that node only where no other connector names it (its record or its /p2p/ address); where one does,
+            // close only this dial's connection. A link to the recorded node that is already up stays up and says nothing;
+            // otherwise the refusal is this connector's state.
+            const namedElsewhere = connectors.some(c => c !== currentConnector
+                && (c.pinnedPeerId === remotePeerId || peerIdFromAddress(c.address) === remotePeerId));
+            if (namedElsewhere) await conn.close().catch(() => {});
+            else await p2pNode.hangUp(conn.remotePeer).catch(() => {});
+            if (!(status.connected && status.peerId === currentConnector.pinnedPeerId)) {
+                status.connected = false;
+                status.error = 'A different node answered at this address';
+            }
+            logger.error('P2P', `[Connectors] ❌ Refused ${remotePeerId} at ${address}: a different node answered at this address`);
             return false;
         }
 

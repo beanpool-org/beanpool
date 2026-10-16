@@ -409,14 +409,35 @@ async function main() {
     const racedConn = cm.getConnectorByAddress(racedAddr);
     assert(racedConn?.pinnedPeerId === peerIdZ,
         `7c. pinnedPeerId is node Z (got ${racedConn?.pinnedPeerId})`);
-    assert(racedConn?.error === 'A different node answered at this address',
-        `7d. status error shows refusal: "${racedConn?.error}"`);
-    assert(localNode.getConnections(nodeY.peerId).length === 0,
-        `7e. connection to node Y was hung up`);
+    // The link to Z is up: the refused dial to Y leaves it connected and quiet (review check of fix round 1, N4).
+    assert(racedConn?.connected === true && racedConn?.peerId === peerIdZ && racedConn?.error === null,
+        `7d. the healthy link to node Z stays connected, with no error (connected=${racedConn?.connected}, error=${racedConn?.error})`);
+    // Y is still named by the connectors of cases 4 and 5 (its record, its /p2p/ address): their link is not cut.
+    assert(cm.getConnectorByPeerId(peerIdY)?.address !== racedAddr && localNode.getConnections(nodeY.peerId).length > 0,
+        `7e. the refused dial closed only its own connection: Y's other connectors keep theirs (${localNode.getConnections(nodeY.peerId).length})`);
 
     cm.removeConnector(racedAddr);
     px.close();
     await nodeZ.stop();
+
+    // 7f. The same race with a node no connector names: it is hung up entirely.
+    const nodeW = await makeNode(0);
+    const nodeV = await makeNode(0);
+    const portOf = (n: any) => Number(n.getMultiaddrs()[0].toString().split('/tcp/')[1].split('/')[0]);
+    const pxW = await proxy([{ port: portOf(nodeW), delay: 300 }, { port: portOf(nodeV), delay: 0 }]);
+    const racedAddrW = `127.0.0.1:${pxW.port}`;
+    cm.addConnector(racedAddrW, 'peer', 'RacedW');
+    const slowW = cm.connectToAddress(racedAddrW);
+    await new Promise(r => setTimeout(r, 50));
+    const fastV = await cm.connectToAddress(racedAddrW);
+    const refusedW = await slowW;
+    assert(fastV === true && refusedW === false && cm.getConnectorByAddress(racedAddrW)?.pinnedPeerId === nodeV.peerId.toString()
+        && localNode.getConnections(nodeW.peerId).length === 0,
+        `7f. a refused node that no connector names is hung up (connections ${localNode.getConnections(nodeW.peerId).length})`);
+    cm.removeConnector(racedAddrW);
+    pxW.close();
+    await nodeW.stop();
+    await nodeV.stop();
 
     // ── 8. Stale pinnedPeerId on /p2p/ connector dropped in migrateConnector (N5) ──
     const staleP2pAddr = `/ip4/127.0.0.1/tcp/1234/p2p/${peerIdY}`;

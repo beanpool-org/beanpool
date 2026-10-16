@@ -27,10 +27,33 @@ export function pairLinkFromSystemPath(path: unknown): string | null {
     return `beanpool://pair${path.slice(m[0].length)}`;
 }
 
-/** The pairing screen's route for a pairing link (`/pair-device?qr=<the whole link>`), or null for any other path. */
+/** The longest code the grammar reads (pair-device-target.ts parsePairingQr). */
+const MAX_LINK = 600;
+
+/**
+ * The pairing screen's route for a pairing link (`/pair-device?qr=<the whole link, as hex>`), or null for any other path.
+ *
+ * Hex, not percent-encoding: Expo Router decodes a route's query once when it reads the path, and useLocalSearchParams
+ * decodes every value AGAIN (expo-router 55 build/hooks.js). A percent-encoded link reached the screen with its `node=`
+ * unescaped (`https://…`), and the grammar refused every real code (seen on the emulator, #2025 fix round 1). Hex has
+ * nothing to decode, however many times it is decoded; the screen turns it back into the link exactly (pairLinkFromRoute).
+ * A link longer than the grammar takes is cut to one character over it: still refused, and the route stays small.
+ */
 export function pairRouteFromSystemPath(path: unknown): string | null {
     const link = pairLinkFromSystemPath(path);
-    return link === null ? null : `/pair-device?qr=${encodeURIComponent(link)}`;
+    if (link === null) return null;
+    // Four hex digits per UTF-16 code unit: any string, and back exactly.
+    let hex = '';
+    for (let i = 0; i < Math.min(link.length, MAX_LINK + 1); i++) hex += link.charCodeAt(i).toString(16).padStart(4, '0');
+    return `/pair-device?qr=${hex}`;
+}
+
+/** The link a route's `qr` carries (pairRouteFromSystemPath), exactly; '' for anything that isn't that hex: unreadable. */
+export function pairLinkFromRoute(qr: unknown): string {
+    if (typeof qr !== 'string' || qr.length % 4 !== 0 || !/^[0-9a-f]*$/.test(qr)) return '';
+    let link = '';
+    for (let i = 0; i < qr.length; i += 4) link += String.fromCharCode(parseInt(qr.slice(i, i + 4), 16));
+    return link;
 }
 
 /** A pairing link, so the root layout's invite reader leaves it alone (its `node=` is not an invite's server). */

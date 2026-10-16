@@ -7,7 +7,7 @@
  * derives an E2E shared secret via X25519 ECDH + HKDF, encrypts the sovereign identity,
  * and transfers it via the local node's in-memory pairing relay.
  *
- * Opened with `qr` (`/pair-device?qr=<link>`): the web app's QR scanned with the phone's camera app, routed here by
+ * Opened with `qr` (`/pair-device?qr=<link as hex>`): the web app's QR scanned with the phone's camera app, routed here by
  * app/+native-intent.ts (utils/pair-link.ts). The link is read exactly as a scan is (readCode), and reaches the same
  * sheet: nothing is sent before the member's tap, the phone's unlock and the two digits.
  */
@@ -39,6 +39,7 @@ import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
 import { pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
 import { getSavedNodes } from '../utils/nodes';
+import { pairLinkFromRoute } from '../utils/pair-link';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ParsedPairingData extends PairingQr {
@@ -64,7 +65,9 @@ export default function PairDeviceScreen() {
     const lockBusyRef = useRef(false);
     const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { qr } = useLocalSearchParams<{ qr?: string | string[] }>();
-    const linkCode = typeof qr === 'string' ? qr : Array.isArray(qr) ? qr[0] : undefined;
+    // The link as hex (utils/pair-link.ts says why), turned back into exactly the link; no `qr`: no link.
+    const qrParam = typeof qr === 'string' ? qr : Array.isArray(qr) ? qr[0] : undefined;
+    const linkCode = qrParam === undefined ? undefined : pairLinkFromRoute(qrParam);
     const isTransferringRef = useRef(isTransferring);
     isTransferringRef.current = isTransferring;
     const confirmCodeRef = useRef(confirmCode);

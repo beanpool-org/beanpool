@@ -17,7 +17,7 @@ import * as path from 'node:path';
 vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter: { emit: vi.fn() } }));
 vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
 
-import { isPairLink, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
+import { isPairLink, pairLinkFromRoute, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
 import { afterJoinRedirect, parsePairingQr, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
 import { redirectSystemPath } from '../../app/+native-intent';
 
@@ -28,11 +28,20 @@ const OWN = 'https://mullum.example';
 const QUERY = `session=${SESSION}&pub=${PUB}&node=${encodeURIComponent(OWN)}`;
 const LINK = `beanpool://pair?${QUERY}`;
 
-/** The `qr` the pairing screen gets for a route: what expo-router decodes from it. */
-function qrOf(route: string | null): string | null {
+/**
+ * The link the pairing screen reads for a route. Expo Router decodes the route's query once reading the path
+ * (parseQueryParams), and useLocalSearchParams decodes every value again (expo-router 55 build/hooks.js, which keeps a
+ * value it can't decode); the screen then turns the hex back (pairLinkFromRoute). Any other number of decodes: the same.
+ */
+function qrOf(route: string | null, decodes = 2): string | null {
     if (!route) return null;
     const m = /^\/pair-device\?qr=([^&]*)$/.exec(route);
-    return m ? decodeURIComponent(m[1]) : null;
+    if (!m) return null;
+    let value = m[1];
+    for (let i = 0; i < decodes; i++) {
+        try { value = decodeURIComponent(value); } catch { /* kept, as useLocalSearchParams keeps it */ }
+    }
+    return pairLinkFromRoute(value);
 }
 
 describe('a pairing link from outside the app opens the pairing screen', () => {
@@ -64,6 +73,44 @@ describe('a pairing link from outside the app opens the pairing screen', () => {
         const passed = qrOf(redirectSystemPath({ path: hostile, initial: false }));
         expect(passed).toBe(hostile);
         expect(readPairingCode(passed, 'link')).toEqual({ kind: 'unreadable' });
+    });
+
+    it('the link reaches the screen exactly, however many times the router decodes it (it decodes twice)', () => {
+        const odd = [
+            LINK,
+            `beanpool://pair?session=${SESSION}&pub=${PUB}&node=${encodeURIComponent('https://mullum.example\\@evil.test')}`,
+            `beanpool://pair?${QUERY}%2540x%ZZ%`,
+            'beanpool://pair?x=é😀&y=%E9',
+        ];
+        for (const link of odd) {
+            const route = redirectSystemPath({ path: link, initial: false });
+            expect(route, link).toMatch(/^\/pair-device\?qr=[0-9a-f]+$/);
+            for (const decodes of [0, 1, 2, 3]) expect(qrOf(route, decodes), `${link} ×${decodes}`).toBe(link);
+        }
+    });
+
+    it('percent-encoded, as before (emulator, #2025 fix round 1): the second decode unescaped node= and every real code was refused', () => {
+        const before = `/pair-device?qr=${encodeURIComponent(LINK)}`;
+        const screenGot = decodeURIComponent(decodeURIComponent(before.slice('/pair-device?qr='.length)));
+        expect(screenGot).toBe(`beanpool://pair?session=${SESSION}&pub=${PUB}&node=${OWN}`);
+        expect(readPairingCode(screenGot, 'link')).toEqual({ kind: 'unreadable' });
+        // Now: the same link, read as the QR.
+        expect(readPairingCode(qrOf(redirectSystemPath({ path: LINK, initial: false })), 'link')).toEqual({ kind: 'pairing', qr: { sessionId: SESSION, desktopPubHex: PUB, nodeUrl: OWN } });
+    });
+
+    it('a route value that is not that hex is no link at all: unreadable, nothing guessed', () => {
+        for (const bad of ['', 'xyz', '006', '0062ZZZZ', '00620062'.toUpperCase(), LINK, encodeURIComponent(LINK), undefined, 42]) {
+            expect(readPairingCode(pairLinkFromRoute(bad), 'link'), String(bad)).toEqual({ kind: 'unreadable' });
+        }
+        expect(pairLinkFromRoute(undefined)).toBe('');
+    });
+
+    it('a very long link is cut to one character over what the grammar reads: still refused, the route stays small', () => {
+        const long = `beanpool://pair?${QUERY}${'&x=1'.repeat(5000)}`;
+        const route = redirectSystemPath({ path: long, initial: false }) as string;
+        expect(route.length).toBeLessThan(2_500);
+        expect(qrOf(route)).toBe(long.slice(0, 601));
+        expect(readPairingCode(qrOf(route), 'link')).toEqual({ kind: 'unreadable' });
     });
 
     it('a garbled pair link opens the pairing screen, which refuses it: never Unmatched Route', () => {
@@ -139,6 +186,8 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         const src = pair();
         expect(src).toContain("await readCode(result.data, 'camera');");
         expect(src).toContain("void readCode(linkCode, 'link');");
+        // The route's `qr` is the link as hex (utils/pair-link.ts): turned back before anything reads it.
+        expect(src).toContain('const linkCode = qrParam === undefined ? undefined : pairLinkFromRoute(qrParam);');
         const body = readCode();
         expect(body).toContain('readPairingCode(data, source)');
         expect(body).toContain('transferTarget(parsed.nodeUrl, anchor, saved)');

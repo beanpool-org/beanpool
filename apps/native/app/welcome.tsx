@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState, Animated } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
+import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../utils/words-put-away';
@@ -1011,6 +1011,11 @@ export default function WelcomeScreen() {
                 // Go to avatar selection (Step 2)
                 setMode('profileSetup');
             } catch (err: any) {
+                // An account this phone holds but can't read is never replaced by a new one (identity.ts KEY-04).
+                if (err instanceof StoredKeyUnreadableError) {
+                    setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
+                    return;
+                }
                 setError(`Failed to register identity: ${err?.message || err}`);
                 console.error(err);
             }

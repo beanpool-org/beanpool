@@ -56,12 +56,15 @@ function keyItemJob<T>(job: () => Promise<T>): Promise<T> {
     return run;
 }
 
+/** The item as it is now, without waiting a turn: for a job that already holds one. */
+async function readKeyItemNow(): Promise<string | null> {
+    const data = await SecureStore.getItemAsync(KEY_ID);
+    if (data || !onIPhone) return data;
+    return SecureStore.getItemAsync(KEY_ID_MOVING);
+}
+
 async function readKeyItem(): Promise<string | null> {
-    return keyItemJob(async () => {
-        const data = await SecureStore.getItemAsync(KEY_ID);
-        if (data || !onIPhone) return data;
-        return SecureStore.getItemAsync(KEY_ID_MOVING);
-    });
+    return keyItemJob(readKeyItemNow);
 }
 
 async function writeKeyItem(payload: string): Promise<void> {
@@ -307,7 +310,7 @@ export async function discardUnjoinedIdentity(publicKey: string): Promise<boolea
 /**
  * Recover identity from a 12-word mnemonic phrase.
  */
-export async function createIdentityFromMnemonic(words: string[], callsign: string): Promise<BeanPoolIdentity> {
+export async function createIdentityFromMnemonic(words: string[], callsign: string, options: SaveOptions = {}): Promise<BeanPoolIdentity> {
     const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(words);
 
     const identity: BeanPoolIdentity = {
@@ -318,15 +321,15 @@ export async function createIdentityFromMnemonic(words: string[], callsign: stri
         mnemonic: words,
     };
 
-    await saveIdentity(identity);
+    await saveIdentity(identity, options);
     return identity;
 }
 
 /**
  * Import a pre-existing identity (from another device).
  */
-export async function importIdentity(identity: BeanPoolIdentity): Promise<void> {
-    await saveIdentity(identity);
+export async function importIdentity(identity: BeanPoolIdentity, options: SaveOptions = {}): Promise<void> {
+    await saveIdentity(identity, options);
 }
 
 /**
@@ -388,15 +391,44 @@ export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdent
 }
 
 /**
+ * The phone holds an item where its account is kept, but can't read it (it isn't an account, or the read itself failed):
+ * nothing was written. The account may still be there behind a passing fault, and it may be the member's only copy, so
+ * a new key never goes over it. The member restarts and tries again, or restores with their 12 words.
+ */
+export class StoredKeyUnreadableError extends Error {
+    constructor() {
+        super('The account stored on this phone could not be read, so it was not replaced.');
+        this.name = 'StoredKeyUnreadableError';
+    }
+}
+
+export interface SaveOptions {
+    /** The member is restoring an account they hold (their 12 words or their sign-in): it may replace an unreadable item. */
+    replaceUnreadable?: boolean;
+}
+
+/**
  * Every write of the phone's key comes through here, and announces the key the phone now holds (account-on-phone.ts):
  * what the phone keeps per account (blocklist.ts) follows it without a restart.
+ *
+ * Before the write it reads the item (KEY-04): one that is there but holds no readable public key, or a read that throws
+ * (expo-secure-store throws for anything but "not found"), refuses with {@link StoredKeyUnreadableError} unless
+ * `replaceUnreadable` says the member asked for this account back. A readable item is written over as before: the same
+ * key is this account's own update, and a different one has been through the confirm-replace screen.
  */
-async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
+async function saveIdentity(identity: BeanPoolIdentity, { replaceUnreadable = false }: SaveOptions = {}): Promise<void> {
     const payload = JSON.stringify(identity);
     if (isWeb) {
         localStorage.setItem(KEY_ID, payload);
     } else {
-        await writeKeyItem(payload);
+        // One turn for the read and the write, so an iPhone's move can't land between them.
+        await keyItemJob(async () => {
+            if (!replaceUnreadable) {
+                const stored = await readKeyItemNow().catch(() => { throw new StoredKeyUnreadableError(); });
+                if (stored && !publicKeyIn(stored)) throw new StoredKeyUnreadableError();
+            }
+            await SecureStore.setItemAsync(KEY_ID, payload, KEY_ITEM_OPTIONS);
+        });
     }
     announceAccountOnPhone(identity.publicKey);
 }

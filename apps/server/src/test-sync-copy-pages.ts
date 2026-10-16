@@ -357,7 +357,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = {
-        ADMIN_PASSWORD: PW, BEANPOOL_SUITE_ENV_PASSWORD: '1', NODE_ROLE: 'primary', NODE_ENV: 'test',
+        ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const gwen = newId('Gwen');

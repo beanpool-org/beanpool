@@ -192,6 +192,7 @@ export const SUITES = [
     'test-backup-identity-bundle',
     'test-backup-owner-gate',
     'test-owner-delete-gates',
+    'test-owner-delete-alerts',
     'test-restore-points',
     'test-sealed-backups',
     'test-offbox-backups',

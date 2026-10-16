@@ -7,7 +7,9 @@
  */
 
 import type { Libp2p } from 'libp2p';
-import { isPeerTrusted } from './connector-manager.js';
+import { isPeerTrusted, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
+import { peerHomeUrl, remoteMemberStanding } from './federation-origin.js';
+import { assertDmLineFits, WriterLimitError } from './engine/writer-bounds.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
 import { getMember, createConversation, sendMessage, registerVisitor } from './state-engine.js';
@@ -24,6 +26,13 @@ import type { SettlementReceipt } from './federation-receipt.js';
 import type { ReceiptStatus } from './federation-settlement-state.js';
 
 const PROTOCOL = '/beanpool/federation/1.0.0';
+
+/** FED-06: what a node with ENABLE_PEER_CONNECTORS off refuses (the settlement ones too, as FEDERATION_SETTLEMENT does). */
+const PEER_ONLY_ACTIONS = new Set(['verify_member', 'relay_message', 'list_listings', 'settle_purchase']);
+export const PEERS_OFF_ERROR = 'Peer connectors are switched off on this node';
+/** FED-02: a peer whose connector record here has no public URL cannot be named as anyone's home. */
+export const NO_PEER_HOME_ERROR = 'This node holds no public address for your node, so it cannot name a sender\'s home';
+export const SENDER_ELSEWHERE_ERROR = 'Sender is a member of another community';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
@@ -259,7 +268,15 @@ export function registerFederationHandler(node: Libp2p): void {
             // 3. Route Action
             let response: any = { error: 'Unknown action' };
 
-            if (request.action === 'verify_member') {
+            // FED-06: ENABLE_PEER_CONNECTORS off means peer connectors do not function at all
+            // (docs/federation-connector.md), inbound as well as outbound. Before this the flag stopped only our own
+            // dialling: a configured connector's member lookups, relays and listing pulls were still answered.
+            // settle_receipt and settle_receipt_status stay open, as under FEDERATION_SETTLEMENT (settlementGateRefusal):
+            // they finish trades already in flight, and refusing them would strand Beans mid-trade.
+            if (!ENABLE_PEER_CONNECTORS && PEER_ONLY_ACTIONS.has(request.action)) {
+                response = { error: PEERS_OFF_ERROR };
+            }
+            else if (request.action === 'verify_member') {
                 const { publicKey } = request;
                 // ⚡ O(1) indexed lookup instead of loading all members and scanning
                 const member = getMember(publicKey);
@@ -276,7 +293,8 @@ export function registerFederationHandler(node: Libp2p): void {
                 }
             } 
             else if (request.action === 'relay_message') {
-                const { id, senderPublicKey, senderCallsign, senderNodeUrl, recipientPublicKey, ciphertext, nonce, metadata } = request;
+                // No `senderNodeUrl`: the payload's word for the sender's home is ignored (FED-02, below).
+                const { id, senderPublicKey, senderCallsign, recipientPublicKey, ciphertext, nonce, metadata } = request;
 
                 if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
                     response = { error: 'Missing required payload fields' };
@@ -285,11 +303,14 @@ export function registerFederationHandler(node: Libp2p): void {
                     // is no remote sender (it passed the impersonation guard below, and got a visitor's row of its own).
                     response = { error: BAD_KEY_ERROR };
                 } else {
+                    // FED-02: the sender's home is THIS peer's, from our connector record for the authenticated
+                    // connection, never the payload's `senderNodeUrl`.
+                    const peerHome = peerHomeUrl(remotePeerId);
                     // Verify recipient exists locally (O(1) indexed lookup)
                     const recipient = getMember(recipientPublicKey);
                     if (!recipient) {
                         response = { error: 'Recipient not found on this node' };
-                    } else if ((() => { const s = getMember(senderPublicKey); return s && !s.homeNodeUrl; })()) {
+                    } else if (remoteMemberStanding(senderPublicKey, peerHome) === 'local') {
                         // A2-28: the connection is trusted (a `peer` connector), but that
                         // authorizes the CONNECTION, not the asserted sender authorship —
                         // a compromised/malicious federation peer can set senderPublicKey
@@ -299,15 +320,23 @@ export function registerFederationHandler(node: Libp2p): void {
                         // peer cannot forge messages "from" a local identity into an inbox.
                         // (Full origin authenticity needs per-message sender signatures —
                         // a protocol change; tracked. The relay path is gated by
-                        // ENABLE_PEER_CONNECTORS, off by default.)
+                        // ENABLE_PEER_CONNECTORS, off by default — at the top of this
+                        // handler since FED-06; before that the comment was not true.)
                         console.warn(`[Federation] Rejected relay impersonating local member ${senderPublicKey.slice(0, 8)} from peer ${remotePeerId.slice(-8)}`);
                         response = { error: 'Sender impersonates a local member' };
+                    } else if (!peerHome) {
+                        response = { error: NO_PEER_HOME_ERROR };
+                    } else if (remoteMemberStanding(senderPublicKey, peerHome) === 'elsewhere') {
+                        // FED-02: this member's row already names another community as home, so this peer does
+                        // not speak for them. Before, peer A could put a line "from" B's member in their thread.
+                        console.warn(`[Federation] Rejected relay for ${senderPublicKey.slice(0, 8)}, a member of another community, from peer ${remotePeerId.slice(-8)}`);
+                        response = { error: SENDER_ELSEWHERE_ERROR };
                     } else {
                         // Origin is asserted by the relaying node (a trusted peer connector),
                         // NOT cryptographically verified per-message — treat as
                         // remote/unverified-origin. registerVisitor tags it with the
                         // sender's home node so it is never confused with a local member.
-                        registerVisitor(senderPublicKey, senderCallsign, senderNodeUrl);
+                        registerVisitor(senderPublicKey, senderCallsign, peerHome);
                         
                         const conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
                         if (conversation) {
@@ -317,9 +346,13 @@ export function registerFederationHandler(node: Libp2p): void {
                             let refusal: string | null = null;
                             try {
                                 // Under the sender's own id: the line is sealed to it (relayedMessageId).
-                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id));
+                                // FED-09: the member send route's 64 KB line limit, as the line would be stored. A
+                                // peer relayed 1 MB lines before; a refusal is answered, not rethrown, so the peer
+                                // hears why instead of waiting out its read.
+                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id),
+                                    (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
                             } catch (e: any) {
-                                if (!(e instanceof MessagingError)) throw e;
+                                if (!(e instanceof MessagingError) && !(e instanceof WriterLimitError)) throw e;
                                 refusal = e.message;
                             }
                             if (refusal) {

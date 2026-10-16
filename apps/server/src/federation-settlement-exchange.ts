@@ -40,7 +40,8 @@ import {
     conservingTransaction, getNodeRole,
 } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
-import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
+import { getConnectors } from './connector-manager.js';
+import { peerHomeUrl, remoteMemberStanding } from './federation-origin.js';
 import {
     openSettlement, claimSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
@@ -844,12 +845,22 @@ export function handlePurchaseRequest(input: {
     // `home_node_url` onto an existing member row that has none — quietly converting one of OUR members
     // into a visitor. `assertLocalSettlement` then refuses that member's own local spending (#102). So any
     // peer that knows a local member's public key could freeze their account by naming them as a buyer.
-    const claimedBuyer = getMember(input.buyerPublicKey);
-    if (claimedBuyer && !claimedBuyer.homeNodeUrl) {
+    const peerHome = peerHomeUrl(input.peerId);
+    const buyerStanding = remoteMemberStanding(input.buyerPublicKey, peerHome);
+    if (buyerStanding === 'local') {
         console.warn(`[Federation] Peer ${input.peerId.slice(-8)} claimed local member ${input.buyerPublicKey.slice(0, 8)} as a cross-node buyer`);
         return {
             accepted: false, reason: 'buyer_is_local',
             message: 'That buyer is a member of this community, so their purchase is settled here, not across nodes.',
+        };
+    }
+
+    // M3 (the FED-02 binding): a buyer whose row already names another community is not this peer's to buy for.
+    if (buyerStanding === 'elsewhere') {
+        console.warn(`[Federation] Peer ${input.peerId.slice(-8)} claimed ${input.buyerPublicKey.slice(0, 8)}, a member of another community, as its buyer`);
+        return {
+            accepted: false, reason: 'buyer_elsewhere',
+            message: 'That buyer is a member of another community, not of the node asking.',
         };
     }
 
@@ -871,9 +882,10 @@ export function handlePurchaseRequest(input: {
     //
     // Deriving it from the connector is also strictly better than believing the payload: we know who the
     // peer is from the authenticated connection, whereas `buyerHomeNode` is just a string they sent.
-    const resolvedHomeNode = input.buyerHomeNode?.trim()
-        || getConnectorByPeerId(input.peerId)?.publicUrl
-        || null;
+    //
+    // M3: and ONLY from the connector. The payload's `buyerHomeNode` used to win, so a capped peer could name any
+    // community as its buyer's home (measured: https://some-other-community.example stamped on the row).
+    const resolvedHomeNode = peerHome;
     if (!resolvedHomeNode) {
         return {
             accepted: false, reason: 'unknown_home_node',

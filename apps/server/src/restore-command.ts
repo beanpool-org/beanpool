@@ -70,6 +70,13 @@ export const RESTORE_EXIT = { done: 0, refused: 1, usage: 2 } as const;
 const LINE_BREAKS = /[\r\n\u2028\u2029]+/g;
 // eslint-disable-next-line no-control-regex -- these are the characters it removes
 const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+/** Whole terminal sequences, so none leaves a visible tail ("[30;40m") once its ESC is gone: CSI and OSC (#2017 c2, N12). */
+// eslint-disable-next-line no-control-regex -- these are the sequences it removes
+const ESCAPES = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u009b[0-?]*[ -/]*[@-~]/g;
+/** Characters that draw nothing: format characters (zero-width, BOM, tags, soft hyphen, bidi) and the grapheme joiner. */
+const INVISIBLE = /[\p{Cf}\u034f]/gu;
+/** Whitespace and the fillers that draw as blank space (Hangul fillers, the braille blank). */
+const SPACES = /[\s\u115f\u1160\u3164\uffa0\u2800]+/g;
 
 /**
  * Text that came from a backup file, as the terminal shows it (#2017 confirmation review B2). A file's header is
@@ -79,7 +86,11 @@ const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u20
  * become one space, the controls go, and at most `max` characters are shown (null: no cap, for a whole sentence).
  */
 export function shown(s: unknown, max: number | null = 80): string {
-    const t = String(s ?? '').replace(LINE_BREAKS, ' ').replace(CONTROLS, '');
+    let t = String(s ?? '').replace(ESCAPES, '').replace(LINE_BREAKS, ' ').replace(CONTROLS, '');
+    // A file's value (capped): no invisible characters and no runs of spaces or fillers, which could pad a callsign out
+    // to a line of its own on an 80-column terminal (#2017 confirmation 2, N11). A whole sentence of this command's own
+    // (max null) keeps its spacing: the usage lines are aligned.
+    if (max !== null) t = t.replace(INVISIBLE, '').replace(SPACES, ' ').trim();
     const chars = [...t];
     return max !== null && chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : t;
 }
@@ -269,7 +280,8 @@ function tellResult(io: ShellIo, body: Record<string, any>, keysExpected: boolea
     io.out('');
     io.out(body.backup?.createdAt ? `Restored the backup made ${day(body.backup.createdAt)}.` : 'Restored the backup.');
     const keys: string[] = Array.isArray(body.keysWritten) ? body.keysWritten : [];
-    if (keys.length) io.out(`Its keys came back: ${keys.map((k) => shown(k)).join(', ')}.`);
+    // The server's own words (restoreFromTar names each file it wrote): not capped (#2017 confirmation 2, N12).
+    if (keys.length) io.out(`Its keys came back: ${keys.map((k) => shown(k, null)).join(', ')}.`);
     else if (keysExpected) io.out('The file carried no keys: this server keeps its own.');
     else io.out('The database only: this server keeps its own keys, password and 2FA.');
     io.out(body.complete ? 'Every photo and attachment the database names is here.' : shown(body.warning || 'Some photos or attachments may be missing.', null));
@@ -328,7 +340,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     try { ownPeer = readNodeIdentity()?.peerId ?? null; } catch { ownPeer = null; }
     /** This server beside the file; with `people`, who is in its community (the file is of another one, #2017 review N3). */
     const thisServer = (people = false): string[] => [
-        `This server:  community ${ownCommunity ?? '(its genesis.json cannot be read)'}`,
+        `This server:  community ${ownCommunity !== null ? shown(ownCommunity) : '(its genesis.json cannot be read)'}`,
         ...(people ? [`              ${thisCommunity()}`] : []),
         `              node ${ownPeer ?? '(its node key cannot be read)'}`,
     ];
@@ -521,7 +533,7 @@ function describeCommunity(db: Database.Database, name: string | null | undefine
     try {
         const n = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE COALESCE(status, '') != 'pruned'
             AND COALESCE(is_treasury, 0) = 0 AND public_key NOT IN ('SYSTEM', 'genesis', 'COMMONS_POOL')
-            AND public_key NOT LIKE 'escrow_%'`).get() as { c: number }).c;
+            AND public_key NOT LIKE 'escrow_%' AND COALESCE(is_visitor, 0) = 0`).get() as { c: number }).c;
         members = `${n} ${n === 1 ? 'member' : 'members'}`;
     } catch { /* said as unknown */ }
     try {

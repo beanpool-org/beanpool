@@ -269,6 +269,20 @@ const PW_LATER = hashPassword('Changed-Later-Pw-2!');
 updateLocalConfig({ adminHash: PW_LATER.hash, salt: PW_LATER.salt } as any);
 
 // ── 1. The node is running ──
+console.log('\n— 0. what a file\'s text looks like on the terminal (shown) —');
+{
+    // #2017 confirmation 2, N11/N12: a file's value draws no invisible characters and no padding; whole escape sequences
+    // go (no "[30;40m" tail); the command's own sentences (no cap) keep their spacing.
+    const { shown } = await import('./restore-command.js');
+    assert(shown('@O​wner‍Ma⁠in﻿') === '@OwnerMain', '0. zero-width characters, joiners and a BOM are dropped from a file\'s value');
+    assert(shown(`Locked by this server${' '.repeat(60)}x`) === 'Locked by this server x', '0. a run of spaces in a file\'s value is one space, so it cannot pad out a line of its own');
+    assert(shown('aㅤㅤ⠀b') === 'a b', '0. Hangul fillers and the braille blank count as spaces');
+    assert(shown('\u001b[30;40mhidden') === 'hidden' && shown('\u001b]8;;https://x.test\u0007link\u001b]8;;\u0007') === 'link',
+        '0. a CSI or OSC sequence goes whole: no visible tail');
+    assert(shown('  --code-file F          read the code', null) === '  --code-file F          read the code', '0. the command\'s own aligned lines keep their spacing');
+    assert(shown('\u001b[90m[2026-10-16]\u001b[0m [Restore] kept', null) === '[2026-10-16] [Restore] kept', '0. the node log\'s colours vanish whole instead of printing as text');
+}
+
 console.log('\n— 1. refused while the node runs —');
 // As index.ts does first at boot. Loaded by name so this suite still runs where the module is not (fail-first on main).
 const lock: any = await import('./node-running-lock.js').catch(() => null);

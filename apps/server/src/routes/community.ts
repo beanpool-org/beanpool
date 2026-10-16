@@ -590,8 +590,13 @@ router.post('/api/local/connectors/connect', async (ctx) => {
         return;
     }
 
-    const success = await connectToAddress(address);
-    ctx.body = { success };
+    try {
+        const success = await connectToAddress(address);
+        ctx.body = { success };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: memberErrorText(e, 'Failed to connect to address') };
+    }
 });
 
 /**

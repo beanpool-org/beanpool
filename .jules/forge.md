@@ -161,3 +161,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
+
+## 2026-10-16 - [Missing try/catch in POST /api/local/connectors/connect]
+**Issue:** `POST /api/local/connectors/connect` in `apps/server/src/routes/community.ts` called `await connectToAddress(address)` without a `try/catch` block.
+**Learning:** Async route handlers dialing libp2p peers or network endpoints can throw unexpected runtime exceptions, which cause unhandled HTTP 500 crashes instead of formatted JSON error bodies.
+**Pattern:** Ensure async route handlers invoking network or P2P dialing operations wrap `await` calls in a `try/catch` block that returns a structured error object and status 500.

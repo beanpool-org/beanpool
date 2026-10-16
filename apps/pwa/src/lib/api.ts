@@ -2785,20 +2785,6 @@ export async function pollPairingApi(sessionId: string): Promise<{
     return request<any>('GET', `/api/pair/poll?session=${encodeURIComponent(sessionId)}`);
 }
 
-export async function transferPairingApi(
-    sessionId: string,
-    mobilePubHex: string,
-    nonceHex: string,
-    ciphertextHex: string
-): Promise<{ success: boolean }> {
-    return request<{ success: boolean }>('POST', '/api/pair/transfer', {
-        sessionId,
-        mobilePubHex,
-        nonceHex,
-        ciphertextHex,
-    });
-}
-
 export async function cancelPairingApi(sessionId: string): Promise<void> {
     try {
         await request<void>('POST', '/api/pair/cancel', { sessionId });

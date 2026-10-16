@@ -189,7 +189,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // so it persists across sessions.
     // Never for a visitor, whose list has no such chip to undo it.
     const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
-    const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
+    const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [groupFilter, setGroupFilter] = useState<string>('all');
     const [userGroups, setUserGroups] = useState<Group[]>([]);
@@ -354,6 +354,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // There the Beans-only chip and the Pricing Guide are hidden (design §1, "Hidden on global"), and a Beans-only picked
     // before does not quietly filter the feed.
     const beansOnly = beansOnlyPicked && !priceMarked;
+    // "New members" picks authors with no trade yet: where Beans are marked (global) that is everyone, so no chip and no filter.
+    const foundingOnly = foundingOnlyPicked && !priceMarked;
     const dealMarked = marked(dealsMode);
     const markWays = {
         onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
@@ -2576,6 +2578,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     )}
 
+                    {!priceMarked && (
                     <button
                         onClick={() => setFoundingOnly(v => !v)}
                         aria-pressed={foundingOnly}
@@ -2587,6 +2590,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         🌱 New members{foundingOnly ? ' ✓' : ''}
                     </button>
+                    )}
 
                     {!priceMarked && (
                     <button

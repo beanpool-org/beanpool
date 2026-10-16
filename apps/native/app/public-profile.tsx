@@ -26,6 +26,7 @@ import { useShowcaseMode } from '../utils/use-reader-features';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
+import { meetingTips } from '../utils/market-global';
 
 
 
@@ -1075,6 +1076,19 @@ export default function PublicProfileScreen() {
                             </>)}
                         </>
                     ) : null
+                )}
+
+                {/* Where Beans are off, another member's profile still carries the plain meeting advice, without the verdict. */}
+                {!isSelf && !showsBeans && (
+                    <View style={[styles.safetyBanner, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]} testID="meeting-tips">
+                        <View style={styles.safetyHeaderRow}>
+                            <Text style={styles.safetyEmoji} allowFontScaling={false}>🛡️</Text>
+                            <Text style={[styles.safetyHeadline, { color: colors.text.heading }]} accessibilityRole="header">{meetingTips().heading}</Text>
+                        </View>
+                        {meetingTips().tips.map((tip, i) => (
+                            <Text key={i} style={[styles.safetyReason, { color: colors.text.body }]}>• {tip}</Text>
+                        ))}
+                    </View>
                 )}
 
                 {!showsBeans && beansPreview && (

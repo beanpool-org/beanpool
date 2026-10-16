@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -98,8 +98,10 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Este código não pode ser lido com segurança, por isso nada foi enviado: gere um novo código no outro aparelho e escaneie esse.",
   "OK": "OK",
   "Connect to your community first.": "Conecte-se à sua comunidade primeiro.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Scan the code {own} shows on the other device, or restore your account there with your 12 words.": "Este código é de {host}, um servidor que seu celular não usa: ele usa {own}. Nada foi enviado. Escaneie o código que {own} mostra no outro aparelho ou restaure sua conta lá com suas 12 palavras.",
-  "This code is from {host}, a server your phone doesn't use. Nothing was sent. To use your account there, restore it with your 12 words.": "Este código é de {host}, um servidor que seu celular não usa. Nada foi enviado. Para usar sua conta lá, restaure-a com suas 12 palavras.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Este código é de {host}, um servidor que seu celular não usa: ele usa {own}. Nada foi enviado. Abra o BeanPool em {own} no outro aparelho e escaneie o código lá, ou entre primeiro na comunidade global neste celular e depois escaneie de novo.",
+  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.": "Este código é de {host}, um servidor que seu celular não usa: ele usa {own}. Nada foi enviado. Abra o BeanPool em {own} no outro aparelho e escaneie o código lá.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Este código é de {host}, um servidor que seu celular não usa. Nada foi enviado. Entre primeiro na comunidade global neste celular e depois escaneie de novo.",
+  "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Este código é de {host}, um servidor que seu celular não usa. Nada foi enviado.",
   "Confirm it is you to send your account to another device.": "Confirme que é você para enviar sua conta para outro aparelho.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Seu celular não tem bloqueio de tela, por isso o BeanPool não enviará sua conta. Defina um PIN, padrão ou senha nas Configurações do celular, em Segurança, e tente novamente.",
   "The phone's unlock did not pass, so nothing was sent.": "O desbloqueio do celular não passou, por isso nada foi enviado.",
@@ -285,5 +287,9 @@
   "The people who run this community's server are alerted even without your words.": "Os responsáveis pelo servidor desta comunidade são alertados mesmo sem as suas palavras.",
   "If a child is in danger right now, call your local emergency number first.": "Se uma criança estiver em perigo agora, ligue primeiro para o número local de emergência.",
   "This restore was stopped, from a phone that has your account or by a newer restore started on another device, so nothing came back. If that wasn't you, use your 12 words.": "Esta recuperação foi interrompida por um celular que tem sua conta ou por uma nova recuperação iniciada em outro aparelho, por isso nada foi restaurado. Se não foi você, use suas 12 palavras.",
-  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Essa recuperação já foi concluída: o outro celular agora tem sua conta. Se não foi você, outra pessoa está com a sua conta: certifique-se de que a conta de login usada seja apenas sua e peça ajuda a quem administra a comunidade."
+  "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "Essa recuperação já foi concluída: o outro celular agora tem sua conta. Se não foi você, outra pessoa está com a sua conta: certifique-se de que a conta de login usada seja apenas sua e peça ajuda a quem administra a comunidade.",
+  "Link a device": "Vincular um aparelho",
+  "🌍 Join the global community": "🌍 Entrar na comunidade global",
+  "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Isto abriu a partir de um link. Continue só se você acabou de apontar sua câmera para um código na sua própria tela.",
+  "Copies your own account to a browser, to use BeanPool there as you": "Copia sua própria conta para um navegador, para usar o BeanPool lá como você"
 }

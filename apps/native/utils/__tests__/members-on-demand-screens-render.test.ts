@@ -274,6 +274,8 @@ const NEWCOMER_TRUST = {
 };
 /** Words only the Beans half of the Trust & safety panel draws. */
 const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited directly by the system admin', 'Completion', 'Vouch for Member', 'Calculating trust signals'];
+/** The plain meeting advice another member's profile carries where Beans are off (director's call, 16 Oct 11:07). */
+const MEETING_TIPS = ['Meet somewhere public the first time.', "Don't share your home address until you've met.", "Tell a friend where and when you're meeting."];
 async function nodeFetch(input: unknown): Promise<Response> {
     const url = new URL(String(input));
     if (!node.online) throw new TypeError('Network request failed');
@@ -297,6 +299,7 @@ import PeopleScreen from '../../app/(tabs)/people';
 import NewMessageScreen from '../../app/new-message';
 import ChatsScreen from '../../app/(tabs)/chats';
 import PublicProfileScreen from '../../app/public-profile';
+import { meetingTips } from '../market-global';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
@@ -844,6 +847,28 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain("1 connection in common");
             });
 
+            it("another member on the worldwide community: the meeting tips as plain advice, with no verdict, tier, trades or vouching", async () => {
+                node.trust = NEWCOMER_TRUST;
+                nav.params = { publicKey: KOFI, callsign: "Kofi" };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                const box = host.querySelector('[data-testid="meeting-tips"]')!;
+                expect(box).not.toBeNull();
+                expect(box.textContent).toContain(meetingTips().heading);
+                for (const tip of MEETING_TIPS) expect(box.textContent, tip).toContain(tip);
+                // Words true on a node where nobody trades or vouches; the verdict's ⚠️ alarm is not used.
+                expect(box.textContent).not.toMatch(/trade|vouch|Trust|Newcomer|precaution|⚠️/i);
+                for (const w of TRUST_PANEL_WORDS) expect(text(), w).not.toContain(w);
+                await fits([OWN, KOFI]);
+            });
+
+            it("the member's own profile on the worldwide community: no meeting tips", async () => {
+                nav.params = { publicKey: OWN };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(host.querySelector('[data-testid="meeting-tips"]')).toBeNull();
+            });
+
             it("another member on a local community (Beans on): the whole Trust & safety panel, as before, and no line", async () => {
                 community.membersOnDemand = false;
                 node.trust = NEWCOMER_TRUST;
@@ -854,6 +879,9 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(host.querySelector("[data-testid=\"trust-track-record\"]")).not.toBeNull();
                 expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.profile);
                 expect(text()).toContain("Collaboration Chemistry");
+                // The verdict's own tips, once: the plain box is for Beans-off nodes only.
+                expect(host.querySelector('[data-testid="meeting-tips"]')).toBeNull();
+                expect(text().split(MEETING_TIPS[0]).length - 1).toBe(1);
             });
         });
 
@@ -902,6 +930,11 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
                 expect(text()).toContain('Collaboration Chemistry');
                 expect(text()).toContain('1 connection in common');
+                // The plain meeting advice stays, above the trust line (director's call, 16 Oct 11:07).
+                const box = host.querySelector('[data-testid="meeting-tips"]')!;
+                for (const tip of MEETING_TIPS) expect(box.textContent, tip).toContain(tip);
+                expect(box.textContent).not.toMatch(/trade|vouch|Trust|⚠️/i);
+                expect(text().indexOf(MEETING_TIPS[0])).toBeLessThan(text().indexOf(LOCAL_COMMUNITY_LINES.profile));
                 await fits([OWN, KOFI]);
             });
 

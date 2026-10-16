@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, BackHandler, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary, useFocusEffect } from 'expo-router';
+import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
@@ -20,6 +20,7 @@ import { startOneWayBack } from '../utils/one-way-back';
 import { vaultCopyKnown } from '../utils/vault';
 import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
 import { HOME_REDIRECT } from '../utils/join-another-community';
+import { afterJoinRedirect } from '../utils/pair-device-target';
 import { signInCopiesAt } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 
@@ -33,6 +34,7 @@ export { ErrorBoundary };
  * refusal leaves everything as it was.
  */
 export default function JoinGlobalScreen() {
+    const { then: thenParam } = useLocalSearchParams<{ then?: string }>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -327,7 +329,8 @@ export default function JoinGlobalScreen() {
             Alert.alert(joined.title, joined.body, [{
                 text: 'Next',
                 // As after any second community: the name and photo for this one, then home.
-                onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT, name: joined.name } }),
+                // Started from the pairing screen's refusal (`then=pair-device`): back there to scan again, after the profile.
+                onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: afterJoinRedirect(thenParam, HOME_REDIRECT), name: joined.name } }),
             }], { cancelable: false });
             return;
         }

@@ -603,13 +603,6 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </Pressable>
                     </View>
 
-                    {preview && (
-                        <View testID="deals-preview-head">
-                            <LocalCommunityMark variant="strip" feature="escrow" />
-                            <ExampleHeader />
-                        </View>
-                    )}
-
                     {/* Tab bar */}
                     <View style={styles.tabBar}>
                         {[
@@ -662,6 +655,14 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         renderItem={renderDealItem}
                         contentContainerStyle={{ paddingBottom: 24 }}
                         showsVerticalScrollIndicator={false}
+                        // In preview the strip and "Example" head the list and scroll away with it, as on the Ledger: in the
+                        // fixed head they filled a 320 dp sheet, and no deal showed until the strip was closed.
+                        ListHeaderComponent={preview ? (
+                            <View testID="deals-preview-head">
+                                <LocalCommunityMark variant="strip" feature="escrow" />
+                                <ExampleHeader />
+                            </View>
+                        ) : null}
                         ListEmptyComponent={
                             <View style={styles.emptyState}>
                                 <Text style={styles.emptyEmoji}>

@@ -6,6 +6,8 @@
  *   POST /api/pair/cancel
  *   POST /api/pair/confirm (number matching, fable-security-signin finding 1: the phone's payload waits for its two
  *   digits, typed by the browser that opened the session, which holds the binding cookie)
+ *   A transfer without `confirm: 'digits'` comes from an app too old to show the digits: 409, nothing held, the session
+ *   stays open for a newer app.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-pairing-routes.ts
@@ -108,6 +110,27 @@ async function main() {
     };
     const encrypted = encryptPairingPayload(samplePayload, session.publicKeyHex, session.sessionId);
 
+    // An app that can't show the two digits (every store build before #1983) sends no `confirm`: the relay would hold the
+    // account for digits nobody sees and the browser would wait for ever. Refused, nothing held, in words the old app
+    // shows as they are (it displays a 4xx's `error` in the sheet).
+    const oldAppRes = await fetch(`${BASE}/api/pair/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.sessionId, mobilePubHex: encrypted.mobilePubHex, nonceHex: encrypted.nonceHex, ciphertextHex: encrypted.ciphertextHex }),
+    });
+    const oldAppBody = (await oldAppRes.json()) as any;
+    assert(oldAppRes.status === 409 && oldAppBody.error === 'This BeanPool app is too old to show the two digits, so nothing was sent. Update the BeanPool app, then scan again.' && !oldAppBody.confirmCode,
+        `a transfer without confirm: 'digits' (an app too old to show them) is refused 409 with words for that app, no digits (${oldAppRes.status} "${oldAppBody.error}")`);
+    const afterOldApp = (await (await poll(session.sessionId, cookie)).json()) as any;
+    assert(afterOldApp.status === 'waiting' && !afterOldApp.payload, `nothing is held after the refusal: the session still waits for a phone (${afterOldApp.status})`);
+    for (const confirm of ['', 'yes', 1, true]) {
+        const r = await fetch(`${BASE}/api/pair/transfer`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: session.sessionId, mobilePubHex: encrypted.mobilePubHex, nonceHex: encrypted.nonceHex, ciphertextHex: encrypted.ciphertextHex, confirm }),
+        });
+        assert(r.status === 409, `confirm: ${JSON.stringify(confirm)} is not the flag: 409 (${r.status})`);
+    }
+
     const goodTransferRes = await fetch(`${BASE}/api/pair/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,6 +139,7 @@ async function main() {
             mobilePubHex: encrypted.mobilePubHex,
             nonceHex: encrypted.nonceHex,
             ciphertextHex: encrypted.ciphertextHex,
+            confirm: 'digits',
         }),
     });
     assert(goodTransferRes.status === 200, 'POST /api/pair/transfer returns 200 on valid transfer');
@@ -180,7 +204,7 @@ async function main() {
         const e2 = encryptPairingPayload(samplePayload, s2.publicKeyHex, s2.sessionId);
         const t2 = (await (await fetch(`${BASE}/api/pair/transfer`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: s2.sessionId, mobilePubHex: e2.mobilePubHex, nonceHex: e2.nonceHex, ciphertextHex: e2.ciphertextHex }),
+            body: JSON.stringify({ sessionId: s2.sessionId, mobilePubHex: e2.mobilePubHex, nonceHex: e2.nonceHex, ciphertextHex: e2.ciphertextHex, confirm: 'digits' }),
         })).json()) as any;
         const statuses: number[] = [];
         for (let i = 0; i < 3; i++) statuses.push((await confirmDigits(s2.sessionId, otherDigits(t2.confirmCode), c2)).status);
@@ -213,7 +237,7 @@ async function main() {
     const transferStart = Date.now();
     const realTransfer = await fetch(`${BASE}/api/pair/transfer`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: real.sessionId, mobilePubHex: realPayload.mobilePubHex, nonceHex: realPayload.nonceHex, ciphertextHex: realPayload.ciphertextHex }),
+        body: JSON.stringify({ sessionId: real.sessionId, mobilePubHex: realPayload.mobilePubHex, nonceHex: realPayload.nonceHex, ciphertextHex: realPayload.ciphertextHex, confirm: 'digits' }),
     });
     const transferMs = Date.now() - transferStart;
     // The member reads the two digits off the phone and types them on the computer.

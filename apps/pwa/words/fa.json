@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -85,7 +85,7 @@
   "Fire": "آتش",
   "Free\u0004price": "رایگان",
   "Gallery": "گالری",
-  "Go to **Settings → Use your account on another device** (older apps: **Link Another Device**)": "به **تنظیمات → استفاده از حساب‌تان در دستگاه دیگر** بروید (در برنامه‌های قدیمی‌تر: **اتصال دستگاه دیگر**)",
+  "Go to **Settings → Link a device** (older apps: **Use your account on another device**)": "به **تنظیمات → اتصال دستگاه** بروید (در برنامه‌های قدیمی‌تر: **Use your account on another device**)",
   "Going": "می‌روم",
   "Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.": "کد دعوت دارید یا QR را اسکن کرده‌اید؟ آن را با کال‌ساینی که انتخاب کرده‌اید در زیر وارد کنید تا بپیوندید.",
   "Green Bean": "لوبیای سبز",
@@ -460,5 +460,6 @@
   "That did not go through. Try again.": "انجام نشد. دوباره امتحان کنید.",
   "Type the two digits your phone shows": "دو رقمی را که تلفنتان نشان می‌دهد تایپ کنید",
   "Confirm": "تأیید",
-  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "حساب شما در اینجا تنها پس از ورود ارقام صحیح باز می‌شود. با سه بار تلاش اشتباه، چیزی ارسال نمی‌شود."
+  "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "حساب شما در اینجا تنها پس از ورود ارقام صحیح باز می‌شود. با سه بار تلاش اشتباه، چیزی ارسال نمی‌شود.",
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "هنوز چیزی از تلفن شما نرسیده است. این کد از {host} است. اگر تلفن شما می‌گوید این کد از سروری است که از آن استفاده نمی‌کند، BeanPool را در نشانی جامعهٔ خودتان باز کنید، یا ابتدا در تلفن خود به {host} بپیوندید و سپس دوباره اسکن کنید. اگر تلفن شما هیچ رقمی نشان نمی‌دهد، برنامهٔ BeanPool را روی آن به‌روز کنید و سپس دوباره اسکن کنید."
 }

@@ -6,8 +6,8 @@
 // down to the page's doodle — its ground and its stroke farthest from the words, under the light page's wash. It fails
 // under 4.5:1 (3:1 for large words: 24 px, or 18.66 px bold).
 //
-// Light must pass everywhere. Dark is the site as it was before light existed and is kept as it was, so the places
-// where it is under the bar today are pinned below with their ratio: a new one, or one that gets worse, fails.
+// Both themes must pass everywhere. Dark carried nine pinned pairs when this check began (15 Oct 2026); each was fixed
+// from dark's own values in style.css's set, light untouched, and the pins are gone (16 Oct 2026).
 // A canary (words the colour of the page) must fail in both themes, so a check gone blind fails too.
 // Not judged: anything aria-hidden (decoration), and Leaflet's own popup close button.
 // No network: the CDN scripts come from node_modules or a stub, map tiles are blank. About a minute.
@@ -26,23 +26,6 @@ const SITE = path.resolve(process.env.WEBSITE_ROOT ?? path.join(ROOT, 'apps/webs
 const require = createRequire(path.join(ROOT, 'apps/pwa/package.json'));
 const { chromium } = require('playwright');
 const LEAFLET = path.dirname(require.resolve('leaflet/dist/leaflet.js'));
-
-/**
- * Dark, under the bar before this check existed (15 Oct 2026; the dark site is kept exactly as it was): each pair is
- * the words' colour and the ground they were judged on, with the ratio then. Most are words with no panel under them,
- * judged on the dark doodle's brightest stroke (#454c49), or over a translucent panel or tint on it.
- */
-const DARK_KNOWN = [
-    ['#8190a6', '#2b3033', 4.1], // --text-muted in the footer: every page's footer words and links
-    ['#8190a6', '#2e353a', 3.86], // --text-muted on a guide page's panel: the kicker and the foot
-    ['#8190a6', '#343b40', 3.52], // --text-muted in post-extraction's worked example
-    ['#f59e0b', '#454c49', 4.1], // amber links with no panel under them (index, help)
-    ['#f59e0b', '#535344', 3.65], // amber words on the hero badge's tint, and the first-time setup link
-    ['#8b5cf6', '#454c49', 2.08], // the violet stop of the hero's rainbow word
-    ['#f87171', '#47333c', 4.19], // the ✕ marks on "What BeanPool isn't"
-    ['#10b981', '#40574f', 3.08], // the "For community organisers" tag
-    ['#ff5252', '#40222a', 4.44], // the "Video Guides" badge on Getting Started
-];
 
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.webp': 'image/webp', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
 function serve(root) {
@@ -168,8 +151,6 @@ function judge(strokes) {
     return rows;
 }
 
-const known = (row) => DARK_KNOWN.some(([ink, ground, then]) => ink === row.ink && ground === row.ground && row.ratio >= then);
-
 const browser = await chromium.launch();
 const server = await serve(SITE);
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -205,7 +186,6 @@ try {
             for (const row of rows) {
                 if (row.ratio >= row.min) continue;
                 if (row.text === 'contrast canary') { canaryCaught = true; continue; }
-                if (theme === 'dark' && known(row)) continue;
                 failures.push({ pair: `${theme} ${row.ink} on ${row.ground} = ${row.ratio}:1 (needs ${row.min})`, line: `${width}px ${pg}: ${row.sel} "${row.text}"` });
             }
             await ctx.close();
@@ -225,4 +205,4 @@ if (failures.length) {
     for (const [k, v] of pairs) console.log(`  ${k}  x${v.n}  e.g. ${v.first}`);
     process.exit(1);
 }
-console.log('PASS: every word on the website reads at 4.5:1 or better (3:1 large) in light, and dark is no worse than it was');
+console.log('PASS: every word on the website reads at 4.5:1 or better (3:1 large), in light and in dark');

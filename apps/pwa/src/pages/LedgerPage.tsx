@@ -46,13 +46,15 @@ interface Props extends LocalCommunityWays {
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
 // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
 // the tier (floors slide continuously between them). Only presentation lives here.
+// The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
+const INVITE_PERK = 'Invite others to join';
 const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: string; perks: string[] }> = {
     Newcomer: { color: 'var(--tier-newcomer)', bg: 'var(--tier-newcomer-bg)', border: 'var(--tier-newcomer-border)',
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
+      perks: ['Browse & trade the marketplace', 'Receive credits', INVITE_PERK, 'Send credits after first trade (needs positive balance)'] },
     Resident: { color: 'var(--tier-resident)', bg: 'var(--tier-resident-bg)', border: 'var(--tier-resident-border)',
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-      perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
+      perks: ['Credit floor deepens with the value you trade', INVITE_PERK] },
     Steward:  { color: 'var(--tier-steward)', bg: 'var(--tier-steward-bg)', border: 'var(--tier-steward-border)',
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
       perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
@@ -370,10 +372,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
             {/* Identity & Balance Overview */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-6 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-full border-2 border-emerald-500 overflow-hidden bg-oat-50 dark:bg-nature-800 shadow-inner flex items-center justify-center">
+                    <div className="w-14 h-14 shrink-0 rounded-full border-2 border-emerald-500 overflow-hidden bg-oat-50 dark:bg-nature-800 shadow-inner flex items-center justify-center">
                         <img src="/assets/logo-192x192.png" className="w-[70%] h-[70%] object-contain" alt="Identity" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{sample ? sample.member : identity?.callsign}</h2>
                         <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
@@ -501,12 +503,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
+                                <span>{canSend ? t('Send Beans') : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
                             </button>}
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
+                            {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites tab says so. */}
+                            {!preview && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
                                 <span>Invite Members</span>
-                            </div>
+                            </div>}
                         </div>
                     </div>
 
@@ -579,7 +582,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            {sel.perks.map(p => (
+                            {sel.perks.filter(p => !(preview && p === INVITE_PERK)).map(p => (
                                 <div key={p} className="flex items-start gap-2 text-[13px]">
                                     <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : sel.color }}>{selReached ? '✓' : '○'}</span>
                                     <span className="text-nature-700 dark:text-nature-300">{p}</span>
@@ -590,7 +593,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">{preview
+                            ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
+                            : t("Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")}</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -705,8 +710,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
                             }`}
                         >
                             {!canSend
-                                ? (earned <= 0 ? '🔒 Send Credits (needs 1 completed trade)' : '🔒 Send Credits (needs positive balance)')
-                                : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                                ? (earned <= 0 ? '🔒 Send Beans (needs 1 completed trade)' : '🔒 Send Beans (needs positive balance)')
+                                : showSend ? '✕ Cancel' : <><span>💸</span> <span>{t('Send Beans')}</span></>}
                         </button>
 
                         {/* Send Form */}

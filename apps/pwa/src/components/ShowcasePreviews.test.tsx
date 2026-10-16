@@ -281,6 +281,8 @@ describe('sample invites and tree adapters', () => {
         expect(tree[0].callsign).toBe('an example member');
         expect(tree[0].children).toHaveLength(2);
         expect(tree[0].children.map(c => c.callsign)).toEqual(['a neighbour', 'a neighbour']);
+        // Each was brought in with the used invite that names them.
+        expect(tree[0].children.map(c => [c.publicKey, c.inviteCode])).toEqual([['sample-member-first', 'EXAMPLE-9012'], ['sample-member-second', 'EXAMPLE-5678']]);
     });
 });
 

@@ -270,18 +270,26 @@ describe('the Invites page in preview mode shows the real screen with sample dat
             expect.objectContaining({ value: 'EXAMPLE-1234' }),
         );
 
-        // QR card copy button is also a marker action and does not copy
-        const qrCopyBtns = screen.getAllByRole('button', { name: /Copy/ }).filter(b => b.getAttribute('data-testid') === 'local-community-action');
-        expect(qrCopyBtns.length).toBeGreaterThanOrEqual(2);
-        fireEvent.click(qrCopyBtns[qrCopyBtns.length - 1]);
-        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
-        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        // The QR card's own Copy and Share are marker actions too: each opens the sheet; nothing copied or shared
+        const share = vi.fn();
+        Object.assign(navigator, { share });
+        const qrCard = screen.getByTestId('invite-qr-card');
+        const qrMarkers = within(qrCard).getAllByTestId('local-community-action');
+        expect(qrMarkers.map(b => b.textContent)).toEqual([expect.stringMatching(/📋 Copy/), expect.stringMatching(/^Share/)]);
+        for (const marker of qrMarkers) {
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            fireEvent.click(marker);
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        }
         expect(writeText).not.toHaveBeenCalled();
+        expect(share).not.toHaveBeenCalled();
 
-        // Community Tree tab shows sample members
+        // Community Tree tab: the example member at the root, the two neighbours they brought in
         fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
-        expect((await screen.findAllByText(/an example member/)).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText(/a neighbour/).length).toBeGreaterThanOrEqual(2);
+        const treeBox = await screen.findByTestId('invite-tree');
+        expect(within(treeBox).getAllByText(/an example member/)).toHaveLength(1);
+        expect(within(treeBox).getAllByText(/a neighbour/)).toHaveLength(2);
 
         // No network calls made for member's own invites/tree/generate
         expect(getMyInvites).not.toHaveBeenCalled();

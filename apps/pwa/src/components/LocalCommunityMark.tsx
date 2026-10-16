@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
 } from '@beanpool/core';
@@ -99,7 +100,8 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
 
 /**
  * The sheet and the Start a community screen, opened by whatever `children` renders with the `open` (the sheet) and
- * `start` (the screen) it is handed.
+ * `start` (the screen) it is handed. Both are drawn on document.body: a `fixed` overlay drawn in place inside a
+ * transformed card (a pending invite's hover lift) would fill that card, not the screen (review of #2057, B3).
  */
 function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways: LocalCommunityWays; children: (open: () => void, start: () => void) => ReactNode }) {
     const [shown, setShown] = useState<'sheet' | 'start' | null>(null);
@@ -107,13 +109,15 @@ function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways
     return (
         <>
             {children(() => setShown('sheet'), () => setShown('start'))}
-            {/* A marker inside a tappable card (a poll, a listing): its clicks and the sheet's stay here. */}
-            {shown && (
+            {/* A marker inside a tappable card (a poll, a listing): React still bubbles the portal's clicks through the
+                card, so they stop here. */}
+            {shown && createPortal(
                 <div onClick={(e) => e.stopPropagation()}>
                     {shown === 'sheet'
                         ? <LocalCommunitySheet feature={feature} onClose={close} onStart={() => setShown('start')} {...ways} />
                         : <StartCommunityScreen onClose={close} onNearYou={ways.onNearYou} />}
-                </div>
+                </div>,
+                document.body,
             )}
         </>
     );

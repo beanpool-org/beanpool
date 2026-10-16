@@ -446,17 +446,18 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     )}
 
                     {newCode && showQR && (
-                        <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all">
+                        <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all" data-testid={isPreview ? 'invite-qr-card' : undefined}>
                             <p className="text-nature-600 dark:text-nature-400 text-[14px] font-medium mb-3">Share this code with someone you trust</p>
                             <p className="font-mono text-xl font-bold text-nature-950 dark:text-white tracking-widest break-all mb-4" title={newCode}>
                                 {newCode.length > 20 ? `${newCode.substring(0, 16)}...` : newCode.toUpperCase()}
                             </p>
-                            <div className="bg-white rounded-xl p-4 inline-block mb-5 shadow-sm">
-                                <QRCodeSVGComponent value={isPreview ? newCode : `${window.location.origin}/?invite=${newCode}`} size={200} />
+                            {/* Preview: the QR and both markers fit the card at 320 px with 1.3x text (review of #2057, B2). */}
+                            <div className={`bg-white rounded-xl p-4 inline-block mb-5 shadow-sm${isPreview ? ' max-w-full' : ''}`}>
+                                <QRCodeSVGComponent value={isPreview ? newCode : `${window.location.origin}/?invite=${newCode}`} size={200} className={isPreview ? 'block max-w-full h-auto' : undefined} />
                             </div>
-                            <div className="flex gap-3 justify-center">
+                            <div className={isPreview ? 'flex flex-col gap-2' : 'flex gap-3 justify-center'}>
                                 {isPreview ? (
-                                    <LocalCommunityAction feature="invites" label={t('📋 Copy')} className="py-3 px-6 text-[14px]" {...waysForward} />
+                                    <LocalCommunityAction feature="invites" label={t('📋 Copy')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
                                 ) : (
                                     <button 
                                         onClick={() => newCode && handleCopyProxy(newCode)} 
@@ -472,7 +473,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                     </button>
                                 )}
                                 {isPreview ? (
-                                    <LocalCommunityAction feature="invites" label={t('Share')} className="py-3 px-6 text-[14px]" {...waysForward} />
+                                    <LocalCommunityAction feature="invites" label={t('Share')} className="w-full py-3 px-6 text-[14px]" {...waysForward} />
                                 ) : (
                                     <button 
                                         onClick={() => newCode && handleShare(newCode)} 
@@ -510,11 +511,11 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                 {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex gap-2">
                                             {isPreview && (
                                                 <button 
                                                     onClick={() => { setNewCode(inv.code); setShowQR(prev => newCode === inv.code ? !prev : true); }}
-                                                    className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
                                                     aria-label="Show QR code"
                                                     title="Show QR code"
                                                 >
@@ -598,7 +599,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                             <p className="font-medium">No members yet. Generate an invite to start growing!</p>
                         </div>
                     ) : (
-                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm">
+                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm" data-testid={isPreview ? 'invite-tree' : undefined}>
                             {tree.map(node => (
                                 <TreeNodeView key={node.publicKey} node={node} depth={0} identity={identity} />
                             ))}

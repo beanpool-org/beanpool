@@ -142,7 +142,8 @@ export function sampleInviteTree(now: number = Date.now()): SampleTreeNode[] {
             publicKey: child.id,
             callsign: t(child.who),
             joinedAt: at(child.joinedDaysAgo),
-            inviteCode: child.id === 'sample-member-second' ? 'EXAMPLE-5678' : 'EXAMPLE-9012',
+            // The code each was brought in with: the used invite that names them.
+            inviteCode: S.invites.find((inv) => inv.usedBy === child.id)?.code ?? '',
             children: [],
         })),
     }];

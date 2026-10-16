@@ -1099,6 +1099,8 @@ export function initSchema() {
 
     // Ensure all tables have updated_at columns so schema.sql triggers/indexes can compile successfully
     try { db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // A hardship grant's shield on a debt being worked off (state-engine.ts sweepRepayment).
+    try { db.prepare(`ALTER TABLE names_debts ADD COLUMN hardship_held REAL NOT NULL DEFAULT 0`).run(); } catch { }
     // Elder vouch column — added BEFORE schema.sql exec so the re-created
     // members_touch_updated_at trigger (which whitelists elder_vouched_by) compiles.
     try { db.prepare(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT REFERENCES members(public_key)`).run(); } catch { }
@@ -2984,12 +2986,21 @@ export function updateCrowdfundProject(
     })();
 }
 
+/** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
+export const WHOLE_CENTS_ERROR = 'The amount is a number of Beans above 0, to the cent.';
+/** A positive, finite number of Beans in whole cents, within float noise (0.1 + 0.2 is 30 cents). */
+export function isWholeCents(amount: unknown): amount is number {
+    return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) <= 1e-6;
+}
+
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // SECURITY (SRV-8): defense-in-depth — reject non-positive amounts at the data
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
+    // To the cent, as a payment to the Commons is (state-engine.ts payToCommons). Before anything moves: a refusal in words.
+    if (!isWholeCents(amount)) throw new Error(WHOLE_CENTS_ERROR);
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
@@ -3075,7 +3086,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         db.prepare(`UPDATE projects SET current_amount = current_amount + ? WHERE id = ?`).run(amount, projectId);
 
         const updatedProject = db.prepare(`SELECT current_amount, goal_amount FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
-        if (updatedProject && updatedProject.current_amount >= updatedProject.goal_amount && project.status === 'ACTIVE') {
+        // In cents: SQLite sums REALs, and 0.70 + 0.10 + 0.10 + 0.10 is 0.9999999999999999, short of a goal of 1.
+        if (updatedProject && Math.round(updatedProject.current_amount * 100) >= Math.round(updatedProject.goal_amount * 100) && project.status === 'ACTIVE') {
             db.prepare(`UPDATE projects SET status = 'FUNDED' WHERE id = ?`).run(projectId);
             db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 

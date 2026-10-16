@@ -27,6 +27,8 @@ export interface DebtRecord {
     repaying_pubkey: string | null; repaid: number; settled_how: 'pay_back' | 'work_off' | 'forgiven' | null;
     settled_by: string | null; settled_at: string | null; settle_ref: string | null; note: string | null;
     work_off_confirmation_id: string | null; work_off_floor_before: string | null; work_off_floor_set_at: string | null;
+    /** What a hardship grant gave the member working this debt off, as far as they still hold it (never swept). */
+    hardship_held: number;
 }
 
 export class DebtError extends Error {

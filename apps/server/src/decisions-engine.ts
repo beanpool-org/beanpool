@@ -1507,6 +1507,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
                         VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
                     `).run(crypto.randomUUID(), memberPubkey, amount, `Hardship grant: ${decision.title.slice(0, 80)}`, now, authSigner);
+                    // A member working off a debt keeps the grant: the next payment they receive sweeps only what it
+                    // brought (state-engine.ts sweepRepayment), not this.
+                    db.prepare(`UPDATE names_debts SET hardship_held = ROUND(hardship_held + ?, 2) WHERE repaying_pubkey = ? AND status = 'open'`)
+                        .run(amount, memberPubkey);
 
                     persistDecayEvents();
                     persistCommonsBalance();

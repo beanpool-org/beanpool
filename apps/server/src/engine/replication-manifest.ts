@@ -439,7 +439,7 @@ export const TABLES: Record<string, TableEntry> = {
     health_access_log: plain('id actor_pubkey action subject_pubkey detail token_id token_name at updated_at'),
     known_consents: plain('member_pubkey version consented_at updated_at'),
     known_consent_log: plain('id member_pubkey action version at updated_at'),
-    names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at updated_at'),
+    names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at hardship_held updated_at'),
     names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
     // A member's retried payment gets its first answer (engine/money-requests.ts), on a standby that took over too. Its
     // week-old ids go without tombstones, on each server (engine/money-requests.ts pruneMoneyRequests; the age rule).

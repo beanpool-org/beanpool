@@ -163,10 +163,15 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
     }
     const drift = sumBalances - baseline;
 
+    // An open crowdfund's escrow, and an open bounded enterprise's (escrow_<projectId>), holds its pledges until the goal is
+    // met (the server's pledgeToProject): not stranded. A funded or closed project's escrow that still holds Beans is. A bare
+    // ledger database (a test's, a copy being checked) may have no projects table.
+    const hasProjects = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects'`).get();
     const strandedEscrows = (db.prepare(`
         SELECT COUNT(*) as c FROM accounts
         WHERE public_key LIKE 'escrow_%' AND ABS(balance) > 0.01
           AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
+          ${hasProjects ? `AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM projects WHERE status = 'ACTIVE')` : ''}
     `).get() as any).c as number;
 
     // `Math.abs(drift) < 0.01` is false for a NaN drift, so a non-finite sum fails too.

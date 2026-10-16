@@ -27,7 +27,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -2701,7 +2701,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         } else {
-            sweepRepayment(to);
+            // What this payment brought them, net of the fee: the hardship shield is read against it.
+            sweepRepayment(to, txn.amount - (txn.taxFee || 0));
         }
     });
 
@@ -3125,7 +3126,7 @@ export function payFromCommons(
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         } else {
-            sweepRepayment(to);
+            sweepRepayment(to, txn.amount);
         }
     });
 
@@ -5486,15 +5487,25 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
  * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
  * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
  * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
- * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back:
+ * the grant raises the debt's `hardship_held` (the shield), and each sweep keeps back the part of it the member still held
+ * before this payment came in (`received`, what it brought them). Spending the grant shrinks the shield, so what is
+ * earned afterwards is swept.
  * Returns what moved.
  */
-export function sweepRepayment(memberPubkey: string): number {
+const sweptAhead = new Map<string, number>();
+export function sweepRepayment(memberPubkey: string, received = 0): number {
     const debt = repaymentOf(memberPubkey);
     if (!debt) return 0;
     const { balance } = getBalance(memberPubkey);
+    // Several payments to one member in one transaction run their sweeps one after another, after it commits: the first
+    // already swept what the later ones brought, so a later one must not count that again as money it brought (it would
+    // read the grant as spent and sweep it). Cleared once the batch of after-commit sweeps is over.
+    const ahead = sweptAhead.get(memberPubkey) ?? 0;
+    const own = Math.max(0, received - ahead);
+    const shield = Math.max(0, Math.min(Number(debt.hardship_held) || 0, balance - own));
     // Down to the cent, never up: rounding up would take a part of a cent below 0.
-    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    const amount = Math.floor(Math.max(0, Math.min(balance - shield, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
     if (!(amount > 0)) return 0;
     try {
         conservingTransaction(() => {
@@ -5504,12 +5515,20 @@ export function sweepRepayment(memberPubkey: string): number {
             const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
                 .run(amount, debt.id, amount);
             if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
+            // What is left of the grant: what was spent of it is gone from the shield.
+            db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ?').run(shield, debt.id);
             db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?
                         WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
         console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
         return 0;
+    }
+    const over = amount - own;
+    if (over > 0 || ahead > 0) {
+        const next = Math.max(0, ahead - received) + Math.max(0, over);
+        if (!sweptAhead.has(memberPubkey)) setImmediate(() => sweptAhead.delete(memberPubkey));
+        sweptAhead.set(memberPubkey, next);
     }
     // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
     try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
@@ -5535,8 +5554,8 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
     }
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
-        throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
+    if (!isWholeCents(amount)) {
+        throw Object.assign(new Error(WHOLE_CENTS_ERROR), { status: 400 });
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;

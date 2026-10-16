@@ -13,7 +13,7 @@ import { assertNotMuted } from './auto-moderation.js';
 import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
-import { isAcceptablePhotoValue } from './avatar.js';
+import { photoRefusalError, photosRefusal } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
@@ -97,7 +97,8 @@ function forActor(post: MarketplacePost, actorPubkey: string | undefined): Marke
  * Checked before the first put, so a refused edit writes nothing. Both apps send JPEGs.
  */
 function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
-    if (!photos.every(p => isAcceptablePhotoValue(p))) throw new Error(POST_PHOTO_FORMAT_ERROR);
+    const refusal = photosRefusal(photos);
+    if (refusal) throw photoRefusalError(refusal, POST_PHOTO_FORMAT_ERROR);
     const store = getImageStore();
     return photos.map((p, idx) =>
         storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));

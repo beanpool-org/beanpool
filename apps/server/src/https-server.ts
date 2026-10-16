@@ -299,10 +299,10 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 //     before it has (or to decide whether to join with) an identity.
 //   - onboarding / recovery: a not-yet-joined or recovering user has no member
 //     identity to sign as.
-//   - binary assets fetched by <img>/streamed: a browser image/attachment
-//     request cannot carry signature headers. Message attachments are E2E
-//     ciphertext (NAT-1), so serving them unauthenticated leaks no plaintext.
-//     (A token-in-URL scheme for these is tracked as follow-up.)
+//   - binary assets fetched by <img>/streamed: a browser image request cannot
+//     carry signature headers. Not a chat photo: both apps fetch it as a signed
+//     JSON read (native signedGet, the PWA's request), so it is gated, for the
+//     people in its conversation only (routes/marketplace.ts).
 // Some entries are here only so that, switched off by the node's profile, they answer 404 feature_off to everyone:
 // otherwise they are members' reads on every node (MEMBERS_ONLY_READS_*), and the listings and the Commons pot are
 // public only on some (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT, MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT).
@@ -365,7 +365,7 @@ export function isPeerProtocolRead(ctx: { method: string; path: string }): boole
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
 // accidentally expose a sensitive neighbour — e.g. the DM-content reads
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
-// GATED; only the E2E-ciphertext attachment binary is public.
+// GATED, and the chat photo beside them too.
 export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member? (answered only to the key's own signer; the route refuses anyone else)
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability (rate-limited)
@@ -375,7 +375,6 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/decisions\/[^/]+$/,                   // members only (MEMBERS_ONLY_READS_PATTERNS)
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: the exact callsign's SSO recovery candidate, no photo (rate-limited)
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed for every listing where the listings are members', and for a listing off the board where they are a public read (engine/photo-keys.ts)
-    /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
     /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)

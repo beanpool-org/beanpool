@@ -46,7 +46,7 @@ import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
 import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
-import { withheldAttachmentFor } from '../engine/withheld-lines.js';
+import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
@@ -217,14 +217,20 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
 
 // Lazy-load an encrypted message attachment (image). Returns ciphertext only —
 // the node can't read it; the recipient decrypts with the DM key + nonce.
+// Only to the people in its conversation, as its words go (GET /api/messages/:conversationId), and a withheld line's
+// to its sender alone: both apps sign this read. Anyone else gets the answer for an id with no photo, so it says neither
+// that the message exists nor that it carries one (its size, its type, the moment it is deleted).
 router.get('/api/messages/:id/attachment', async (ctx) => {
     const { id } = ctx.params;
+    const viewer = ctx.state.actor as string | undefined;
     // The row first, for the same reason as the photo route above.
-    const row = db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined;
+    const inIt = !!viewer && !!db.prepare(`SELECT 1 FROM messages m JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
+        WHERE m.id = ? AND cp.public_key = ?`).get(id, viewer);
+    const row = inIt ? db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined : undefined;
     if (!row) {
         // The photo of a line kept for its sender alone (engine/withheld-lines.ts): served by its id as a stored one is, from
         // the row or the image store as a chat photo is.
-        const own = withheldAttachmentFor(id);
+        const own = ownWithheldLine(id, viewer) ? withheldAttachmentFor(id) : undefined;
         if (own) {
             let ownData: string | null = null;
             try {

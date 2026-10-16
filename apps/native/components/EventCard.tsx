@@ -70,19 +70,23 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         || post.event_going_count != null || post.event_interested_count != null;
 
     const handleRsvp = async (tapped: EventRsvpStatus) => {
-        if (pending || closed) return;
+        const next = nextRsvp(counts.mine, tapped);
+        if (pending || (closed && next !== null)) return;
         if (!currentPubkey) {
             Alert.alert('Sign in to RSVP', 'Set up your member identity to tell the host you are coming.');
             return;
         }
-        const next = nextRsvp(counts.mine, tapped);
         const before = counts;
         hapticTick();
         setCounts(applyRsvp(counts, next));
         setPending(tapped);
         try {
             const res = await rsvpEvent(post.id, next);
-            if (res?.post) setCounts(countsOf(res.post));
+            if (res?.post) {
+                setCounts(countsOf(res.post));
+            } else if (res?.success) {
+                setCounts(c => applyRsvp(c, null));
+            }
             onRsvpChanged?.();
         } catch (err: any) {
             setCounts(before);
@@ -94,14 +98,15 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
 
     const rsvpButton = (status: EventRsvpStatus, label: string) => {
         const selected = counts.mine === status;
+        const disabled = (closed && !selected) || !!pending;
         return (
             <Pressable
                 onPress={() => handleRsvp(status)}
-                disabled={closed || !!pending}
-                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, closed && styles.rsvpBtnDisabled]}
+                disabled={disabled}
+                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
                 accessibilityRole="button"
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
-                accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
+                accessibilityState={{ selected, disabled, busy: pending === status }}
             >
                 {/*
                   * The label stays in the layout while the RSVP is in flight, hidden under the spinner rather
@@ -168,7 +173,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
             {isOwnEvent(post, currentPubkey) ? (
                 <Text style={styles.hosting} numberOfLines={1}>You're hosting this event</Text>
-            ) : !closed && (
+            ) : (
                 <View style={styles.rsvpRow}>
                     {rsvpButton('going', 'Going')}
                     {rsvpButton('interested', 'Interested')}

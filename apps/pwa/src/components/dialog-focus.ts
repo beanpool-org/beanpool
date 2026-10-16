@@ -17,6 +17,8 @@ export interface DialogFocusOptions {
     keepFocus?: RefObject<boolean>;
     /** Where focus goes on close when the opener has gone. */
     fallback?: () => HTMLElement | null | undefined;
+    /** Where focus goes on open (defaults to the dialog's h2). */
+    initialFocus?: () => HTMLElement | null | undefined;
 }
 
 export function useDialogFocus(dialog: RefObject<HTMLDivElement | null>, onClose: () => void, opts: DialogFocusOptions = {}) {
@@ -25,10 +27,16 @@ export function useDialogFocus(dialog: RefObject<HTMLDivElement | null>, onClose
     closeRef.current = onClose;
     const fallbackRef = useRef(opts.fallback);
     fallbackRef.current = opts.fallback;
+    const initialFocusRef = useRef(opts.initialFocus);
+    initialFocusRef.current = opts.initialFocus;
     const keepFocus = opts.keepFocus;
     useEffect(() => {
         const back = opener.current as HTMLElement | null;
-        dialog.current?.querySelector<HTMLElement>('h2')?.focus();
+        if (initialFocusRef.current) {
+            initialFocusRef.current()?.focus();
+        } else {
+            dialog.current?.querySelector<HTMLElement>('h2')?.focus();
+        }
         const onKeyDown = (e: KeyboardEvent) => {
             const box = dialog.current;
             // Not drawn (the picker while its card's settings are open in its place), or another dialog is in front.
@@ -57,9 +65,9 @@ export function useDialogFocus(dialog: RefObject<HTMLDivElement | null>, onClose
                 first.focus();
             }
         };
-        document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keydown', onKeyDown);
         return () => {
-            document.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keydown', onKeyDown);
             if (keepFocus?.current) return;
             const to = back && back !== document.body && back.isConnected ? back : fallbackRef.current?.();
             to?.focus?.();

@@ -153,9 +153,33 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         // On the first line with the date, as one more piece of the wrapping row, so it never covers the time.
         expect(screen.getByTestId('event-state-badge').parentElement).toBe(screen.getByTestId('event-when').parentElement);
         unmount();
-        renderAt320(<EventCard post={{ ...baseEvent, eventState: 'cancelled' }} identity={identity} />);
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventState: 'cancelled' }} identity={identity} />);
         expect(screen.getByTestId('event-state-badge')).toHaveTextContent('CANCELLED');
-        expect(screen.getByRole('button', { name: 'Going ✓' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Going' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Interested' })).toBeDisabled();
+    });
+
+    it('a cancelled event, the member Going, "Not going" answered with post:null → the card shows not going and the right counts', async () => {
+        vi.mocked(api.rsvpEvent).mockResolvedValueOnce({ success: true, post: null });
+        const onRsvpChange = vi.fn();
+        renderAt320(<EventCard post={{ ...baseEvent, eventState: 'cancelled', myRsvp: 'going', goingCount: 7, interestedCount: 3 }} identity={identity} onRsvpChange={onRsvpChange} />);
+        const going = screen.getByRole('button', { name: 'Going ✓' });
+        expect(going).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Interested' })).toBeDisabled();
+
+        fireEvent.click(going);
+        await waitFor(() => expect(api.rsvpEvent).toHaveBeenCalledWith('ev-1', null));
+
+        expect(await screen.findByText(/6 going · 3 interested/)).toBeInTheDocument();
+        const goingAfter = screen.getByRole('button', { name: 'Going' });
+        expect(goingAfter).toHaveAttribute('aria-pressed', 'false');
+        expect(goingAfter).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Interested' })).toBeDisabled();
+        expect(onRsvpChange).toHaveBeenCalledWith(expect.objectContaining({
+            myRsvp: null,
+            goingCount: 6,
+            interestedCount: 3,
+        }));
     });
 
     it('a viewer with no identity cannot RSVP', () => {

@@ -62,7 +62,7 @@ export function MyDealsModal({
     const sheetShownRef = useRef(sheetShown);
     sheetShownRef.current = sheetShown;
     const markFromRef = useRef<HTMLElement | null>(null);
-    const openMark = (from: HTMLElement) => { markFromRef.current = from; setSheetShown('sheet'); };
+    const openMark = (from: HTMLElement) => { from?.focus?.(); markFromRef.current = from; setSheetShown('sheet'); };
     const closeMark = () => { setSheetShown(null); markFromRef.current?.focus(); };
 
     const sample = useMemo(() => (preview ? sampleDeals() : null), [preview]);
@@ -103,11 +103,10 @@ export function MyDealsModal({
         }, 30);
 
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-            // If the lightbox or the card's sheet is open, its own trap and Escape listener take precedence
-            if (lightboxOpenRef.current || sheetShownRef.current) return;
+            // If the lightbox or a sheet (card's sheet or a marker's sheet) is open, its own trap and Escape listener take precedence
+            if (lightboxOpenRef.current || sheetShownRef.current || document.querySelector(MARKER_SHEET)) return;
 
             if (e.key === 'Escape') {
-                if (document.querySelector(MARKER_SHEET)) return;
                 e.preventDefault();
                 e.stopPropagation();
                 onClose();
@@ -741,12 +740,14 @@ export function MyDealsModal({
                     onStart={() => setSheetShown('start')}
                     onNearYou={onNearYou ? () => { onClose(); onNearYou(); } : undefined}
                     onGuide={onGuide ? (slug) => { onClose(); onGuide(slug); } : undefined}
+                    returnFocus={() => markFromRef.current}
                 />
             )}
             {sheetShown === 'start' && (
                 <StartCommunityScreen
                     onClose={closeMark}
                     onNearYou={onNearYou ? () => { onClose(); onNearYou(); } : undefined}
+                    returnFocus={() => markFromRef.current}
                 />
             )}
         </>

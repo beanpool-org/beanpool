@@ -114,6 +114,9 @@ async function main() {
 
     assert(visitorsOwnRead(`/api/messages/${convId}`, {}, visitorKey), 'Read DM visitor is in allowed');
     assert(!visitorsOwnRead('/api/messages/unknown-conv-id', {}, visitorKey), 'Read unknown DM refused');
+    // A chat photo's route answers its conversation's people and a withheld line's sender, and anyone else as for no photo (#2079).
+    assert(visitorsOwnRead(`/api/messages/${msgId}/attachment`, {}, visitorKey) && visitorsOwnRead('/api/messages/unknown-id/attachment', {}, visitorKey),
+        'Read of a chat photo left to its route, which decides');
 
     assert(visitorsOwnRead(`/api/ledger/balance/${visitorKey}`, {}, visitorKey), 'Read own balance allowed');
     assert(!visitorsOwnRead(`/api/ledger/balance/${memberKey1}`, {}, visitorKey), 'Read someone else balance refused');

@@ -92,7 +92,6 @@ const VISITOR_READS_PATTERNS = [
     /^\/api\/members\/callsign-available\/[^/]+$/,
     /^\/api\/recovery\/lookup\/[^/]+$/,
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,
-    /^\/api\/messages\/[^/]+\/attachment$/,
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,
     /^\/api\/avatar\/[^/]+$/,
 ];

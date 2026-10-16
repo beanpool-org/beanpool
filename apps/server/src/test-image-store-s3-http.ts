@@ -12,8 +12,8 @@
  *   3. A replaced photo takes a new key and the old object leaves the bucket after the commit; a removed
  *      photo 404s; a row gone while its object remains 404s; a photo replaced while it is being read 404s;
  *      an object gone while its row remains is a 503.
- *   4. A message attachment's ciphertext goes to the bucket and comes back exactly; one deleted while it is
- *      being read 404s.
+ *   4. A message attachment's ciphertext goes to the bucket and comes back exactly to a participant; one deleted
+ *      while it is being read 404s.
  *   5. The sync export rebuilds each photo from the bucket byte for byte, and omits (and names) one it
  *      cannot read, so a replica keeps its own copy.
  *   6. The orphan sweep judges the BUCKET: an aged orphan goes, a fresh one and a referenced one stay, and an
@@ -327,7 +327,15 @@ async function main(): Promise<void> {
 
     // ── 4. an attachment ───────────────────────────────────────────────────────────────────────
     console.log('\n--- 4. An attachment ---');
-    const bob = crypto.randomBytes(32).toString('hex');
+    // Bob asks for the photo signed: a chat photo goes to the people in its conversation only (#2079).
+    const bobKeys = crypto.generateKeyPairSync('ed25519');
+    const bob = bobKeys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    const asBob = (p: string): Record<string, string> => {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const signature = crypto.sign(null, Buffer.from(`GET\n${p}\n${ts}\n${nonce}\n`), bobKeys.privateKey).toString('base64');
+        return { 'X-Public-Key': bob, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    };
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(bob);
     const conv = createConversation('dm', [author, bob], author);
     if (!conv) throw new Error('setup: no conversation');
@@ -341,7 +349,7 @@ async function main(): Promise<void> {
     assert(!!attRow && attRow.data === null && attRow.storage_key === `attachments/${msg.id}.bin`,
         'an attachment\'s ciphertext leaves the row for the bucket');
     assert((await fake.objects()).get(attRow.storage_key)?.bytes.toString('base64') === cipher, 'the bucket holds the ciphertext exactly');
-    const attRes = await fetch(`${BASE}/api/messages/${msg.id}/attachment`);
+    const attRes = await fetch(`${BASE}/api/messages/${msg.id}/attachment`, { headers: asBob(`/api/messages/${msg.id}/attachment`) });
     const attJson = await attRes.json() as any;
     assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === att.nonce && attJson.mime === 'image/png',
         'the attachment route returns the ciphertext, nonce and mime unchanged');
@@ -355,7 +363,7 @@ async function main(): Promise<void> {
     const att2Row = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg2.id) as any;
     await fake.clearLog();
     await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${att2Row.storage_key}`, delayMs: 1_500, count: 1 });
-    const racedAtt = fetch(`${BASE}/api/messages/${msg2.id}/attachment`);
+    const racedAtt = fetch(`${BASE}/api/messages/${msg2.id}/attachment`, { headers: asBob(`/api/messages/${msg2.id}/attachment`) });
     // The bucket has the read (and is holding it) before the message is deleted under it.
     for (let i = 0; i < 200; i++) {
         if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(att2Row.storage_key))) break;
@@ -367,7 +375,7 @@ async function main(): Promise<void> {
         'setup: the message was deleted, and its attachment\'s object removed, while the read was in flight');
     const racedAttStatus = (await racedAtt).status;
     await fake.clearFaults();
-    assert(racedAttStatus === 404, `an attachment deleted while it was being read is a 404, not a 503 (got ${racedAttStatus})`);
+    assert(racedAttStatus === 404, `an attachment deleted while it was being read is a 404 to a participant, not a 503 (got ${racedAttStatus})`);
 
     // ── 5. the sync export ─────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. The sync export ---');

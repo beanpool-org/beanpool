@@ -94,6 +94,8 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { getImageStore } = await import('./storage/image-store.js');
     const photoKeys = await import('./engine/photo-keys.js');
+    const thumbs = await import('./storage/photo-thumbnails.js').catch(() => null);
+    const settled = async (): Promise<void> => { if (thumbs) await thumbs.thumbnailsSettled(); else await new Promise(r => setTimeout(r, 100)); };
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -123,6 +125,7 @@ async function main(): Promise<void> {
     /** Vera posts a photo; her listing's id, its photo's URL as her read carries it, its key in the store and its bytes. */
     const veraPosts = async (title: string, extra: Record<string, unknown> = {}) => {
         const r = await listing(vera, title, [TINY_PNG], extra);
+        await settled();
         const id = r.body?.post?.id as string;
         const url = pathOf(String(r.body?.post?.photos?.[0] ?? ''));
         const key = id ? keyOf(id) : null;

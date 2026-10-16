@@ -58,7 +58,7 @@ const VISITOR_READS_EXACT = new Set([
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/, /^\/api\/members\/callsign-available\/[^/]+$/, /^\/api\/recovery\/lookup\/[^/]+$/,
-    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/, /^\/api\/messages\/[^/]+\/attachment$/, /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,
+    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/, /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,
     /^\/api\/avatar\/[^/]+$/,
 ];
 const visitorMayRead = (p) => VISITOR_READS_EXACT.has(p) || VISITOR_READS_PATTERNS.some((re) => re.test(p));

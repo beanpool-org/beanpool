@@ -19,6 +19,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
 } from '@beanpool/core';
 import { StartCommunityScreen } from './StartCommunityScreen';
+import { useDialogFocus } from './dialog-focus';
 
 /** Where the sheet's two in-app ways forward lead; a button whose way is absent is not shown. */
 export interface LocalCommunityWays {
@@ -41,18 +42,30 @@ export function LocalCommunityPill() {
     );
 }
 
-export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGuide }: { feature: ShowcaseFeature; onClose: () => void; onStart: () => void } & LocalCommunityWays) {
+export function LocalCommunitySheet({
+    feature,
+    onClose,
+    onStart,
+    onNearYou,
+    onGuide,
+    returnFocus,
+}: {
+    feature: ShowcaseFeature;
+    onClose: () => void;
+    onStart: () => void;
+    returnFocus?: () => HTMLElement | null | undefined;
+} & LocalCommunityWays) {
+    const dialog = useRef<HTMLDivElement>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
-    useEffect(() => {
-        closeRef.current?.focus();
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    useDialogFocus(dialog, onClose, {
+        initialFocus: () => closeRef.current,
+        fallback: returnFocus,
+    });
     const go = (fn: () => void) => () => { onClose(); fn(); };
     return (
         <div className="fixed inset-0 z-[1200] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
             <div
+                ref={dialog}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="local-community-sheet-title"
@@ -105,17 +118,32 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
  */
 function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways: LocalCommunityWays; children: (open: () => void, start: () => void) => ReactNode }) {
     const [shown, setShown] = useState<'sheet' | 'start' | null>(null);
-    const close = () => setShown(null);
+    const openerRef = useRef<HTMLElement | null>(null);
+    const open = () => {
+        openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+        setShown('sheet');
+    };
+    const start = () => {
+        openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+        setShown('start');
+    };
+    const close = () => {
+        setShown(null);
+        const back = openerRef.current;
+        if (back && back !== document.body && back.isConnected) {
+            back.focus();
+        }
+    };
     return (
         <>
-            {children(() => setShown('sheet'), () => setShown('start'))}
+            {children(open, start)}
             {/* A marker inside a tappable card (a poll, a listing): React still bubbles the portal's clicks through the
                 card, so they stop here. */}
             {shown && createPortal(
                 <div onClick={(e) => e.stopPropagation()}>
                     {shown === 'sheet'
-                        ? <LocalCommunitySheet feature={feature} onClose={close} onStart={() => setShown('start')} {...ways} />
-                        : <StartCommunityScreen onClose={close} onNearYou={ways.onNearYou} />}
+                        ? <LocalCommunitySheet feature={feature} onClose={close} onStart={() => setShown('start')} returnFocus={() => openerRef.current} {...ways} />
+                        : <StartCommunityScreen onClose={close} onNearYou={ways.onNearYou} returnFocus={() => openerRef.current} />}
                 </div>,
                 document.body,
             )}

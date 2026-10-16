@@ -34,8 +34,8 @@
  * ## Formats
  *
  * JPEG, PNG, WebP and GIF are stripped: between them they are every format a node accepts where it checks the
- * bytes (avatars, enterprise and crowdfund photos, group pictures: `isAcceptableAvatarValue`, a JPEG, PNG, WebP or
- * GIF whose bytes really are one; where a photo is also handed out as stored, `isAcceptablePhotoValue` holds a bare
+ * bytes (avatars, enterprise and crowdfund photos, group pictures: `avatarValueRefusal`, a JPEG, PNG, WebP or
+ * GIF whose bytes really are one; where a photo is also handed out as stored, `photoValueRefusal` holds a bare
  * base64 value to the same rule) and every format a post may declare (JPEG, PNG, WebP). Anything else passes
  * through untouched. It can only arrive where a node does not look at the bytes: a post photo whose declared type
  * does not match what it holds (the post check reads the data URL's type, not the bytes, and the existing suites
@@ -113,6 +113,90 @@ export function isStorableImageValue(value: unknown): boolean {
     if (typeof value !== 'string') return true;
     const read = readImageValue(value);
     return read === null || walkImage(read.bytes) !== 'unsafe';
+}
+
+/**
+ * The most pixels a stored photo may have: what the list copy's decoder takes (storage/photo-thumbnails.ts), 2048 × 2048.
+ * A camera photo either app sends is far below it (800 px wide on the phone, 800 on the longest side on the web). The
+ * phone bounds the width alone, so a scroll capture of more than about three screens comes out 800 × more than 5,243
+ * px, over it: refused with its own sentence (engine/avatar.ts tooManyPixelsText), never the format one. A photo is
+ * decoded whole by every phone and browser that shows it, a list's 56-px square included: a 49 KB PNG of 20,000 ×
+ * 20,000 is 1.6 GB of pixels, and a desktop Chromium held 1.8 GB to draw one at 80 px (the photos/events audit check,
+ * 2026-10-17).
+ */
+export const MAX_STORED_PIXELS = 2048 * 2048;
+
+/**
+ * The width and height a JPEG, PNG, GIF or WebP says it has, read from its headers alone (nothing is decoded), or null
+ * for anything else or a header cut short: the routes judge those as before.
+ *
+ * Read as a decoder reads them. A JPEG is walked as the strip walks it (nextJpegMarker, libjpeg's next_marker): bytes
+ * between segments that are no marker, `FF 00` pairs among them, are skipped, so four bytes after the SOI cannot hide
+ * the frame behind a length that is not one (#2079 review B3). A GIF is as big as its biggest image on the screen: a
+ * decoder draws a first image bigger than the logical screen at its own size (Chromium sizes the picture to it), so
+ * every image descriptor counts, past the extension blocks between them (#2079 review B4).
+ */
+export function imageSize(b: Buffer): { width: number; height: number } | null {
+    try {
+        if (b.length >= 24 && b.subarray(0, 8).equals(PNG_SIGNATURE) && b.toString('latin1', 12, 16) === 'IHDR') {
+            return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+        }
+        if (b.length >= 10 && (b.toString('latin1', 0, 6) === 'GIF87a' || b.toString('latin1', 0, 6) === 'GIF89a')) {
+            let width = b.readUInt16LE(6), height = b.readUInt16LE(8);
+            let pos = 13 + colourTableBytes(b[10] ?? 0);
+            while (pos < b.length) {
+                const introducer = b[pos];
+                if (introducer === 0x2c) { // image descriptor: left, top, width, height
+                    if (pos + 10 > b.length) break;
+                    width = Math.max(width, b.readUInt16LE(pos + 1) + b.readUInt16LE(pos + 5));
+                    height = Math.max(height, b.readUInt16LE(pos + 3) + b.readUInt16LE(pos + 7));
+                    pos = skipGifSubBlocks(b, pos + 10 + colourTableBytes(b[pos + 9]) + 1);
+                } else if (introducer === 0x21) { // extension
+                    pos = skipGifSubBlocks(b, pos + 2);
+                } else {
+                    break; // the trailer, or bytes no decoder reads on from
+                }
+                if (pos < 0) break;
+            }
+            return { width, height };
+        }
+        if (b.length >= 30 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') {
+            const kind = b.toString('latin1', 12, 16);
+            if (kind === 'VP8X') return { width: 1 + b.readUIntLE(24, 3), height: 1 + b.readUIntLE(27, 3) };
+            if (kind === 'VP8L') { const bits = b.readUInt32LE(21); return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 }; }
+            if (kind === 'VP8 ') return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+            return null;
+        }
+        if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+            let pos = 2;
+            for (;;) {
+                const start = nextJpegMarker(b, pos);
+                if (start < 0) return null;
+                let at = start;
+                while (b[at + 1] === 0xff) at++; // fill bytes before the marker
+                const marker = b[at + 1];
+                if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) { pos = at + 2; continue; }
+                if (marker === 0xda || marker === 0xd9) return null;
+                // A start of frame (SOF0-15 but DHT, JPG and DAC): its height, then its width.
+                if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+                    return at + 9 <= b.length ? { width: b.readUInt16BE(at + 7), height: b.readUInt16BE(at + 5) } : null;
+                }
+                if (at + 4 > b.length) return null;
+                pos = at + 2 + b.readUInt16BE(at + 2);
+            }
+        }
+    } catch { /* cut short */ }
+    return null;
+}
+
+/**
+ * The width and height of an image with more pixels than a node stores (MAX_STORED_PIXELS), or null for any other
+ * bytes. A route that stores the picture judges the bytes it will store (stripImageMetadata's), which are what every
+ * phone and browser decodes.
+ */
+export function tooManyPixels(b: Buffer): { width: number; height: number } | null {
+    const size = imageSize(b);
+    return size && size.width * size.height > MAX_STORED_PIXELS ? size : null;
 }
 
 const DATA_URL = /^data:([^;,]+);base64,([\s\S]*)$/i;

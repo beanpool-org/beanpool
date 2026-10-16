@@ -458,6 +458,65 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(onClose).toHaveBeenCalledTimes(1);
         });
 
+        it('preview: Tab and Shift+Tab loop inside card sheet and marker sheet; Escape returns focus to card or marker', async () => {
+            const onClose = vi.fn();
+            render(<MyDealsModal visible identity={mockIdentity} preview onClose={onClose} />);
+            await new Promise(r => setTimeout(r, 50));
+
+            // 1. Card's sheet
+            const shelvesCard = screen.getByTestId('sample-deal-sample-deal-shelves');
+            fireEvent.click(shelvesCard);
+            const cardSheet = await screen.findByTestId('local-community-sheet');
+            expect(cardSheet).toBeInTheDocument();
+
+            const cardButtons = Array.from(cardSheet.querySelectorAll<HTMLElement>('button:not([disabled])'));
+            const cardFirst = cardButtons[0];
+            const cardLast = cardButtons[cardButtons.length - 1];
+
+            // Shift+Tab from first lands on last
+            cardFirst.focus();
+            fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+            expect(document.activeElement).toBe(cardLast);
+
+            // Tab from last lands on first
+            cardLast.focus();
+            fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+            expect(document.activeElement).toBe(cardFirst);
+
+            // Escape returns focus to the card
+            fireEvent.keyDown(document, { key: 'Escape' });
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            expect(document.activeElement).toBe(shelvesCard);
+
+            // 2. Marker's sheet (inside a card)
+            const bike = screen.getByTestId('sample-deal-sample-deal-bike');
+            const marker = within(bike).getByTestId('local-community-action');
+            marker.focus();
+            fireEvent.click(marker);
+
+            const markerSheet = await screen.findByTestId('local-community-sheet');
+            expect(markerSheet).toBeInTheDocument();
+
+            const markerButtons = Array.from(markerSheet.querySelectorAll<HTMLElement>('button:not([disabled])'));
+            const markerFirst = markerButtons[0];
+            const markerLast = markerButtons[markerButtons.length - 1];
+
+            // Shift+Tab from first lands on last
+            markerFirst.focus();
+            fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+            expect(document.activeElement).toBe(markerLast);
+
+            // Tab from last lands on first
+            markerLast.focus();
+            fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+            expect(document.activeElement).toBe(markerFirst);
+
+            // Escape returns focus to the marker
+            fireEvent.keyDown(document, { key: 'Escape' });
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            expect(document.activeElement).toBe(marker);
+        });
+
         it('preview: keys on a marker, or inside its sheet, are that button\'s, never swallowed by the card', async () => {
             render(<MyDealsModal visible identity={mockIdentity} preview onClose={vi.fn()} />);
             const bike = screen.getByTestId('sample-deal-sample-deal-bike');

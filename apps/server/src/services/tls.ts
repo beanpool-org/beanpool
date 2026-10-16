@@ -331,15 +331,26 @@ async function cfDeleteTxtRecord(recordId: string): Promise<void> {
 
 // --- Self-Signed Certs (LAN / Fallback) ---
 
-/**
- * Why OpenSSL refuses this CA certificate, or this server certificate and key as the pair https.createServer loads
- * (the same tls.createSecureContext call); null when they are good. selfsigned 2.x (node-forge) makes a certificate
- * OpenSSL 3 cannot parse about once in 10,000: its random 9-byte serial can start 00 00 and node-forge then writes a
- * non-minimal INTEGER ("asn1 illegal padding"), which failed a fresh boot on CI on 15 Oct.
+/*
+ * selfsigned 2.x (node-forge) makes a certificate OpenSSL 3 cannot parse 1 time in 65,536: its random 9-byte serial
+ * can start 00 00 with a third byte below 0x80, and node-forge then writes a non-minimal INTEGER ("asn1 illegal
+ * padding"), which failed a fresh boot on CI on 15 Oct. A set of two certificates is bad 1 time in 32,768.
  */
-export function selfSignedProblem(caCert: string, serverCert: string, serverKey: string): string | null {
+
+/** Why OpenSSL refuses this CA certificate (the one /trust hands out); null when it parses. */
+export function caCertProblem(caCert: string): string | null {
     try {
         new crypto.X509Certificate(caCert);
+        return null;
+    } catch (err) {
+        return (err as Error).message || String(err);
+    }
+}
+
+/** Why OpenSSL refuses this server certificate and key as the pair https.createServer loads (the same
+ *  tls.createSecureContext call); null when they are good. */
+export function serverPairProblem(serverCert: string, serverKey: string): string | null {
+    try {
         tls.createSecureContext({ cert: serverCert, key: serverKey });
         return null;
     } catch (err) {
@@ -351,58 +362,83 @@ let generate: typeof selfsigned.generate = selfsigned.generate;
 /** Tests only: make the certificates with this instead of selfsigned.generate (null puts it back). */
 export function _setSelfSignedGenerateForTests(fn: typeof selfsigned.generate | null): void { generate = fn ?? selfsigned.generate; }
 
-/** Fresh tries before a boot gives up: a bad set is about one in 10,000, so a second try all but always does. */
+/** Fresh tries before a boot gives up: a bad certificate is 1 in 65,536, so a second try all but always does. */
 const SELF_SIGNED_TRIES = 5;
 
+/** A file's text, or why it cannot be read. */
+function readOrError(file: string): string | Error {
+    try {
+        return fs.readFileSync(file, 'utf-8');
+    } catch (err) {
+        return err as Error;
+    }
+}
+
 function generateSelfSigned(): void {
-    // Certificates already on disk are used when OpenSSL takes them. A set it refuses (a bad serial written by an
+    // Certificates already on disk are used when OpenSSL takes them. A half it refuses (a bad serial written by an
     // older version, a certificate and key from two different runs, a missing file) is made again rather than
-    // failing every boot after this one.
-    if (fs.existsSync(CA_CERT_PATH) && fs.existsSync(SERVER_CERT_PATH)) {
-        let problem: string | null;
-        try {
-            const ca = fs.readFileSync(CA_CERT_PATH, 'utf-8');
-            const cert = fs.readFileSync(SERVER_CERT_PATH, 'utf-8');
-            const key = fs.readFileSync(SERVER_KEY_PATH, 'utf-8');
-            problem = selfSignedProblem(ca, cert, key);
-            if (!problem) {
-                caCertPem = ca;
-                serverCertPem = cert;
-                serverKeyPem = key;
-                console.log('🔐 Self-signed certificates loaded from disk');
-                return;
-            }
-        } catch (err) {
-            problem = (err as Error).message;
+    // failing every boot after this one. The CA and the server pair are checked apart (#2031 N1): the server pair is
+    // what a browser exception or NODE_EXTRA_CA_CERTS trusts on a LAN node, so a bad CA alone is remade alone.
+    const ca = readOrError(CA_CERT_PATH);
+    const cert = readOrError(SERVER_CERT_PATH);
+    const key = readOrError(SERVER_KEY_PATH);
+    const missing = (r: string | Error) => r instanceof Error && (r as NodeJS.ErrnoException).code === 'ENOENT';
+    if (!(missing(ca) && missing(cert) && missing(key))) {
+        const caProblem = ca instanceof Error ? ca.message : caCertProblem(ca);
+        const pairProblem = cert instanceof Error ? cert.message : key instanceof Error ? key.message : serverPairProblem(cert, key);
+        if (!pairProblem && !caProblem) {
+            caCertPem = ca as string;
+            serverCertPem = cert as string;
+            serverKeyPem = key as string;
+            console.log('🔐 Self-signed certificates loaded from disk');
+            return;
         }
-        console.log(`⚠️  Self-signed certificates on disk cannot be used (${problem}) — making new ones`);
+        if (!pairProblem) {
+            console.log(`⚠️  The self-signed CA on disk cannot be used (${caProblem}) — making a new CA, keeping the server certificate`);
+            const made = madeUntilGood(makeCa, (m) => caCertProblem(m.caCert));
+            caCertPem = made.caCert;
+            serverCertPem = cert as string;
+            serverKeyPem = key as string;
+            writeFileAtomic(CA_CERT_PATH, caCertPem);
+            writeFileAtomic(CA_KEY_PATH, made.caKey, { mode: 0o600 });
+            console.log('🔐 CA certificate generated and saved to data/tls/');
+            return;
+        }
+        // A new server pair would be signed by the CA kept here if selfsigned 2.4.1 could sign with one; it cannot
+        // (every certificate it makes is its own issuer), so the four are made again together, as on a first boot.
+        console.log(`⚠️  The self-signed server certificate on disk cannot be used (${pairProblem}) — making new certificates`);
     }
 
     console.log('🔐 Generating local CA + server certificates...');
+    const made = madeUntilGood(
+        () => ({ ...makeCa(), ...makeServerPair() }),
+        (m) => caCertProblem(m.caCert) ?? serverPairProblem(m.serverCert, m.serverKey),
+    );
+    caCertPem = made.caCert;
+    serverCertPem = made.serverCert;
+    serverKeyPem = made.serverKey;
+    // Persist
+    writeFileAtomic(CA_CERT_PATH, caCertPem);
+    writeFileAtomic(CA_KEY_PATH, made.caKey, { mode: 0o600 });
+    writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
+    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
+    console.log('🔐 Certificates generated and saved to data/tls/');
+}
 
+/** make() until OpenSSL takes what it made (problem() is null), at most SELF_SIGNED_TRIES times. */
+function madeUntilGood<T>(make: () => T, problem: (made: T) => string | null): T {
     let lastProblem = '';
     for (let attempt = 1; attempt <= SELF_SIGNED_TRIES; attempt++) {
-        const made = makeSelfSignedSet();
-        const problem = selfSignedProblem(made.caCert, made.serverCert, made.serverKey);
-        if (!problem) {
-            caCertPem = made.caCert;
-            serverCertPem = made.serverCert;
-            serverKeyPem = made.serverKey;
-            // Persist
-            writeFileAtomic(CA_CERT_PATH, caCertPem);
-            writeFileAtomic(CA_KEY_PATH, made.caKey, { mode: 0o600 });
-            writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
-            writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
-            console.log('🔐 Certificates generated and saved to data/tls/');
-            return;
-        }
-        lastProblem = problem;
-        console.log(`⚠️  A new self-signed certificate did not parse (${problem}) — making another (try ${attempt} of ${SELF_SIGNED_TRIES})`);
+        const made = make();
+        const why = problem(made);
+        if (!why) return made;
+        lastProblem = why;
+        console.log(`⚠️  A new self-signed certificate did not parse (${why}) — making another (try ${attempt} of ${SELF_SIGNED_TRIES})`);
     }
     throw new Error(`TLS: ${SELF_SIGNED_TRIES} self-signed certificates in a row did not parse: ${lastProblem}`);
 }
 
-function makeSelfSignedSet(): { caCert: string; caKey: string; serverCert: string; serverKey: string } {
+function makeCa(): { caCert: string; caKey: string } {
     // Generate the Root CA
     const caAttrs = [{ name: 'commonName', value: 'BeanPool Local CA' }];
     const caResult = generate(caAttrs, {
@@ -419,7 +455,10 @@ function makeSelfSignedSet(): { caCert: string; caKey: string; serverCert: strin
             },
         ],
     });
+    return { caCert: caResult.cert, caKey: caResult.private };
+}
 
+function makeServerPair(): { serverCert: string; serverKey: string } {
     // Generate the server certificate
     const serverAttrs = [{ name: 'commonName', value: 'beanpool.local' }];
     const serverResult = generate(serverAttrs, {
@@ -437,8 +476,7 @@ function makeSelfSignedSet(): { caCert: string; caKey: string; serverCert: strin
             },
         ],
     });
-
-    return { caCert: caResult.cert, caKey: caResult.private, serverCert: serverResult.cert, serverKey: serverResult.private };
+    return { serverCert: serverResult.cert, serverKey: serverResult.private };
 }
 
 // --- Cert Helpers ---

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,7 +458,7 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "Masyadong maraming maling digit, kaya walang ipinadala. Gumawa ng bagong code at subukan muli.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "Nag-expire na ang code na iyon, kaya walang ipinadala. Gumawa ng bagong code at subukan muli.",
   "That did not go through. Try again.": "Hindi iyon tumuloy. Subukang muli.",
-  "Type the two digits your phone shows": "I-type ang dalawang digit na ipinapakita ng telepono mo",
+  "Type the four digits your phone shows": "I-type ang apat na digit na ipinapakita ng telepono mo",
   "Confirm": "Kumpirmahin",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Magbubukas lamang dito ang account mo pagkatapos ng tamang mga digit. Tatlong maling pagsubok at walang ipapadala.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Wala pang dumarating mula sa telepono mo. Ang code na ito ay mula sa {host}. Kung sinasabi ng telepono mo na mula ito sa server na hindi nito ginagamit, buksan ang BeanPool sa address ng sarili mong komunidad, o sumali muna sa {host} sa telepono mo, saka mag-scan ulit. Kung walang ipinapakitang digit ang telepono mo, i-update ang BeanPool app dito, saka mag-scan ulit."

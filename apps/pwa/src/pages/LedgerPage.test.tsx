@@ -554,7 +554,7 @@ describe('the Ledger before the node has said what Beans are here', () => {
             });
 
             // Now it plainly says it could not load and offers Try again
-            expect(screen.getByRole('status')).toHaveTextContent('Could not load your ledger.');
+            expect(screen.getByRole('alert')).toHaveTextContent('Could not load your ledger.');
             const retryButton = screen.getByRole('button', { name: /Try again/i });
             expect(retryButton).toBeInTheDocument();
             // Still never shows balance, ledger or preview
@@ -586,4 +586,3 @@ describe('the Ledger before the node has said what Beans are here', () => {
         }
     });
 });
-

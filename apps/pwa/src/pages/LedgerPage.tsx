@@ -411,7 +411,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid="ledger-waiting">
                 {modeTimedOut ? (
                     <div className="space-y-3">
-                        <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Could not load your ledger.')}</p>
+                        <p className="text-sm text-nature-600 dark:text-nature-300" role="alert">{t('Could not load your ledger.')}</p>
                         <button
                             type="button"
                             onClick={handleRetryMode}

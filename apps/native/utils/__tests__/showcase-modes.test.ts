@@ -117,4 +117,23 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
         expect(rows.some(r => /fee/i.test(r.memo))).toBe(false);
         expect(JSON.stringify([b, rows])).not.toMatch(/Ʀ/);
     });
+
+    it('sampleInvites and sampleInviteTree read Example Valley for people.tsx in preview', async () => {
+        const { sampleInvites, sampleInviteTree } = await import('../../components/showcase/sample-screens');
+        const invites = sampleInvites();
+        expect(invites.map(i => i.code)).toEqual(['EXAMPLE-1234', 'EXAMPLE-5678', 'EXAMPLE-9012']);
+        expect(invites[0].usedBy).toBeNull();
+        expect(invites[0].intendedFor).toBe('a neighbour');
+        expect(invites[1].usedBy).toBe('sample-member-second');
+        expect(invites[2].usedBy).toBe('sample-member-first');
+
+        const tree = sampleInviteTree();
+        expect(tree).toHaveLength(1);
+        expect(tree[0].publicKey).toBe('sample-member-example');
+        expect(tree[0].callsign).toBe('an example member');
+        expect(tree[0].children).toHaveLength(2);
+        expect(tree[0].children.map(c => c.callsign)).toEqual(['a neighbour', 'a neighbour']);
+        // Each was brought in with the used invite that names them.
+        expect(tree[0].children.map(c => [c.publicKey, c.inviteCode])).toEqual([['sample-member-first', 'EXAMPLE-9012'], ['sample-member-second', 'EXAMPLE-5678']]);
+    });
 });

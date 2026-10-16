@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { QRCodeSVG } from 'qrcode.react';
 
 /**
  * No invites on the global node (Marty, 2026-10-01: "Off on global"; config/node-profile.ts `invites` on the server):
@@ -23,8 +24,8 @@ vi.mock('../lib/api', async (importOriginal) => {
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
 }));
-// The QR code isn't what is under test, and qrcode.react brings its own copy of React.
-vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
+// The QR code spy: verifies what value is encoded.
+vi.mock('qrcode.react', () => ({ QRCodeSVG: vi.fn(() => null) }));
 
 import { InvitePage } from './InvitePage';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -159,6 +160,7 @@ describe('the Invites page everywhere else: as before', () => {
             expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
             expect(screen.queryByText(/Bring someone here/)).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Show QR code' })).toBeNull();
         });
     }
 
@@ -203,3 +205,96 @@ describe('the Invites page reads nothing of the member\'s where invites are in p
         await waitFor(() => { expect(getMyInvites).toHaveBeenCalled(); expect(getInviteTree).toHaveBeenCalled(); });
     });
 });
+
+describe('the Invites page in preview mode shows the real screen with sample data', () => {
+    const SHOWCASE = { ...GLOBAL, features: { ...GLOBAL.features, escrow: false, enterprises: false, showcase: true } };
+
+    it('renders Example Valley invites: pending EXAMPLE-1234, used invites, community tree, and marker actions', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue(SHOWCASE as never);
+        render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+
+        // Strip, sample header, and invites-preview wrapper are present
+        expect(await screen.findByTestId('local-community-strip')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-header')).toBeInTheDocument();
+        expect(screen.getByTestId('invites-preview')).toBeInTheDocument();
+
+        // Top line stays
+        expect(await screen.findByText(/Bring someone here/)).toBeInTheDocument();
+        const line = await screen.findByTestId('local-community-line');
+        expect(line).toBeInTheDocument();
+
+        // Real screen elements are present
+        expect(screen.getByRole('button', { name: /Invites/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
+
+        // Pending invite card with EXAMPLE-1234
+        expect(await screen.findByText(/EXAMPLE-1234/)).toBeInTheDocument();
+        expect(screen.getAllByText(/For: a neighbour/).length).toBe(3);
+
+        // Used invites
+        expect(screen.getByText(/EXAMPLE-5678/)).toBeInTheDocument();
+        expect(screen.getByText(/EXAMPLE-9012/)).toBeInTheDocument();
+
+        // Marker actions: Generate and Share open the sheet
+        const generateBtn = screen.getByRole('button', { name: /Generate New Invite/ });
+        expect(generateBtn).toHaveAttribute('data-testid', 'local-community-action');
+        fireEvent.click(generateBtn);
+        const sheet = await screen.findByTestId('local-community-sheet');
+        expect(sheet).toBeInTheDocument();
+        expect(sheet.textContent).toContain(LOCAL_COMMUNITY_SHEET.features.invites);
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+
+        // Share button on the pending card is a marker action
+        const shareBtns = screen.getAllByRole('button', { name: /Share/ });
+        const cardShare = shareBtns.find(b => b.getAttribute('data-testid') === 'local-community-action');
+        expect(cardShare).toBeDefined();
+        fireEvent.click(cardShare!);
+        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+
+        // Copy button on the pending card is a marker action
+        const writeText = vi.fn();
+        Object.assign(navigator, { clipboard: { writeText } });
+        const copyBtns = screen.getAllByRole('button', { name: /Copy/ });
+        const cardCopy = copyBtns.find(b => b.getAttribute('data-testid') === 'local-community-action');
+        expect(cardCopy).toBeDefined();
+        fireEvent.click(cardCopy!);
+        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        expect(writeText).not.toHaveBeenCalled();
+
+        // Tapping the phone/QR icon opens the QR card
+        const qrToggle = screen.getByRole('button', { name: 'Show QR code' });
+        fireEvent.click(qrToggle);
+        expect(vi.mocked(QRCodeSVG).mock.calls[0][0]).toEqual(
+            expect.objectContaining({ value: 'EXAMPLE-1234' }),
+        );
+
+        // The QR card's own Copy and Share are marker actions too: each opens the sheet; nothing copied or shared
+        const share = vi.fn();
+        Object.assign(navigator, { share });
+        const qrCard = screen.getByTestId('invite-qr-card');
+        const qrMarkers = within(qrCard).getAllByTestId('local-community-action');
+        expect(qrMarkers.map(b => b.textContent)).toEqual([expect.stringMatching(/📋 Copy/), expect.stringMatching(/^Share/)]);
+        for (const marker of qrMarkers) {
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            fireEvent.click(marker);
+            expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+            fireEvent.click(within(screen.getByTestId('local-community-sheet')).getByRole('button', { name: 'Close' }));
+        }
+        expect(writeText).not.toHaveBeenCalled();
+        expect(share).not.toHaveBeenCalled();
+
+        // Community Tree tab: the example member at the root, the two neighbours they brought in
+        fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
+        const treeBox = await screen.findByTestId('invite-tree');
+        expect(within(treeBox).getAllByText(/an example member/)).toHaveLength(1);
+        expect(within(treeBox).getAllByText(/a neighbour/)).toHaveLength(2);
+
+        // No network calls made for member's own invites/tree/generate
+        expect(getMyInvites).not.toHaveBeenCalled();
+        expect(getInviteTree).not.toHaveBeenCalled();
+        expect(generateInvite).not.toHaveBeenCalled();
+    });
+});
+

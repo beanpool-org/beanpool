@@ -187,6 +187,10 @@ async function main(): Promise<void> {
         }
         assert(held.a.length === 1 && JSON.stringify(held.a) === JSON.stringify(held.b) && held.a[0] === setup.envelopeId,
             'both hold the same envelope, the one the main server sealed');
+        // The harness boots as index.ts does (#2037 NB4): each node's first start ran the pin's migration, once per data folder.
+        const migrated = (n: string): unknown => { try { return JSON.parse(fs.readFileSync(path.join(dir(n), 'standby-main.migrated'), 'utf8')).outcome; } catch { return null; } };
+        assert(migrated('main') === 'not-a-standby' && migrated('a') === 'unpaired' && migrated('b') === 'unpaired',
+            `each node's first start ran the pin's migration, as index.ts does (main ${migrated('main')}, A ${migrated('a')}, B ${migrated('b')})`);
         await main.kill('SIGKILL');
 
         let a = track(await spawnNode(SCRIPT, dir('a'), envA));

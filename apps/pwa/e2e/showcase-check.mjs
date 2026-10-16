@@ -177,8 +177,26 @@ async function openContext(browser, origin, identity, dark, holdInfoMs = 0) {
 }
 
 async function noSideScroll(page, where) {
-    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const { over, past } = await page.evaluate(() => {
+        const W = window.innerWidth;
+        const docOver = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+        const beyond = [];
+        for (const el of document.querySelectorAll('[data-testid^="local-community-"]')) {
+            const r = el.getBoundingClientRect();
+            if (r.width && (r.right > W + 1 || r.left < -1)) {
+                beyond.push(`${(el.getAttribute('data-testid') || el.tagName)} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}" right=${Math.round(r.right)}`);
+            }
+        }
+        for (const el of document.querySelectorAll('*')) {
+            const cs = getComputedStyle(el);
+            if (el.scrollWidth > el.clientWidth + 1 && cs.overflowX === 'hidden' && el.clientWidth >= W) {
+                beyond.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ').slice(0, 3).join('.')} scrollW=${el.scrollWidth} > clientW=${el.clientWidth}`);
+            }
+        }
+        return { over: docOver, past: beyond };
+    });
     check(over <= 1, `${where}: no sideways scroll at 320 px with 1.3x text${over > 1 ? ` (it scrolls ${over}px)` : ''}`);
+    check(past.length === 0, `${where}: no inner overflow or marker past innerWidth${past.length ? ` (${past.join('; ')})` : ''}`);
 }
 
 async function shot(page, name) {

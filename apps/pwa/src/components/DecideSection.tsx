@@ -404,7 +404,7 @@ export function DecideSection({
                                             )}
 
                                             {preview ? (
-                                                <div className="flex gap-3">
+                                                <div className="flex flex-col sm:flex-row gap-3">
                                                     <LocalCommunityAction feature="decisions" label="👍 Vote YES" className="flex-1" {...ways} />
                                                     <LocalCommunityAction feature="decisions" label="👎 Vote NO" className="flex-1" {...ways} />
                                                 </div>

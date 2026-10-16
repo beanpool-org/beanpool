@@ -354,8 +354,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
                 like Home and the Market (index.css "Doodle wallpaper"); the cards keep their fills. */}
             <header className="px-4 pt-4 pb-3 flex flex-col gap-3">
-                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
-                    <div>
+                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
+                    <div className={decisionsMode === 'preview' && activeSection === 'decide' ? 'min-w-0' : undefined}>
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>

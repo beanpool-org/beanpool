@@ -841,13 +841,9 @@ export function DecideSection({
                                         )}
 
                                         {preview ? (
-                                            <View style={styles.voteButtonsRow}>
-                                                <View style={{ flex: 1 }}>
-                                                    <LocalCommunityMark variant="action" feature="decisions" label="👍 Vote YES" />
-                                                </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <LocalCommunityMark variant="action" feature="decisions" label="👎 Vote NO" />
-                                                </View>
+                                            <View style={{ gap: 8 }}>
+                                                <LocalCommunityMark variant="action" feature="decisions" label="👍 Vote YES" />
+                                                <LocalCommunityMark variant="action" feature="decisions" label="👎 Vote NO" />
                                             </View>
                                         ) : (
                                             <View style={styles.voteButtonsRow}>

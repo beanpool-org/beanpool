@@ -329,21 +329,34 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         );
     };
 
-    if (!makes && !isPreview) {
+    const bringSomeoneHere = (withLine: boolean) => {
+        const desc = refused ?? (
+            nodeInfo?.features?.wordsDoor === false
+                ? t("This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.")
+                : t("This community doesn’t use invites. Anyone can join it with 12 words or a sign-in, so just share its link.")
+        );
         return (
-            <div className="p-4 max-w-[500px] mx-auto min-h-full">
+            <div className={withLine ? "mb-6" : undefined}>
                 <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                    📤 Bring someone here
+                    {t('📤 Bring someone here')}
                 </h2>
                 <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                    {refused ?? `This community doesn’t use invites. Anyone can join it with ${nodeInfo?.features?.wordsDoor === false ? '' : '12 words or '}a sign-in, so just share its link.`}
+                    {desc}
                 </p>
                 {linkActions()}
-                {marked(modeFor('invites', nodeInfo, reader)) && (
+                {withLine && (
                     <div className="mt-5" data-testid="invites-local-line">
                         <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites} {...waysForward} />
                     </div>
                 )}
+            </div>
+        );
+    };
+
+    if (!makes && !isPreview) {
+        return (
+            <div className="p-4 max-w-[500px] mx-auto min-h-full">
+                {bringSomeoneHere(Boolean(marked(modeFor('invites', nodeInfo, reader))))}
             </div>
         );
     }
@@ -356,20 +369,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     <SampleHeader />
                 </div>
             )}
-            {isPreview && (
-                <div className="mb-6">
-                    <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                        📤 Bring someone here
-                    </h2>
-                    <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                        {refused ?? `This community doesn’t use invites. Anyone can join it with ${nodeInfo?.features?.wordsDoor === false ? '' : '12 words or '}a sign-in, so just share its link.`}
-                    </p>
-                    {linkActions()}
-                    <div className="mt-5" data-testid="invites-local-line">
-                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites} {...waysForward} />
-                    </div>
-                </div>
-            )}
+            {isPreview && bringSomeoneHere(true)}
             {/* Section tabs */}
             <div className="flex gap-2 mb-6">
                 <button 

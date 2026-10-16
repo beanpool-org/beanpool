@@ -9,7 +9,11 @@
  *   2. the NET SPY over all of that: no POST, PUT, PATCH or DELETE at all, nothing carrying a `sample-` id, no host but
  *      this machine (map tiles aside, aborted), and the reader's own features read from /api/community/me; and on the
  *      Commons, Invites, the profile (with the app shell's load) and a listing, no read of the reader's own data at
- *      all (OWN_READS: their balance, ledger, deals, Decisions and voice credits, the pool, treasuries, invites);
+ *      all (OWN_READS: their balance, ledger, deals, Decisions and voice credits, the pool, treasuries, invites); and
+ *      the same on the Ledger, the Market tab's load with My Deals, and the Map with the composer (review of #2035, N1);
+ *   2b. the node's info held back 6 s and the Ledger tapped at once (a slow link): nothing of the member's is read
+ *      before the info answers, and no live balance is drawn meanwhile (review of #2035, N2); on a local node the
+ *      Ledger then reads the balance and ledger, as before;
  *   3. a member of a local node (Beans live): the real Ledger, no strip, no line, the real deal button; and the same
  *      screens DO read the reader's own data there, as they always have.
  *
@@ -132,7 +136,7 @@ function spy(page) {
     return { since: (t) => all.filter((r) => r.at >= t) };
 }
 
-async function openContext(browser, origin, identity, dark) {
+async function openContext(browser, origin, identity, dark, holdInfoMs = 0) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
     const offHost = new Set();
     await context.addInitScript((mode) => {
@@ -160,6 +164,13 @@ async function openContext(browser, origin, identity, dark) {
             tx.onerror = () => reject(tx.error);
         };
     }), identity);
+    // A slow link: the node's info answers `holdInfoMs` late on the load that counts (the one below).
+    if (holdInfoMs) {
+        await context.route((url) => url.hostname === 'localhost' && url.pathname === '/api/community/info', async (route) => {
+            await wait(holdInfoMs);
+            await route.continue().catch(() => {});
+        });
+    }
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
     return { context, page, net, offHost };
@@ -245,6 +256,8 @@ async function globalMember(browser, root, dark) {
         await targetsAtLeast44(page, 'Ledger, strip collapsed');
         await shot(page, `ledger-collapsed-${scheme}`);
         await page.getByRole('button', { name: 'Show the whole note' }).click();
+        await wait(1_000);
+        readsNothingOwn(net, t0, node.origin, 'the Ledger');
 
         // The Commons: enterprise and Decision in preview, Vote opens the sheet.
         const tCommons = Date.now();
@@ -261,6 +274,7 @@ async function globalMember(browser, root, dark) {
         readsNothingOwn(net, tCommons, node.origin, 'the Commons');
 
         // The Market: My Deals in preview; a listing's In return and its deal action.
+        const tMarket = Date.now();
         await tab(page, 'Market');
         await page.getByRole('button', { name: /My Deals/ }).first().click();
         await page.getByTestId('deals-preview').waitFor({ timeout: 10_000 });
@@ -272,6 +286,8 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('local-community-sheet').waitFor();
         await closeSheet(page);
         await page.getByRole('dialog', { name: 'My Deals' }).getByRole('button', { name: 'Close' }).click();
+        await wait(1_000);
+        readsNothingOwn(net, tMarket, node.origin, 'the Market tab\'s load and My Deals');
         const tListing = Date.now();
         await page.getByText('Sourdough loaves').first().click();
         await page.getByTestId('listing-in-return').waitFor({ timeout: 10_000 });
@@ -305,6 +321,7 @@ async function globalMember(browser, root, dark) {
         readsNothingOwn(net, tInvites, node.origin, 'Invites');
 
         // The composer, on the Map: no price field, the line in its slot.
+        const tMap = Date.now();
         await tab(page, 'Map');
         await page.getByRole('button', { name: 'New Post' }).first().click();
         await page.getByTestId('composer-price-line').waitFor({ timeout: 10_000 }).catch(async (e) => {
@@ -315,6 +332,8 @@ async function globalMember(browser, root, dark) {
         check(await page.getByPlaceholder('B', { exact: true }).count() === 0, 'composer: no price field');
         await noSideScroll(page, 'composer');
         await shot(page, `composer-${scheme}`);
+        await wait(1_000);
+        readsNothingOwn(net, tMap, node.origin, 'the Map and the composer');
 
         // Her own profile (global shows listings, not people: no author to tap), opened as Settings' "View my profile"
         // opens it: the trust card's slot carries the line.
@@ -368,15 +387,25 @@ async function localMember(browser, root) {
         await wait(3_000);
         // The app shell's load reads the member's deals, as before.
         readsOwnAsBefore(net, tLoad, node.origin, 'the app shell\'s load', ['their deals']);
+        const tLedger = Date.now();
         await tab(page, 'Ledger');
         await wait(2_500);
         check(await page.getByTestId('ledger-preview').count() === 0 && await page.getByTestId('local-community-strip').count() === 0, 'Ledger: the real one, no strip');
+        readsOwnAsBefore(net, tLedger, node.origin, 'the Ledger', ['their balance', 'their ledger']);
+        const tMarket = Date.now();
         await tab(page, 'Market');
+        await wait(2_500);
+        // The Offer-first gate's balance, as before.
+        readsOwnAsBefore(net, tMarket, node.origin, 'the Market tab\'s load', ['their balance']);
         await page.getByText('Sourdough loaves').first().click();
         await page.getByRole('button', { name: /Accept Offer/ }).waitFor({ timeout: 10_000 });
         check(await page.getByTestId('listing-in-return').count() === 0 && await page.getByTestId('local-community-action').count() === 0, 'listing: the price and the real Accept, no marker');
         await shot(page, 'local-listing-light');
         await page.keyboard.press('Escape');
+        const tMap = Date.now();
+        await tab(page, 'Map');
+        await wait(2_500);
+        readsOwnAsBefore(net, tMap, node.origin, 'the Map', ['their balance']);
 
         // The Commons, Invites and her own profile read her own data here, as they always have.
         const tCommons = Date.now();
@@ -401,6 +430,45 @@ async function localMember(browser, root) {
     }
 }
 
+/**
+ * The node's info held back 6 s, and the Ledger tapped as soon as the app is up (review of #2035, N2): on a global node
+ * nothing of the member's is read before the info answers, the page draws no live balance meanwhile, and the preview
+ * comes after. On a local node the Ledger waits too, then reads the balance and ledger, as before.
+ */
+async function slowInfoLedger(browser, root, profile) {
+    const HOLD = 6_000;
+    const who = memberIdentity(profile === 'global' ? 'Rua' : 'Ana');
+    const node = await startNode(root, profile, [{ publicKey: who.publicKey, callsign: profile === 'global' ? 'Rua' : 'Ana', joinedDaysAgo: profile === 'global' ? 1 : 30 }]);
+    console.log(`\nA member of a ${profile} node, the node's info held back ${HOLD / 1000} s, the Ledger tapped at once, on ${node.origin}:`);
+    const { context, page, net } = await openContext(browser, node.origin, who, false, HOLD);
+    try {
+        const infoAnswered = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/community/info', { timeout: 30_000 });
+        await page.getByTestId('mobile-bottom-nav').waitFor({ timeout: 30_000 });
+        const tTap = Date.now();
+        await tab(page, 'Ledger');
+        await wait(1_500);
+        const drawnLive = await page.getByTestId('ledger-balance').count();
+        await shot(page, `ledger-waiting-${profile}-light`);
+        await infoAnswered;
+        const tInfo = Date.now();
+        const early = ownReads(net.since(tTap).filter((r) => r.at < tInfo), node.origin);
+        check(early.length === 0, `net spy, the Ledger before the info answered (${tInfo - tTap} ms): no read of the member's own data${early.length ? ` (${[...new Set(early)].join(', ')})` : ''}`);
+        check(drawnLive === 0, 'the Ledger before the info answered: no live balance drawn (a neutral wait)');
+        if (profile === 'global') {
+            await page.getByTestId('ledger-preview').waitFor({ timeout: 10_000 });
+            await wait(1_500);
+            readsNothingOwn(net, tTap, node.origin, 'the Ledger once the info said preview');
+        } else {
+            await page.getByTestId('ledger-balance').waitFor({ timeout: 10_000 });
+            await wait(1_500);
+            readsOwnAsBefore(net, tInfo, node.origin, 'the Ledger once the info answered', ['their balance', 'their ledger']);
+        }
+    } finally {
+        await context.close();
+        await node.stop();
+    }
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-showcase-check-'));
     let browser;
@@ -408,7 +476,8 @@ async function main() {
         await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
         browser = await chromium.launch();
         console.log('The web app as built; one Chromium at 320 px, 1.3x text, reduced motion.');
-        for (const run of [() => globalMember(browser, root, false), () => globalMember(browser, root, true), () => localMember(browser, root)]) {
+        for (const run of [() => globalMember(browser, root, false), () => globalMember(browser, root, true), () => localMember(browser, root),
+            () => slowInfoLedger(browser, root, 'global'), () => slowInfoLedger(browser, root, 'local')]) {
             try {
                 await run();
             } catch (e) {

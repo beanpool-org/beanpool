@@ -706,6 +706,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [pairingDigitsNote, setPairingDigitsNote] = useState<string | null>(null);
 
     /** The relay could not tie this page to its code: the page is open at another address than its community's. */
+    /** The code lives 120 s; with nothing from a phone 20 s after it went up, the page says why that may be. */
+    const PAIRING_HINT_AFTER_LEFT = 100;
     const PAIRING_WRONG_BROWSER = () => t('This page can\'t finish linking from here. Open your community\'s own web address on this computer and make a new code there.');
 
     async function handleConfirmPairingDigits(e: React.FormEvent) {
@@ -2576,6 +2578,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Twenty seconds after the code went up and nothing from a phone: the two ways a phone stays silent
+                                to this page. It refused the code because this server isn't one it uses (the phone sends only to
+                                its own saved servers), or it is an app too old to show the two digits (the server refuses its
+                                transfer, 409, and nothing is held). Neither tells this page, so the page says both. */}
+                            {pairingStatus === 'waiting' && pairingSession && !pairingConfirming && pairingSecondsLeft <= PAIRING_HINT_AFTER_LEFT && (
+                                <div role="status" style={{ margin: '0 auto 1.25rem', maxWidth: '22rem', fontSize: '0.85rem', lineHeight: 1.45, color: 'var(--text-primary)', textAlign: 'left' }}>
+                                    {t('Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn\'t use, open BeanPool at your own community\'s address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.', {
+                                        host: (nodeOrigin(getNodeApiUrl() || window.location.origin) ?? window.location.origin).replace(/^https?:\/\//, ''),
+                                    })}
+                                </div>
+                            )}
 
                             {/* 3 Step Guide */}
                             <div style={{

@@ -3,9 +3,13 @@
  * account, the relay holds it until this browser types the two digits the phone shows. The page swaps the QR for the
  * digit entry, sends what is typed to /api/pair/confirm, says so on wrong digits, and stops on a burned session. The
  * node is a stubbed fetch; the relay's side is test-pairing-routes / test-pairing-relay.
+ *
+ * And when nothing comes from the phone (Marty, 16 Oct: Damo's phone refused global's code as a server it doesn't use;
+ * an old store app never shows the digits and the server now refuses its transfer): 20 s after the code went up the
+ * page says both causes and what to do, naming the code's server.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
 import { WelcomePage } from './WelcomePage';
@@ -51,6 +55,7 @@ beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
+    vi.useRealTimers();
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -112,5 +117,31 @@ describe('linking with the phone: the two digits', () => {
         expect(await screen.findByRole('img', { name: /QR code/ })).toBeTruthy();
         await new Promise((r) => setTimeout(r, 1_700));
         expect(screen.queryByLabelText('Type the two digits your phone shows')).toBeNull();
+    });
+
+    const SILENT = /^Nothing has come from your phone yet\. This code is from (\S+)\. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join \1 on your phone first, then scan again\. If your phone shows no digits, update the BeanPool app on it, then scan again\.$/;
+
+    it('20 s with nothing from the phone: the page says both causes, naming the code\'s server; not before', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        stubRelay([], () => 'waiting');
+        render(<WelcomePage onComplete={vi.fn()} start="restore" />);
+        fireEvent.click((await screen.findAllByRole('button', { name: /Link with Mobile App/ }))[0]);
+        expect(await screen.findByRole('img', { name: /QR code/ })).toBeTruthy();
+        await act(async () => { vi.advanceTimersByTime(18_000); });
+        expect(screen.queryByText(SILENT)).toBeNull();
+        await act(async () => { vi.advanceTimersByTime(3_000); });
+        const hint = screen.getByText(SILENT);
+        expect(hint.getAttribute('role')).toBe('status');
+        expect(SILENT.exec(hint.textContent ?? '')?.[1]).toBe(window.location.host);
+        // The QR stays up: the member can still scan it once the phone is ready.
+        expect(screen.getByRole('img', { name: /QR code/ })).toBeTruthy();
+    });
+
+    it('no such line once the phone has sent: the digit entry is up instead', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        stubRelay([]);
+        await openQrAndWaitForDigits();
+        await act(async () => { vi.advanceTimersByTime(25_000); });
+        expect(screen.queryByText(SILENT)).toBeNull();
     });
 });

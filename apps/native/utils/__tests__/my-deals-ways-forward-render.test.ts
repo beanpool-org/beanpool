@@ -84,13 +84,6 @@ vi.mock('../../components/CommonsInfoModal', () => ({
 const net = vi.hoisted(() => ({ calls: [] as string[] }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
 
-import { LocalCommunityMark, LocalCommunitySheet, markTone } from '../../components/showcase/LocalCommunityMark';
-import { CommonsPreview } from '../../components/showcase/Previews';
-import { MyDealsSheet } from '../../components/MyDealsSheet';
-import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
-import * as db from '../db';
-import { pressEverything } from './press-everything';
-
 import { LocalCommunityMark, SHEET_ROUTES } from '../../components/showcase/LocalCommunityMark';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 
@@ -111,8 +104,6 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const render = async (node: unknown) => { await act(async () => { root.render(node as any); }); await act(async () => {}); };
-const styleOf = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') || '{}');
-const text = () => host.textContent ?? '';
 const press = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); await act(async () => {}); };
 
 

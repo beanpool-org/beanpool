@@ -25,6 +25,7 @@ delete process.env.CF_ZONE_ID;
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
         for (const id of Object.values(ids)) db.prepare('DELETE FROM transactions WHERE id = ?').run(id);
         se.setNodeRole('backup');
         const trustedAddr = `/ip4/127.0.0.1/tcp/4999/p2p/${nodeId}`;
-        addConnector(trustedAddr, 'mirror', 'self-test-peer');
+        pinMainServerForTests(trustedAddr);
         try {
             const result: any = await se.importRemoteState(payload);
             for (const n of notes) {
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
             assert(result?.newTransactions === notes.length && Number(result?.conflictsSkipped) >= 2,
                 `the import wrote exactly the ${notes.length} real sends and skipped the two changed ones (${JSON.stringify({ n: result?.newTransactions, s: result?.conflictsSkipped })})`);
         } finally {
-            removeConnector(trustedAddr);
+            unpinMainServerForTests();
         }
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

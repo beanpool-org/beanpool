@@ -44,6 +44,7 @@ import readline from 'node:readline';
 import WebSocket from 'ws';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -380,7 +381,7 @@ async function standbyCopy(): Promise<void> {
     const { getStateHash } = await import('@beanpool/engine');
     se.initStateEngine();
     const p2p = await startP2P(0, 0);
-    addConnector(`/ip4/127.0.0.1/tcp/4091/p2p/${p2p.peerId.toString()}`, 'mirror', 'description-limit-self');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4091/p2p/${p2p.peerId.toString()}`);
     console.log('\n— 4. a standby\'s copy —');
 
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status, updated_at) VALUES (?, ?, ?, ?, 'active', ?)`);

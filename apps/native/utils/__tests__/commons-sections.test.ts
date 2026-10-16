@@ -87,6 +87,11 @@ describe('the Commons screen shows the sections a node has', () => {
         }
     });
 
+    it('decisionsPreview adds decide to sections where decisions are off', () => {
+        expect(commonsSections(GLOBAL, { decisionsPreview: true })).toEqual(['decide', 'groups']);
+        expect(commonsSectionFor('decide', GLOBAL, { decisionsPreview: true })).toBe('decide');
+    });
+
     it("on the worldwide community that shows its switched-off features: the Commons heading over Example Valley, the real groups under it (review of #1852, finding 5)", () => {
         const showcase = { ...GLOBAL, showcase: true };
         expect(commonsSections(showcase)).toEqual(['groups']);
@@ -196,14 +201,14 @@ describe('the screens go through the helpers (source check)', () => {
 
     it('Commons: the section drawn is commonsSectionFor, and Decide, its pill and the propose form only where shown', () => {
         const src = read('app/(tabs)/projects.tsx');
-        expect(src).toContain('const sections = commonsSections(reader.effective);');
+        expect(src).toContain('const sections = commonsSections(reader.effective, { decisionsPreview });');
         expect(src).toContain("const showsDecide = sections.includes('decide');");
-        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, reader.effective);');
+        expect(src).toMatch(/const activeSection = commonsSectionFor\([^;]*reader\.effective[^;]*\{ decisionsPreview \}/);
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");
         expect(block(src, '{showsDecide && (')).toContain('accessibilityLabel="Decide Section"');
-        const modal = block(src, '{showsDecide && (', src.indexOf('{createGroup.modal}') - 800);
+        const modal = block(src, '{showsDecide && !decisionsPreview && (', src.indexOf('{createGroup.modal}') - 800);
         expect(modal).toContain('<ProposeDecisionModal');
         expect(src.split('<ProposeDecisionModal').length - 1).toBe(1);
         // No Enterprises pill: Groups holds them (pick 7), with the kind chips from groupKindChips and the rows from

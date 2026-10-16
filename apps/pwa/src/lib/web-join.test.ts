@@ -567,15 +567,21 @@ describe("a taken name's suggestions (the invite join's rename, card invite-back
         vi.restoreAllMocks();
     });
 
-    it('the name check sends the member\'s own key as `exclude` when it has one, and nothing otherwise', async () => {
-        const fetchMock = vi.fn(async () => new Response(JSON.stringify({ available: true }), { status: 200 }));
+    it('the name check is signed by the member\'s own key when it has one (the node excludes the signer\'s own name), unsigned otherwise, and never names a key in the address (NEW-2)', async () => {
+        const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ available: true }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
-        expect(await checkCallsign(' Sam Fox ', 'ab12')).toBe('available');
+        const { generateIdentity } = await import('./identity');
+        const member = await generateIdentity('');
+        expect(await checkCallsign(' Sam Fox ', member)).toBe('available');
         expect(await checkCallsign('Sam Fox')).toBe('available');
-        expect(fetchMock.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual([
-            '/api/members/callsign-available/Sam%20Fox?exclude=ab12',
+        expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual([
+            '/api/members/callsign-available/Sam%20Fox',
             '/api/members/callsign-available/Sam%20Fox',
         ]);
+        const headers = fetchMock.mock.calls.map((c) => (c[1]?.headers ?? {}) as Record<string, string>);
+        expect(headers[0]['X-Public-Key']).toBe(member.publicKey);
+        expect(headers[0]['X-Signature']).toBeTruthy();
+        expect(headers[1]['X-Public-Key']).toBeUndefined();
     });
 
     it('"<name> <word>" within the cap, the word kept whole and a long name cut between its words', () => {
@@ -587,25 +593,28 @@ describe("a taken name's suggestions (the invite join's rename, card invite-back
         }
     });
 
-    it('only names the node says are free, at most three, asked three at a time with the key excluded; none when it cannot be asked', async () => {
+    it('only names the node says are free, at most three, asked three at a time signed by the member; none when it cannot be asked', async () => {
         const asked: string[] = [];
-        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+        const { generateIdentity } = await import('./identity');
+        const member = await generateIdentity('');
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = new URL(String(input), 'http://node.test');
-            asked.push(url.searchParams.get('exclude') ?? '');
+            expect(url.search).toBe('');
+            asked.push(((init?.headers ?? {}) as Record<string, string>)['X-Public-Key'] ?? '');
             const name = decodeURIComponent(url.pathname.split('/').pop()!);
             // Every other candidate is taken.
             const taken = asked.length % 2 === 1;
             return new Response(JSON.stringify({ callsign: name, available: !taken }), { status: 200 });
         }));
-        const offered = await suggestCallsigns('Sam', 'ab12');
+        const offered = await suggestCallsigns('Sam', member);
         expect(offered).toHaveLength(3);
         for (const s of offered) expect(s).toMatch(/^Sam [A-Z][a-z]+$/);
         expect(new Set(offered).size).toBe(3);
         expect(asked.length % 3).toBe(0);
-        expect(asked.every((k) => k === 'ab12')).toBe(true);
+        expect(asked.every((k) => k === member.publicKey)).toBe(true);
 
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
-        expect(await suggestCallsigns('Sam', 'ab12')).toEqual([]);
-        expect(await suggestCallsigns('   ', 'ab12')).toEqual([]);
+        expect(await suggestCallsigns('Sam', member)).toEqual([]);
+        expect(await suggestCallsigns('   ', member)).toEqual([]);
     });
 });

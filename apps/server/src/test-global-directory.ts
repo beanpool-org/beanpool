@@ -196,8 +196,9 @@ const settle = () => new Promise(r => setTimeout(r, 250));
 
 // ── the registry's rows ──────────────────────────────────────────────────────────────────────────────────────────
 const BYRON_POINT = { lat: -28.64, lng: 153.61 };
+// Its exact pin, as a node from before #2049 still pushes it (the operator's home, perhaps): kept here to two decimals.
 const MULLUM = { node_id: 'peer-mullum', callsign: 'Mullum Node', community_name: 'Mullumbimby Commons', node_url: 'https://mullum.beanpool.org',
-    service_radius: { lat: -28.55, lng: 153.50, radiusKm: 25 }, member_count: 40, contact_email: 'hello@mullum.example', contact_phone: null,
+    service_radius: { lat: -28.55312, lng: 153.49871, radiusKm: 25 }, member_count: 40, contact_email: 'hello@mullum.example', contact_phone: null,
     updated_at: '2026-09-20T00:00:00Z' };
 // The registry gap (§11): no address until the release. Listed by name and distance, with no link.
 const CASTLE = { node_id: 'peer-castle', callsign: 'Castlemaine BeanPool', community_name: null, node_url: null,
@@ -318,7 +319,7 @@ async function main(): Promise<void> {
     const mul = byKey(near, 'peer-mullum');
     assert(mul?.name === 'Mullumbimby Commons' && mul?.url === 'https://mullum.beanpool.org' && mul?.memberCount === 40
         && mul?.lat === -28.55 && mul?.lng === 153.5 && mul?.radiusKm === 25 && mul?.contactEmail === 'hello@mullum.example',
-        `a full row: community_name before callsign, its address, members, place and contact (${JSON.stringify(mul)})`);
+        `a full row: community_name before callsign, its address, members, place (to two decimals, ~1 km: the exact pin -28.55312, 153.49871 is not served) and contact (${JSON.stringify(mul)})`);
     assert(typeof mul?.distanceKm === 'number' && Math.abs(mul.distanceKm - 14.8) < 1, `and its distance from the point in km (${mul?.distanceKm})`);
     const cas = byKey(near, 'peer-castle');
     assert(cas && cas.url === null && cas.name === 'Castlemaine BeanPool' && typeof cas.distanceKm === 'number',

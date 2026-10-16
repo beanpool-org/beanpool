@@ -187,3 +187,101 @@ describe('DecideSection voting answers', () => {
         expect(line).not.toContain('−0');
     });
 });
+
+describe('DecideSection in preview mode', () => {
+    beforeEach(() => vi.mocked(castDecisionVote).mockClear());
+
+    it('renders the sample decision, tags, turnout, tally, and marker actions opening the sheet without lock icons', async () => {
+        const previewItem = {
+            id: 'sample-decide-1',
+            authorPubkey: 'author',
+            title: 'Grant 50 Beans from the Commons pool to Example Valley Bakery for community grain mill repairs',
+            description: '50 Beans from the pool: Community grain mill repairs.',
+            touches: 'pool' as const,
+            effect: 'grant_enterprise' as const,
+            subject: 'enterprise',
+            params: { amount: 50, subject: 'enterprise' },
+            franchise: 'quadratic_trade' as const,
+            status: 'open' as const,
+            opensAt: '2026-04-10T12:00:00.000Z',
+            closesAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            gracePeriodEndsAt: null,
+            createdAt: '2026-04-10T12:00:00.000Z',
+            executedAt: null,
+            executionError: null,
+            executionReason: null,
+            adminHaltedAt: null,
+            adminHaltReason: null,
+            updatedAt: '2026-04-10T12:00:00.000Z',
+            tally: {
+                decisionId: 'sample-decide-1',
+                status: 'open' as const,
+                totalVoters: 9,
+                electorate: 20,
+                quorumRatio: 0.3,
+                quorumRequired: 6,
+                quorumMet: true,
+                yesWeight: 12,
+                noWeight: 2,
+                totalWeight: 14,
+                supportRatio: 12 / 14,
+                thresholdRequired: 0.6,
+                passed: true,
+            },
+            myVote: null,
+        };
+
+        const { container } = render(
+            <DecideSection
+                preview
+                decisions={[previewItem]}
+                myPoolVoting={{ voiceCredits: 582, hasCompletedTrade: true }}
+                identity={{ publicKey: 'viewer', privateKey: 'k', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' }}
+                commonsBalance={640}
+                onRefresh={async () => {}}
+                onOpenPropose={() => {}}
+                canPropose={true}
+                hasOpenDecision={true}
+                activeView="open"
+                onChangeView={() => {}}
+            />
+        );
+
+        // Strip and Sample Header
+        expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-header')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toHaveTextContent('582');
+
+        // Sample decision card
+        const card = screen.getByTestId('sample-decision');
+        expect(card).toBeInTheDocument();
+        expect(card).toHaveTextContent('Touches: pool');
+        expect(card).toHaveTextContent('Grant Enterprise');
+        expect(card).toHaveTextContent('Quadratic on Trade');
+        expect(card).toHaveTextContent('Turnout: 9 of 6 votes needed');
+        expect(card).toHaveTextContent('Quorum Met');
+        expect(card).toHaveTextContent('Yes 12 (86%)');
+        expect(card).toHaveTextContent('No 2');
+        expect(card).toHaveTextContent(/3 days left/);
+
+        // Secret ballot note has no lock icon
+        const secretNote = screen.getByTestId('secret-ballot-note');
+        expect(secretNote.textContent).toBe('Secret ballot: members see the totals, never who voted how.');
+
+        // Entire container has no lock icon
+        expect(container.innerHTML).not.toMatch(/🔒|Locked|locked|Ʀ/);
+
+        // Marker actions open the sheet and never call castDecisionVote
+        const actions = screen.getAllByTestId('local-community-action');
+        expect(actions.length).toBeGreaterThanOrEqual(3); // Propose, Vote YES, Vote NO
+        for (const action of actions) {
+            fireEvent.click(action);
+            const sheet = await screen.findByTestId('local-community-sheet');
+            expect(sheet).toBeInTheDocument();
+            expect(sheet).toHaveTextContent('A vote binds a community');
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        }
+        expect(castDecisionVote).not.toHaveBeenCalled();
+    });
+});

@@ -70,6 +70,7 @@ async function main() {
     const { withAreaDistances } = await import('./engine/member-area.js');
     const { isSelfAvatarUrl } = await import('@beanpool/core');
     const { setMemberPhoto } = await import('@beanpool/engine');
+    const { withAvatarKey } = await import('./avatar-test-url.js');
 
     initAdminPassword();
     await initTls();
@@ -79,13 +80,14 @@ async function main() {
 
     /**
      * The URL the route made from a photo held in the member's row, before photos moved out of it (origin/main 09c2588d
-     * @beanpool/core avatarUrlFor; no member-only keys here): the oracle's, from the photo each member was given.
+     * @beanpool/core avatarUrlFor): the oracle's, from the photo each member was given. Plus the photo's key, which every
+     * node adds since the public-routes audit's SEC-PUB-02 (avatar-test-url.ts).
      */
     const oldAvatarUrl = (id: string, stored: string | null | undefined): string | null => {
         if (!stored || !stored.trim() || isSelfAvatarUrl(stored)) return null;
         const trimmed = stored.trim();
         if (trimmed.startsWith('bundled://')) return stored;
-        return `/api/avatar/${id}?size=thumb&v=${crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8)}`;
+        return withAvatarKey(`/api/avatar/${id}?size=thumb&v=${crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8)}`);
     };
     // Each member's photo as the test gave it: what their row held before photos moved out.
     const given = new Map<string, string | null>();

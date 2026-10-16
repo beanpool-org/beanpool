@@ -50,6 +50,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords, GOOGLE_SUB } from './recovery-seal-test-http.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Main-Server-Pw-907!';
@@ -107,7 +108,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },
@@ -202,7 +203,7 @@ async function main(): Promise<void> {
             'S2: …and the main server stores it wrapped with its recovery-seal key');
         const mainSealKey = fs.readFileSync(path.join(dirs.main, SEAL_KEY));
 
-        // The standby is set up as setup-backup.mjs does: the main server's genesis, its PeerId pinned as mirror.
+        // The standby is set up as setup-backup.mjs and `beanpool pair` do: the main server's genesis, its PeerId pinned.
         for (const d of [dirs.standby, dirs.third]) {
             fs.mkdirSync(d, { recursive: true });
             fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(d, 'genesis.json'));
@@ -338,7 +339,8 @@ async function main(): Promise<void> {
         const conns = after.connectors as { address: string; trustLevel: string }[];
         assert(conns.length === 1 && conns[0].trustLevel === 'peer' && conns[0].address.includes(setup.neighbour),
             'the link with the other community is restored');
-        assert(!conns.some((c) => c.trustLevel === 'mirror'), 'the mirror pin on the old main server is gone: this server imports from nobody');
+        assert(after.standbyMain === false && after.standbyMainRetired.length === 1,
+            `the pin on the old main server is retired (data/${after.standbyMainRetired[0]}): this server imports from nobody`);
         assert(after.configNodeRole === 'primary' && after.promotionAuditPending === false && after.lastPromotionAudit?.ok === true,
             `nodeRole is in the config, the audit is no longer pending, and the ledger adds up (${JSON.stringify(after.lastPromotionAudit)})`);
         assert(after.backupPrimaryUrl === null && after.backupReplicationToken === null, 'the pull settings are cleared');

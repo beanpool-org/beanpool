@@ -77,6 +77,7 @@ import { setMemberArea } from './engine/member-area.js';
 import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -746,7 +747,7 @@ async function main(): Promise<void> {
     assert(!!hideOnlyAt && !!hideInsertAt, 'setup: two hidden posts');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
-    addConnector(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+    pinMainServerForTests(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`);
     const payload: any = await exportSyncState(nodeId);
     const exported = (payload.posts ?? []).find((p: any) => p.id === hideOnly);
     const exportedRemoved = (payload.posts ?? []).find((p: any) => p.id === target);

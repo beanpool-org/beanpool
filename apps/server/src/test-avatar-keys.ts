@@ -3,18 +3,18 @@
  * and guestListingsOnly avatar route key protection.
  *
  * Covers:
- * 1. Default boot when guestListingsOnly is false -> installAvatarKeysAtBoot() returns false, avatarKeysRequired() is false.
+ * 1. Default boot (local profile) -> faces keyed there too (public-routes audit SEC-PUB-02): installAvatarKeysAtBoot() is true.
  * 2. Boot when guestListingsOnly is true (NODE_PROFILE=global) -> secret generated, avatarKeysRequired() is true.
  * 3. Short secret error handling -> throws when avatarKeySecret in node_config is too short (<16 bytes).
  * 4. avatarKeyMatches helper logic:
- *    - false if avatarKeysRequired() is false
  *    - false if key length is not 22
  *    - false if member does not exist
  *    - false if the member has no photo, or a shipped picture (bundled://, whose URL carries no key)
  *    - true if key matches HMAC for member's current photo
  *    - false if key is mismatched/tampered
- * 5. GET /api/avatar/:pubkey HTTP route behavior when avatarKeysRequired() is true:
- *    - 404 without k query param or with invalid k
+ * 5. GET /api/avatar/:pubkey on a LOCAL node:
+ *    - 404 without k query param or with invalid k; a photo-less member and a non-member get the same 404
+ *    - the signed members list hands out the URL with k=, and it opens unsigned
  *    - 200 OK with valid k query param
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-avatar-keys.ts
@@ -22,6 +22,7 @@
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
+import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';
 import { initTls } from './services/tls.js';
@@ -67,12 +68,12 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
 
-    // ── 1. Default boot without guestListingsOnly ──────────────────────────
-    console.log('--- 1. Default Boot (guestListingsOnly = false) ---');
+    // ── 1. Default boot: a local node keys faces too (public-routes audit SEC-PUB-02) ──────────────────────────
+    console.log('--- 1. Default Boot (local profile: faces keyed on every node) ---');
     delete process.env.NODE_PROFILE;
     let installed = installAvatarKeysAtBoot();
-    assert(installed === false, 'installAvatarKeysAtBoot() returns false when guestListingsOnly is off');
-    assert(avatarKeysRequired() === false, 'avatarKeysRequired() is false when guestListingsOnly is off');
+    assert(installed === true, 'installAvatarKeysAtBoot() returns true on the local profile (it returned false before SEC-PUB-02)');
+    assert(avatarKeysRequired() === true, 'avatarKeysRequired() is true on the local profile');
 
     // ── 2. Boot with guestListingsOnly (NODE_PROFILE=global) ───────────────
     console.log('\n--- 2. Boot with guestListingsOnly (NODE_PROFILE=global) ---');
@@ -136,30 +137,67 @@ async function main(): Promise<void> {
     setMemberPhoto(db, bundledPubkey, 'bundled://leaf');
     assert(avatarKeyMatches(bundledPubkey, validKey) === false, 'avatarKeyMatches returns false for a bundled:// avatar');
 
-    // When avatar keys are not required, avatarKeyMatches returns false
+    // Back on the local profile, keys stay required, and the same key still opens the face.
     process.env.NODE_PROFILE = 'local';
     delete (process.env as any).NODE_PROFILE;
     db.prepare("DELETE FROM node_config WHERE key LIKE 'nodeProfile.%'").run();
     installAvatarKeysAtBoot();
-    assert(avatarKeysRequired() === false, 'Keys disabled after reinstall on local profile');
-    assert(avatarKeyMatches(pubkey, validKey) === false, 'avatarKeyMatches returns false when avatarKeysRequired() is false');
+    assert(avatarKeysRequired() === true, 'Keys still required after reinstall on the local profile');
+    assert(avatarKeyMatches(pubkey, validKey) === true, 'avatarKeyMatches still true for the valid key on the local profile');
 
-    // ── 5. HTTP Route Protection Integration ────────────────────────────────
-    console.log('\n--- 5. HTTP Route Protection ---');
-    process.env.NODE_PROFILE = 'global';
-    installAvatarKeysAtBoot();
-    assert(avatarKeysRequired() === true, 'Keys enabled for HTTP route test');
+    // ── 5. HTTP Route Protection Integration, on a LOCAL node ───────────────
+    console.log('\n--- 5. HTTP Route Protection (local profile) ---');
+    assert(avatarKeysRequired() === true, 'Keys enabled for HTTP route test on the local profile');
 
     const port = await startHttpsServer(0);
     const baseUrl = `https://localhost:${port}`;
 
-    // Without k parameter
+    // Without k parameter: refused, as a face that isn't there (200 image/jpeg before SEC-PUB-02).
     const noKeyRes = await fetch(`${baseUrl}/api/avatar/${pubkey}`);
-    assert(noKeyRes.status === 404, 'GET /api/avatar/:pubkey without ?k= returns 404 Avatar not found');
+    const noKeyText = await noKeyRes.text();
+    assert(noKeyRes.status === 404, `GET /api/avatar/:pubkey without ?k= returns 404 Avatar not found on a local node (got ${noKeyRes.status})`);
 
     // With wrong k parameter
     const wrongKeyRes = await fetch(`${baseUrl}/api/avatar/${pubkey}?k=${'B'.repeat(22)}`);
     assert(wrongKeyRes.status === 404, 'GET /api/avatar/:pubkey with wrong ?k= returns 404 Avatar not found');
+
+    // A member with no photo and a key that is no member: the same 404 and the same words, so it tells nobody which is which.
+    const noPhotoPubkey = 'd'.repeat(64);
+    db.prepare(`
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'NoPhotoMember', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(noPhotoPubkey);
+    const noPhotoRes = await fetch(`${baseUrl}/api/avatar/${noPhotoPubkey}`);
+    const nonMemberRes = await fetch(`${baseUrl}/api/avatar/${nonExistentPubkey}`);
+    const noPhotoText = await noPhotoRes.text(), nonMemberText = await nonMemberRes.text();
+    assert(noPhotoRes.status === 404 && nonMemberRes.status === 404 && noPhotoText === noKeyText && nonMemberText === noKeyText,
+        `a member with a photo asked without its key, one with no photo, and no member at all: the same 404 (${noKeyRes.status} ${noPhotoRes.status} ${nonMemberRes.status}; ${noKeyText} | ${noPhotoText} | ${nonMemberText})`);
+
+    // The URL a signed members list hands a member carries k=, and opens unsigned (as an <img> asks it).
+    const viewerKeys = crypto.generateKeyPairSync('ed25519');
+    const viewerPk = viewerKeys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    db.prepare(`
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'Viewer', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(viewerPk);
+    const listPath = '/api/members';
+    const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
+    const listRes = await fetch(`${baseUrl}${listPath}`, {
+        headers: {
+            'X-Public-Key': viewerPk,
+            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${listPath}\n${ts}\n${nonce}\n`), viewerKeys.privateKey).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        },
+    });
+    const listBody: any = await listRes.json().catch(() => null);
+    const rows: any[] = Array.isArray(listBody) ? listBody : Array.isArray(listBody?.members) ? listBody.members : [];
+    const listed = rows.find((m) => m?.publicKey === pubkey);
+    const listedUrl: string | undefined = listed?.avatarUrl ?? listed?.avatar;
+    assert(listRes.status === 200 && typeof listedUrl === 'string' && /[?&]k=[A-Za-z0-9_-]{22}(&|$)/.test(listedUrl),
+        `the signed members list hands out the face with its key (${listRes.status} ${listedUrl})`);
+    const listedRes = listedUrl ? await fetch(`${baseUrl}${listedUrl}`) : null;
+    assert(listedRes?.status === 200, `and that URL opens unsigned (got ${listedRes?.status})`);
 
     // With correct k parameter
     const validKeyRes = await fetch(`${baseUrl}/api/avatar/${pubkey}?k=${validKey}`);

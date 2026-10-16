@@ -17,7 +17,8 @@
  *     an IP literal, a path-only string) is no address. A community with no address is listed by name and distance,
  *     with no link and nothing to knock on (the registry gap, design §11: rows had no `node_url` until #1112);
  *   - the place is `service_radius {lat, lng, radiusKm}` (an object, or its JSON text), else top-level `lat`/`lng`: a
- *     point off the Earth, or exactly 0,0, is no place, and a radius that isn't a positive distance is none;
+ *     point off the Earth, or exactly 0,0, is no place, a place is kept to two decimals (~1 km), and a radius that isn't
+ *     a positive distance is none;
  *   - the name is `community_name`, else `callsign`, else `name`, with control and direction-changing characters taken
  *     out and at most 80 characters: it is shown in other people's notifications;
  *   - a member count is a whole number from 0; contacts are an email and a phone number or nothing.
@@ -144,9 +145,12 @@ function place(r: Record<string, unknown>): { lat: number | null; lng: number | 
     const onEarth = lat !== undefined && lng !== undefined && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
         // 0,0 is in the Gulf of Guinea: a default nobody changed, not a community.
         && !(lat === 0 && lng === 0);
+    // Kept to two decimals (~1 km), as a node now publishes it (getDirectoryInfo): one that hasn't updated sends its exact
+    // pin, which may be its operator's home, and this node serves the place to anyone.
+    const km = (n: number) => Math.round(n * 100) / 100;
     return {
-        lat: onEarth ? lat! : null,
-        lng: onEarth ? lng! : null,
+        lat: onEarth ? km(lat!) : null,
+        lng: onEarth ? km(lng!) : null,
         radiusKm: radius !== undefined && radius > 0 && radius <= 20_037 ? radius : null,
     };
 }

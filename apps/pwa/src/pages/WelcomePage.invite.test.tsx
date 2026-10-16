@@ -295,7 +295,8 @@ describe('← Back on the photo step changes the name on the same account (card 
                 const url = new URL(call.path, 'http://node.test');
                 const name = decodeURIComponent(url.pathname.split('/').pop()!);
                 const tooShort = name.trim().length < 2;
-                return json(200, { callsign: name, available: !tooShort && !takenBy(name, url.searchParams.get('exclude')), tooShort });
+                // Whose own name it is comes from the check's signer, never a parameter (routes/community.ts, public-routes audit NEW-2).
+                return json(200, { callsign: name, available: !tooShort && !takenBy(name, call.headers['X-Public-Key'] ?? null), tooShort });
             },
             '/api/community/membership/': (_body, call) => {
                 const key = decodeURIComponent(call.path.split('/').pop()!);
@@ -312,7 +313,7 @@ describe('← Back on the photo step changes the name on the same account (card 
             },
         });
         const updates = () => node.calls.filter((c) => c.path === '/api/profile/update');
-        const nameChecks = () => node.calls.filter((c) => c.path.startsWith('/api/members/callsign-available/')).map((c) => new URL(c.path, 'http://node.test'));
+        const nameChecks = () => node.calls.filter((c) => c.path.startsWith('/api/members/callsign-available/'));
         return { ...node, state, updates, nameChecks };
     }
 
@@ -402,9 +403,12 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(await loadIdentity()).toEqual(saved);
         const offered = await screen.findAllByRole('button', { name: /^Use the name Sam / });
         expect(offered).toHaveLength(3);
-        // Each suggestion was checked free on the node, with this member's own key left out, as a rename is.
+        // Each suggestion was checked free on the node, signed by this member's key, whose own name is left out, as a rename is.
         expect(node.nameChecks().length).toBeGreaterThanOrEqual(3);
-        for (const check of node.nameChecks()) expect(check.searchParams.get('exclude')).toBe(saved.publicKey);
+        for (const check of node.nameChecks()) {
+            expect(check.headers['X-Public-Key']).toBe(saved.publicKey);
+            expect(new URL(check.path, 'http://node.test').search).toBe('');
+        }
 
         const picked = offered[0].textContent!;
         fireEvent.click(offered[0]);
@@ -473,7 +477,7 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(offered).toHaveLength(3);
         for (const chip of offered) expect(chip.textContent!.length).toBeLessThanOrEqual(20);
         expect(node.nameChecks().length).toBeGreaterThanOrEqual(3);
-        for (const check of node.nameChecks()) expect(decodeURIComponent(check.pathname.split('/').pop()!).length).toBeLessThanOrEqual(20);
+        for (const check of node.nameChecks()) expect(decodeURIComponent(new URL(check.path, 'http://node.test').pathname.split('/').pop()!).length).toBeLessThanOrEqual(20);
     });
 
     it('redeem, then a rename to a suggestion, then the app registers the member as it opens: the node keeps exactly the name they chose', async () => {

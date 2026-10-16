@@ -44,6 +44,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -518,7 +519,7 @@ async function main(): Promise<void> {
         const { startP2P } = await import('./p2p.js');
         const { addConnector } = await import('./connector-manager.js');
         const p2pNode = await startP2P(0, 0);
-        addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${p2pNode.peerId.toString()}`, 'mirror', 'imgstore-self-test-peer');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4073/p2p/${p2pNode.peerId.toString()}`);
 
         // Watch every put the import makes and record whether a transaction was open at the time.
         const realPut = store.put.bind(store);

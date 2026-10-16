@@ -54,8 +54,8 @@ The node enforces its own security firewall via `src/config/gateway.ts` and `loc
 |------|----------|---------|
 | **80** | HTTP | Redirect to HTTPS + QR poster page |
 | **443** | HTTPS | PWA, API, admin settings |
-| **4001** | TCP | Node-to-node gossip (libp2p) |
-| **4002** | TCP | Yamux multiplexed streams |
+| **4001** | TCP | Node-to-node gossip (libp2p). Opt-in: only needed to let linked nodes dial this node. |
+| **4002** | WS | libp2p WebSocket transport for the same links. Opt-in: only needed to let linked nodes dial this node. |
 
 ---
 
@@ -101,8 +101,9 @@ services:
     ports:
       - "80:8080"
       - "443:8443"
-      - "4001:4001"
-      - "4002:4002"
+      # Uncomment only to let linked nodes dial this node:
+      # - "4001:4001"
+      # - "4002:4002"
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
@@ -173,8 +174,9 @@ services:
     ports:
       - "80:8080"
       - "443:8443"
-      - "4001:4001"
-      - "4002:4002"
+      # Uncomment only to let linked nodes dial this node:
+      # - "4001:4001"
+      # - "4002:4002"
     environment:
       - PUBLIC_IP=YOUR_LAN_IP
       - ADMIN_PASSWORD=choose-a-strong-password
@@ -229,8 +231,9 @@ services:
     image: ghcr.io/beanpool-org/beanpool-node:latest
     ports:
       - "8443:8443"
-      - "4001:4001"
-      - "4002:4002"
+      # Uncomment only to let linked nodes dial this node:
+      # - "4001:4001"
+      # - "4002:4002"
     environment:
       - PUBLIC_IP=bean.yourcommunity.org
       - ADMIN_PASSWORD=choose-a-strong-password

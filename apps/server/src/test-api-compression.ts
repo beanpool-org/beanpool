@@ -103,6 +103,7 @@ async function main() {
     const { setMemberPhoto } = await import('@beanpool/engine');
     const heavy = await import('./heavy-reads.js');
     const { apiGzipFromEnv } = await import('./api-compression.js');
+    const { withAvatarKey } = await import('./avatar-test-url.js');
 
     await initTls();
     se.initStateEngine();
@@ -191,7 +192,8 @@ async function main() {
     assert(learned === raw.bytes.length, `the cap learned its raw size from the gzip reader's read, as before (${learned} = ${raw.bytes.length}, read without gzip)`);
 
     console.log('\n── 5. a photo goes out as stored ──');
-    const photo = await ask(`/api/avatar/${alice.pubKeyHex}`, null, { 'Accept-Encoding': 'gzip' });
+    // Asked as a member is handed it, with its key (faces are keyed on every node).
+    const photo = await ask(withAvatarKey(`/api/avatar/${alice.pubKeyHex}`), null, { 'Accept-Encoding': 'gzip' });
     assert(photo.status === 200 && String(photo.headers['content-type']).startsWith('image/'), `the photo is 200, an image (${photo.status}, ${photo.headers['content-type']})`);
     assert(encoding(photo) === undefined && photo.bytes.equals(PNG_PADDED), `its bytes are the stored ones, not encoded (${photo.bytes.length} = ${PNG_PADDED.length}, ${encoding(photo)})`);
 

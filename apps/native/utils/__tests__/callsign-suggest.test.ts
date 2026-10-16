@@ -11,7 +11,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null) },
 }));
 
-import { suggestionFor, suggestCallsigns } from '../callsign-suggest';
+const signedGet = vi.fn(async (url: string, path: string, identity: { publicKey: string }) => {
+    signedAsked.push({ url: `${url}${path}`, by: identity.publicKey });
+    return { ok: true, json: async () => ({ available: true }) } as unknown as Response;
+});
+const signedAsked: Array<{ url: string; by: string }> = [];
+vi.mock('../node-post', () => ({ signedGet: (...a: [string, string, { publicKey: string }]) => signedGet(...a) }));
+
+import { suggestionFor, suggestCallsigns, checkCallsignAvailable } from '../callsign-suggest';
 
 const NODE = 'https://global.beanpool.org';
 const originalFetch = globalThis.fetch;
@@ -62,7 +69,7 @@ describe('suggestionFor', () => {
 describe('suggestCallsigns with a limit', () => {
     it('every suggestion fits, and is the very name the node was asked about', async () => {
         const asked = everyNameFree();
-        const suggestions = await suggestCallsigns('Sarah Jane Smithson', undefined, 3, NODE, 20);
+        const suggestions = await suggestCallsigns('Sarah Jane Smithson', 3, NODE, 20);
         expect(suggestions).toHaveLength(3);
         for (const s of suggestions) {
             expect(s.length).toBeLessThanOrEqual(20);
@@ -71,5 +78,32 @@ describe('suggestCallsigns with a limit', () => {
             expect(s).not.toBe('Sarah Jane Smithson');
         }
         expect(asked.every(name => name.length <= 20)).toBe(true);
+    });
+});
+
+describe("the name check names no key in its address but the signer's own (public-routes audit NEW-2)", () => {
+    const me = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32) } as any;
+
+    // The node reads whose name it is from the signature; ?exclude= with the same key is for a node that hasn't updated
+    // (review of #2049, N1: it reads only the parameter, so a member's own name read "taken" and blocked Next).
+    it("a member's check is signed by their own key, and ?exclude= names only that key", async () => {
+        signedAsked.length = 0;
+        const plain = everyNameFree();
+        expect(await checkCallsignAvailable('Sarah', NODE, { signer: me })).toBe('available');
+        expect(signedAsked).toEqual([{ url: `${NODE}/api/members/callsign-available/Sarah?exclude=${me.publicKey}`, by: me.publicKey }]);
+        expect(plain).toEqual([]);
+        expect(await suggestCallsigns('Sarah', 3, NODE, 32, { signer: me })).toHaveLength(3);
+        expect(signedAsked.every((a) => a.by === me.publicKey && new URL(a.url).searchParams.get('exclude') === me.publicKey
+            && [...new URL(a.url).searchParams.keys()].join() === 'exclude')).toBe(true);
+    });
+
+    it('without a signer it is a plain request, with nothing after the name', async () => {
+        const urls: string[] = [];
+        globalThis.fetch = vi.fn(async (input: any) => {
+            urls.push(String(input));
+            return { ok: true, json: async () => ({ available: false }) } as unknown as Response;
+        }) as any;
+        expect(await checkCallsignAvailable('Sarah', NODE)).toBe('taken');
+        expect(urls).toEqual([`${NODE}/api/members/callsign-available/Sarah`]);
     });
 });

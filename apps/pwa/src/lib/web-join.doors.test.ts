@@ -190,7 +190,7 @@ describe('the name check, signed by the joining key (design §4.4)', () => {
             return new Response(JSON.stringify({ available: true }), { status: 200 });
         }));
         const joining = await generateIdentity('');
-        expect(await checkCallsign('Bea', undefined, joining)).toBe('available');
+        expect(await checkCallsign('Bea', joining)).toBe('available');
         expect(seen[0]['X-Public-Key']).toBe(joining.publicKey);
         expect(seen[0]['X-Signature']).toBeTruthy();
         expect(await checkCallsign('Bea')).toBe('available');

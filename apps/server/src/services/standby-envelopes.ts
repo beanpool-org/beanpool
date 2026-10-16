@@ -29,7 +29,7 @@ import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type SealedEnvelopeHeader } from '@beanpool/core';
-import { getConnectorsByLevel } from '../connector-manager.js';
+import { keyEnd, standbyMainPeerId } from './standby-main.js';
 import { logger } from '../logger.js';
 import { redirectRefusal } from './credential-redirect.js';
 
@@ -132,9 +132,9 @@ function keep(bytes: Uint8Array, header: SealedEnvelopeHeader): void {
 
 // ── Who may have sealed it ─────────────────────────────────────────────────────────────────
 
-/** The PeerIds this standby trusts as its main server: its `mirror` connectors, as for sync. */
-function mirrorPins(): string[] {
-    return getConnectorsByLevel('mirror').map((c) => c.peerId).filter((p): p is string => typeof p === 'string' && !!p);
+/** The PeerId this standby trusts as its main server: its pin (services/standby-main.ts), as for sync. */
+function mainServerPin(): string | null {
+    return standbyMainPeerId(dataDir());
 }
 
 function publicKeyOfPeerId(peerId: string): Uint8Array | null {
@@ -149,7 +149,7 @@ function publicKeyOfPeerId(peerId: string): Uint8Array | null {
 export type EnvelopeCheck = { ok: true; header: SealedEnvelopeHeader } | { ok: false; why: string; signer: string | null };
 
 /** Is this a take-over envelope signed by the main server this standby is pinned to? Reads the header only. */
-export function checkEnvelopeFromMirror(bytes: Uint8Array): EnvelopeCheck {
+export function checkEnvelopeFromMainServer(bytes: Uint8Array): EnvelopeCheck {
     let header: SealedEnvelopeHeader;
     try {
         header = readSealedHeader(bytes);
@@ -157,12 +157,12 @@ export function checkEnvelopeFromMirror(bytes: Uint8Array): EnvelopeCheck {
         return { ok: false, why: `it is not a sealed envelope (${e?.message || 'unreadable header'})`, signer: null };
     }
     if (header.kind !== 'takeover') return { ok: false, why: `it is a ${header.kind} envelope, not a take-over envelope`, signer: header.nodePeerId };
-    const pins = mirrorPins();
-    if (pins.length === 0) {
-        return { ok: false, why: 'this standby has no pinned main server (no mirror connector) to check its signature against', signer: header.nodePeerId };
+    const pin = mainServerPin();
+    if (!pin) {
+        return { ok: false, why: 'this standby is not paired with a main server (beanpool pair) to check its signature against', signer: header.nodePeerId };
     }
-    if (!pins.includes(header.nodePeerId)) {
-        return { ok: false, why: `it names ${header.nodePeerId}, not the main server this standby copies from`, signer: header.nodePeerId };
+    if (pin !== header.nodePeerId) {
+        return { ok: false, why: `it names ${header.nodePeerId}, not this standby's main server ${pin} (${keyEnd(pin)})`, signer: header.nodePeerId };
     }
     const key = publicKeyOfPeerId(header.nodePeerId);
     if (!key || !verifySealedHeader(header, key)) {
@@ -266,7 +266,7 @@ export async function pullTakeoverEnvelope(opts: { primaryUrl: string; replicati
         }
 
         const bytes = await readCapped(res);
-        const check = checkEnvelopeFromMirror(bytes);
+        const check = checkEnvelopeFromMainServer(bytes);
         if (!check.ok) {
             lastRejected = { at: Date.now(), signer: check.signer, why: check.why };
             logger.security('P2P', `[Backup] ❌ Refused a take-over envelope: ${check.why}. Not kept; the ones already held are unchanged.`);

@@ -706,18 +706,18 @@ async function main(): Promise<void> {
     assert(liveMembers() === membersBefore && noLeftovers().length === 0 && !fs.existsSync(path.join(dataDir!, 'restore-points')),
         '6. …and so is the database: nothing restored, no restore point, nothing left behind');
 
-    // ── 7. A mirror link's key: a pin on a standby only (standby review F2) ──
-    console.log('\n— 7. a mirror link is a pin on a standby, not on a main server —');
+    // ── 7. A standby's pin: a pin on a standby only (standby review F2; case 19 D1) ──
+    console.log('\n— 7. the pin is a pin on a standby, not on a main server —');
     {
         const { setNodeRole, getNodeRole } = await import('./config/node-role.js');
-        const connectorsBefore = fs.readFileSync(path.join(dataDir!, 'connectors.json'));
-        fs.writeFileSync(path.join(dataDir!, 'connectors.json'), JSON.stringify([{ address: `/ip4/127.0.0.1/tcp/4001/p2p/${forgerPeer}`, trustLevel: 'mirror', enabled: true, callsign: 'mirror', addedAt: 1 }]));
+        const { pinMainServerForTests, unpinMainServerForTests } = await import('./standby-pin-test-helper.js');
+        pinMainServerForTests(forgerPeer, { dir: dataDir! });
         const wasRole = getNodeRole();
         try {
             setNodeRole('primary');
             const onMain = await restore(forged, { 'X-Recovery-Code': code.code });
             assert(onMain.status === 409 && onMain.body.signerNotPinned === true && !(onMain.body.pins || []).includes(forgerPeer),
-                `7. on a main server, a file signed by its mirror link's key: 409, not a pin (got ${onMain.status}: ${JSON.stringify(onMain.body.pins)})`);
+                `7. on a main server, a file signed by a key in a stray standby-main.json: 409, not a pin (got ${onMain.status}: ${JSON.stringify(onMain.body.pins)})`);
             setNodeRole('backup');
             const onStandby = await restore(forged, { 'X-Recovery-Code': code.code });
             assert(onStandby.status === 500 && /Restore failed/.test(onStandby.body.error || ''),
@@ -725,7 +725,7 @@ async function main(): Promise<void> {
             assert(liveMembers() === membersBefore && noLeftovers().length === 0, '7. nothing was restored and nothing left behind');
         } finally {
             setNodeRole(wasRole);
-            fs.writeFileSync(path.join(dataDir!, 'connectors.json'), connectorsBefore);
+            unpinMainServerForTests(dataDir!);
         }
     }
 

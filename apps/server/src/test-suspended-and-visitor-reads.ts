@@ -73,6 +73,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const MODE = READ_AUTH_OFF ? '[read auth off]' : '[defaults]';
 let BASE = '';
@@ -555,7 +556,7 @@ async function main() {
         se.transfer('genesis', yan.pubKeyHex, 1, 'hello', 'direct', true);
         const p2p = await startP2P(0, 0);
         const nodeId = p2p.peerId.toString();
-        addConnector(`/ip4/127.0.0.1/tcp/4297/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4297/p2p/${nodeId}`);
         const payload: any = await se.exportSyncState(nodeId);
         const exported = (pk: string) => (payload.members ?? []).find((m: any) => m.publicKey === pk);
         assert(exported(zed.pubKeyHex)?.isVisitor === true && exported(dee.pubKeyHex)?.isVisitor === false && exported(gen.pubKeyHex)?.isVisitor === false,

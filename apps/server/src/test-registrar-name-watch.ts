@@ -71,6 +71,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_P = 'Name-Watch-P-Pw-3317!';
@@ -191,7 +192,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },

@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
-import type { BalanceInfo, MarketplacePost, MarketplaceTransaction } from '../lib/api';
+import type { BalanceInfo, DecisionWithTally, MarketplacePost, MarketplaceTransaction, MyPoolVoting } from '../lib/api';
 
 const S = SAMPLE_COMMUNITY;
 
@@ -101,19 +101,78 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
 }
 
 /**
- * The Commons in preview: the pool and an enterprise where enterprises are previewed, a Decision where Decisions are,
- * each by its own mode, so a node that turns one on loses only that one's sample (design §4).
+ * Example Valley's Decision as the real Decide screen reads it (DecisionWithTally): touches pool, grant enterprise,
+ * quadratic on trade, turnout 9 of 6, Yes 12 (86%) · No 2 · needs 60%, closing in 3 days.
  */
-export function CommonsPreview({ enterprises = true, decisions = true, ...ways }: { enterprises?: boolean; decisions?: boolean } & LocalCommunityWays) {
+export function sampleDecisions(): DecisionWithTally[] {
+    const d = S.decisions[0];
+    const now = Date.now();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    return [{
+        id: d.id,
+        authorPubkey: 'sample-member-neighbour',
+        title: d.question,
+        description: t('{amount} Beans from the pool: {what}.', { amount: String(d.fromPool), what: S.projects[0].what }),
+        touches: d.touches,
+        effect: d.effect,
+        subject: d.subject,
+        params: { amount: d.fromPool, subject: d.subject },
+        franchise: d.franchise,
+        status: 'open',
+        opensAt: new Date(now - 4 * DAY_MS).toISOString(),
+        closesAt: new Date(now + d.closesInDays * DAY_MS).toISOString(),
+        gracePeriodEndsAt: null,
+        createdAt: new Date(now - 4 * DAY_MS).toISOString(),
+        executedAt: null,
+        executionError: null,
+        executionReason: null,
+        adminHaltedAt: null,
+        adminHaltReason: null,
+        updatedAt: new Date(now - 4 * DAY_MS).toISOString(),
+        tally: {
+            decisionId: d.id,
+            status: 'open',
+            totalVoters: d.totalVoters,
+            electorate: d.electorate,
+            quorumRatio: d.quorumRatio,
+            quorumRequired: d.quorumRequired,
+            quorumMet: d.quorumMet,
+            yesWeight: d.yesWeight,
+            noWeight: d.noWeight,
+            totalWeight: d.yesWeight + d.noWeight,
+            supportRatio: d.yesWeight / (d.yesWeight + d.noWeight),
+            thresholdRequired: d.thresholdRequired,
+            passed: d.passed,
+        },
+        myVote: null,
+    }];
+}
+
+/** Voice credits for money votes from Example Valley (582 voice credits, completed trades). */
+export function samplePoolVoting(): MyPoolVoting {
+    return {
+        voiceCredits: S.voiceCredits,
+        hasCompletedTrade: true,
+    };
+}
+
+/** The Commons pool balance in Beans from Example Valley (640). */
+export function sampleCommonsBalance(): number {
+    return S.pool;
+}
+
+/**
+ * The Commons in preview: the pool and an enterprise where enterprises are previewed (the real Decide screen
+ * is drawn by DecideSection on the Decide tab).
+ */
+export function CommonsPreview({ enterprises = true, ...ways }: { enterprises?: boolean } & LocalCommunityWays) {
     const [commonsInfo, setCommonsInfo] = useState(false);
     const e = S.enterprises[0];
-    const d = S.decisions[0];
-    if (!enterprises && !decisions) return null;
+    if (!enterprises) return null;
     return (
         <div data-testid="commons-preview">
-            <LocalCommunityStrip feature={enterprises ? 'enterprises' : 'decisions'} {...ways} />
+            <LocalCommunityStrip feature="enterprises" {...ways} />
             <SampleHeader />
-            {enterprises && (<>
             <section className={`${CARD} mb-4`}>
                 <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Commons pool</p>
@@ -133,17 +192,6 @@ export function CommonsPreview({ enterprises = true, decisions = true, ...ways }
                     <LocalCommunityAction feature="enterprises" label="Pause" className="w-full" {...ways} />
                 </div>
             </section>
-            </>)}
-            {decisions && (
-            <section className={`${CARD} mb-4`} data-testid="sample-decision">
-                <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Decide · closes in {d.closesInDays} days</p>
-                <h3 className="font-bold text-nature-900 dark:text-nature-50">{d.question}</h3>
-                <p className="text-sm text-nature-600 dark:text-nature-300">{d.fromPool} Beans from the pool · {d.yesWeight} for, {d.noWeight} against</p>
-                <div className="mt-3">
-                    <LocalCommunityAction feature="decisions" label="Vote" className="w-full" {...ways} />
-                </div>
-            </section>
-            )}
             <CommonsInfoModal isOpen={commonsInfo} onClose={() => setCommonsInfo(false)} commonsBalance={S.pool} />
         </div>
     );

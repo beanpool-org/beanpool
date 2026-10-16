@@ -102,6 +102,14 @@ export const outsideRegistrar = (env, name, what) => ({
     body: `Claim refused: ${host(env, name)} already has ${what} the registrar did not make. Nothing was changed. If it is ours, add a name_policy row (blocked) by migration.`,
 });
 
+// The budget of new auto names across all keys is spent (index.js newNameBudgetSpent): claims of new names get a 429
+// until it frees up. Told once per window (the hour's, the day's); counts and the setting only, never a name or a key.
+export const newNameBudgetSpent = (env, { window, words, made, budget, setting, bucket }) => ({
+    category: 'health', priority: PRIORITY.high, tag: TAG.warning, name: null, title: `New-name budget spent (${window})`,
+    once: `new-name-budget:${window}:${bucket}`,
+    body: `New-name budget spent: ${plural(made, 'new name')} in ${words} (budget ${budget}, ${setting}). Claims of new names get a 429 until it frees up; gated claims and existing names are unaffected. If this is real uptake, raise ${setting}.`,
+});
+
 // A4 and A7: conditions the sweep evaluates every tick. `detail` is said while it is active, `clear` once it ends.
 const SUSPENDED = {
     'suspended:canary': (env) => `the canary ${env.CANARY_NAME} did not attest ok`,

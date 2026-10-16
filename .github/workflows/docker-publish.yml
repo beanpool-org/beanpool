@@ -156,8 +156,9 @@ jobs:
               ports:
                 - "80:8080"
                 - "443:8443"
-                - "4001:4001"
-                - "4002:4002"
+                # Uncomment only to let linked nodes dial this node:
+                # - "4001:4001"
+                # - "4002:4002"
               volumes:
                 - ./data:/data
           ```

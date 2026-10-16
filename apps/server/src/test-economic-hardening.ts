@@ -24,6 +24,7 @@ import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { db } from './db/db.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -87,7 +88,7 @@ async function main() {
 
         // A2-14 — an amount≤0 imported txn is an explicit skip, not a silent drop.
         setNodeRole('backup');
-        addConnector(`/ip4/127.0.0.1/tcp/4025/p2p/${nodeId}`, 'mirror', 'self');
+        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4025/p2p/${nodeId}`);
         const payload: SyncPayload = await signSyncPayload({
             nodeId,
             transactions: [{ id: 'zero-tx', from: 'A', to: 'B', amount: 0, memo: 'bad', timestamp: new Date().toISOString() } as any],

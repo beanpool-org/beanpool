@@ -1,9 +1,11 @@
 /**
- * Faces for members only, on a node that shows visitors the listings and not the people (global node G9a-2, design
- * §4; the profile's `guestListingsOnly`).
+ * Faces for members only, on every node (public-routes audit SEC-PUB-02, 16 Oct; first on a node that shows visitors the
+ * listings and not the people, global node G9a-2, design §4, and in a private preview).
  *
- * `/api/avatar/:pubkey` is fetched by `<img>`, which cannot sign a request, so it has always been public: anyone with a
- * member's key could fetch their face. On such a node every avatar URL the node emits carries a key, `k=`, and the
+ * `/api/avatar/:pubkey` is fetched by `<img>`, which cannot sign a request, so it was public: anyone with a member's key
+ * could fetch their face, and learn from the 200 or 404 whether that key was a member of the community at all, the
+ * question the membership probe refuses strangers (one key is a person's on every community, and keys are seen on
+ * global). Marty, 28 Sep: nothing on a private node is public. So every avatar URL the node emits carries a key, `k=`, and the
  * route serves a face only to a URL whose key is right for that member's photo as it is NOW; any other request is
  * answered as if there were no photo (404 `Avatar not found`, the same answer, so it tells nobody which is which). The
  * node hands those URLs to members alone: the members list, profiles, DMs, groups and RSVPs are members-only, and a
@@ -16,11 +18,10 @@
  * - The secret is 32 random bytes in `node_config.avatarKeySecret`, written once: it travels with the database (file
  *   and sealed backups, a restore). A server that has no copy of it (a standby, a take-over) mints its own, and members'
  *   saved URLs show initials until their next members sync brings the new ones: a nuisance, never a leak.
- * - Decided at boot, like the rest of what a node runs as: an operator who switches `guestListingsOnly` restarts the
- *   node, so the URLs it emits and the URLs it serves always agree.
+ * - Every node, whatever its profile or read auth (safe by default for self-hosters: no switch turns it off).
  * - A phone keeps the face URLs it was handed in its own copy of the members, and between its hourly whole reads asks
  *   only for the members changed since its cursor (apps/native services/pillar-sync.ts, `/api/members?updatedAfter=`).
- *   Keying faces or no longer keying them (`guestListingsOnly` or a private preview switched), or a new secret, changes
+ *   Keying faces where they were plain (the update that keyed every node), or a new secret (a take-over), changes
  *   every member's URL and no member's row, so the URLs such a phone holds would stop opening until its next whole read
  *   (review of #1645). So the boot that changes the URLs' shape records when (`node_config.avatarKeysSince`, beside
  *   `avatarKeysShape`, what they were), and a delta from a phone with no sync since then is answered with the whole
@@ -36,7 +37,6 @@ import crypto from 'node:crypto';
 import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } from '@beanpool/core';
 import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { isPrivatePreview } from '../config/private-preview.js';
 import { getNodeRole } from '../config/node-role.js';
 
 export const AVATAR_KEY_SECRET_ROW = 'avatarKeySecret';
@@ -108,9 +108,8 @@ export function avatarKeyMemoSize(): number {
 }
 
 /**
- * At boot: on a node whose `guestListingsOnly` switch is on, or in a private preview (config/private-preview.ts: a member's
- * face reaches the apps' unsigned `<img>` only with its key), every avatar URL carries its key from now on and the route
- * asks for it; elsewhere neither. Returns whether faces are keyed.
+ * At boot: every avatar URL carries its key from now on and the route asks for it, on every node (SEC-PUB-02). Returns
+ * whether faces are keyed: always, now.
  */
 export function installAvatarKeysAtBoot(): boolean {
     // Groups' pictures are keyed on every node (above).
@@ -118,15 +117,11 @@ export function installAvatarKeysAtBoot(): boolean {
     groupSecret = s;
     configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
     const guestListingsOnly = getProfileSwitches().guestListingsOnly;
-    const keyed = guestListingsOnly || isPrivatePreview();
-    shapeOf = () => ({ shape: faceUrlShape(s, keyed), unrecorded: faceUrlShape(s, guestListingsOnly) });
+    // A node that kept faces open until this boot recorded the open shape, so the keyed one is a change: its time goes in
+    // avatarKeysSince, and a phone's next members delta is the whole directory, with the keyed URLs (faceUrlsChangedAfter).
+    shapeOf = () => ({ shape: faceUrlShape(s, true), unrecorded: faceUrlShape(s, guestListingsOnly) });
     // Before this record, faces were keyed by guestListingsOnly alone (the preview came later): what a node with none had.
     noteFaceUrlShape(shapeOf().shape, shapeOf().unrecorded);
-    if (!keyed) {
-        secret = null;
-        configureAvatarKeys(null);
-        return false;
-    }
     secret = s;
     configureAvatarKeys((id, version) => keyFor(s, id, version));
     return true;

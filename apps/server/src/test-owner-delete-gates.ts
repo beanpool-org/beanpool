@@ -23,17 +23,19 @@
  *     what it asked before. Shortening the span the scheduled snapshots cover (interval × keep, at most their 14-day
  *     age: a lower keep that prunes some now, a shorter interval, turning them off, an interval past that age) asks the
  *     same; a change that keeps the span or lengthens it (keeping more, turning them on, a longer interval within the
- *     age, more often with as many more kept) does not. A mirror link (adding one, changing one, disconnecting or removing
- *     one) and the server a standby copies from ask the same (S2b, D2), connectors.json and the copy source held on
- *     every refusal. 3a: a standby whose owner's session cannot make its own key a mirror link restores no file that key
- *     signed (409 signerNotPinned), nothing moved.
+ *     age, more often with as many more kept) does not. The server a standby copies from asks the same (S2b, D2), the
+ *     copy source held on every refusal. 3a (design case 19, rows a and g): on a standby pinned to its main server, no
+ *     credential, the fresh phone hand-off included, makes another key the pin (a `mirror` link is 400, there is no such
+ *     level; a pairing code of another key is 409 pairOnShell; another server's address and token save, the pin as it
+ *     was), so a file that key signed restores nothing (409 signerNotPinned, the phone way too), and a file naming the
+ *     main server that it never signed is refused as altered; standby-main.json byte for byte as it was throughout.
  *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
  *     passes; the helper itself refuses a password caller (fail closed).
  *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
  *     an admin or backups token, the owner's button) never pushes out a scheduled one, and the manual ones keep their own
  *     newest 3; the off-box retention floor (7 days, and a stored lower row read as 7); the standby's copy schedule
  *     (owner-only, bounded, a stored value read through the bounds); the gateway allow-list that would shut the caller
- *     out, or is no list; mirror links owner-only, the first recovery code plain.
+ *     out, or is no list; the first recovery code plain.
  *
  * Run:
  *   SERVER_SUITES_ONLY=test-owner-delete-gates node scripts/run-server-suites.mjs
@@ -52,6 +54,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { localFetch } from './keepalive-test-fetch.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -237,7 +240,6 @@ async function main(): Promise<void> {
 
         // ── 2. OWNER ONLY ─────────────────────────────────────────────────────────────────────────────────────────
         console.log('\n── 2. owner-only: an admin is refused in words, an admin token by its scope, an owner passes ──');
-        const mirrorAddr = 'mirror.example.invalid:4001';
         const branchRoot = addMember('Bramble');
         const ownerOnly: Array<{ what: string; method: string; route: string; body: unknown; unchanged?: () => string; ok: (r: any) => boolean }> = [
             // Keeping more: keeping fewer asks the fresh proof too (3d).
@@ -271,7 +273,7 @@ async function main(): Promise<void> {
                 unchanged: () => JSON.stringify(db.prepare(`SELECT status FROM members WHERE public_key = ?`).get(branchRoot)),
                 ok: (r) => r.status !== 401 && r.status !== 403 },
         ];
-        // An admin keeps peer links (only mirror is an owner's).
+        // An admin keeps peer links.
         const peerAddr = 'peer.example.invalid:4001';
         const adminPeer = await call('POST', '/api/local/connectors', asAdmin, { address: peerAddr, trustLevel: 'peer' });
         assert(adminPeer.status === 200 && getConnectors().some((c: any) => c.address === peerAddr && c.trustLevel === 'peer'),
@@ -310,7 +312,7 @@ async function main(): Promise<void> {
         assert(madeFirst.status === 200 && typeof madeFirst.json?.code === 'string',
             `the FIRST recovery code stays plain: a computer's owner session makes it (${madeFirst.status})`);
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
-        const firstClaim = { name: 'oldvale', mode: 'direct' };
+        const firstClaim = { name: 'oldvale', mode: 'tunnel' };
         const sameClaim = await call('POST', '/api/local/admin/public-address/claim', asComputer, firstClaim);
         assert(sameClaim.status !== 401 && sameClaim.status !== 403, `claiming the name already held asks no proof (${short(sameClaim)})`);
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
@@ -330,18 +332,13 @@ async function main(): Promise<void> {
         const destHeld = (): boolean => storedDest()?.endpoint === gatesDest.endpoint;
         const passes = (r: any) => r.status !== 401 && r.status !== 403;
         let retention = 30;
-        const mirrorThere = () => getConnectors().some((c: any) => c.address === mirrorAddr && c.trustLevel === 'mirror');
-        let connectorsSet = '';
-        const connectorsAsSet = () => JSON.stringify(getConnectors()) === connectorsSet;
-        const noMirror = () => { removeConnector(mirrorAddr); connectorsSet = JSON.stringify(getConnectors()); };
-        const oneMirror = () => { removeConnector(mirrorAddr); addConnector(mirrorAddr, 'mirror', 'Main'); connectorsSet = JSON.stringify(getConnectors()); };
         const fresh: Row[] = [
             { what: 'replace the recovery code (A11)', method: 'POST', route: '/api/local/admin/takeover/recovery-code', body: () => ({ replace: true }),
                 ok: (r) => r.status === 200 && typeof r.json?.code === 'string' },
             { what: 'take the community offline (B1)', method: 'POST', route: '/api/local/admin/public-address/offline', body: () => ({}), ok: passes,
                 before: () => updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any) },
             { what: 'release a name (B2)', method: 'POST', route: '/api/local/admin/public-address/release-name', body: () => ({ name: 'sparevale' }), ok: passes },
-            { what: 'claim over a different live name (B3)', method: 'POST', route: '/api/local/admin/public-address/claim', body: () => ({ name: 'newvale', mode: 'direct' }), ok: passes,
+            { what: 'claim over a different live name (B3)', method: 'POST', route: '/api/local/admin/public-address/claim', body: () => ({ name: 'newvale', mode: 'tunnel' }), ok: passes,
                 before: () => updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any) },
             { what: 'break-glass mode (C5)', method: 'POST', route: '/api/local/admin/auth/break-glass-mode', body: () => ({ enabled: false }),
                 ok: (r) => r.status === 200 && r.json?.breakGlassMode === false },
@@ -362,17 +359,8 @@ async function main(): Promise<void> {
             { what: 're-point an off-box destination by its id (amendment 1)', method: 'POST', route: '/api/local/admin/offbox-backups/settings',
                 before: putDestBack, body: () => ({ destination: { ...gatesDest, id: storedDest()?.id, endpoint: 'https://elsewhere.example.invalid' } }),
                 ok: (r) => r.status === 200 && storedDest()?.endpoint === 'https://elsewhere.example.invalid', held: destHeld },
-            // A mirror link's key is one a standby's restore trusts, and the copy source feeds its database (S2b, D2): each
-            // change asks the fresh proof, connectors.json and the copy source as they were on every refusal.
-            { what: 'add a mirror link (A10, S2b)', method: 'POST', route: '/api/local/connectors', body: () => ({ address: mirrorAddr, trustLevel: 'mirror' }),
-                before: noMirror, ok: (r) => r.status === 200 && mirrorThere(), held: () => !mirrorThere() && connectorsAsSet() },
-            { what: 'change a mirror link to a peer (A10, S2b)', method: 'POST', route: '/api/local/connectors', body: () => ({ address: mirrorAddr, trustLevel: 'peer' }),
-                before: oneMirror, ok: (r) => r.status === 200 && getConnectors().some((c: any) => c.address === mirrorAddr && c.trustLevel === 'peer'),
-                held: () => mirrorThere() && connectorsAsSet() },
-            { what: 'disconnect a mirror link (A10, S2b)', method: 'POST', route: '/api/local/connectors/disconnect', body: () => ({ address: mirrorAddr }),
-                before: oneMirror, ok: (r) => r.status === 200 && r.json?.success === true, held: () => mirrorThere() && connectorsAsSet() },
-            { what: 'remove a mirror link (A10, S2b)', method: 'POST', route: '/api/local/connectors/remove', body: () => ({ address: mirrorAddr }),
-                before: oneMirror, ok: (r) => r.status === 200 && !getConnectors().some((c: any) => c.address === mirrorAddr), held: () => mirrorThere() && connectorsAsSet() },
+            // The copy source feeds a standby's database (S2b, D2): changing it asks the fresh proof, the copy source as it was
+            // on every refusal. Which key a standby trusts is its shell's (case 19 D1): 3a.
             { what: 'the server a standby copies from (A8, S2b)', method: 'POST', route: '/api/local/admin/replication-config/save',
                 body: () => ({ primaryUrl: 'https://elsewhere.example.invalid' }), before: () => updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid' } as any),
                 ok: (r) => r.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://elsewhere.example.invalid',
@@ -430,22 +418,12 @@ async function main(): Promise<void> {
             held(byToken, 'an admin token');
         }
         if (storedDest()) offbox.updateOffboxSettings({ removeId: storedDest().id });
-        removeConnector(mirrorAddr);
 
         // ── 3-NB1. A request the route refuses on its own terms spends no code (#2002 confirmation review, NB1) ──
         console.log('\n── 3-NB1. a mistyped request spends no code: the proof is checked last ──');
         {
             resetAdminAuthTarpit();
             https.resetAdminRateLimit();
-            const linksBefore = JSON.stringify(getConnectors());
-            const code = tfa.code();
-            const badUrl = await call('POST', '/api/local/connectors', pwSession(), { address: mirrorAddr, trustLevel: 'mirror', publicUrl: 'not a url', code });
-            assert(badUrl.status === 400 && /publicUrl/.test(badUrl.json?.error || '') && JSON.stringify(getConnectors()) === linksBefore,
-                `3-NB1. a mirror link with a mistyped public URL → 400, connectors.json unchanged (${short(badUrl)})`);
-            const good = await call('POST', '/api/local/connectors', pwSession(), { address: mirrorAddr, trustLevel: 'mirror', code });
-            assert(good.status === 200 && mirrorThere(), `3-NB1. …and the same code still adds it: it was not spent (${short(good)})`);
-            removeConnector(mirrorAddr);
-
             updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid' } as any);
             const code2 = tfa.code();
             const withPassword = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { primaryUrl: 'https://elsewhere.example.invalid', primaryPassword: 'pasted by mistake', code: code2 });
@@ -542,62 +520,109 @@ async function main(): Promise<void> {
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
             const liveBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
             code = tfa.code();
-            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'direct', code });
+            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'tunnel', code });
             assert(badClaim.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === liveBefore,
                 `3-NB2. claiming over the live name with a name that is no address label → 400, unchanged (${short(badClaim)})`);
-            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'direct', code });
+            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'tunnel', code });
             assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
         }
 
-        // ── 3a. A standby: a session alone cannot make its own key a pin, so a file that key signed restores nothing ──
-        console.log('\n── 3a. a standby: no mirror link from a session alone, so no file signed by an unpinned key ──');
+        // ── 3a. A standby (design case 19, rows a and g): no session makes another key its main server's pin ──
+        console.log('\n── 3a. a standby: no credential, however fresh, makes another key the pin, so no file that key signed restores ──');
         {
             const { setNodeRole, getNodeRole } = await import('./config/node-role.js');
             const core: any = await import('@beanpool/core');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+            const { makePairingCode } = await import('./services/standby-main.js');
+            const { unpinMainServerForTests } = await import('./standby-pin-test-helper.js');
             const roleWas = getNodeRole();
+            const copyWas = { backupPrimaryUrl: getLocalConfig().backupPrimaryUrl ?? null, backupReplicationToken: getLocalConfig().backupReplicationToken ?? null };
             const realMain = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
             const mallory = await generateKeyPair('Ed25519');
             const malloryPeer = peerIdFromPrivateKey(mallory).toString();
+            const pinFile = path.join(dataDir!, 'standby-main.json');
             setNodeRole('backup');
             try {
-                // The standby's link to its real main server, set up when it was made.
-                addConnector(`/ip4/127.0.0.1/tcp/4001/p2p/${realMain}`, 'mirror', 'Main');
+                // The standby's pin on its real main server, from its shell when it was made.
+                pinMainServerForTests(realMain, { url: 'https://main.example.invalid' });
+                updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid', backupReplicationToken: 'a'.repeat(64) } as any);
+                const pinBefore = fs.readFileSync(pinFile).toString('hex');
+                const pinHeld = () => fs.existsSync(pinFile) && fs.readFileSync(pinFile).toString('hex') === pinBefore;
                 const linksBefore = JSON.stringify(getConnectors());
-                const malloryLink = { address: `/ip4/127.0.0.1/tcp/4002/p2p/${malloryPeer}`, trustLevel: 'mirror' };
-                const byComputer = await call('POST', '/api/local/connectors', asComputer, malloryLink);
-                assert(byComputer.status === 403 && byComputer.json?.code === 'phone_required' && JSON.stringify(getConnectors()) === linksBefore,
-                    `3a. a standby: the owner's computer session adds no mirror link of its own key → 403 phone_required, connectors.json unchanged (${short(byComputer)})`);
-                const byEarlier = await call('POST', '/api/local/connectors', { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, malloryLink);
-                assert(byEarlier.status === 401 && byEarlier.json?.totpRequired === true && JSON.stringify(getConnectors()) === linksBefore,
-                    `3a. …nor the password with an earlier 2FA session → 401 totpRequired, connectors.json unchanged (${short(byEarlier)})`);
-                // A file of this community, signed by that key, locked to a code the uploader made.
                 const community = JSON.parse(fs.readFileSync(path.join(dataDir!, 'genesis.json'), 'utf8')).communityId;
+                const malloryLink = { address: `/ip4/127.0.0.1/tcp/4002/p2p/${malloryPeer}`, trustLevel: 'mirror' };
+                const malloryCode = makePairingCode({ url: 'https://mallory.example.invalid', communityId: community, peerId: malloryPeer, token: 'b'.repeat(64) });
+                // Every credential, the fresh phone hand-off (Manage within 90 s) first: the strongest a stolen phone holds.
+                const creds: Array<[string, () => Record<string, string>, () => Record<string, unknown>, boolean]> = [
+                    ['a fresh phone hand-off', asPhone, () => ({}), true],
+                    ['the password with a current code', pwSession, () => ({ code: tfa.code() }), true],
+                    ['the password with an earlier 2FA session', () => ({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }), () => ({}), false],
+                    ["the owner's computer session", () => asComputer, () => ({}), false],
+                    ['Manage pressed 91 s ago', asStalePhone, () => ({}), false],
+                    ['an admin', () => asAdmin, () => ({}), false],
+                    ['an admin token', () => asToken, () => ({}), false],
+                ];
+                for (const [who, headers, extra, passes] of creds) {
+                    resetAdminAuthTarpit();
+                    https.resetAdminRateLimit();
+                    const link = await call('POST', '/api/local/connectors', headers(), { ...malloryLink, ...extra() });
+                    assert((passes ? link.status === 400 : link.status >= 400) && pinHeld() && JSON.stringify(getConnectors()) === linksBefore,
+                        `3a. ${who}: a mirror link to another key → ${passes ? '400, no such level' : 'refused'}; the pin and connectors.json as they were (${short(link)})`);
+                    const paired = await call('POST', '/api/local/admin/replication-config/save', headers(), { pairingCode: malloryCode, ...extra() });
+                    assert((passes ? paired.status === 409 && paired.json?.pairOnShell === true : paired.status >= 400) && pinHeld()
+                        && getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid',
+                        `3a. ${who}: another key's pairing code in Live Backup Server → ${passes ? '409 pairOnShell' : 'refused'}; the pin and the copy source as they were (${short(paired)})`);
+                }
+                // The fresh hand-off can point the copy source at another server (the model: an owner's phone), but never the
+                // pin: copies from there are refused at their first page (test-standby-pin row b).
+                const repointed = await call('POST', '/api/local/admin/replication-config/save', asPhone(), { primaryUrl: 'https://mallory.example.invalid', primaryToken: 'b'.repeat(64) });
+                assert(repointed.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://mallory.example.invalid' && pinHeld()
+                    && repointed.json?.standbyMain?.peerId === realMain,
+                    `3a. a fresh phone hand-off: another server's address and token save (200), and the pin is byte for byte as it was (${short(repointed)})`);
+                updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid' } as any);
+                // A file of this community, signed by that key, locked to a code the uploader made.
                 const theirCode = await core.createRecoveryCode(7);
-                const forged = Buffer.from(await core.sealEnvelope(new Uint8Array(Buffer.from('a database of their own')), {
-                    kind: 'backup', communityId: community, nodePeerId: malloryPeer,
+                const sealedBy = async (nodePeerId: string) => Buffer.from(await core.sealEnvelope(new Uint8Array(Buffer.from('a database of their own')), {
+                    kind: 'backup', communityId: community, nodePeerId,
                     recipients: { owners: [], codes: [theirCode.record] }, signingKey: new Uint8Array(mallory.raw.subarray(0, 32)),
                 }));
+                const forged = await sealedBy(malloryPeer);
                 const rolesBefore = JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all());
                 const keyBefore = fs.readFileSync(path.join(dataDir!, 'libp2p_key')).toString('hex');
-                resetAdminAuthTarpit();
-                https.resetAdminRateLimit();
-                pruneAuthAttempts(Date.now() + 120_000);
-                const res = await localFetch(base + '/api/local/admin/restore', {
-                    method: 'POST', body: new Uint8Array(forged),
-                    headers: { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession, 'X-Recovery-Code': theirCode.code, 'Content-Type': 'application/octet-stream' },
-                });
-                const restored: any = await res.json().catch(() => null);
-                assert(res.status === 409 && restored?.signerNotPinned === true && restored?.signer === malloryPeer,
-                    `3a. …so the file that key signed, with the uploader's own code: 409 signerNotPinned (${res.status} ${String(restored?.error).slice(0, 120)})`);
+                const filesBefore = fs.readdirSync(dataDir!).sort().join(',');
+                const upload = async (file: Buffer, headers: Record<string, string>) => {
+                    resetAdminAuthTarpit();
+                    https.resetAdminRateLimit();
+                    pruneAuthAttempts(Date.now() + 120_000);
+                    const res = await localFetch(base + '/api/local/admin/restore', {
+                        method: 'POST', body: new Uint8Array(file),
+                        headers: { ...headers, 'X-Recovery-Code': theirCode.code, 'Content-Type': 'application/octet-stream' },
+                    });
+                    return { status: res.status, json: await res.json().catch(() => null) as any };
+                };
+                for (const [who, headers] of [
+                    ['a fresh phone hand-off', asPhone()],
+                    ['the password with an earlier 2FA session', { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }],
+                    ['a fresh phone hand-off, opened with the phone', { ...asPhone(), 'X-Unlock-With': 'phone' }],
+                ] as Array<[string, Record<string, string>]>) {
+                    const r = await upload(forged, headers);
+                    assert(r.status === 409 && r.json?.signerNotPinned === true && r.json?.signer === malloryPeer && r.json?.mainServer === realMain
+                        && String(r.json?.error).includes(malloryPeer.slice(-8)) && String(r.json?.error).includes(realMain.slice(-8)) && !r.json?.sessionId,
+                        `3a. ${who}: the file that key signed, with the uploader's own code → 409 signerNotPinned, naming both keys, no unlock started (${r.status} ${String(r.json?.error).slice(0, 140)})`);
+                }
+                // Naming the main server is no way round: the main server never signed it.
+                const posing = await upload(await sealedBy(realMain), asPhone());
+                assert(posing.status === 400 && posing.json?.badSignature === true,
+                    `3a. a file naming the main server that it never signed → 400, altered (${posing.status} ${String(posing.json?.error).slice(0, 100)})`);
                 assert(JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()) === rolesBefore
                     && fs.readFileSync(path.join(dataDir!, 'libp2p_key')).toString('hex') === keyBefore
                     && !fs.existsSync(path.join(dataDir!, 'restore-points'))
-                    && fs.readdirSync(dataDir!).filter((f) => f.startsWith('uploaded-backup') || f.startsWith('.restore')).length === 0,
-                    '3a. …nothing moved: the roles, the node key, no restore point, nothing left');
+                    && fs.readdirSync(dataDir!).sort().join(',') === filesBefore && pinHeld(),
+                    '3a. …nothing moved: the roles, the node key, the pin, no restore point, no file kept for a phone, nothing left');
             } finally {
-                for (const c of getConnectors()) if (c.trustLevel === 'mirror') removeConnector(c.address);
+                unpinMainServerForTests(dataDir!);
+                updateLocalConfig(copyWas as any);
                 setNodeRole(roleWas);
             }
         }

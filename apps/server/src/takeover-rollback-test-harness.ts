@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnNode, post, copyDir, runNodeChild, inspectNode, type NodeProc } from './takeover-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 export const PW_MAIN = 'Main-Server-Pw-512!';
 export const PW_STANDBY = 'Standby-Own-Pw-618!';
@@ -36,7 +37,7 @@ export const MAIN_BOOT_ROWS = [
 ];
 
 /** The files a take-over writes and a roll-back puts back, by hash (null: not there). */
-const FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'recovery-seal.key', 'open-join.key'];
+const FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'standby-main.json'];
 
 /** The node processes' commands. Run as the suite's child (`--child`). */
 export async function rollbackChild(): Promise<void> {
@@ -66,7 +67,7 @@ export async function rollbackChild(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },
@@ -156,6 +157,8 @@ async function standbyState(): Promise<Record<string, any>> {
             sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
         },
         connectorsInMemory: getConnectors().map((x: any) => x.trustLevel).sort(),
+        /** The standby's pin (services/standby-main.ts): the PeerId it copies, or null. */
+        standbyMain: (() => { try { return JSON.parse(fs.readFileSync(path.join(dataDir, 'standby-main.json'), 'utf-8')).peerId ?? null; } catch { return null; } })(),
         journal: fs.existsSync(journalFile) ? JSON.parse(fs.readFileSync(journalFile, 'utf-8')) : null,
         bundleFile: fs.existsSync(path.join(dataDir, 'takeover-bundle.json')),
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),

@@ -35,6 +35,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Main-Server-Pw-404!';
@@ -58,7 +59,7 @@ async function child(): Promise<void> {
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
-            addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+            pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
         },
@@ -186,6 +187,10 @@ async function main(): Promise<void> {
         }
         assert(held.a.length === 1 && JSON.stringify(held.a) === JSON.stringify(held.b) && held.a[0] === setup.envelopeId,
             'both hold the same envelope, the one the main server sealed');
+        // The harness boots as index.ts does (#2037 NB4): each node's first start ran the pin's migration, once per data folder.
+        const migrated = (n: string): unknown => { try { return JSON.parse(fs.readFileSync(path.join(dir(n), 'standby-main.migrated'), 'utf8')).outcome; } catch { return null; } };
+        assert(migrated('main') === 'not-a-standby' && migrated('a') === 'unpaired' && migrated('b') === 'unpaired',
+            `each node's first start ran the pin's migration, as index.ts does (main ${migrated('main')}, A ${migrated('a')}, B ${migrated('b')})`);
         await main.kill('SIGKILL');
 
         let a = track(await spawnNode(SCRIPT, dir('a'), envA));

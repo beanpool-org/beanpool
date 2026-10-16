@@ -79,4 +79,4 @@ Turning a feature off affects every member at once. Tell them first.
 
 ## Peers: other communities
 
-Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway & Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first.
+Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway & Peers**. A link is either a peer or blocked. A standby is not a link: it is paired with its main server from its own shell (see Which server a standby trusts, in Backups and replicas). Trading between communities is new and little used; agree the terms with the other community's owners first.

@@ -29,7 +29,10 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITL
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
 import { t, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS } from '@beanpool/core';
-import { useReadsOwn } from '../lib/features';
+import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
+import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+
+export const LEDGER_MODE_WAIT_CAP_MS = 10_000;
 
 interface Props extends LocalCommunityWays {
     /** Null only in preview: a visitor with no key reads Example Valley's ledger in the lobby (GuestLobby). */
@@ -42,6 +45,8 @@ interface Props extends LocalCommunityWays {
     isMember?: boolean;
     /** Beans are previewed on this node: Example Valley's ledger, and the marker's sheet for every action (above). */
     preview?: boolean;
+    /** How long to wait for the node's info read to settle before giving up and offering Try again (default 10s). */
+    waitCapMs?: number;
 }
 
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
@@ -78,17 +83,37 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate, isMember, preview = false, ...ways }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, ...ways }: Props) {
     const viewerIsMember = isMember !== false && identity !== null;
     const myKey = identity?.publicKey ?? '';
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
     // Built each render (it is small), so its words follow a change of language.
     const sample = preview ? sampleLedger() : null;
+    const [modeTimedOut, setModeTimedOut] = useState(false);
+    const [modeRetryCount, setModeRetryCount] = useState(0);
     // The member's balance and ledger are Beans: nothing of theirs is asked until the node has said Beans are not a
     // preview here (lib/features readsOwn), as on the phone. Until then the page draws a neutral wait, never a live 0
     // (review of #2035, N2). A local community answers at once and reads as before.
-    const readsBeans = useReadsOwn('beans', viewerIsMember && !preview);
+    const readsBeans = useReadsOwn('beans', viewerIsMember && !preview, modeRetryCount);
     const waitingForMode = viewerIsMember && !preview && !readsBeans;
+
+    useEffect(() => {
+        if (!waitingForMode) {
+            setModeTimedOut(false);
+            return;
+        }
+        const timer = setTimeout(() => {
+            setModeTimedOut(true);
+        }, waitCapMs ?? LEDGER_MODE_WAIT_CAP_MS);
+        return () => clearTimeout(timer);
+    }, [waitingForMode, modeRetryCount, waitCapMs]);
+
+    const handleRetryMode = useCallback(() => {
+        resetCommunityInfoOnce();
+        resetReaderFeaturesOnce();
+        setModeTimedOut(false);
+        setModeRetryCount(c => c + 1);
+    }, []);
     // App learns guest status after mount, so a member-style refresh can still be in flight when this
     // flips to false; its failure must not put an error in front of the guest.
     const viewerIsMemberRef = useRef(viewerIsMember);
@@ -384,7 +409,20 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, ..
     if (waitingForMode) {
         return (
             <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid="ledger-waiting">
-                <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your ledger…')}</p>
+                {modeTimedOut ? (
+                    <div className="space-y-3">
+                        <p className="text-sm text-nature-600 dark:text-nature-300" role="alert">{t('Could not load your ledger.')}</p>
+                        <button
+                            type="button"
+                            onClick={handleRetryMode}
+                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                        >
+                            {t('Try again')}
+                        </button>
+                    </div>
+                ) : (
+                    <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your ledger…')}</p>
+                )}
             </div>
         );
     }

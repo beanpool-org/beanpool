@@ -83,8 +83,8 @@ async function partA(world: World, root: string): Promise<void> {
         assert(node.proc.exitCode === null && node.proc.signalCode === null, 'the server runs on: no restart');
         const s = await node.send('state');
         assertRolledBack(world, s, 'A', 'roles');
-        assert(s.connectorsInMemory.includes('mirror') && !s.connectorsInMemory.includes('peer'),
-            `[A] in memory too, it pins its main server again, and holds no link of the community's (${s.connectorsInMemory})`);
+        assert(!!s.standbyMain && !s.connectorsInMemory.includes('peer'),
+            `[A] it pins its main server again (${s.standbyMain}), and holds no link of the community's, in memory too (${s.connectorsInMemory})`);
 
         const again = await post(node.base, '/api/local/admin/takeover/open', { code: world.code }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         assert(again.status === 200 && again.body.preview?.sessionId,
@@ -124,7 +124,7 @@ async function failAt(world: World, root: string, step: string): Promise<void> {
         assert(node.proc.exitCode === null && node.proc.signalCode === null, `[${label}] the server runs on`);
         const s = await node.send('state');
         assertRolledBack(world, s, label, step);
-        assert(s.connectorsInMemory.includes('mirror'), `[${label}] it pins its main server again, in memory too`);
+        assert(!!s.standbyMain, `[${label}] it pins its main server again (${s.standbyMain})`);
         // `pull-config` stopped the puller before it failed: a standby put back copies again.
         if (step === 'pull-config') assert(s.pullerRunning, `[${label}] the puller it stopped runs again`);
         await node.kill();

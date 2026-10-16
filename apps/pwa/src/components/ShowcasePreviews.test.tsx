@@ -11,7 +11,7 @@ import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
-import { CommonsPreview, sampleDealChip } from './ShowcasePreviews';
+import { CommonsPreview, sampleDealChip, sampleDecisions, samplePoolVoting, sampleCommonsBalance } from './ShowcasePreviews';
 import { MyDealsModal } from './MyDealsModal';
 import { LedgerPage } from '../pages/LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -111,11 +111,11 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         });
     }
 
-    it('Commons: pool, enterprise and Decision; Pledge, Pause and Vote open the sheet', async () => {
+    it('Commons: pool and enterprise; Pledge and Pause open the sheet', async () => {
         render(<CommonsPreview />);
         expect(screen.getByTestId('sample-enterprise')).toHaveTextContent(SAMPLE_COMMUNITY.enterprises[0].name);
-        expect(screen.getByTestId('sample-decision')).toHaveTextContent(SAMPLE_COMMUNITY.decisions[0].question);
-        for (const [name, feature] of [['Pledge', 'enterprises'], ['Pause', 'enterprises'], ['Vote', 'decisions']] as const) {
+        expect(screen.queryByTestId('sample-decision')).toBeNull();
+        for (const [name, feature] of [['Pledge', 'enterprises'], ['Pause', 'enterprises']] as const) {
             fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
             expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features[feature]);
             fireEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -123,19 +123,25 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         onlyInfo();
     });
 
-    it('Commons, each part by its own feature: enterprises alone, or the Decision alone under the Decisions strip', () => {
-        const { unmount } = render(<CommonsPreview enterprises decisions={false} />);
-        expect(screen.getByTestId('sample-enterprise')).toBeInTheDocument();
-        expect(screen.queryByTestId('sample-decision')).toBeNull();
-        unmount();
-        const second = render(<CommonsPreview enterprises={false} decisions />);
-        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
-        expect(screen.queryByTestId('sample-enterprise')).toBeNull();
-        expect(screen.getByTestId('local-community-strip')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.lead.decisions);
-        expect(screen.getByTestId('local-community-strip')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.body.decisions);
-        second.unmount();
-        const { container } = render(<CommonsPreview enterprises={false} decisions={false} />);
-        expect(container).toBeEmptyDOMElement();
+    it('sampleDecisions, samplePoolVoting, and sampleCommonsBalance match the sample community', () => {
+        const decisions = sampleDecisions();
+        expect(decisions).toHaveLength(SAMPLE_COMMUNITY.decisions.length);
+        expect(decisions[0].title).toBe(SAMPLE_COMMUNITY.decisions[0].question);
+        expect(decisions[0].touches).toBe(SAMPLE_COMMUNITY.decisions[0].touches);
+        expect(decisions[0].effect).toBe(SAMPLE_COMMUNITY.decisions[0].effect);
+        expect(decisions[0].franchise).toBe(SAMPLE_COMMUNITY.decisions[0].franchise);
+        expect(decisions[0].tally.totalVoters).toBe(9);
+        expect(decisions[0].tally.quorumRequired).toBe(6);
+        expect(decisions[0].tally.quorumMet).toBe(true);
+        expect(decisions[0].tally.yesWeight).toBe(12);
+        expect(decisions[0].tally.noWeight).toBe(2);
+        expect(decisions[0].tally.thresholdRequired).toBe(0.6);
+
+        const poolVoting = samplePoolVoting();
+        expect(poolVoting.voiceCredits).toBe(SAMPLE_COMMUNITY.voiceCredits);
+        expect(poolVoting.hasCompletedTrade).toBe(true);
+
+        expect(sampleCommonsBalance()).toBe(SAMPLE_COMMUNITY.pool);
     });
 
     it('My Deals: the real modal in preview with In Progress / My Posts / History tabs; requested shows Action Required, held Held in trust, sold +30; every button opens the sheet', async () => {
@@ -458,5 +464,20 @@ describe('the strip\'s ✕ is remembered, per node and feature, in this browser'
         render(<LocalCommunityStrip feature="beans" />);
         expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
         onlyInfo();
+    });
+});
+
+describe('sampleDecisions and samplePoolVoting match between web and phone (N5)', () => {
+    it('web and phone sample decisions and pool voting agree', async () => {
+        const PHONE_SAMPLE = '../../../native/components/showcase/sample-screens';
+        const phone = await import(/* @vite-ignore */ PHONE_SAMPLE) as { sampleDecisions: () => any[]; samplePoolVoting: () => any };
+        const webDecisions = sampleDecisions();
+        const phoneDecisions = phone.sampleDecisions();
+        expect(webDecisions).toHaveLength(phoneDecisions.length);
+        expect(webDecisions[0].id).toBe(phoneDecisions[0].id);
+        expect(webDecisions[0].title).toBe(phoneDecisions[0].title);
+        expect(webDecisions[0].description).toBe(phoneDecisions[0].description);
+        expect(webDecisions[0].tally).toEqual(phoneDecisions[0].tally);
+        expect(samplePoolVoting()).toEqual(phone.samplePoolVoting());
     });
 });

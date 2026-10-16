@@ -55,7 +55,7 @@ The node enforces its own security firewall via `src/config/gateway.ts` and `loc
 | **80** | HTTP | Redirect to HTTPS + QR poster page |
 | **443** | HTTPS | PWA, API, admin settings |
 | **4001** | TCP | Node-to-node gossip (libp2p). Opt-in: only needed to let linked nodes dial this node. |
-| **4002** | TCP | Yamux multiplexed streams. Opt-in: only needed to let linked nodes dial this node. |
+| **4002** | WS | libp2p WebSocket transport for the same links. Opt-in: only needed to let linked nodes dial this node. |
 
 ---
 

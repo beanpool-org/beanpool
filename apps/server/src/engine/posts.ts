@@ -268,7 +268,9 @@ function notifyEventChange(
 
 function parseEventTime(raw: unknown, label: string): string {
     const ms = typeof raw === 'string' || typeof raw === 'number' ? new Date(raw).getTime() : NaN;
-    if (!Number.isFinite(ms)) throw new Error(`${label} must be a valid date and time`);
+    // A year past 9999 is written "+010000-…", which sorts before every real date where the times are compared as text
+    // (the feed's and the scrub's SQL): hidden at once and scrubbed at the next tick as ended a month ago.
+    if (!Number.isFinite(ms) || ms < 0 || ms > Date.UTC(9999, 11, 31, 23, 59, 59, 999)) throw new Error(`${label} must be a valid date and time`);
     return new Date(ms).toISOString();
 }
 

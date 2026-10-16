@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ModalBackdrop } from './ModalBackdrop';
 
 /**
@@ -13,6 +14,11 @@ import { ModalBackdrop } from './ModalBackdrop';
  *     return <>{...}{confirmation}</>;
  *
  * Escape, the backdrop and Back (ModalBackdrop) answer "no".
+ *
+ * It is drawn in document.body, above every modal (z-50) and the z-[60] layers (the 2FA prompt, the phone menu), so a
+ * question asked from inside a modal is on top of it. Left where `{confirmation}` sits, it was a sibling of the modal at
+ * the same z-index and earlier in the page, so the modal painted over it: Keepers → Revoke showed nothing (PR #2029,
+ * B1; e2e/in-page-confirm.mjs). React events still bubble through the component tree as before.
  */
 export interface InPageConfirmAsk {
     title: string;
@@ -41,7 +47,7 @@ export function useInPageConfirm(): [(ask: InPageConfirmAsk) => Promise<boolean>
     }, []);
 
     const element = open ? (
-        <ModalBackdrop onClose={() => answer(false)} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <ModalBackdrop onClose={() => answer(false)} className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
             <div role="alertdialog" aria-modal="true" aria-labelledby="in-page-confirm-title" aria-describedby={open.body ? 'in-page-confirm-body' : undefined}
                 data-testid="in-page-confirm"
                 className="w-full max-w-md min-w-0 p-5 rounded-2xl bg-nature-900 border border-nature-700 shadow-2xl space-y-4"
@@ -62,5 +68,5 @@ export function useInPageConfirm(): [(ask: InPageConfirmAsk) => Promise<boolean>
         </ModalBackdrop>
     ) : null;
 
-    return [ask, element];
+    return [ask, element && typeof document !== 'undefined' ? createPortal(element, document.body) : element];
 }

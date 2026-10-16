@@ -113,12 +113,41 @@ describe('preview mode asks the node for its info and nothing else, and writes n
     it('Commons: pool, enterprise and Decision; Pledge, Pause and Vote open the sheet', async () => {
         render(<CommonsPreview />);
         expect(screen.getByTestId('sample-enterprise')).toHaveTextContent(SAMPLE_COMMUNITY.enterprises[0].name);
+        expect(screen.getByTestId('sample-project')).toHaveTextContent(SAMPLE_COMMUNITY.projects[0].title);
         expect(screen.getByTestId('sample-decision')).toHaveTextContent(SAMPLE_COMMUNITY.decisions[0].question);
         for (const [name, feature] of [['Pledge', 'enterprises'], ['Pause', 'enterprises'], ['Vote', 'decisions']] as const) {
             fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
             expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features[feature]);
             fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         }
+        onlyInfo();
+    });
+
+    it('Commons: the enterprise and the project are the list\'s real cards fed the sample, each once, each marked, each opening its page (review of #2063, B2, N3)', async () => {
+        const onOpenEnterprise = vi.fn();
+        const { container } = render(<CommonsPreview onOpenEnterprise={onOpenEnterprise} />);
+        const e = SAMPLE_COMMUNITY.enterprises[0];
+        const p = SAMPLE_COMMUNITY.projects[0];
+        const cards = screen.getAllByTestId('sample-enterprise-card');
+        expect(cards).toHaveLength(2);
+        // Under the strip and the Example header, in that order.
+        const order = Array.from(container.querySelectorAll('[data-testid="local-community-strip"], [data-testid="sample-header"], [data-testid="sample-enterprise-card"]')).map(el => el.getAttribute('data-testid'));
+        expect(order).toEqual(['local-community-strip', 'sample-header', 'sample-enterprise-card', 'sample-enterprise-card']);
+        for (const card of cards) expect(within(card).getByTestId('local-community-pill')).toBeInTheDocument();
+        expect(container.textContent?.split(e.name).length).toBe(2);
+        expect(container.textContent?.split(p.title).length).toBe(2);
+        // The numbers are the sample's, as the real card draws them.
+        expect(cards[0]).toHaveTextContent(`${e.liveOffers} live offer`);
+        expect(cards[0]).toHaveTextContent(`${e.balance} 🫘`);
+        expect(cards[1]).toHaveTextContent(`${p.pledged} 🫘 raised of ${p.goal} 🫘`);
+        // Each opens the real page in preview, by mouse and by keyboard.
+        fireEvent.click(cards[0]);
+        expect(onOpenEnterprise).toHaveBeenLastCalledWith(e.id);
+        fireEvent.keyDown(cards[1], { key: 'Enter' });
+        expect(onOpenEnterprise).toHaveBeenLastCalledWith(p.id);
+        fireEvent.keyDown(cards[0], { key: ' ' });
+        expect(onOpenEnterprise).toHaveBeenCalledTimes(3);
+        expect(cards.every(c => c.getAttribute('role') === 'button' && c.tabIndex === 0)).toBe(true);
         onlyInfo();
     });
 
@@ -230,7 +259,13 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
 describe('the marker never looks locked', () => {
     it('no lock, no greying, no reduced opacity, no tier colour, and Beans never Ʀ', () => {
         const { container } = render(<><CommonsPreview /><DealsPreviewDialog onClose={() => {}} /></>);
-        const html = container.innerHTML;
+        // The one exception, by name: the real project card's own lifecycle chip, amber on every community's list. Any
+        // other amber or red anywhere, inside the real cards too, still fails.
+        const shown = container.cloneNode(true) as HTMLElement;
+        const chips = Array.from(shown.querySelectorAll('[data-testid="sample-enterprise-card"] [class*="amber-"]'));
+        expect(chips.map(c => c.textContent)).toEqual(['🌱 Project']);
+        chips.forEach(c => c.remove());
+        const html = shown.innerHTML;
         expect(html).not.toMatch(/🔒|Locked|locked|Ʀ/);
         expect(html).not.toMatch(/opacity-(?:[1-6]0)|grayscale|cursor-not-allowed|\bamber-|\bred-/);
         for (const el of Array.from(container.querySelectorAll('[data-testid="local-community-action"]'))) {

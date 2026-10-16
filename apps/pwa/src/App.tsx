@@ -39,7 +39,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, isSampleId, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
+import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -1036,7 +1036,9 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
-                            preview={enterprisesMode === 'preview' || isSampleId(openTreasuryPubkey)}
+                            enterprisesPreview={enterprisesMode === 'preview'}
+                            onNearYou={() => { setOpenTreasuryPubkey(null); setActiveTab('home'); }}
+                            onGuide={(slug) => { setOpenTreasuryPubkey(null); navigateToTab('guide', slug); }}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
                                 setOpenTreasuryPubkey(null);

@@ -13,8 +13,9 @@
 
 import { useState } from 'react';
 import { SAMPLE_COMMUNITY, LOCAL_COMMUNITY_STRIP, TIER_LEVELS, sampleRowNote, t, tn, type SampleDeal } from '@beanpool/core';
-import { LocalCommunityAction, LocalCommunityPill, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
+import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { CommonsInfoModal } from './CommonsInfoModal';
+import { EnterpriseCard } from './EnterpriseCard';
 import type { BalanceInfo, Treasury, EnterpriseLedgerResponse } from '../lib/api';
 
 const S = SAMPLE_COMMUNITY;
@@ -336,13 +337,16 @@ export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerRespons
 }
 
 /**
- * The Commons in preview: the pool and an enterprise where enterprises are previewed, a Decision where Decisions are,
- * each by its own mode, so a node that turns one on loses only that one's sample (design §4).
+ * The Commons in preview: the pool and Example Valley's enterprise and project where enterprises are previewed, a
+ * Decision where Decisions are, each by its own mode, so a node that turns one on loses only that one's sample (design
+ * §4). The enterprise and the project are the Commons list's own cards (EnterpriseCard) fed the sample, each marked, and
+ * here only, under the strip and the Example header: the list below stays the node's own (review of #2063, B2). Each
+ * opens the real enterprise page in preview (`onOpenEnterprise`).
  */
 export function CommonsPreview({ enterprises = true, decisions = true, onOpenEnterprise, ...ways }: { enterprises?: boolean; decisions?: boolean; onOpenEnterprise?: (pubkey: string) => void } & LocalCommunityWays) {
     const [commonsInfo, setCommonsInfo] = useState(false);
-    const e = S.enterprises[0];
     const d = S.decisions[0];
+    const [bakery, project] = sampleTreasuries();
     if (!enterprises && !decisions) return null;
     return (
         <div data-testid="commons-preview">
@@ -356,21 +360,15 @@ export function CommonsPreview({ enterprises = true, decisions = true, onOpenEnt
                 </div>
                 <p className="text-2xl font-black text-nature-900 dark:text-nature-50">{S.pool} Beans</p>
             </section>
-            <section
-                className={`${CARD} mb-4 ${onOpenEnterprise ? 'cursor-pointer' : ''}`}
-                data-testid="sample-enterprise"
-                onClick={onOpenEnterprise ? () => onOpenEnterprise(e.id) : undefined}
-            >
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <h3 className="font-bold text-nature-900 dark:text-nature-50">🏛️ {e.name}</h3>
-                    <LocalCommunityPill />
-                </div>
-                <p className="text-sm text-nature-600 dark:text-nature-300">{e.what}</p>
-                <p className="mt-1 text-sm text-nature-600 dark:text-nature-300">{e.keepers} keepers · this season {beans(e.season)}</p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <section className="mb-4 space-y-3" data-testid="sample-enterprise">
+                <EnterpriseCard treasury={bakery} onOpen={onOpenEnterprise} sample />
+                <div className="flex flex-col gap-2 sm:flex-row">
                     <LocalCommunityAction feature="enterprises" label="Pledge" className="w-full" {...ways} />
                     <LocalCommunityAction feature="enterprises" label="Pause" className="w-full" {...ways} />
                 </div>
+            </section>
+            <section className="mb-4" data-testid="sample-project">
+                <EnterpriseCard treasury={project} onOpen={onOpenEnterprise} sample />
             </section>
             </>)}
             {decisions && (

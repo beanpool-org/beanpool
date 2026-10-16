@@ -30,7 +30,7 @@ import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
-import { LocalCommunityStrip, LocalCommunityAction } from '../components/LocalCommunityMark';
+import { LocalCommunityStrip, LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
 
 /** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
 function decodeThreadText(ciphertext: string, type: string, metadata?: string, keeper = 'keeper'): string {
@@ -44,7 +44,10 @@ function decodeThreadText(ciphertext: string, type: string, metadata?: string, k
     }
 }
 
-interface Props {
+/** A marker's own sheet or Start screen (LocalCommunityAction draws them in place): its Escape is its own. */
+const MARKER_SHEET = '[data-testid="local-community-sheet"], [data-testid="start-community-screen"]';
+
+interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity | null;
     pubkey: string;
     onBack: () => void;
@@ -57,12 +60,18 @@ interface Props {
     isMember?: boolean;
     /** Opens a member's profile — a keeper row is tapped. */
     onOpenProfile?: (pubkey: string) => void;
-    /** When true or when pubkey is a sample id, drawn from Example Valley with every control a marker. */
-    preview?: boolean;
+    /**
+     * Enterprises are a preview here for this reader (the worldwide community): no real one exists, so a real key (a
+     * stale link, a notice) is not asked for and the page says why.
+     */
+    enterprisesPreview?: boolean;
 }
 
-export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile, preview }: Props) {
-    const isEffectivePreview = preview || isSampleId(pubkey);
+export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile, enterprisesPreview, ...ways }: Props) {
+    // Example Valley's enterprise or project (a sample id: the Commons preview's cards): drawn from the sample, every
+    // control a marker, nothing asked of the node. Only a sample id: any other key is a real one.
+    const isEffectivePreview = isSampleId(pubkey);
+    const elsewhere = !isEffectivePreview && !!enterprisesPreview;
     const viewerIsMember = !!identity && isMember !== false;
     const [detail, setDetail] = useState<any>(null);
     /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
@@ -365,6 +374,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setLoading(false);
             return;
         }
+        if (elsewhere) {
+            setDetail(null);
+            setLoading(false);
+            return;
+        }
         try {
             setLoading(true);
             setError(null);
@@ -391,7 +405,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } finally {
             setLoading(false);
         }
-    }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview]);
+    }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview, elsewhere]);
 
     useEffect(() => {
         load();
@@ -405,6 +419,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setLedgerLoading(false);
             return;
         }
+        if (elsewhere) return;
         try {
             setLedgerLoading(true);
             setLedgerError(null);
@@ -423,14 +438,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } finally {
             setLedgerLoading(false);
         }
-    }, [pubkey, ledgerPeriod, isEffectivePreview]);
+    }, [pubkey, ledgerPeriod, isEffectivePreview, elsewhere]);
 
     useEffect(() => {
         loadLedger(ledgerPeriod);
     }, [loadLedger, ledgerPeriod]);
 
     const loadThread = useCallback(async () => {
-        if (!pubkey || isEffectivePreview) return;
+        if (!pubkey || isEffectivePreview || elsewhere) return;
         try {
             const res = await getEnterpriseThread(pubkey);
             if (res) {
@@ -441,16 +456,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } catch {
             setThreadUnavailable(true);
         }
-    }, [pubkey, isEffectivePreview]);
+    }, [pubkey, isEffectivePreview, elsewhere]);
 
     useEffect(() => {
         loadThread();
-        if (isEffectivePreview) return;
+        if (isEffectivePreview || elsewhere) return;
         const unsubscribe = onSyncActivity(() => {
             loadThread();
         });
         return () => unsubscribe();
-    }, [loadThread, isEffectivePreview]);
+    }, [loadThread, isEffectivePreview, elsewhere]);
 
     const handlePostThreadMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -572,6 +587,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                if (document.querySelector(MARKER_SHEET)) return;
                 if (postModalMode) {
                     setPostModalMode(null);
                 } else {
@@ -865,13 +881,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             Retry
                         </button>
                     </div>
+                ) : !detail && elsewhere ? (
+                    <div className="py-20 text-center" data-testid="enterprise-elsewhere">
+                        <LocalCommunityLine feature="enterprises" text={t('🏘️ Enterprises live in a local community ›')} {...ways} />
+                    </div>
                 ) : !detail ? (
                     <div className="py-20 text-center text-nature-500">Group not found.</div>
                 ) : (
                     <>
                         {isEffectivePreview && (
                             <div className="space-y-3">
-                                <LocalCommunityStrip feature="enterprises" />
+                                <LocalCommunityStrip feature="enterprises" {...ways} />
                                 <SampleHeader />
                             </div>
                         )}
@@ -1038,7 +1058,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                                 {t('Back this initiative')}
                                             </div>
-                                            <LocalCommunityAction feature="enterprises" label={t('Pledge')} className="w-full" />
+                                            <LocalCommunityAction feature="enterprises" label={t('Pledge')} className="w-full" {...ways} />
                                         </div>
                                     ) : (
                                         <>
@@ -1191,11 +1211,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className={`grid ${isEffectivePreview ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
                                     {isEffectivePreview ? (
                                         <>
-                                            <LocalCommunityAction feature="enterprises" label={t('Post Offer')} className="w-full" />
-                                            <LocalCommunityAction feature="enterprises" label={t('Post Need')} className="w-full" />
+                                            <LocalCommunityAction feature="enterprises" label={t('Post Offer')} className="w-full" {...ways} />
+                                            <LocalCommunityAction feature="enterprises" label={t('Post Need')} className="w-full" {...ways} />
                                         </>
                                     ) : (
                                         <>
@@ -1245,7 +1265,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {/* Sweep Surplus */}
                                 {isEffectivePreview ? (
                                     <div className="pt-2">
-                                        <LocalCommunityAction feature="enterprises" label={t('To Commons')} className="w-full" />
+                                        <LocalCommunityAction feature="enterprises" label={t('To Commons')} className="w-full" {...ways} />
                                     </div>
                                 ) : (
                                     <form onSubmit={handleSweep} className="flex gap-2 items-center pt-2">
@@ -1413,9 +1433,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         </div>
 
                                         {isEffectivePreview ? (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <LocalCommunityAction feature="enterprises" label={t('Pause for season')} className="w-full" />
-                                                <LocalCommunityAction feature="enterprises" label={t('Start wind-up')} className="w-full" />
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <LocalCommunityAction feature="enterprises" label={t('Pause for season')} className="w-full" {...ways} />
+                                                <LocalCommunityAction feature="enterprises" label={t('Start wind-up')} className="w-full" {...ways} />
                                             </div>
                                         ) : (
                                             <>
@@ -1841,13 +1861,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div>
                                     <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                         <span aria-hidden="true">🤝</span>
-                                        <span>Ask to join as a {kw.keeper}</span>
+                                        <span>{t('Ask to join as a {keeper}', { keeper: kw.keeper })}</span>
                                     </div>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
-                                        Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
+                                        {t('Help run this {kind}. You can back it with your earned trading standing to expand its credit floor.', { kind: kw.kind })}
                                     </p>
                                 </div>
-                                <LocalCommunityAction feature="enterprises" label={t('Join as keeper')} className="w-full" />
+                                <LocalCommunityAction feature="enterprises" label={t('Join as {keeper}', { keeper: kw.keeper })} className="w-full" {...ways} />
                             </div>
                         ) : viewerIsMember && !isKeeperOfThis && detail.status !== 'completed' && (
                             myPendingRequest ? (
@@ -1942,7 +1962,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         // enterprise, but cannot act until the suspension is lifted.
                                         const isSuspended = !!k.suspended;
                                         const keeperKey: string | undefined = k.publicKey || k.pubkey || k.memberPubkey;
-                                        const canOpen = !!keeperKey && !!onOpenProfile;
+                                        // Not in preview: Example Valley's keepers have no profile here (review of #2063, B3).
+                                        const canOpen = !isEffectivePreview && !!keeperKey && !!onOpenProfile;
                                         // A row opens that keeper's profile, as a row in People does. 48px target.
                                         const KeeperRow = canOpen ? 'button' : 'div';
                                         return (

@@ -1,9 +1,18 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import React from 'react';
+/**
+ * The enterprise page in preview (review of #2063): Example Valley's enterprise and project (a sample id) are the real
+ * page fed the sample, every control a marker that opens the sheet, and the visit asks the node nothing: the real api
+ * module runs under a fetch spy, so any request at all is seen, a write or a `sample-` id above all. A keeper row is
+ * not a button (B3), the markers stand one to a row (B4), a marker's sheet keeps its own Escape (N1) and carries the
+ * sheet's ways forward (N2). A real key where enterprises are a preview says why and asks nothing (N8). A local node
+ * reads as before.
+ */
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import { sampleTreasuries, sampleTreasuryDetail } from '../components/ShowcasePreviews';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -29,121 +38,156 @@ const mockIdentity: BeanPoolIdentity = {
     createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-describe('TreasuryDetailPage in preview mode (Showcase)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        vi.spyOn(api, 'getTreasury').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({} as any);
-        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({} as any);
-    });
+// Example Valley as the Commons preview hands it over (only ShowcasePreviews names the sample itself).
+const [bakery, project] = sampleTreasuries();
+const BAKERY = { id: bakery.publicKey, name: bakery.name, balance: bakery.balance, listing: sampleTreasuryDetail(bakery.publicKey).posts[0].title as string };
+const PROJECT = { id: project.publicKey, title: project.name };
 
-    it('renders real enterprise page from sample without calling network', async () => {
-        render(
-            <TreasuryDetailPage
-                identity={mockIdentity}
-                isMember={true}
-                pubkey="sample-enterprise-bakery"
-                onBack={vi.fn()}
-            />
-        );
+let calls: { url: string; method: string; body: string }[] = [];
 
-        // Header shows bakery name from sample
-        await waitFor(() => {
-            expect(screen.getAllByText('Example Valley Bakery').length).toBeGreaterThan(0);
-        });
+beforeEach(() => {
+    vi.clearAllMocks();
+    calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        calls.push({ url, method: (init?.method ?? 'GET').toUpperCase(), body: typeof init?.body === 'string' ? init.body : '' });
+        return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }));
+});
+afterEach(() => { vi.unstubAllGlobals(); });
 
-        // Did NOT call real API
-        expect(api.getTreasury).not.toHaveBeenCalled();
-        expect(api.getEnterpriseLedger).not.toHaveBeenCalled();
+/** Let anything the page started land, then: not one request, so no write and no sample id on the wire. */
+async function askedNothing() {
+    await new Promise(r => setTimeout(r, 20));
+    expect(calls).toEqual([]);
+}
 
-        // Shows Local Community strip and Example header
+function renderPage(pubkey: string, extra: Partial<Parameters<typeof TreasuryDetailPage>[0]> = {}) {
+    const props = { onBack: vi.fn(), onOpenProfile: vi.fn(), onNavigatePost: vi.fn(), onNearYou: vi.fn(), onGuide: vi.fn(), ...extra };
+    render(<TreasuryDetailPage identity={mockIdentity} isMember={true} pubkey={pubkey} enterprisesPreview {...props} />);
+    return props;
+}
+
+describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
+    it('is the real page fed the sample, marked, and asks the node nothing', async () => {
+        renderPage(BAKERY.id);
+        await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
+
         expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
         expect(screen.getByTestId('sample-header')).toBeInTheDocument();
-
-        // Shows keepers from sample
         expect(screen.getAllByText('a neighbour').length).toBeGreaterThanOrEqual(2);
-
-        // Live offers from sample (Sourdough loaves, baked twice a week)
-        expect(screen.getByText('Sourdough loaves, baked twice a week')).toBeInTheDocument();
-
-        // Balance from sample
-        expect(screen.getAllByText(/160/i).length).toBeGreaterThan(0);
-
-        // Decisions component is NOT drawn on preview
+        expect(screen.getByText(BAKERY.listing)).toBeInTheDocument();
+        expect(screen.getAllByText(new RegExp(String(BAKERY.balance))).length).toBeGreaterThan(0);
+        // Not drawn in preview: the keepers' votes, Report, the thread's composer.
         expect(screen.queryByTestId('enterprise-decisions')).not.toBeInTheDocument();
-
-        // Report enterprise button is NOT drawn on preview
         expect(screen.queryByRole('button', { name: /Report/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+        await askedNothing();
     });
 
-    it('renders all enterprise controls as marker actions that open the local community sheet', async () => {
-        render(
-            <TreasuryDetailPage
-                identity={mockIdentity}
-                isMember={true}
-                pubkey="sample-enterprise-bakery"
-                preview={true}
-                onBack={vi.fn()}
-            />
-        );
+    it('every control is a marker that opens the sheet, with its ways forward, and asks nothing', async () => {
+        const props = renderPage(BAKERY.id);
+        await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
 
-        await waitFor(() => {
-            expect(screen.getAllByText('Example Valley Bakery').length).toBeGreaterThan(0);
-        });
-
-        // 1. Join as keeper
-        const joinBtn = screen.getByRole('button', { name: /Join as keeper/i });
-        expect(joinBtn).toBeInTheDocument();
-
-        // 2. Pause for season
-        const pauseBtn = screen.getByRole('button', { name: /Pause for season/i });
-        expect(pauseBtn).toBeInTheDocument();
-
-        // 3. Start wind-up
-        const windupBtn = screen.getByRole('button', { name: /Start wind-up/i });
-        expect(windupBtn).toBeInTheDocument();
-
-        // 4. Post Offer
-        const postOfferBtn = screen.getByRole('button', { name: /Post Offer/i });
-        expect(postOfferBtn).toBeInTheDocument();
-
-        // 5. Post Need
-        const postNeedBtn = screen.getByRole('button', { name: /Post Need/i });
-        expect(postNeedBtn).toBeInTheDocument();
-
-        // 6. To Commons (sweep)
-        const toCommonsBtn = screen.getByRole('button', { name: /To Commons/i });
-        expect(toCommonsBtn).toBeInTheDocument();
-
-        // Clicking any control opens the Local Community sheet modal
-        fireEvent.click(joinBtn);
-        expect(screen.getByTestId('local-community-sheet')).toBeInTheDocument();
-        expect(screen.getByText('Why this lives in a local community')).toBeInTheDocument();
-        expect(screen.getByText(/An enterprise is kept by people its community knows/i)).toBeInTheDocument();
+        const markers = screen.getAllByTestId('local-community-action').map(b => b.textContent?.replace(/🏘️.*$/u, '').trim());
+        expect(markers).toEqual(['Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up', 'Join as keeper']);
+        for (const name of markers) {
+            fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
+            const sheet = await screen.findByTestId('local-community-sheet');
+            expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.enterprises);
+            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+        }
+        // The sheet's ways forward are the app's (review N2).
+        fireEvent.click(screen.getByRole('button', { name: /^Join as keeper/ }));
+        fireEvent.click(await screen.findByTestId('local-community-near-you'));
+        expect(props.onNearYou).toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Post Offer/ }));
+        fireEvent.click(await screen.findByTestId('local-community-guide'));
+        expect(props.onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.enterprises);
+        // A listing tap goes nowhere.
+        fireEvent.click(screen.getByText(BAKERY.listing));
+        expect(props.onNavigatePost).not.toHaveBeenCalled();
+        await askedNothing();
     });
 
-    it('renders sample crowdfund project and pledge marker control', async () => {
-        render(
-            <TreasuryDetailPage
-                identity={mockIdentity}
-                isMember={true}
-                pubkey="sample-project-compost-bay"
-                onBack={vi.fn()}
-            />
-        );
+    it('a keeper row is not a button: no profile opens, nothing is sent (B3)', async () => {
+        const props = renderPage(BAKERY.id);
+        const keepers = (await screen.findByText(/^Keepers \(3\)$/)).parentElement!;
+        expect(within(keepers).getAllByText('a neighbour')).toHaveLength(3);
+        expect(within(keepers).queryAllByRole('button')).toEqual([]);
+        expect(screen.queryAllByRole('button', { name: /a neighbour/ })).toEqual([]);
+        for (const row of within(keepers).getAllByText('a neighbour')) fireEvent.click(row);
+        expect(props.onOpenProfile).not.toHaveBeenCalled();
+        await askedNothing();
+    });
 
-        await waitFor(() => {
-            expect(screen.getAllByText('A compost bay by the community garden').length).toBeGreaterThan(0);
-        });
+    it('the markers stand one to a row, so at 320 px no pill runs off its button (B4)', async () => {
+        renderPage(BAKERY.id);
+        await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
+        for (const name of [/^Post Offer/, /^Post Need/, /^Pause for season/, /^Start wind-up/]) {
+            const grid = screen.getByRole('button', { name }).closest('.grid');
+            expect(grid).toHaveClass('grid-cols-1');
+            expect(grid).not.toHaveClass('grid-cols-2');
+        }
+    });
 
-        // Did NOT call real API
-        expect(api.getTreasury).not.toHaveBeenCalled();
+    it('Escape on a marker\'s sheet closes the sheet and leaves the page open; the next Escape goes back (N1)', async () => {
+        const props = renderPage(BAKERY.id);
+        await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
+        fireEvent.click(screen.getByRole('button', { name: /^Start wind-up/ }));
+        await screen.findByTestId('local-community-sheet');
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+        expect(props.onBack).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(props.onBack).toHaveBeenCalledTimes(1);
+    });
+});
 
-        // Pledge control is a marker action
-        const pledgeBtn = screen.getByRole('button', { name: /Pledge/i });
-        expect(pledgeBtn).toBeInTheDocument();
+describe('TreasuryDetailPage in preview: Example Valley\'s project', () => {
+    it('the pledge is the marker, never the form; the join card says the project\'s word', async () => {
+        renderPage(PROJECT.id);
+        await waitFor(() => expect(screen.getAllByText(PROJECT.title).length).toBeGreaterThan(0));
+        expect(screen.queryByPlaceholderText(/Amount/)).toBeNull();
+        const markers = screen.getAllByTestId('local-community-action').map(b => b.textContent?.replace(/🏘️.*$/u, '').trim());
+        expect(markers).toContain('Pledge');
+        expect(markers).toContain('Join as collaborator');
+        expect(markers).not.toContain('Join as keeper');
+        fireEvent.click(screen.getByRole('button', { name: /^Pledge/ }));
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.enterprises);
+        await askedNothing();
+    });
+});
 
-        fireEvent.click(pledgeBtn);
-        expect(screen.getByTestId('local-community-sheet')).toBeInTheDocument();
+describe('TreasuryDetailPage: a real key', () => {
+    it('where enterprises are a preview (the worldwide community): says why and asks nothing (N8)', async () => {
+        renderPage('b'.repeat(64));
+        const line = await screen.findByTestId('enterprise-elsewhere');
+        expect(line).toHaveTextContent('Enterprises live in a local community');
+        expect(screen.queryByText(BAKERY.name)).toBeNull();
+        fireEvent.click(within(line).getByRole('button'));
+        expect(await screen.findByTestId('local-community-sheet')).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.enterprises);
+        await askedNothing();
+    });
+
+    it('on a local node: read as before, the detail, its ledger and its thread; no strip, no marker', async () => {
+        const detail = vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'local-ent-1', name: 'Garden Bakery', purpose: 'Bread from the garden oven', balance: 50, creditLine: 100,
+            liveOffers: 0, lifecycle: 'ongoing', status: 'active', keepers: [{ publicKey: 'kofi-key', callsign: 'Kofi', role: 'lead' }], posts: [],
+        } as any);
+        const ledger = vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({ entries: [], summary: null } as any);
+        const thread = vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: null, messages: [], readOnly: false } as any);
+        const onOpenProfile = vi.fn();
+        render(<TreasuryDetailPage identity={mockIdentity} isMember={true} pubkey="local-ent-1" onBack={vi.fn()} onOpenProfile={onOpenProfile} />);
+        await waitFor(() => expect(screen.getAllByText('Garden Bakery').length).toBeGreaterThan(0));
+        expect(detail).toHaveBeenCalledWith('local-ent-1');
+        expect(ledger).toHaveBeenCalled();
+        expect(thread).toHaveBeenCalled();
+        expect(screen.queryByTestId('local-community-strip')).toBeNull();
+        expect(screen.queryAllByTestId('local-community-action')).toEqual([]);
+        // A keeper row still opens that keeper's profile.
+        fireEvent.click(screen.getByRole('button', { name: /Kofi/ }));
+        expect(onOpenProfile).toHaveBeenCalledWith('kofi-key');
     });
 });

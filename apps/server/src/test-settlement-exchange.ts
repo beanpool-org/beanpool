@@ -305,7 +305,10 @@ async function main() {
     assert(getSettlement(R1)!.amount === 5, 'and the reservation still holds its original amount');
 
     setConnectorCreditCap(OTHER_ADDR, 10);
-    const over = ask('k-in-over', 999, OTHER);
+    // A buyer of Melbourne's own: remoteBuyer's home is Brisbane, and Melbourne buying for her is refused before any cap
+    // (buyer_elsewhere, the FED-02 binding; test-federation-hardening).
+    const melbourneBuyer = makeMember('Melbourne Buyer', 0, 'https://melbourne.beanpool.org');
+    const over = ask('k-in-over', 999, OTHER, seller, melbourneBuyer);
     assert(over.accepted === false && (over as any).reason === 'cap_exhausted', 'an amount beyond the cap is refused');
     assert(/limit/i.test((over as any).message), 'and says so in plain language, not a code');
 

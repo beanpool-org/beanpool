@@ -118,7 +118,7 @@ async function main(): Promise<void> {
         const settlementRows = (db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE key = 'k-off'").get() as { n: number }).n;
         assert(isOff(buy) && settlementRows === 0, `settle_purchase is refused, no settlement row (got ${JSON.stringify(buy)})`);
         const status = await ask(A, { action: 'settle_receipt_status', key: 'k-none' });
-        assert(!!status && status.error !== fp.PEERS_OFF_ERROR,
+        assert(!!status && !isOff(status),
             `settle_receipt_status is still answered, as under FEDERATION_SETTLEMENT (got ${JSON.stringify(status)})`);
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);

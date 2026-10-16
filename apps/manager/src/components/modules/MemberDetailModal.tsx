@@ -9,6 +9,7 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
 import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 /** The node demands a reason of at least this many characters; members see it on the vote. */
 export const MIN_SUSPEND_REASON = 10;
@@ -51,10 +52,12 @@ interface MemberDetailModalProps {
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onPrune?: (pubkey: string) => void;
-    onPruneBranch?: (pubkey: string) => Promise<void>;
+    /** `code`: an owner's fresh proof, when the node asked it for an owner's or admin's role (FreshProofRequiredError). */
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    /** Rejects with FreshProofRequiredError when removing this member (an owner) asks an owner's fresh proof. */
+    onPrune?: (pubkey: string, code?: string) => void | Promise<void>;
+    onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     nodeUrl?: string;
     adminPassword?: string;
     tfaToken?: string;
@@ -120,12 +123,26 @@ export function MemberDetailModal({
     const canSuspendHere = Boolean(nodeUrl) && (memberStatus === 'active' || isSuspended);
     const suspendReasonTrimmed = suspendReason.trim();
 
-    const handleSuspend = async () => {
+    // Suspending or removing an owner asks an owner's fresh proof each time (server ownerRemovalProof).
+    const suspendProof = useFreshProof();
+    const pruneProof = useFreshProof();
+
+    const handlePrune = async (code?: string) => {
+        try {
+            await onPrune?.(pubkey, ...(code ? [code] : []));
+            pruneProof.close();
+        } catch (e) {
+            pruneProof.checkError(e, (c) => handlePrune(c), code);
+        }
+    };
+
+    const handleSuspend = async (code?: string) => {
         if (!nodeUrl || suspendReasonTrimmed.length < MIN_SUSPEND_REASON) return;
         setSuspendBusy(true);
         setSuspendError(null);
         try {
-            const res = await emergencySuspendMember(nodeUrl, pubkey, suspendReasonTrimmed, adminPassword, tfaToken);
+            const res = await emergencySuspendMember(nodeUrl, pubkey, suspendReasonTrimmed, adminPassword, tfaToken, ...(code ? [code] : []));
+            suspendProof.close();
             const closes = res.decision?.closesAt ? new Date(res.decision.closesAt).toLocaleDateString() : 'in 7 days';
             setLocalStatus('disabled');
             setShowSuspend(false);
@@ -136,6 +153,7 @@ export function MemberDetailModal({
                 : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
         } catch (e: unknown) {
+            if (suspendProof.checkError(e, (c) => handleSuspend(c), code)) return;
             setSuspendError(e instanceof Error ? e.message : 'Failed to suspend');
         } finally {
             setSuspendBusy(false);
@@ -187,16 +205,21 @@ export function MemberDetailModal({
         copiedPubkeyTimer.schedule(() => setCopiedPubkey(false), 2000);
     };
 
-    const handleGrantRole = async (targetRole: MemberNodeRole) => {
+    // Granting or taking an owner's or admin's role asks an owner's fresh proof each time (server roleChangeNeedsOwner).
+    const roleProof = useFreshProof();
+
+    const handleGrantRole = async (targetRole: MemberNodeRole, code?: string) => {
         if (!pubkey || !onGrantNodeRole) return;
         setRoleLoading(true);
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onGrantNodeRole(pubkey, targetRole);
+            await onGrantNodeRole(pubkey, targetRole, ...(code ? [code] : []));
+            roleProof.close();
             setLocalRole(targetRole);
             setRoleSuccess(`Granted ${targetRole} role successfully`);
         } catch (e: unknown) {
+            if (roleProof.checkError(e, (c) => handleGrantRole(targetRole, c), code)) return;
             const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
                 setRoleError('⚠️ Protocol Guard: Cannot remove or demote the last owner. Appoint another owner first.');
@@ -208,16 +231,18 @@ export function MemberDetailModal({
         }
     };
 
-    const handleRevokeRole = async () => {
-        if (!pubkey || !currentRole || !onRevokeNodeRole) return;
+    const handleRevokeRole = async (code?: string, role: MemberNodeRole | null = currentRole) => {
+        if (!pubkey || !role || !onRevokeNodeRole) return;
         setRoleLoading(true);
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onRevokeNodeRole(pubkey, currentRole);
+            await onRevokeNodeRole(pubkey, role, ...(code ? [code] : []));
+            roleProof.close();
             setLocalRole(null);
-            setRoleSuccess(`Revoked ${currentRole} role successfully`);
+            setRoleSuccess(`Revoked ${role} role successfully`);
         } catch (e: unknown) {
+            if (roleProof.checkError(e, (c) => handleRevokeRole(c, role), code)) return;
             const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
                 setRoleError('⚠️ Protocol Guard: Cannot remove the last owner. The community must have at least one owner. Appoint another owner before revoking.');
@@ -415,6 +440,8 @@ export function MemberDetailModal({
                         </div>
                     )}
 
+                    <FreshProofBox proof={roleProof} testId="member-role-proof" />
+
                     {roleSuccess && (
                         <div className="p-2.5 bg-emerald-950/60 border border-emerald-800 rounded-xl text-xs text-emerald-300 font-medium">
                             ✓ {roleSuccess}
@@ -463,7 +490,7 @@ export function MemberDetailModal({
                             <button
                                 type="button"
                                 disabled={roleLoading || isFrozen}
-                                onClick={handleRevokeRole}
+                                onClick={() => handleRevokeRole()}
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-bp-chip-danger-ink bg-bp-chip-danger-tint border border-red-800/80 hover:opacity-90 transition-all ml-auto"
                             >
                                 {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}
@@ -515,6 +542,7 @@ export function MemberDetailModal({
                         <div className="p-3 rounded-2xl bg-nature-900/60 border border-nature-800 space-y-2 text-xs" data-testid="suspend-panel">
                             {suspendDone && <p className="m-0 text-emerald-300 font-semibold">{suspendDone}</p>}
                             {suspendError && <p className="m-0 text-red-300 font-semibold">{suspendError}</p>}
+                            <FreshProofBox proof={suspendProof} testId="suspend-proof" />
                             {isSuspended ? (
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-amber-300 font-semibold">⏸️ Suspended</span>
@@ -554,7 +582,7 @@ export function MemberDetailModal({
                                             Cancel
                                         </button>
                                         <button
-                                            onClick={handleSuspend}
+                                            onClick={() => handleSuspend()}
                                             disabled={suspendBusy || suspendReasonTrimmed.length < MIN_SUSPEND_REASON}
                                             className="px-3 py-1.5 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
@@ -590,7 +618,7 @@ export function MemberDetailModal({
                                 </button>
                                 <button
                                     onClick={() => {
-                                        onPrune?.(pubkey);
+                                        void handlePrune();
                                         setShowPruneConfirm(false);
                                     }}
                                     className="px-3 py-1.5 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-[11px] shadow-lg"
@@ -684,6 +712,7 @@ export function MemberDetailModal({
                             )}
                         </div>
                     )}
+                    <FreshProofBox proof={pruneProof} testId="prune-proof" />
                 </div>
 
             </div>
@@ -693,8 +722,8 @@ export function MemberDetailModal({
                     rootMember={member as any}
                     members={members}
                     accounts={accounts}
-                    onConfirm={async (pk) => {
-                        await onPruneBranch?.(pk);
+                    onConfirm={async (pk, code) => {
+                        await onPruneBranch?.(pk, ...(code ? [code] : []));
                         onClose();
                     }}
                     onClose={() => setShowPruneBranch(false)}

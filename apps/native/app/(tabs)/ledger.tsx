@@ -21,14 +21,14 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, t, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents, t, type TierName } from '@beanpool/core';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
-import { sampleBalance, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
+import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
@@ -132,7 +132,9 @@ export default function LedgerScreen() {
         if (scrollY.current > tabBarY.current) listRef.current?.scrollToOffset({ offset: tabBarY.current, animated: false });
     }, [activeTab]);
     const [selectedLevel, setSelectedLevel] = useState<number | null>(null); // Levels shelf: null → follows current tier
-    const [escrowTotal, setEscrowTotal] = useState(0);
+    const [heldEscrow, setEscrowTotal] = useState(0);
+    // The sample's In Escrow is held like its balance: never drawn as the member's own once the screen turns live.
+    const escrowTotal = heldSample === preview ? heldEscrow : 0;
     const [pledgeHistory, setPledgeHistory] = useState<any[]>([]);
     const [exporting, setExporting] = useState(false);
 
@@ -363,8 +365,8 @@ export default function LedgerScreen() {
     const loadData = () => {
         const gen = ++loadGen.current;
         if (beansMode === undefined) return;
-        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(0); setPledgeHistory([]); setHeldSample(true); return; }
-        if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setHeldSample(false); }
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(sampleEscrowTotal()); setPledgeHistory([]); setHeldSample(true); return; }
+        if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setEscrowTotal(0); setHeldSample(false); }
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
@@ -419,6 +421,8 @@ export default function LedgerScreen() {
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         const amount = parseFloat(sendAmount);
         if (isNaN(amount) || amount <= 0) { setSendError('Enter a valid amount'); return; }
+        // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
+        if (!isWholeCents(amount)) { setSendError(t('The amount is a number of Beans above 0, to the cent.')); return; }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (amount > balanceState.balance) {

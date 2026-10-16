@@ -105,6 +105,15 @@ afterEach(async () => {
     vi.useRealTimers();
 });
 
+describe('the line next to Copy (KEY-07)', () => {
+    it('says the copy clears in a minute, and that a keyboard\'s clipboard history or a shared clipboard may keep one', async () => {
+        const { CopyClearsNote } = await import('../../components/WordsOnScreen');
+        await draw(createElement(CopyClearsNote));
+        expect(container.textContent).toContain('The copy clears from your clipboard after a minute.');
+        expect(container.textContent).toContain("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.");
+    });
+});
+
 describe('the block comes before the words', () => {
     it('the words are not drawn until the library has answered the block, then they are', async () => {
         await screenWithWords();

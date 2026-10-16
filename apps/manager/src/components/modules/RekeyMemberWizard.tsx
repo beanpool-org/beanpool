@@ -14,6 +14,7 @@ import {
 import { useTimeout } from '../../lib/use-timeout';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 /** What the operator types to make a new code for a member who already moved to a new key. */
 export const MOVE_AGAIN_WORDS = 'NEW CODE';
@@ -126,6 +127,10 @@ export function RekeyMemberWizard({
     const [cancelling, setCancelling] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
+    // Making or using an owner's or admin's code asks an owner's fresh proof each time (server rekeyProof): `code` to
+    // issue-code, X-Fresh-Proof to complete. A refusal keeps everything typed and ticked, so after Manage again on the
+    // phone the same press goes through.
+    const proof = useFreshProof();
 
     const isChecklistComplete = checkPhysical && checkLost && checkInvalidateNotice;
     /** The member's latest finished re-key, newest first from the node: they already moved to a new key. */
@@ -247,19 +252,21 @@ export function RekeyMemberWizard({
         }
     };
 
-    const handleIssueCode = async () => {
+    const handleIssueCode = async (code?: string) => {
         if (!mayMakeCode) return;
         setLoading(true);
         setError(null);
         setNotice(null);
         try {
-            const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken, ...(code ? [code] : []));
+            proof.close();
             forgetCodeState();
             setIssuedCode(res.code);
             setCodeNeedsStepUp(false);
             setExpiresAt(res.expiresAt);
             setStep(2);
         } catch (err: unknown) {
+            if (proof.checkError(err, (c) => handleIssueCode(c), code)) return;
             setError(err instanceof Error ? err.message : 'Failed to issue re-enrolment code');
         } finally {
             setLoading(false);
@@ -273,6 +280,7 @@ export function RekeyMemberWizard({
         setError(null);
         try {
             const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            proof.close();
             forgetCodeState();
             setIssuedCode(null);
             setCodeNeedsStepUp(false);
@@ -294,7 +302,7 @@ export function RekeyMemberWizard({
      * Binds the phone in front of the admin by the number it shows: the node binds the waiting phone with those digits,
      * so no card can be bound by a press, and a thief's phone (another number) can't be picked by mistake.
      */
-    const handleBindByMatch = async () => {
+    const handleBindByMatch = async (code?: string) => {
         const match = typedMatch.trim();
         if (!/^\d{2}$/.test(match)) {
             setError('Type the two digits on their phone.');
@@ -309,12 +317,15 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken);
+            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken, ...(code ? [code] : []));
+            proof.close();
             setSignInCopiesRemoved(res.signInCopiesRemoved ?? 0);
             setNewPubkey(res.newPubkey);
             setStep(3);
             onSuccess?.(res.newPubkey);
         } catch (err: any) {
+            // Refused before the number was checked (no try counted): the number stays for the same press again.
+            if (proof.checkError(err, (c) => handleBindByMatch(c), code)) return;
             setTypedMatch('');
             if (err instanceof RekeyBindError && err.code === 'code_stopped') {
                 setCodeStopped('wrong');
@@ -332,7 +343,7 @@ export function RekeyMemberWizard({
     };
 
     /** "Paste a key instead": binds the key pasted, for a phone that can't ask on the code. */
-    const bindKey = async (key: string) => {
+    const bindKey = async (key: string, code?: string) => {
         const clean = key.trim().toLowerCase();
         if (!clean || !/^[0-9a-f]{64}$/.test(clean)) {
             setError('Please enter a valid 64-character hex public key');
@@ -346,12 +357,14 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken);
+            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken, ...(code ? [code] : []));
+            proof.close();
             setSignInCopiesRemoved(res?.signInCopiesRemoved ?? 0);
             setNewPubkey(clean);
             setStep(3);
             onSuccess?.(clean);
         } catch (err: unknown) {
+            if (proof.checkError(err, (c) => bindKey(key, c), code)) return;
             setError(err instanceof Error ? err.message : 'Failed to complete re-keying');
         } finally {
             setCompleting(false);
@@ -433,6 +446,8 @@ export function RekeyMemberWizard({
                         ⚠️ {error}
                     </div>
                 )}
+
+                <FreshProofBox proof={proof} testId="rekey-proof" />
 
                 {notice && (
                     <div data-testid="rekey-notice" className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-2xl text-xs text-emerald-200 break-words">
@@ -549,7 +564,7 @@ export function RekeyMemberWizard({
                             <button
                                 type="button"
                                 disabled={!mayMakeCode}
-                                onClick={handleIssueCode}
+                                onClick={() => handleIssueCode()}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
                                     mayMakeCode
                                         ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on'
@@ -602,6 +617,7 @@ export function RekeyMemberWizard({
                                         <button
                                             type="button"
                                             onClick={() => {
+                                                proof.close();
                                                 setIssuedCode(null);
                                                 setCodeNeedsStepUp(false);
                                                 setExpiresAt(null);
@@ -698,7 +714,7 @@ export function RekeyMemberWizard({
                                                 <button
                                                     type="button"
                                                     disabled={completing || declining !== null || !/^\d{2}$/.test(typedMatch)}
-                                                    onClick={handleBindByMatch}
+                                                    onClick={() => handleBindByMatch()}
                                                     className={`px-3 py-2 rounded-xl text-xs font-bold ${
                                                         !completing && /^\d{2}$/.test(typedMatch)
                                                             ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on'
@@ -789,6 +805,7 @@ export function RekeyMemberWizard({
                                 <button
                                     type="button"
                                     onClick={() => {
+                                        proof.close();
                                         setIssuedCode(null);
                                         setCodeNeedsStepUp(false);
                                         setExpiresAt(null);

@@ -30,7 +30,7 @@ import {
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -44,7 +44,7 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
+import { avatarUrlOf, isSyntheticAccount, isWholeCents, replaceLoneSurrogates } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
@@ -938,6 +938,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
+        // To the cent, as a member's payment to the Commons is (LED-05).
+        if (!isWholeCents(amt)) { ctx.status = 400; ctx.body = { error: WHOLE_CENTS_ERROR }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
         // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the

@@ -5,6 +5,9 @@ import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { proofField } from '../../lib/fresh-proof';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import type { RolesViewer } from './NodeRolesPanel';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -80,12 +83,17 @@ export function describeTunnel(t: TunnelStatus | undefined): string | null {
 export interface PublicAddressPanelProps {
     activeNode: NodeProfile;
     onRefreshDiag?: () => void;
+    /** Who is signed in: a new tunnel key is an owner's (server B4), so an admin's key session is not offered it. */
+    viewer?: RolesViewer;
 }
 
 /** A name this community's key holds besides its address (GET /api/local/admin/public-address/extra-names). */
 interface ExtraName { name: string; hostname?: string; releasable?: boolean; fromInstall?: boolean }
 
-export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressPanelProps) {
+export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' } }: PublicAddressPanelProps) {
+    const isOwnerViewer = viewer.kind === 'password' || viewer.role === 'owner';
+    // Take offline, Release and Claim over a live name ask an owner's fresh proof each time (server requireFreshProof).
+    const proof = useFreshProof();
     const [statusData, setStatusData] = useState<PublicAddressStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<ProbeLogEntry[]>([]);
@@ -224,7 +232,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         }
     }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
 
-    const releaseExtraName = async (name: string) => {
+    const releaseExtraName = async (name: string, code?: string) => {
         setReleasingName(name);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name');
@@ -234,8 +242,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ name, ...passwordField(nodeCredential(activeNode)) }),
+                body: JSON.stringify({ name, ...passwordField(nodeCredential(activeNode)), ...proofField(code) }),
             });
+            if (await proof.check(res, (c) => releaseExtraName(name, c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok) setActionMessage({ text: `✓ ${name}.beanpool.org released. This community's address is unchanged.`, type: 'success' });
             else setActionMessage({ text: typeof data.error === 'string' ? data.error : `${name}.beanpool.org was not released`, type: 'error' });
@@ -298,8 +307,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const previewUrl = `https://${cleanSubdomain(claimName) || 'cairns'}.beanpool.org`;
 
     // Handle Claim Web Address
-    const handleClaim = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleClaim = async (e: React.FormEvent | null, code?: string) => {
+        e?.preventDefault();
         const trimmedName = cleanSubdomain(claimName);
         if (!trimmedName) {
             setFormError('Subdomain name is required');
@@ -332,8 +341,13 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     mode: 'tunnel',
                     communityName: communityName.trim() || undefined,
                     contact: contact.trim() || undefined,
+                    ...proofField(code),
                 }),
             });
+            if (await proof.check(res, (c) => handleClaim(null, c), code)) {
+                setActionMessage(null);
+                return;
+            }
 
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
@@ -414,6 +428,42 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         });
     };
 
+    // Take the address offline (B1: an owner's fresh proof each time).
+    const takeOffline = async (code?: string) => {
+        setTakingOffline(true);
+        setActionMessage({ text: '⏳ Releasing domain & tearing down tunnel...', type: 'info' });
+        startLogMonitor();
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/offline');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), ...proofField(code) }),
+            });
+            if (await proof.check(res, (c) => takeOffline(c), code)) {
+                setActionMessage(null);
+                return;
+            }
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setActionMessage({ text: '✓ Public address released. Node is offline.', type: 'success' });
+                setStatusData({ status: 'none' });
+                await loadStatus();
+                onRefreshDiag?.();
+            } else {
+                setActionMessage({ text: typeof data.error === 'string' ? data.error : 'Failed to take offline', type: 'error' });
+            }
+        } catch (e: unknown) {
+            setActionMessage({ text: e instanceof Error ? e.message : 'Failed to take offline', type: 'error' });
+        } finally {
+            setTakingOffline(false);
+            stopLogMonitor();
+        }
+    };
+
     // Execute confirmed destructive action
     const handleConfirmAction = async () => {
         const action = confirmModal.actionType;
@@ -481,34 +531,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 stopLogMonitor();
             }
         } else if (action === 'offline') {
-            setTakingOffline(true);
-            setActionMessage({ text: '⏳ Releasing domain & tearing down tunnel...', type: 'info' });
-            startLogMonitor();
-            try {
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/offline');
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok) {
-                    setActionMessage({ text: '✓ Public address released. Node is offline.', type: 'success' });
-                    setStatusData({ status: 'none' });
-                    await loadStatus();
-                    onRefreshDiag?.();
-                } else {
-                    setActionMessage({ text: typeof data.error === 'string' ? data.error : 'Failed to take offline', type: 'error' });
-                }
-            } catch (e: unknown) {
-                setActionMessage({ text: e instanceof Error ? e.message : 'Failed to take offline', type: 'error' });
-            } finally {
-                setTakingOffline(false);
-                stopLogMonitor();
-            }
+            await takeOffline();
         }
     };
 
@@ -576,6 +599,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         {loading ? 'Refreshing…' : '🔄 Refresh'}
                     </button>
                 </div>
+
+                <FreshProofBox proof={proof} testId="address-proof" />
 
                 {/* Status Message Banner */}
                 {actionMessage && (
@@ -799,7 +824,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <span>{restarting ? 'Restarting…' : 'Restart tunnel'}</span>
                         </button>
 
-                        {isLive && mode === 'tunnel' && (
+                        {isLive && mode === 'tunnel' && isOwnerViewer && (
                             <button
                                 type="button"
                                 onClick={requestRotateConfirmation}

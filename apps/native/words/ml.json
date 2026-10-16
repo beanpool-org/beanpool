@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "ഉപകരണം ബന്ധിപ്പിക്കുക",
   "🌍 Join the global community": "🌍 ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "ഇത് ഒരു ലിങ്കിൽ നിന്നാണ് തുറന്നത്. നിങ്ങളുടെ സ്വന്തം സ്ക്രീനിലെ ഒരു കോഡിലേക്ക് ഇപ്പോൾ ക്യാമറ തിരിച്ചെങ്കിൽ മാത്രം തുടരുക.",
-  "Copies your own account to a browser, to use BeanPool there as you": "നിങ്ങളുടെ സ്വന്തം അക്കൗണ്ട് ഒരു ബ്രൗസറിലേക്ക് പകർത്തുന്നു, അവിടെ നിങ്ങളായി BeanPool ഉപയോഗിക്കാൻ"
+  "Copies your own account to a browser, to use BeanPool there as you": "നിങ്ങളുടെ സ്വന്തം അക്കൗണ്ട് ഒരു ബ്രൗസറിലേക്ക് പകർത്തുന്നു, അവിടെ നിങ്ങളായി BeanPool ഉപയോഗിക്കാൻ",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "ഈ ഫോണിലെ അക്കൗണ്ട് BeanPool-ന് വായിക്കാൻ കഴിയുന്നില്ല. വീണ്ടും തുടങ്ങി ശ്രമിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിച്ച് വീണ്ടെടുക്കുക.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "ഒരു കീബോർഡിന്റെ ക്ലിപ്പ്ബോർഡ് ചരിത്രമോ നിങ്ങളുടെ മറ്റ് ഉപകരണങ്ങളുമായി പങ്കിടുന്ന ക്ലിപ്പ്ബോർഡോ BeanPool-ന് മായ്ക്കാൻ കഴിയാത്ത ഒരു പകർപ്പ് സൂക്ഷിച്ചേക്കാം."
 }

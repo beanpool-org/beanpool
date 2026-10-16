@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -291,5 +291,7 @@
   "Link a device": "Unganisha kifaa",
   "🌍 Join the global community": "🌍 Jiunge na jumuiya ya kimataifa",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Hii imefunguka kutoka kwa kiungo. Endelea tu ikiwa umeelekeza kamera yako sasa hivi kwenye msimbo ulio kwenye skrini yako mwenyewe.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Inanakili akaunti yako mwenyewe kwenye kivinjari, ili utumie BeanPool huko kama wewe"
+  "Copies your own account to a browser, to use BeanPool there as you": "Inanakili akaunti yako mwenyewe kwenye kivinjari, ili utumie BeanPool huko kama wewe",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool haiwezi kusoma akaunti iliyo kwenye simu hii. Washa upya na ujaribu tena, au irejeshe kwa maneno yako 12.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Historia ya ubao wa kunakili wa kibodi au ubao wa kunakili unaoshirikiwa na vifaa vyako vingine unaweza kuhifadhi nakala ambayo BeanPool haiwezi kufuta."
 }

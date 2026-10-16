@@ -25,6 +25,7 @@
 // this is synchronous, so nothing can run between the guards and the payment on Node's one thread.
 
 import { DUST_THRESHOLD, ESCROW_FLOOR, isEscrowAccount, ESCROW_ACCOUNT_PREFIX } from '@beanpool/core';
+import { escrowNotHeldOpenSql } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { adminActorName } from './admin-actor-name.js';
@@ -130,7 +131,7 @@ function balanceRefusal(balance: number, tradeStatus: string | null): { code: Wr
 /**
  * Every escrow the audit would call stranded, plus any negative one too small for the audit's 0.01 cut but still
  * a real hole. Positive ones are listed so the count the admin sees in the audit matches this list, and are marked
- * ineligible.
+ * ineligible. The audit's own clause leaves out what an open deal or an open project holds (escrowNotHeldOpenSql).
  */
 export function listStrandedEscrows(): StrandedEscrowList {
     const rows = db.prepare(`
@@ -140,7 +141,7 @@ export function listStrandedEscrows(): StrandedEscrowList {
         FROM accounts a
         LEFT JOIN marketplace_transactions mt ON mt.id = SUBSTR(a.public_key, 8)
         WHERE a.public_key LIKE 'escrow_%' AND ABS(a.balance) > ?
-          AND SUBSTR(a.public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
+          AND ${escrowNotHeldOpenSql(db, 'a.public_key')}
         ORDER BY a.balance ASC, a.public_key ASC
     `).all(DUST_THRESHOLD) as any[];
 

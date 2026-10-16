@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -461,5 +461,6 @@
   "Type the four digits your phone shows": "Andika tarakimu nne zinazoonyeshwa na simu yako",
   "Confirm": "Thibitisha",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Akaunti yako itafunguka hapa tu baada ya tarakimu sahihi. Majaribio matatu yasiyo sahihi na hakuna kitakachotumwa.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Bado hakuna kilichofika kutoka kwenye simu yako. Msimbo huu unatoka {host}. Simu yako ikisema unatoka kwenye seva ambayo haitumii, fungua BeanPool kwenye anwani ya jumuiya yako mwenyewe, au kwanza jiunge na {host} kwenye simu yako, kisha uchanganue tena. Simu yako isipoonyesha tarakimu, sasisha programu ya BeanPool iliyo ndani yake, kisha uchanganue tena."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Bado hakuna kilichofika kutoka kwenye simu yako. Msimbo huu unatoka {host}. Simu yako ikisema unatoka kwenye seva ambayo haitumii, fungua BeanPool kwenye anwani ya jumuiya yako mwenyewe, au kwanza jiunge na {host} kwenye simu yako, kisha uchanganue tena. Simu yako isipoonyesha tarakimu, sasisha programu ya BeanPool iliyo ndani yake, kisha uchanganue tena.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Historia ya ubao wa kunakili wa kibodi au ubao wa kunakili unaoshirikiwa na vifaa vyako vingine unaweza kuhifadhi nakala ambayo BeanPool haiwezi kufuta."
 }

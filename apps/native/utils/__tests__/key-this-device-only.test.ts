@@ -95,10 +95,11 @@ describe('every write of the key passes WHEN_UNLOCKED_THIS_DEVICE_ONLY', () => {
         await id.createIdentity('Kim');
         await id.removeStoredIdentity();
         await id.createIdentityFromMnemonic(ACCOUNT.mnemonic!, 'Kim');
-        await id.importIdentity(ACCOUNT);
+        // ACCOUNT's key is not its words' key, so each of these replaces another account: a restore the member confirmed.
+        await id.importIdentity(ACCOUNT, { replaceUnreadable: true });
         await id.updateCallsign('Kim 2');
         // A phone with the key and no words, given its words back.
-        const made = await id.createIdentityFromMnemonic(ACCOUNT.mnemonic!, 'Kim');
+        const made = await id.createIdentityFromMnemonic(ACCOUNT.mnemonic!, 'Kim', { replaceUnreadable: true });
         await id.removeStoredIdentity();
         await id.importIdentity({ ...made, mnemonic: undefined });
         expect((await id.addMnemonicToIdentity(ACCOUNT.mnemonic!)).ok).toBe(true);

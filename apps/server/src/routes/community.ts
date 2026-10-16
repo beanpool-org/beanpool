@@ -76,7 +76,7 @@ import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -1733,6 +1733,12 @@ router.post('/api/ledger/transfer', async (ctx) => {
     if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
         ctx.body = { error: 'to and a positive amount are required' };
+        return;
+    }
+    // To the cent, as a pledge and a payment to the Commons are (LED-05).
+    if (!isWholeCents(parsedAmount)) {
+        ctx.status = 400;
+        ctx.body = { error: WHOLE_CENTS_ERROR };
         return;
     }
 

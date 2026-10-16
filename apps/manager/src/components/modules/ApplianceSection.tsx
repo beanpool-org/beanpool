@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { SubTabStrip } from '../layout/SubTabStrip';
 import { useSectionSubTab } from '../../lib/sections';
@@ -35,6 +35,8 @@ import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { RestorePointsPanel } from './RestorePointsPanel';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField, t } from '../../lib/fresh-proof';
 import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
@@ -54,7 +56,7 @@ interface ApplianceSectionProps {
     gatewaySaving: boolean;
     nodeLogs: LogEntry[];
     onChangeGateway: (updated: GatewayConfig) => void;
-    onSaveGateway: () => void;
+    onSaveGateway: (code?: string) => void | Promise<void>;
     onRefreshDiag: () => void;
     onRefreshLogs: () => void;
     onDownloadBackup: () => Promise<void>;
@@ -274,6 +276,7 @@ export function ApplianceSection({
                 nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
+            nodeScheduleRef.current = cfg;
             setScheduleConfig(cfg);
             setScheduleKnown(true);
             setScheduleReadFailed(false);
@@ -332,26 +335,44 @@ export function ApplianceSection({
     };
 
 
-    const handleSaveSchedule = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!scheduleKnown || !scheduleConfig) return;
+    // Keeping fewer snapshots, or turning them off, asks an owner's fresh proof (server snapshotsLessened decides which).
+    const scheduleProof = useFreshProof();
+    /** The schedule the node has (last read or saved): Cancel in the box puts it back in the form (opus-2028 N5). */
+    const nodeScheduleRef = useRef<SnapshotScheduleConfig | null>(null);
+    const cancelSchedule = () => {
+        if (nodeScheduleRef.current) setScheduleConfig(nodeScheduleRef.current);
+        setScheduleStatusMsg(t("Not saved. The form shows the node's schedule again."));
+    };
+
+    /** Sends this schedule; after the node asked the proof, the same schedule again with the code. */
+    const sendSchedule = async (config: SnapshotScheduleConfig, code?: string) => {
         setSavingSchedule(true);
         setScheduleStatusMsg(null);
         try {
             const updated = await updateNodeSnapshotSchedule(
                 activeNode.url,
-                scheduleConfig,
+                config,
                 nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id)
+                getTfaSessionToken(activeNode.id),
+                ...(code ? [code] : [])
             );
+            scheduleProof.close();
+            nodeScheduleRef.current = updated;
             setScheduleConfig(updated);
             setScheduleKnown(true);
             setScheduleStatusMsg('Backup schedule updated successfully.');
         } catch (e: unknown) {
+            if (scheduleProof.checkError(e, (c) => sendSchedule(config, c), code)) return;
             setScheduleStatusMsg(e instanceof Error ? e.message : 'Failed to update schedule');
         } finally {
             setSavingSchedule(false);
         }
+    };
+
+    const handleSaveSchedule = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!scheduleKnown || !scheduleConfig) return;
+        void sendSchedule(scheduleConfig);
     };
 
     const handleVerifyDatabase = async (snapshotName?: string) => {
@@ -558,6 +579,9 @@ export function ApplianceSection({
         }
     };
 
+    // Making a break-glass code asks an owner's fresh proof each time (server admin.ts break-glass/issue, C7).
+    const breakGlassProof = useFreshProof();
+
     // A key session makes a code for its own key; the password names the owner (the node refuses a key without the role).
     const handleIssueBreakGlass = async () => {
         setBreakGlassMessage('');
@@ -566,13 +590,19 @@ export function ApplianceSection({
             setBreakGlassMessage("Paste the owner's member key the code is for.");
             return;
         }
+        await sendBreakGlassIssue(rolesViewer.kind === 'password' ? { memberPubkey } : {});
+    };
+
+    /** Sends this request; after the node asked the proof, the same one again with the code. */
+    const sendBreakGlassIssue = async (request: { memberPubkey?: string }, code?: string) => {
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/break-glass/issue');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify(rolesViewer.kind === 'password' ? { memberPubkey } : {}),
+                body: JSON.stringify({ ...request, ...proofField(code) }),
             });
+            if (await breakGlassProof.check(res, (c) => sendBreakGlassIssue(request, c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.breakGlassCode) {
                 setBreakGlassShown(data.breakGlassCode);
@@ -1200,6 +1230,9 @@ export function ApplianceSection({
                                 </div>
                             </form>
                         )}
+                        {scheduleKnown && scheduleConfig && (
+                            <FreshProofBox proof={scheduleProof} testId="schedule-proof" onCancel={cancelSchedule} />
+                        )}
                     </div>
 
                     {/* Database Integrity Verification Card */}
@@ -1371,6 +1404,7 @@ export function ApplianceSection({
                             key={activeNode.id}
                             activeNode={activeNode}
                             onRefreshDiag={onRefreshDiag}
+                            viewer={rolesViewer}
                         />
                     </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="App addresses" resetKey={activeNode.id}>
@@ -1687,6 +1721,7 @@ export function ApplianceSection({
                             ) : (
                                 <p className="text-[11px] text-nature-400 m-0">Only an owner has a break-glass code.</p>
                             )}
+                            <FreshProofBox proof={breakGlassProof} testId="break-glass-proof" />
                             {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>

@@ -1429,7 +1429,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>
                                 <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
-                                    {WEB_COPY_CLEARS_LINE}
+                                    {WEB_COPY_CLEARS_LINE}{' '}
+                                    <span>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</span>
                                 </p>
                             </>
                         ) : (

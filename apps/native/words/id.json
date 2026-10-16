@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -287,5 +287,7 @@
   "Link a device": "Tautkan perangkat",
   "🌍 Join the global community": "🌍 Gabung ke komunitas global",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Ini terbuka dari sebuah tautan. Lanjutkan hanya jika kamu baru saja mengarahkan kameramu ke kode di layarmu sendiri.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Menyalin akunmu sendiri ke browser, agar kamu bisa memakai BeanPool di sana sebagai dirimu"
+  "Copies your own account to a browser, to use BeanPool there as you": "Menyalin akunmu sendiri ke browser, agar kamu bisa memakai BeanPool di sana sebagai dirimu",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool tidak dapat membaca akun di ponsel ini. Mulai ulang dan coba lagi, atau pulihkan dengan 12 kata Anda.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Riwayat papan klip keyboard atau papan klip yang dibagikan dengan perangkat Anda yang lain dapat menyimpan salinan yang tidak bisa dihapus oleh BeanPool."
 }

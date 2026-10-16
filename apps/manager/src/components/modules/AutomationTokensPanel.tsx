@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField, t } from '../../lib/fresh-proof';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
@@ -112,6 +114,9 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
         setMessage('');
     }, [activeNode.id]);
 
+    // A token outlives the session that made it: an owner's fresh proof each time (server C10), from the phone's Manage.
+    const proof = useFreshProof();
+
     if (!isOwner) return null;
 
     const handleMake = async () => {
@@ -124,14 +129,20 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
         const days = EXPIRIES.find((e) => e.value === expiry)?.days ?? null;
         const body: Record<string, unknown> = { name: trimmed, scope };
         if (days !== null) body.expiresAt = Date.now() + days * DAY_MS;
+        await sendMake(body);
+    };
+
+    /** Sends this token's request; after the node asked the proof, the same one again with the code. */
+    const sendMake = async (body: Record<string, unknown>, code?: string) => {
         setBusy(true);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/automation-tokens'), {
                 method: 'POST',
                 headers: headers(),
                 credentials: 'same-origin',
-                body: JSON.stringify(body),
+                body: JSON.stringify({ ...body, ...proofField(code) }),
             });
+            if (await proof.check(res, (c) => sendMake(body, c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.token === 'string') {
                 setShownToken(data.token);
@@ -237,7 +248,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                 </div>
             ) : !canMake ? (
                 <p className="text-xs text-nature-400 m-0 break-words" data-testid="automation-token-needs-key">
-                    Tokens are made with an owner&rsquo;s key, never the password: use Manage in the app, or sign in on a computer by scanning a code.
+                    {t('Tokens are made with an owner’s key from the phone, never the password: open BeanPool on your phone, press Manage, then make the token there.')}
                 </p>
             ) : (
                 <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3">
@@ -291,6 +302,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                 </div>
             )}
 
+            <FreshProofBox proof={proof} testId="token-proof" />
             {message && <p className="text-[11px] text-amber-300 m-0" role="alert">{message}</p>}
 
             <div className="space-y-2">

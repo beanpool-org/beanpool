@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField } from '../../lib/fresh-proof';
 
 /**
  * "Retire the admin password" (node sign-in design step 10; the server is apps/server routes/admin.ts retire-password).
@@ -68,13 +70,16 @@ export function RetirePasswordPanel({ activeNode, viewer = { kind: 'password' } 
         if (isOwner) void load();
     }, [isOwner, load]);
 
+    // Retiring the password asks Manage on the phone within 90 seconds (server C4): a stale or computer session is told how.
+    const proof = useFreshProof();
+
     if (!isOwner) return null;
 
     const oneOwner = !!state && state.owners < 2;
     const ready = canRetire && !!state && !state.passwordRetired && state.hasBreakGlassCode === true
         && confirm.trim() === RETIRE_CONFIRM_WORD && (!oneOwner || acceptOneOwner) && !busy;
 
-    const handleRetire = async () => {
+    const handleRetire = async (code?: string) => {
         if (!ready) return;
         setBusy(true);
         setMessage('');
@@ -82,8 +87,9 @@ export function RetirePasswordPanel({ activeNode, viewer = { kind: 'password' } 
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/retire-password'), {
                 method: 'POST',
                 headers: headers(),
-                body: JSON.stringify(oneOwner ? { acceptOneOwner: true } : {}),
+                body: JSON.stringify({ ...(oneOwner ? { acceptOneOwner: true } : {}), ...proofField(code) }),
             });
+            if (await proof.check(res, (c) => handleRetire(c), code)) return;
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.passwordRetired) {
                 setState(data as PasswordRetirement);
@@ -162,7 +168,7 @@ export function RetirePasswordPanel({ activeNode, viewer = { kind: 'password' } 
                             />
                             <button
                                 type="button"
-                                onClick={handleRetire}
+                                onClick={() => handleRetire()}
                                 disabled={!ready}
                                 className="min-h-[48px] w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                             >
@@ -173,6 +179,7 @@ export function RetirePasswordPanel({ activeNode, viewer = { kind: 'password' } 
                 </div>
             ) : null}
 
+            <FreshProofBox proof={proof} testId="retire-proof" />
             {message && <p className="text-xs text-amber-300 m-0" role="alert">{message}</p>}
         </div>
     );

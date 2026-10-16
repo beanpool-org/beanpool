@@ -1,7 +1,7 @@
 ---
 slug: access-and-security
 title: Access and security
-summary: Changing or retiring the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.
+summary: Changing or retiring the admin password, two-factor sign-in, the changes that ask a fresh proof, break-glass codes, signing out everywhere, and starting over. Under Appliance & Data, then Access & Security.
 related: signing-in, roles, first-time-setup, rate-limits, ai-assistant
 ---
 
@@ -30,17 +30,15 @@ The admin password is one shared secret that makes whoever knows it an owner, fr
 
 What happens: the password and the two-factor sign-in that guarded it are deleted; every sign-in made with the password ends at once, live log views included; every member sees a notice that the password was retired, and by whom; the server's log records it. The card then says **Retired on** the date **by** the owner.
 
-What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more, and the old settings page points to the phone.
+What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more.
 
-It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so at every start until you take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in).
+It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so at every start until you take it out of .env). Starting over with the settings only (below) leaves the server with no password at all. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in).
 
 ## Two-factor sign-in
 
 Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. Settings asks for it with the password. On a server where it is off, signing in with the password opens one card only, which says "Set up two-factor sign-in to open Settings: the admin password alone is not enough." Nothing else in Settings opens until the server accepts a code from your new authenticator; then Settings opens at once, without signing in again. Meanwhile the server keeps running and serving members, the card always opens for the password, and **Log Out** is on it. If two-factor sign-in is switched off later, the next thing the password does brings that card back. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
 
 **Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with "Turn on two-factor sign-in in Settings, or use an automation token made from your phone". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before.
-
-**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says "Turn on two-factor sign-in in Settings, or use an automation token made from your phone. Open Settings (the new page) to turn it on, then come back." Turn it on in Settings, then sign in there with the password and a code.
 
 Two things still take the password alone while two-factor sign-in is off:
 
@@ -58,7 +56,7 @@ Two things still take the password alone while two-factor sign-in is off:
 
 Know its limits:
 
-- It covers every action in Settings: changing the password, the factory reset, the community's name and address, invites, peer links and the money thresholds all ask for the code as well as the password.
+- It covers every action in Settings: changing the password, the community's name and address, invites, peer links and the money thresholds all ask for the code as well as the password.
 - Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.
 - Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.
 - Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.
@@ -104,7 +102,7 @@ What a token may do is its scope:
 - **Backups**: take a backup or snapshot, list them, send one off the box and download one. Nothing else: not restoring, not deleting, not changing where backups go.
 - **Admin**: what an admin can do in Settings.
 
-No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup, reset the node or sign anyone in to Settings. Do those signed in as an owner.
+No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup or sign anyone in to Settings. Do those signed in as an owner.
 
 - Settings shows the token once, when you make it. Copy it then: the server keeps only a scrambled copy and cannot show it again. If you lose it, revoke it and make a new one.
 - The script sends it in the Authorization header, as Bearer followed by the token (it starts with bp_). It needs no two-factor code: it was made with an owner's key. Keep it as you would the password.
@@ -136,8 +134,32 @@ The fleet manager signs in to a node with an automation token instead of the adm
 
 An owner or an admin can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. From Claude or ChatGPT they add the server's address as a connector and approve on their phone; an owner can also make a token for a desktop agent. That token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see.
 
-## Factory reset
+## Changes that ask a fresh proof
 
-Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run beanpool claim on the server to see it. To add an owner when nobody can sign in, run beanpool recover on the server.
+A few changes are rare, and are the kind a stolen sign-in would make in its first minute. For these, being signed in is not enough: the owner proves it is them again, each time. The fresh-proof list:
 
-To start a community again from nothing, stop the server and move the whole data folder away. Keep that copy until you are sure.
+- make, remove or demote an owner or admin, enrol an owner's or admin's key, or re-key one;
+- remove or suspend an owner;
+- replace the recovery code;
+- make a break-glass code, or turn break-glass mode on or off;
+- retire the admin password;
+- make an automation token;
+- change the gateway settings;
+- take this community offline, release a name, or replace this community's live address;
+- add or change a mirror link, disconnect one or remove one, and change which server a standby copies from;
+- remove, change or shorten where backups go off the box, or keep fewer snapshots, or make them cover less time;
+- roll back to a restore point.
+
+What the proof is depends on how you signed in:
+
+- **With the admin password**: Settings opens a box with a **Current code** field and the server's ask, such as "Enter a current code from your authenticator app (or a backup code) to roll back to a restore point". Type the code your authenticator shows now, or an unused backup code, and press **Confirm**: the same change is sent again with it. A code that was already used keeps the box open, and **Confirm** waits for a new one. A code typed earlier in the 4 hours does not count. With two-factor sign-in off the change is refused: "Turn on two-factor sign-in first: this change asks for a current code each time."
+- **From your phone (Manage)**: the change goes through within 90 seconds of your phone's unlock. Later, Settings says "Press Manage on your phone again, then make this change within 90 seconds."
+- **On a computer signed in with your phone (the code you scanned)**: these changes are not made there. Settings says "Do this from your phone: open BeanPool, press Manage, then make this change there."
+- An automation token or a break-glass code never makes them.
+
+## Starting over
+
+There is no button and no command that wipes a server: a stolen sign-in could use either. Both ways to start over are done on the server's own machine, in the folder with docker-compose.yml.
+
+- **The settings only, keeping members, posts, deals and Beans**: docker compose stop beanpool-node, then move data/local-config.json out of the data folder (for example to your home folder), then docker compose up -d. That file holds the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its main server, and on a main server the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It keeps the community's own key. Delete data/first-admin-password.txt too if it is still there: the password in it no longer works. After the start the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run docker compose exec beanpool-node beanpool claim to see it. To add an owner when nobody can sign in, run beanpool recover on the server (Signing in).
+- **The whole community, from nothing**: docker compose down, then move the whole data folder away, then docker compose up -d, then claim the server as in First-time setup (docker compose exec beanpool-node beanpool claim). Keep the old data folder until you are sure.

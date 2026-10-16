@@ -23,7 +23,8 @@ import { useStyles, useTheme } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { communitySwitched } from '../utils/community-switch';
 import { assertPlainNodeAddress } from '../utils/node-url';
-import { draftIdentity, getMnemonic, importIdentity, loadIdentity, type BeanPoolIdentity } from '../utils/identity';
+import { draftIdentity, getMnemonic, importIdentity, loadIdentity, StoredKeyUnreadableError, type BeanPoolIdentity } from '../utils/identity';
+import { useWords } from '../components/LanguageProvider';
 import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
@@ -75,6 +76,7 @@ function hostOf(community: string | undefined): string {
 export default function RekeyCodeScreen() {
     const params = useLocalSearchParams<{ link?: string }>();
     const { setIdentity } = useIdentity();
+    const { t } = useWords();
     const { colors } = useTheme();
     const styles = useStyles(({ theme, colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
@@ -157,10 +159,13 @@ export default function RekeyCodeScreen() {
             }
         } catch (e) {
             finishing.current = false;
-            setError(e instanceof Error ? e.message : REKEY_TEXT.changedAccount);
+            // An account on the phone that can't be read, or one that was not there a moment ago: never replaced (identity.ts).
+            setError(e instanceof StoredKeyUnreadableError
+                ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
+                : e instanceof Error ? e.message : REKEY_TEXT.changedAccount);
             setPhase('ended');
         }
-    }, [setIdentity]);
+    }, [setIdentity, t]);
 
     /** One answer from the node, read into the screen. */
     const apply = useCallback(async (s: RekeySlot, answer: RekeyAnswer) => {

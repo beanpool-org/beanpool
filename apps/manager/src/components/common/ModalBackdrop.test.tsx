@@ -116,4 +116,26 @@ describe('ModalBackdrop', () => {
         // Back put its entry back, so the next Back is still the modal's.
         expect(window.history.state.bpModal).toBe(1);
     });
+
+    it('a new Manage link reaching the open page is not Back: the modals stay, and the link\'s entry is theirs (opus-2028 B3)', async () => {
+        render(<Modal name="Member"><Modal name="Re-key" /></Modal>);
+        await mounted();
+        expect(window.history.state.bpModal).toBe(2);
+        // The second Manage press: Android brings the tab back to the front with a new fragment. A fragment navigation
+        // is a new entry with no state, and its popstate looks like Back.
+        await awaitingPop(() => {
+            window.history.pushState(null, '', `/settings#handoff=${'ef'.repeat(16)}`);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+        });
+        expect(screen.getByText('Member')).toBeInTheDocument();
+        expect(screen.getByText('Re-key')).toBeInTheDocument();
+        expect(window.history.state).toMatchObject({ bpSettings: { tab: 'people', sub: 'directory' }, bpModal: 2 });
+
+        // startKeySession takes the link out of the address bar and keeps the mark; Back then still closes the top one first.
+        window.history.replaceState(window.history.state ?? null, '', '/settings');
+        await back();
+        await back();
+        expect(screen.getByText('Re-key closed')).toBeInTheDocument();
+        expect(screen.getByText('Member')).toBeInTheDocument();
+    });
 });

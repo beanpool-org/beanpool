@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "preview": "vite preview",
+    "test:fresh-proof": "node e2e/fresh-proof.mjs",
     "test:phone-width": "node e2e/phone-width.mjs",
     "test:connected-assistants": "node e2e/connected-assistants.mjs",
     "test:agent-suggestions": "node e2e/agent-suggestions.mjs",

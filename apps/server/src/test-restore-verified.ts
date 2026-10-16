@@ -801,8 +801,10 @@ async function main(): Promise<void> {
             const w = r.restored ?? {};
             assert(w.status === 200 && WORDS.includes(w.imagesError) && typeof w.warning === 'string' && w.warning.includes(w.imagesError) && !w.warning.includes('/'),
                 `9. a restore whose photos could not go back: 200, the warning and images.error in words, no path (${JSON.stringify(w)})`);
-            assert(/file is not a database/.test(r.logs ?? '') && /ENOTDIR[^\n]*snapshots\//.test(r.logs ?? '') && /ENOTDIR[^\n]*p-fresh\//.test(r.logs ?? '')
-                && /EEXIST[^\n]*p-main/.test(r.logs ?? ''), '9. the raw errors, paths and all, are in the log');
+            // The log alone: the child's result line carries the answers.
+            const log = String(r.logs ?? '').split('\n').filter((l) => !l.startsWith('CHILD_RESULT ')).join('\n');
+            assert(/file is not a database/.test(log) && /ENOTDIR[^\n]*snapshots\//.test(log) && /ENOTDIR[^\n]*p-fresh\//.test(log) && /EEXIST[^\n]*p-main/.test(log),
+                '9. the raw errors, paths and all, are in the log');
         }
     } finally {
         registrar.close();

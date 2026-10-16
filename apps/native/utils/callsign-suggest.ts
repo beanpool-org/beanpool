@@ -31,7 +31,9 @@ const FUN_WORDS = [
  * The caller's own current name reads as available (re-confirming your own name): the node takes whose name that is
  * from the request's signature alone (public-routes audit NEW-2: a `?exclude=<key>` parameter told anyone the name
  * behind any key, and the node ignores it). So a check about a key's own name is signed by that key: `signer`, or the
- * app's fetch wrapper, which signs every GET to this phone's own community (utils/node-request-signing.ts).
+ * app's fetch wrapper, which signs every GET to this phone's own community (utils/node-request-signing.ts). A check
+ * signed by `signer` still says `?exclude=` with that same key, for a node that hasn't updated (it reads only the
+ * parameter): it names no key but the one in the signature.
  *
  * `signal` drops the request (and reads as 'unknown'): the global community's door stops a check
  * the member has walked away from, or that ran out of time (global-join.ts `checkNameAtDoor`).
@@ -52,7 +54,8 @@ export async function checkCallsignAvailable(
         // anchor, so callers can pass it explicitly; otherwise use the active node.
         const anchorUrl = anchorUrlOverride || await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return 'unknown';
-        const path = `/api/members/callsign-available/${encodeURIComponent(c)}`;
+        const own = options.signer ? `?exclude=${encodeURIComponent(options.signer.publicKey)}` : '';
+        const path = `/api/members/callsign-available/${encodeURIComponent(c)}${own}`;
         // Loaded when used: signing pulls in the app's crypto, which the wizard's plain checks never need.
         const signed = options.signer ? (await import('./node-post')).signedGet : null;
         // Stopped while that loaded: nothing is sent.

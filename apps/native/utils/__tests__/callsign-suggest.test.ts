@@ -81,17 +81,20 @@ describe('suggestCallsigns with a limit', () => {
     });
 });
 
-describe('the name check names no key in its address (public-routes audit NEW-2)', () => {
+describe("the name check names no key in its address but the signer's own (public-routes audit NEW-2)", () => {
     const me = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32) } as any;
 
-    it("a member's check is signed by their own key, which the node reads as whose name it is; no ?exclude= is sent", async () => {
+    // The node reads whose name it is from the signature; ?exclude= with the same key is for a node that hasn't updated
+    // (review of #2049, N1: it reads only the parameter, so a member's own name read "taken" and blocked Next).
+    it("a member's check is signed by their own key, and ?exclude= names only that key", async () => {
         signedAsked.length = 0;
         const plain = everyNameFree();
         expect(await checkCallsignAvailable('Sarah', NODE, { signer: me })).toBe('available');
-        expect(signedAsked).toEqual([{ url: `${NODE}/api/members/callsign-available/Sarah`, by: me.publicKey }]);
+        expect(signedAsked).toEqual([{ url: `${NODE}/api/members/callsign-available/Sarah?exclude=${me.publicKey}`, by: me.publicKey }]);
         expect(plain).toEqual([]);
         expect(await suggestCallsigns('Sarah', 3, NODE, 32, { signer: me })).toHaveLength(3);
-        expect(signedAsked.every((a) => a.by === me.publicKey && !a.url.includes('?'))).toBe(true);
+        expect(signedAsked.every((a) => a.by === me.publicKey && new URL(a.url).searchParams.get('exclude') === me.publicKey
+            && [...new URL(a.url).searchParams.keys()].join() === 'exclude')).toBe(true);
     });
 
     it('without a signer it is a plain request, with nothing after the name', async () => {

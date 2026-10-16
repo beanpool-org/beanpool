@@ -750,6 +750,9 @@ describe('a key any node may hold is never taken off the phone', () => {
 
 describe('the name step at the door: never a spinner for good, and it can always be left (G7 follow-up, 4106491691)', () => {
     const AVAILABLE = (name: string) => `/api/members/callsign-available/${encodeURIComponent(name)}`;
+    // As the check is sent: signed by the joining key, and naming that key alone in ?exclude=, for a node that hasn't
+    // updated (utils/callsign-suggest.ts).
+    const ASKED = (name: string) => `${AVAILABLE(name)}?exclude=${joiner.publicKey}`;
     const doorKey = (): JoinKey => ({ identity: joiner, createdHere: true });
     /** A node that takes the connection and then never answers, as a stalled one does. */
     function stalledDoor(): Seen[] {
@@ -787,7 +790,7 @@ describe('the name step at the door: never a spinner for good, and it can always
             expect(said).toMatch(/try again/);
             expect(said).toMatch(/go back/);
             // Only the check went out: no key on the phone, no record, no join.
-            expect(seen.map(s => s.path)).toEqual([AVAILABLE('Sam')]);
+            expect(seen.map(s => s.path)).toEqual([ASKED('Sam')]);
             expect(await loadIdentity()).toBeNull();
             expect(await getPendingOnboarding()).toBeNull();
         } finally {
@@ -822,7 +825,7 @@ describe('the name step at the door: never a spinner for good, and it can always
         globalThis.fetch = vi.fn(async (input: any) => {
             const url = String(input);
             if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
-            const name = decodeURIComponent(url.slice(`${NODE}/api/members/callsign-available/`.length));
+            const name = decodeURIComponent(url.slice(`${NODE}/api/members/callsign-available/`.length).split('?')[0]);
             return answer({ status: 200, body: { available: name !== 'Samantha Jane Smith' } });
         }) as any;
         const result = await checkNameAtDoor(NODE, 'Samantha Jane Smith', doorKey());
@@ -839,7 +842,7 @@ describe('the name step at the door: never a spinner for good, and it can always
         try {
             globalThis.fetch = vi.fn((input: any) => {
                 const url = String(input);
-                if (url === `${NODE}${AVAILABLE('Sam')}`) return Promise.resolve(answer({ status: 200, body: { available: false } }));
+                if (url === `${NODE}${ASKED('Sam')}`) return Promise.resolve(answer({ status: 200, body: { available: false } }));
                 return new Promise<Response>(() => {});
             }) as any;
             const pending = checkNameAtDoor(NODE, 'Sam', doorKey());

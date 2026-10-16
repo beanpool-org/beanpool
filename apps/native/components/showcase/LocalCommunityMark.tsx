@@ -112,7 +112,6 @@ export function LocalCommunityMark(props: MarkProps) {
     const [open, setOpen] = useState(false);
     const [collapsed, setCollapsed] = useStripCollapsed(props.feature);
     const sheet = <LocalCommunitySheet feature={props.feature} visible={open} onClose={() => setOpen(false)} onLeave={props.onLeave} />;
-    const leaveTo = (to: (typeof SHEET_ROUTES)['start' | 'nearYou']) => { props.onLeave?.(); router.push(to); };
     const pill = (
         <View style={[s.pill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
             <Text style={[s.pillText, { color: tone.fg }]} numberOfLines={1}>{LOCAL_COMMUNITY_EMOJI} {LOCAL_COMMUNITY_MARK}</Text>
@@ -179,11 +178,11 @@ export function LocalCommunityMark(props: MarkProps) {
                 <Text style={[s.stripText, { color: colors.text.body }]}>
                     <Text style={{ fontWeight: '800' }}>{LOCAL_COMMUNITY_STRIP.lead[props.feature]}</Text> {LOCAL_COMMUNITY_STRIP.body[props.feature]}
                 </Text>
-                <Pressable onPress={() => leaveTo(SHEET_ROUTES.start)} accessibilityRole="button"
+                <Pressable onPress={() => { props.onLeave?.(); router.push(SHEET_ROUTES.start); }} accessibilityRole="button"
                     style={[s.stripButton, { backgroundColor: tone.fg, borderColor: tone.fg }]}>
                     <Text style={[s.buttonText, { color: colors.surface.card }]}>{LOCAL_COMMUNITY_SHEET.start}</Text>
                 </Pressable>
-                <Pressable onPress={() => leaveTo(SHEET_ROUTES.nearYou)} accessibilityRole="button"
+                <Pressable onPress={() => { props.onLeave?.(); router.push(SHEET_ROUTES.nearYou); }} accessibilityRole="button"
                     style={[s.stripButton, { borderColor: tone.border }]}>
                     <Text style={[s.buttonText, { color: tone.fg }]}>{LOCAL_COMMUNITY_SHEET.nearYou}</Text>
                 </Pressable>

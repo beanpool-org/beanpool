@@ -84,7 +84,7 @@ vi.mock('../identity', () => ({ loadIdentity: async () => me.identity }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: me.identity }) }));
 // Decide and the pool's own modals draw what they are given: a stand-in shows it, so a late answer drawn is seen.
 vi.mock('../../components/DecideSection', () => ({
-    DecideSection: ({ decisions }: { decisions: Array<{ title?: string }> }) => createElement('div', { 'data-testid': 'decide-section' }, decisions.map(d => d.title).join(' | ')),
+    DecideSection: ({ decisions, preview }: { decisions: Array<{ title?: string }>; preview?: boolean }) => createElement('div', { 'data-testid': 'decide-section', 'data-preview': String(preview) }, decisions.map(d => d.title).join(' | ')),
 }));
 vi.mock('../../components/ProposeDecisionModal', () => ({ ProposeDecisionModal: () => null }));
 vi.mock('../../components/GroupDetailModal', () => ({ GroupDetailModal: () => null }));
@@ -178,6 +178,20 @@ describe('the Commons on the worldwide community, its profile on the phone', () 
         expect(strip).toBeGreaterThan(-1);
         expect(strip).toBeLessThan(text().indexOf('Real group number 1'));
         expect(text().indexOf(SAMPLE_COMMUNITY.enterprises[0].name)).toBeLessThan(text().indexOf('Real group number 1'));
+    });
+
+    it('switching to the Decide tab shows the DecideSection fed the sample decisions in preview mode', async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(ProjectsScreen));
+        const decideTab = host.querySelector('[aria-label="Decide Section"]') as HTMLElement | null;
+        expect(decideTab).not.toBeNull();
+        await act(async () => { decideTab!.click(); });
+        await settle();
+        const section = host.querySelector('[data-testid="decide-section"]');
+        expect(section).not.toBeNull();
+        expect(section?.getAttribute('data-preview')).toBe('true');
+        expect(section?.textContent).toContain(SAMPLE_COMMUNITY.decisions[0].question);
+        expect(host.querySelector('[data-testid="voice-credits-card"]')?.textContent).toContain('582');
     });
 });
 

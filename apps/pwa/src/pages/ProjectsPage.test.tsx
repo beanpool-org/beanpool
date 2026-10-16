@@ -649,28 +649,34 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
     });
 
-    it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
+    it('and with Decisions off and enterprises on: Decide tab in preview, no sample enterprise, the real Commons pool', async () => {
         const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
-        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(await screen.findByText('Commons Pool')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-enterprise')).toBeNull();
-        expect(screen.queryByTestId('commons-section-tabs')).toBeNull();
-        expect(screen.getByText('Commons Pool')).toBeInTheDocument();
+        expect(sectionTabs()).toHaveLength(2);
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
         // Enterprises live: the kind chips are all there.
         expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        // Switching to Decide tab shows the sample decision
+        fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
     });
 
-    it('the global node as it ships (previews, enterprises and Decisions off): no switcher, no Projects or Enterprises chip, Groups real', async () => {
+    it('the global node as it ships (previews, enterprises and Decisions off): switcher has Decide and Groups, Groups has sample enterprise, Decide has real Decide section in preview', async () => {
         const info = { ...globalInfo, features: { ...globalInfo.features, enterprises: false, showcase: true } };
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
-        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
-        expect(screen.queryByTestId('commons-section-tabs')).toBeNull();
+        expect(sectionTabs()).toHaveLength(2);
         expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
         expect(screen.getByText('Groups:')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
+        // Switching to Decide tab shows the sample decision and voice credits card
+        fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.getByTestId('voice-credits-card')).toHaveTextContent('582');
     });
 
     it('a local node: both tabs and all five kind chips, as before', async () => {
@@ -756,16 +762,25 @@ describe('Commons on global with previews AND members on demand (where #1853 mee
     it('the sample enterprise and Decision draw, the whole directory is never read, and no press sends a sample id', async () => {
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
-        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
+        // In preview mode, Decide tab has the sample decision
+        fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        // Switch back to groups
+        fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
         // Enterprises and Decisions are Example Valley's here: the node's own lists are never asked (lib/features
         // readsOwn), so none of them is drawn under the sample.
         await waitFor(() => expect(getGroups).toHaveBeenCalled());
         expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
-        for (const name of ['Pledge', 'Pause', 'Vote']) {
+        for (const name of ['Pledge', 'Pause']) {
             fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
             const sheet = await screen.findByTestId('local-community-sheet');
             fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
         }
+        // Switch to Decide tab and test Vote
+        fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Vote YES/ }));
+        const voteSheet = await screen.findByTestId('local-community-sheet');
+        fireEvent.click(within(voteSheet).getByRole('button', { name: 'Close' }));
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(getAllMembers).not.toHaveBeenCalled();
         // Every call the page made, to the node's api or to fetch: none names a sample id, and nothing was written.

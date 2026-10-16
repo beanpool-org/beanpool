@@ -28,6 +28,7 @@ process.env.ENABLE_PEER_CONNECTORS = 'true';
 
 import fs from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -101,6 +102,20 @@ async function makeNode(port = 0) {
     });
     await node.start();
     return node;
+}
+
+function proxy(plan: Array<{ port: number; delay: number }>): Promise<{ port: number; close: () => void }> {
+    let n = 0;
+    const server = net.createServer((client) => {
+        const step = plan[Math.min(n++, plan.length - 1)];
+        client.pause();
+        setTimeout(() => {
+            const up = net.connect(step.port, '127.0.0.1', () => { client.pipe(up); up.pipe(client); client.resume(); });
+            up.on('error', () => client.destroy());
+            client.on('error', () => up.destroy());
+        }, step.delay);
+    });
+    return new Promise(r => server.listen(0, '127.0.0.1', () => r({ port: (server.address() as any).port, close: () => server.close() })));
 }
 
 async function main() {
@@ -259,6 +274,38 @@ async function main() {
         `6c. unrecorded connector at non-libp2p port must not get "A different node answered at this address" (got: "${nonP2pConn?.error}")`);
     assert(nonP2pConn?.pinnedPeerId === undefined,
         `6d. unrecorded connector was not pinned`);
+
+    // ── 7. Concurrent first dials with different answerers (N4) ──
+    const nodeZ = await makeNode(0);
+    const portZ = Number(nodeZ.getMultiaddrs()[0].toString().split('/tcp/')[1].split('/')[0]);
+    const peerIdZ = nodeZ.peerId.toString();
+
+    // px: 1st connection goes to nodeY (slow, 300ms delay), 2nd connection goes to nodeZ (fast, 0ms delay)
+    const px = await proxy([{ port: portX, delay: 300 }, { port: portZ, delay: 0 }]);
+    const racedAddr = `127.0.0.1:${px.port}`;
+    cm.addConnector(racedAddr, 'peer', 'Raced');
+
+    const dial1Promise = cm.connectToAddress(racedAddr);
+    await new Promise(r => setTimeout(r, 50));
+    const dial2Promise = cm.connectToAddress(racedAddr);
+
+    const res2 = await dial2Promise; // fast dial to nodeZ finishes first
+    const res1 = await dial1Promise; // slow dial to nodeY finishes second
+
+    assert(res2 === true, `7a. fast first dial to node Z succeeded`);
+    assert(res1 === false, `7b. raced first dial to node Y was refused (got ${res1})`);
+
+    const racedConn = cm.getConnectorByAddress(racedAddr);
+    assert(racedConn?.pinnedPeerId === peerIdZ,
+        `7c. pinnedPeerId is node Z (got ${racedConn?.pinnedPeerId})`);
+    assert(racedConn?.error === 'A different node answered at this address',
+        `7d. status error shows refusal: "${racedConn?.error}"`);
+    assert(localNode.getConnections(nodeY.peerId).length === 0,
+        `7e. connection to node Y was hung up`);
+
+    cm.removeConnector(racedAddr);
+    px.close();
+    await nodeZ.stop();
 
     // Cleanup
     await localNode.stop();

@@ -540,6 +540,16 @@ export async function connectToAddress(address: string): Promise<boolean> {
         const conn = await p2pNode.dial(ma);
         const remotePeerId = conn.remotePeer.toString();
 
+        const currentConnector = connectors.find(c => c.address === address);
+        if (currentConnector?.pinnedPeerId && remotePeerId !== currentConnector.pinnedPeerId) {
+            await p2pNode.hangUp(conn.remotePeer).catch(() => {});
+            status.connected = false;
+            status.error = 'A different node answered at this address';
+            status.lastError = status.error;
+            logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
+            return false;
+        }
+
         status.connected = true;
         status.peerId = remotePeerId;
         status.lastVerified = Date.now();
@@ -547,8 +557,8 @@ export async function connectToAddress(address: string): Promise<boolean> {
         status.lastError = null;
 
         // The FIRST successful dial of a host:port connector records which node answered in its own field
-        if (!hasPeerInAddress && connector && !connector.pinnedPeerId) {
-            connector.pinnedPeerId = remotePeerId;
+        if (!hasPeerInAddress && currentConnector && currentConnector.address === address && !currentConnector.pinnedPeerId) {
+            currentConnector.pinnedPeerId = remotePeerId;
             saveConnectors();
             logger.info('P2P', `[Connectors] Pinned peer ID for ${address} to ${remotePeerId}`);
         }

@@ -203,7 +203,7 @@ async function main(): Promise<void> {
             'S2: …and the main server stores it wrapped with its recovery-seal key');
         const mainSealKey = fs.readFileSync(path.join(dirs.main, SEAL_KEY));
 
-        // The standby is set up as setup-backup.mjs does: the main server's genesis, its PeerId pinned as mirror.
+        // The standby is set up as setup-backup.mjs and `beanpool pair` do: the main server's genesis, its PeerId pinned.
         for (const d of [dirs.standby, dirs.third]) {
             fs.mkdirSync(d, { recursive: true });
             fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(d, 'genesis.json'));

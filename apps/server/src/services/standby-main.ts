@@ -345,7 +345,6 @@ export async function answerPairRequest(req: PairRequest, dir = dataDir()): Prom
             const { forgetPullCursor } = await import('./backup-puller.js');
             forgetPullCursor();
         }
-        noteStandbyPinChanged();
         const lines = outcome === 'same'
             ? [`This standby already follows ${keyEnd(code.peerId)}: its main server's address and token are updated (${code.url}). No copy starts again.`]
             : outcome === 'replaced'
@@ -384,15 +383,6 @@ export function startPairRequestWatch(dir = dataDir()): void {
 export function stopPairRequestWatch(): void {
     if (pairTimer) clearInterval(pairTimer);
     pairTimer = null;
-}
-
-let pinChangedListeners: Array<() => void> = [];
-/** The puller and the alerts read the pin from disk each time; this tells anything that keeps a view of it. */
-export function onStandbyPinChanged(fn: () => void): void {
-    pinChangedListeners.push(fn);
-}
-function noteStandbyPinChanged(): void {
-    for (const fn of pinChangedListeners) { try { fn(); } catch { /* a listener's own */ } }
 }
 
 // ── The boot migration (D4) ────────────────────────────────────────────────────────────────

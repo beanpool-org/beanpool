@@ -25,7 +25,8 @@
  *     its main server, from the server's shell."; the copy lands; a file K1 signed passes the pin.
  *  d. Re-pair: a K2 code → exit 1, nothing changed; with --follow-new-server → the pin replaced, the cursor dropped (the
  *     next copy is whole), the security line, sec.backups high "This standby now follows a different main server (paired
- *     again from the server's shell)."; the code's address answering as K1 → the amber line, paired anyway. A K1 code on
+ *     again from the server's shell).", and a whole copy of the old main server in the stager is thrown away (#2037
+ *     NB2; the refused one leaves it); the code's address answering as K1 → the amber line, paired anyway. A K1 code on
  *     the K1 standby: address and token updated, the cursor kept, no line; at another address, the copy-source line.
  *  e. Promotion needs no re-pair: a code the standby's own key made (a promoted standby's) pasted into Live Backup
  *     Server with the fresh hand-off → 200, its address and token taken, the pin unchanged.
@@ -530,7 +531,12 @@ async function main(): Promise<void> {
         fs.writeFileSync(k2CodeFile, makeCode({ url: base, communityId: community, peerId: K2, token: 'e'.repeat(64) }));
         const cursorKept = new Date(Date.now() - 300_000).toISOString();
         setSyncCursor('backup:primary', cursorKept);
+        // A whole copy of K1 in the stager (#2037 NB2): its pages verify against the pin the stager took when it started.
+        const staging = path.join(dataDir, 'staging');
+        fs.mkdirSync(staging, { recursive: true });
+        fs.writeFileSync(path.join(staging, 'state.db'), 'a copy of K1, being built');
         const refusedRepair = await pairCli(['--code-file', k2CodeFile]);
+        assert(fs.existsSync(path.join(staging, 'state.db')), 'd. the refused re-pair leaves the copy in the stager');
         assert(refusedRepair.code === 1 && /This standby follows …/.test(refusedRepair.out) && /--follow-new-server/.test(refusedRepair.out)
             && trusted() === pinBytes && getLocalConfig().backupReplicationToken === token && savedPullCursor() === cursorKept,
             `d. a K2 code on the K1 standby → exit 1, nothing changed (${refusedRepair.out.trim().slice(-160)})`);
@@ -542,6 +548,7 @@ async function main(): Promise<void> {
         assert(/answers as another key/.test(repaired.out) && /paired anyway/.test(repaired.out),
             `d. the code's address answering as another key: the amber line, paired anyway (${repaired.out.trim().slice(-200)})`);
         assert(printed.slice(secBefore).some((l) => /now follows a different main server/.test(l) && l.includes(K2)), 'd. the security log line says it');
+        assert(!fs.existsSync(staging), 'd. --follow-new-server throws away the copy of the old main server in the stager (#2037 NB2)');
         const follows = await toldLines('sec.backups', FOLLOWS_NEW);
         assert(followsBefore === 0 && follows.length === 1 && (follows[0].count ?? 1) === 1 && (follows[0].high === true || follows[0].priority >= 4),
             `d. the owners are told, sec.backups high: "${FOLLOWS_NEW}" (${JSON.stringify(follows)})`);

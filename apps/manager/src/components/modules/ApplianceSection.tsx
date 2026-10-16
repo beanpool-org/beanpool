@@ -33,6 +33,7 @@ import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
+import { RestorePointsPanel } from './RestorePointsPanel';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -1098,6 +1099,11 @@ export function ApplianceSection({
                             )}
                         </div>
                     </div>
+
+                    {/* Restore points (design case 18 §3.3): read-only list and Roll back, owners only (draws nothing for an admin) */}
+                    <SectionErrorBoundary sectionName="Restore points" resetKey={activeNode.id}>
+                        <RestorePointsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
 
                     {/* Automated Backup Schedule Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">

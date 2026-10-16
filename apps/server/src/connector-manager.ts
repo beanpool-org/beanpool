@@ -66,6 +66,11 @@ export interface ConnectorConfig {
      * config. A compromised peer must not be able to raise the limit that constrains it.
      */
     creditCap?: number;
+    /**
+     * Pinned peer ID recorded on the first successful dial of a host:port connector.
+     * Absent when not yet recorded or for multiaddrs that already specify /p2p/.
+     */
+    pinnedPeerId?: string;
 }
 
 export interface ConnectorStatus extends ConnectorConfig {
@@ -193,6 +198,12 @@ function migrateConnector(c: any): ConnectorConfig {
         c.publicUrl = derivePublicUrl(c.address);
     }
 
+    // Drop redundant pinnedPeerId if address itself names a node (/p2p/)
+    if (c.pinnedPeerId && c.address && peerIdFromAddress(c.address)) {
+        logger.info('P2P', `[Connectors] Dropped redundant pinnedPeerId for ${c.callsign || c.address}: address itself names node`);
+        delete c.pinnedPeerId;
+    }
+
     return c as ConnectorConfig;
 }
 
@@ -229,6 +240,7 @@ export function loadConnectors(): void {
             const needsMigration = dropped.length > 0 || kept.some((c: any) => {
                 if (['credit_verification', 'read_only'].includes(c.trustLevel)) return true;
                 if (c.address && c.address.includes(',')) return true;
+                if (c.pinnedPeerId && c.address && peerIdFromAddress(c.address)) return true;
                 const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
                 if (!current || current.startsWith('https:///')) {
                     return derivePublicUrl(c.address) !== current;
@@ -292,10 +304,15 @@ export function initConnectorManager(node: Libp2p): void {
             // names a peer, so /ipfs/ and /p2p/ can't be treated differently in different checks.
             if (connector.address && peerIdFromAddress(connector.address) === peerId) {
                 matches = true;
-            }
-            const status = statuses.get(connector.address);
-            if (status?.peerId === peerId) {
-                matches = true;
+            } else if (connector.pinnedPeerId) {
+                if (connector.pinnedPeerId === peerId) {
+                    matches = true;
+                }
+            } else {
+                const status = statuses.get(connector.address);
+                if (status?.peerId === peerId) {
+                    matches = true;
+                }
             }
 
             if (matches) {
@@ -507,13 +524,54 @@ export async function connectToAddress(address: string): Promise<boolean> {
     const status = statuses.get(address) || newStatus();
     statuses.set(address, status);
 
+    const connector = connectors.find(c => c.address === address);
+    const hasPeerInAddress = Boolean(peerIdFromAddress(address));
+    const dialTargetNamedNode = hasPeerInAddress || Boolean(connector?.pinnedPeerId);
+
+    // If the address doesn't already specify a /p2p/ peer ID, but we already have a pinnedPeerId from the first dial,
+    // dial address + /p2p/<pinnedPeerId> so libp2p itself refuses a different node.
+    let dialTarget: string;
+    const baseMa = resolveMultiaddr(address);
+    if (!hasPeerInAddress && connector?.pinnedPeerId) {
+        dialTarget = `${baseMa}/p2p/${connector.pinnedPeerId}`;
+    } else {
+        dialTarget = baseMa;
+    }
+
     try {
-        const ma = multiaddr(resolveMultiaddr(address));
+        const ma = multiaddr(dialTarget);
         const conn = await p2pNode.dial(ma);
+        const remotePeerId = conn.remotePeer.toString();
+
+        const currentConnector = connectors.find(c => c.address === address);
+        if (currentConnector?.pinnedPeerId && remotePeerId !== currentConnector.pinnedPeerId) {
+            // Hang up on that node only where no other connector names it (its record or its /p2p/ address); where one does,
+            // close only this dial's connection. A link to the recorded node that is already up stays up and says nothing;
+            // otherwise the refusal is this connector's state.
+            const namedElsewhere = connectors.some(c => c !== currentConnector
+                && (c.pinnedPeerId === remotePeerId || peerIdFromAddress(c.address) === remotePeerId));
+            if (namedElsewhere) await conn.close().catch(() => {});
+            else await p2pNode.hangUp(conn.remotePeer).catch(() => {});
+            if (!(status.connected && status.peerId === currentConnector.pinnedPeerId)) {
+                status.connected = false;
+                status.error = 'A different node answered at this address';
+            }
+            logger.error('P2P', `[Connectors] ❌ Refused ${remotePeerId} at ${address}: a different node answered at this address`);
+            return false;
+        }
+
         status.connected = true;
-        status.peerId = conn.remotePeer.toString();
+        status.peerId = remotePeerId;
         status.lastVerified = Date.now();
         status.error = null;
+
+        // The FIRST successful dial of a host:port connector records which node answered in its own field
+        if (!hasPeerInAddress && currentConnector && currentConnector.address === address && !currentConnector.pinnedPeerId) {
+            currentConnector.pinnedPeerId = remotePeerId;
+            saveConnectors();
+            logger.info('P2P', `[Connectors] Pinned peer ID for ${address} to ${remotePeerId}`);
+        }
+
         logger.info('P2P', `[Connectors] ✅ Connected to ${address} (PeerId: ${status.peerId})`);
 
         // Immediately run handshake to check mutual trust
@@ -539,7 +597,15 @@ export async function connectToAddress(address: string): Promise<boolean> {
         // "this peer is down" into a rejected promise from `connectToAddress`, which the retry loop reads as
         // the whole loop failing rather than one address failing.
         status.connected = false;
-        status.error = errorMessage(e, 'Connection failed');
+        const rawMsg = errorMessage(e);
+        const isIdentityMismatch = dialTargetNamedNode &&
+            rawMsg.includes('does not match expected remote identity key');
+
+        if (isIdentityMismatch) {
+            status.error = 'A different node answered at this address';
+        } else {
+            status.error = errorMessage(e, 'Connection failed');
+        }
         logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
         return false;
     }
@@ -569,7 +635,14 @@ export async function disconnectFromAddress(address: string): Promise<void> {
     logger.info('P2P', `[Connectors] Disconnected from ${address}`);
 }
 
-export function addConnector(address: string, trustLevel: TrustLevel, callsign?: string, publicUrl?: string, enabled?: boolean): ConnectorConfig {
+export function addConnector(
+    address: string,
+    trustLevel: TrustLevel,
+    callsign?: string,
+    publicUrl?: string,
+    enabled?: boolean
+): ConnectorConfig {
+
     // NOTE THE ORDER: derivation happens only on the INSERT path, below. Deriving up here — as this function
     // used to — meant `publicUrl` was never undefined by the time the update branch tested it, so any update
     // that omitted it (changing trust level, toggling enabled) silently overwrote an operator's stated URL with
@@ -725,7 +798,12 @@ export function peerIdFromAddress(address?: string): string | null {
  */
 function materialise(c: ConnectorConfig): ConnectorStatus {
     const status = statuses.get(c.address) || newStatus();
-    return { ...c, ...status, peerId: status.peerId ?? peerIdFromAddress(c.address) };
+    return {
+        ...c,
+        ...status,
+        peerId: status.peerId ?? c.pinnedPeerId ?? peerIdFromAddress(c.address),
+        error: status.error,
+    };
 }
 
 export function getConnectors(): ConnectorStatus[] {
@@ -745,6 +823,10 @@ export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | nu
 
 export function getConnectorByPeerId(peerId: string): ConnectorStatus | null {
     for (const c of connectors) {
+        if (c.pinnedPeerId) {
+            if (c.pinnedPeerId === peerId) return materialise(c);
+            continue;
+        }
         const status = statuses.get(c.address);
         const effectivePeerId = status?.peerId ?? (c.address ? peerIdFromAddress(c.address) : null);
         if (effectivePeerId === peerId) return materialise(c);
@@ -760,6 +842,13 @@ export function isPeerTrusted(peerId: string): { trusted: boolean; trustLevel: T
     // ⚡ Bolt: Iterate raw array instead of calling getConnectors().find() which allocates all objects
     for (const c of connectors) {
         if (c.trustLevel === 'blocked') continue;
+
+        if (c.pinnedPeerId) {
+            if (c.pinnedPeerId === peerId) {
+                return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
+            }
+            continue;
+        }
 
         const status = statuses.get(c.address);
         if (status?.peerId === peerId) {
@@ -817,10 +906,15 @@ export function updateInboundHandshakeStatus(
         let matches = false;
         if (connector.address && peerIdFromAddress(connector.address) === peerId) {
             matches = true;
-        }
-        const status = statuses.get(connector.address);
-        if (status?.peerId === peerId) {
-            matches = true;
+        } else if (connector.pinnedPeerId) {
+            if (connector.pinnedPeerId === peerId) {
+                matches = true;
+            }
+        } else {
+            const status = statuses.get(connector.address);
+            if (status?.peerId === peerId) {
+                matches = true;
+            }
         }
 
         if (matches) {

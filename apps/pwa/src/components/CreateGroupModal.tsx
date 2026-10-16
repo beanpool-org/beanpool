@@ -89,7 +89,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         aria-label="Close"
                     >
                         ✕
@@ -119,7 +119,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
                             maxLength={60}
                             required
-                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         />
                     </div>
 
@@ -133,7 +133,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             placeholder="What does this group discuss or coordinate?"
                             rows={3}
                             maxLength={300}
-                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-sm"
                         />
                     </div>
 
@@ -170,8 +170,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             <div className="mt-3 space-y-2" data-testid="create-group-with-beans">
                                 <p className="text-xs text-nature-600 dark:text-nature-400">With Beans involved?</p>
                                 <div className="flex flex-wrap gap-2">
-                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500">🌱 Start a project</button>
-                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500">🏛️ Start an enterprise</button>
+                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">🌱 Start a project</button>
+                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">🏛️ Start an enterprise</button>
                                 </div>
                             </div>
                         )}
@@ -211,7 +211,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                     <button
                         type="submit"
                         disabled={submitting || !name.trim()}
-                        className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-50 text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                        className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-50 text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                     >
                         {submitting ? 'Creating...' : 'Create Group (You become Convenor)'}
                     </button>

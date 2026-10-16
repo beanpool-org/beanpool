@@ -267,16 +267,20 @@ async function main() {
         const opened = initRaw(d.sessionId, d.publicKeyHex);
         assert(opened.ok && /^[0-9a-f]{64}$/.test(opened.secret || ''), 'init hands the opening browser a binding secret');
         const sent = transferRaw(d.sessionId, mobileHex, nonce, 'ab'.repeat(32));
-        assert(sent.ok && /^\d{2}$/.test(sent.confirmCode || ''), `the phone's send answers two digits to show (${sent.confirmCode})`);
+        assert(sent.ok && /^\d{4}$/.test(sent.confirmCode || ''), `the phone's send answers four digits to show (${sent.confirmCode})`);
         const held = pollRaw(d.sessionId, opened.secret);
         assert(held.status === 'confirming' && !held.payload, 'the opening browser is told "confirming" and gets no payload yet');
         assert(pollRaw(d.sessionId, undefined).status === 'wrong-browser' && pollRaw(d.sessionId, 'f'.repeat(64)).status === 'wrong-browser',
             'a browser without the secret, or with another one, is "wrong-browser" and gets nothing');
         assert(confirmPairingTransfer(d.sessionId, undefined, sent.confirmCode).result === 'wrong-browser'
             && pollRaw(d.sessionId, opened.secret).status === 'confirming', 'the right digits from another browser release nothing');
-        const wrong = String((Number(sent.confirmCode) + 1) % 100).padStart(2, '0');
+        const wrong = String((Number(sent.confirmCode) + 1) % 10_000).padStart(4, '0');
         const once = confirmPairingTransfer(d.sessionId, opened.secret, wrong);
         assert(once.result === 'wrong' && (once as any).triesLeft === 2, 'wrong digits: two tries left');
+        // SEC-INV-02: only four digits can be right. Two (an old page's box, or the first two of the four) is a wrong try.
+        const two = confirmPairingTransfer(d.sessionId, opened.secret, sent.confirmCode!.slice(0, 2));
+        assert(two.result === 'wrong' && (two as any).triesLeft === 1 && pollRaw(d.sessionId, opened.secret).status === 'confirming',
+            `two digits are a wrong try, one left, nothing released (${JSON.stringify(two)})`);
         const right = confirmPairingTransfer(d.sessionId, opened.secret, sent.confirmCode);
         const got = pollRaw(d.sessionId, opened.secret);
         assert(right.result === 'released' && got.status === 'transferred' && got.payload?.ciphertextHex === 'ab'.repeat(32),
@@ -286,13 +290,28 @@ async function main() {
         const d = createPairingSession();
         const opened = initRaw(d.sessionId, d.publicKeyHex);
         const sent = transferRaw(d.sessionId, mobileHex, nonce, 'cd'.repeat(32));
-        const wrong = String((Number(sent.confirmCode) + 1) % 100).padStart(2, '0');
+        const wrong = String((Number(sent.confirmCode) + 1) % 10_000).padStart(4, '0');
         const tries = [0, 1, 2].map(() => confirmPairingTransfer(d.sessionId, opened.secret, wrong).result);
         const late = confirmPairingTransfer(d.sessionId, opened.secret, sent.confirmCode);
         const after = pollRaw(d.sessionId, opened.secret);
         assert(tries.join() === 'wrong,wrong,burned' && late.result === 'burned' && after.status === 'burned' && !after.payload
             && _pairingRelayCountsForTests().held === 0, `three wrong burn the session and drop its payload; the right digits then give nothing (${tries.join()})`);
         assert(!transferRaw(d.sessionId, mobileHex, nonce, 'cd'.repeat(32)).ok, 'and a burned session takes no second send');
+    }
+    clearAllPairingSessions();
+
+    // SEC-INV-02: the code is drawn from 10,000, not padded from 100. Three guesses then win 0.03% of sends (3% with two).
+    {
+        const codes = Array.from({ length: 300 }, () => {
+            const d = createPairingSession();
+            initRaw(d.sessionId, d.publicKeyHex);
+            return transferRaw(d.sessionId, mobileHex, nonce, 'ef'.repeat(32)).confirmCode || '';
+        });
+        const distinct = new Set(codes).size;
+        const high = codes.filter((c) => Number(c) >= 100).length;
+        assert(codes.every((c) => /^\d{4}$/.test(c)) && distinct > 150 && high > 250 && PAIRING_RELAY_LIMITS.confirmTries === 3
+            && PAIRING_RELAY_LIMITS.confirmDigits === 4,
+            `300 sends: every code four digits, ${distinct} distinct, ${high} of them 0100 or more (from 100 values there would be at most 100 distinct and none), 3 tries`);
     }
     clearAllPairingSessions();
 

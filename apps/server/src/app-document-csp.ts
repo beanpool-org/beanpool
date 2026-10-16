@@ -20,10 +20,11 @@
  * popup (the printable invite cards) is built without one. apps/manager/e2e/phone-width.mjs serves the built manager
  * under this header and fails on any violation.
  *
- * It is the default: every response outside /api and /ws starts with it (https-server.ts). A few pages keep the
- * header they had (DOCUMENT_CSP) because they run inline scripts: the old static Settings page (settings.html, at
- * /settings-legacy), the static pages under /auth/, the install page an invite link opens at `/?invite=`
- * (routes/invite-trampoline.ts) and the Apple probe when it is on. Each gets it from the code that renders it
+ * It is the default: every response outside /api and /ws starts with it (https-server.ts). A few pages keep an
+ * older header (DOCUMENT_CSP) because they run inline scripts: the static pages under /auth/, the install page an
+ * invite link opens at `/?invite=` (routes/invite-trampoline.ts) and the Apple probe when it is on. The old static
+ * Settings page (settings.html, /settings-legacy) is gone (design case 18, D9; web-surface review F3), and with it
+ * the hosts only it loaded from (unpkg.com's Leaflet, api.qrserver.com's QR images, Cloudflare's analytics beacon). Each gets it from the code that renders it
  * (useDocumentPolicy) or, for a file in public/, from the file the static server resolved (isDocumentPolicyFile);
  * never from how the request's path is spelled, which the static server reads differently (it decodes and then
  * normalises, so `/a/..%2findex.html` is the web app).
@@ -47,8 +48,12 @@ export const APP_DOCUMENT_CSP = [
 /** So a member's path in the web app (a post, a profile) is not handed to the tile host in full. */
 export const APP_DOCUMENT_REFERRER_POLICY = 'strict-origin-when-cross-origin';
 
-/** The header those few pages keep, unchanged. #131 removed the connect-src wildcard: https: for peer nodes, wss: only. */
-export const DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self'; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
+/**
+ * The header those few pages keep: their own inline scripts, and nothing from another host. #131 removed the
+ * connect-src wildcard (https: for peer nodes, wss: only); owner-delete S4b removed what only the old Settings page
+ * loaded (unpkg.com, static.cloudflareinsights.com, api.qrserver.com).
+ */
+export const DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
 
 /** A Koa context, or Node's response behind a two-line adapter: whatever a policy is set on. */
 interface HeaderTarget {
@@ -70,12 +75,13 @@ export function useDocumentPolicy(target: HeaderTarget): void {
 
 /**
  * Whether a file the static server resolved, by its path inside public/, is one of the pages that need DOCUMENT_CSP:
- * the old static Settings page (settings.html) and the sign-in returns under auth/. Any other file gets the app
- * document's policy: the web app's index.html above all, and the manager's (settings/index.html, manager/index.html).
+ * the sign-in returns under auth/. Any other file gets the app document's policy: the web app's index.html above all,
+ * the manager's (settings/index.html, manager/index.html), and a settings.html, should one ever be put there (the old
+ * static Settings page is gone, design case 18 D9: under this policy its inline script would not run).
  */
 export function isDocumentPolicyFile(relativePath: string): boolean {
     const file = relativePath.replace(/\\/g, '/').replace(/\.(br|gz)$/, '');
-    return file === 'settings.html' || /^auth\/[^/]+\.html$/.test(file);
+    return /^auth\/[^/]+\.html$/.test(file);
 }
 
 /**

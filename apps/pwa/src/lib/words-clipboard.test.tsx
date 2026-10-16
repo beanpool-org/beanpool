@@ -311,6 +311,11 @@ describe('Settings → View Recovery Phrase', () => {
         expect(WEB_COPY_CLEARS_LINE).toBe('If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.');
     });
 
+    it('the line also says a keyboard\'s clipboard history or a shared clipboard may keep a copy (KEY-07)', async () => {
+        page();
+        expect(await screen.findByTestId('seed-copy-clears')).toHaveTextContent("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.");
+    });
+
     it('Chrome: Copy All Words copies them and clears them a minute later', async () => {
         page();
         await screen.findByText('accident');

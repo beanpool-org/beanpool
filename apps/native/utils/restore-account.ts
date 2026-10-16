@@ -127,7 +127,9 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
         await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
         // The update screen asks the community now in use (utils/community-switch.ts).
         communitySwitched();
-        await importIdentity(identity);
+        // The member asked for this account back, and was asked above before it replaces another: it may go over an item
+        // this phone can't read, or the account the gate let it replace (identity.ts KEY-04).
+        await importIdentity(identity, { replaceUnreadable: true });
     } catch (e) {
         if (!replacesAnother) throw e;
         throw await removeUnsavedReplace(e);

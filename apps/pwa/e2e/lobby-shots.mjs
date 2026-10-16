@@ -53,7 +53,7 @@ async function loadPolicy() {
 const VISITOR_READS_EXACT = new Set([
     '/api/version', '/api/community/info', '/api/community/health', '/api/node/config', '/api/directory/info',
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
-    '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info', '/api/federation/links',
+    '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
 ]);
 const VISITOR_READS_PATTERNS = [

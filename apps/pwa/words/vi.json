@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -449,8 +449,9 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "Đã nhập sai chữ số quá nhiều lần nên không có gì được gửi. Hãy tạo mã mới và thử lại.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "Mã đó đã hết hạn nên không có gì được gửi. Hãy tạo mã mới và thử lại.",
   "That did not go through. Try again.": "Thao tác không thành công. Hãy thử lại.",
-  "Type the two digits your phone shows": "Nhập hai chữ số hiển thị trên điện thoại của bạn",
+  "Type the four digits your phone shows": "Nhập bốn chữ số hiển thị trên điện thoại của bạn",
   "Confirm": "Xác nhận",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Tài khoản của bạn chỉ mở ở đây sau khi nhập đúng các chữ số. Thử sai ba lần và sẽ không có gì được gửi.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Chưa có gì đến từ điện thoại của bạn. Mã này đến từ {host}. Nếu điện thoại của bạn báo mã này đến từ một máy chủ nó không dùng, hãy mở BeanPool tại địa chỉ cộng đồng của chính bạn, hoặc tham gia {host} trên điện thoại trước, rồi quét lại. Nếu điện thoại của bạn không hiện chữ số nào, hãy cập nhật ứng dụng BeanPool trên đó, rồi quét lại."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Chưa có gì đến từ điện thoại của bạn. Mã này đến từ {host}. Nếu điện thoại của bạn báo mã này đến từ một máy chủ nó không dùng, hãy mở BeanPool tại địa chỉ cộng đồng của chính bạn, hoặc tham gia {host} trên điện thoại trước, rồi quét lại. Nếu điện thoại của bạn không hiện chữ số nào, hãy cập nhật ứng dụng BeanPool trên đó, rồi quét lại.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Lịch sử bộ nhớ tạm của bàn phím hoặc bộ nhớ tạm dùng chung với các thiết bị khác của bạn có thể giữ một bản sao mà BeanPool không xóa được."
 }

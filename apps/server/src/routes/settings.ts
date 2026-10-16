@@ -18,7 +18,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
     getGatewayConfig, isBreakGlassMode, isPasswordRetired,
 } from '../config/local-config.js';
-import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
+import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession, revokeAdminSession, ADMIN_SESSION_COOKIE } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
@@ -139,6 +139,10 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (token) {
         const exchangeRes = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         if (exchangeRes.ok && exchangeRes.sessionId) {
+            // The session this browser held is ended, as a password sign-in ends it (AUTH-06): replaced here, it would otherwise
+            // stay valid until its idle limit.
+            const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
+            if (held) revokeAdminSession(held);
             setAdminSessionCookie(ctx, exchangeRes.sessionId);
             ctx.redirect('/settings');
             return;

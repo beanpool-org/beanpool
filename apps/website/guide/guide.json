@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 136,
-  "hash": "41dc63ba096a362db4e9dd8346987790c4c646f2fddbcda74ef61e0ce49f125f",
+  "version": 137,
+  "hash": "1f5ed0d80915dd9d5ccea02487d046542062da80fc9dd50fcd0dca95d1327c49",
   "sections": [
     {
       "id": "about",
@@ -2688,7 +2688,9 @@
           "items": [
             "In the web app on the computer, choose to link with the mobile app. It shows a QR code.",
             "On the phone, open **Settings** and tap **Link a device** (older apps: **Use your account on another device**).",
-            "Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that."
+            "Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check.",
+            "The phone then shows **four digits**. Type them on the computer and press **Confirm**. Your account goes to the computer only after that. Three wrong tries and nothing is sent: make a new code. Never read the digits out or send them to anyone.",
+            "If the phone says its app is too old, update the BeanPool app on it, then scan a new code."
           ]
         },
         {

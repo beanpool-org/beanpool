@@ -90,7 +90,7 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
         expect(homeBeansPreview({ features: { beans: true, showcase: true } } as never)).toBe(false);
     });
 
-    it("the member's own Ledger reads Example Valley in preview: 85 Beans, floor −200, level 2, six rows, no Ʀ", async () => {
+    it("the member's own Ledger reads Example Valley in preview: 85 Beans, floor −200, level 2, six rows with the held deal's, no Ʀ", async () => {
         const { sampleBalance, sampleTransactions } = await import('../../components/showcase/sample-screens');
         const { memberLevel, SAMPLE_COMMUNITY: S } = await import('@beanpool/core');
         const b = sampleBalance();
@@ -106,7 +106,15 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
             expect(r.amount).toBeGreaterThan(0);
             expect(r.peer).toMatch(/^(a neighbour|the Commons|the Example Valley Bakery)$/);
         }
-        expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'credit', 'debit', 'credit', 'debit']);
+        // No circulation fee row (a member at 85 Beans never pays one). The held deal's Beans went out to trust yesterday,
+        // so its row is there, as on a node: "Held in trust · Fixing a bike puncture", 20 out, and it is In Escrow's 20.
+        expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'debit', 'credit', 'credit', 'debit']);
+        const held = S.deals.find(d => d.state === 'pending')!;
+        expect(rows.filter(r => r.memo.startsWith('Held in trust'))).toEqual([
+            { id: 'sample-tx-bike-held', type: 'debit', amount: held.amount, peer: 'a neighbour', memo: `Held in trust · ${held.what}`, timestamp: 'yesterday' },
+        ]);
+        expect(held.amount).toBe(S.inEscrow);
+        expect(rows.some(r => /fee/i.test(r.memo))).toBe(false);
         expect(JSON.stringify([b, rows])).not.toMatch(/Ʀ/);
     });
 });

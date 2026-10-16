@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -105,11 +105,11 @@
   "Confirm it is you to send your account to another device.": "अपने खाते को किसी अन्य डिवाइस पर भेजने के लिए पुष्टि करें कि यह आप ही हैं।",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "आपके फ़ोन में कोई स्क्रीन लॉक नहीं है, इसलिए BeanPool आपका खाता नहीं भेजेगा। अपने फ़ोन की सेटिंग में 'सुरक्षा' के अंतर्गत पिन, पैटर्न या पासवर्ड सेट करें, फिर पुनः प्रयास करें।",
   "The phone's unlock did not pass, so nothing was sent.": "फ़ोन का अनलॉक पास नहीं हुआ, इसलिए कुछ भी नहीं भेजा गया।",
-  "Your community's server runs an older BeanPool that can't ask for the two digits, so nothing was sent. Ask its host to update it.": "आपके समुदाय का सर्वर एक पुराना BeanPool चला रहा है जो दो अंकों की माँग नहीं कर सकता, इसलिए कुछ भी नहीं भेजा गया। इसके व्यवस्थापक से इसे अपडेट करने के लिए कहें।",
+  "Your community's server runs an older BeanPool that can't ask for the four digits, so nothing was sent. Ask its host to update it.": "आपके समुदाय का सर्वर एक पुराना BeanPool चला रहा है जो चार अंकों की माँग नहीं कर सकता, इसलिए कुछ भी नहीं भेजा गया। इसके व्यवस्थापक से इसे अपडेट करने के लिए कहें।",
   "That code has expired, so nothing was sent. Make a new code on the other device and scan it again.": "वह कोड समाप्त हो गया है, इसलिए कुछ भी नहीं भेजा गया। दूसरी डिवाइस पर एक नया कोड बनाएँ और उसे दोबारा स्कैन करें।",
-  "Your community's server did not ask for the two digits. Ask its host to update BeanPool before you try again.": "आपके समुदाय के सर्वर ने दो अंक नहीं माँगे। पुनः प्रयास करने से पहले इसके व्यवस्थापक से BeanPool को अपडेट करने के लिए कहें।",
-  "Type these two digits on the other device": "दूसरी डिवाइस पर ये दो अंक दर्ज करें",
-  "The two digits are {digits}": "वे दो अंक हैं: {digits}",
+  "Your community's server did not ask for the four digits. Ask its host to update BeanPool before you try again.": "आपके समुदाय के सर्वर ने चार अंक नहीं माँगे। पुनः प्रयास करने से पहले इसके व्यवस्थापक से BeanPool को अपडेट करने के लिए कहें।",
+  "Type these four digits on the other device": "दूसरी डिवाइस पर ये चार अंक दर्ज करें",
+  "The four digits are {digits}": "वे चार अंक हैं: {digits}",
   "Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.": "सही अंक दर्ज करने के बाद ही आपका खाता वहाँ खुलेगा। यदि आपने अभी अपने सामने स्क्रीन पर इसका अनुरोध नहीं किया है, तो 'रद्द करें' पर टैप करें और दूसरी डिवाइस को कुछ नहीं मिलेगा।",
   "Done": "पूर्ण",
   "Send your whole account to another device?": "क्या अपना पूरा खाता दूसरी डिवाइस पर भेजें?",
@@ -291,5 +291,7 @@
   "Link a device": "डिवाइस जोड़ें",
   "🌍 Join the global community": "🌍 वैश्विक समुदाय से जुड़ें",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "यह एक लिंक से खुला है। आगे तभी बढ़ें जब आपने अभी-अभी अपना कैमरा अपनी ही स्क्रीन पर किसी कोड की ओर किया हो।",
-  "Copies your own account to a browser, to use BeanPool there as you": "आपका अपना खाता एक ब्राउज़र में कॉपी करता है, ताकि आप वहाँ खुद के रूप में BeanPool इस्तेमाल कर सकें"
+  "Copies your own account to a browser, to use BeanPool there as you": "आपका अपना खाता एक ब्राउज़र में कॉपी करता है, ताकि आप वहाँ खुद के रूप में BeanPool इस्तेमाल कर सकें",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool इस फ़ोन पर खाता नहीं पढ़ पा रहा है। फिर से शुरू करें और दोबारा कोशिश करें, या अपने 12 शब्दों से बहाल करें।",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "कीबोर्ड का क्लिपबोर्ड इतिहास या आपके दूसरे डिवाइसों के साथ साझा क्लिपबोर्ड एक ऐसी कॉपी रख सकता है जिसे BeanPool मिटा नहीं सकता।"
 }

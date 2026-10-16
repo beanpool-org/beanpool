@@ -13,6 +13,8 @@ import {
     type OffboxListedBackup,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
  * Off-box backups (apps/server services/offbox-backups.ts): where the main server sends its locked backups, how often
@@ -61,6 +63,8 @@ const HEALTH_LABEL: Record<OffboxDestinationStatus['health'], { text: string; cl
 };
 
 export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [status, setStatus] = useState<OffboxStatus | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
@@ -90,16 +94,24 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
         return () => clearTimeout(t);
     }, [status, load]);
 
-    const save = async (update: Parameters<typeof saveOffboxSettings>[1], done: string | ((saved: OffboxStatus) => string)) => {
+    // Removing, changing or shortening where backups go asks an owner's fresh proof (the node decides which).
+    const proof = useFreshProof();
+
+    /** `after` runs once it is saved, also when that is the re-send with a code. */
+    const save = async (update: Parameters<typeof saveOffboxSettings>[1], done: string | ((saved: OffboxStatus) => string),
+        after?: () => void, code?: string): Promise<boolean> => {
         setSaving(true);
         setMessage(null);
         try {
-            const res = await saveOffboxSettings(activeNode.url, update, ...creds());
+            const res = await saveOffboxSettings(activeNode.url, update, ...creds(), ...(code ? [code] : []));
+            proof.close();
             const saved = checked(res.status);
             setStatus(saved);
             setMessage({ text: typeof done === 'string' ? done : done(saved), isError: false });
+            after?.();
             return true;
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => save(update, done, after, c), code)) return false;
             setMessage({ text: e instanceof Error ? e.message : String(e), isError: true });
             return false;
         } finally {
@@ -111,7 +123,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
         e.preventDefault();
         if (!form) return;
         if (!form.id) {
-            if (await save({ destination: form }, 'Destination added. The first backup goes there within a few minutes.')) setForm(null);
+            await save({ destination: form }, 'Destination added. The first backup goes there within a few minutes.', () => setForm(null));
             return;
         }
         // The server looks after the backups only where a destination points now. A change of endpoint, bucket or folder
@@ -126,12 +138,15 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                 + `no longer removes them after ${saved.retentionDays} days: delete them in that store, or give that bucket a `
                 + `lifecycle rule that deletes files older than ${saved.maxRetentionDays} days.`;
         };
-        if (await save({ destination: form }, saidMoved)) setForm(null);
+        await save({ destination: form }, saidMoved, () => setForm(null));
     };
 
     const remove = async (d: OffboxDestinationStatus) => {
-        if (!confirm(`Stop sending backups to "${d.name}"? The backups already there stay there, and this server no longer removes them: `
-            + 'delete them in that store, or give the bucket a lifecycle rule that deletes old files.')) return;
+        if (!(await ask({
+            title: `Stop sending backups to "${d.name}"?`,
+            body: 'The backups already there stay there, and this server no longer removes them: delete them in that store, or give the bucket a lifecycle rule that deletes old files.',
+            confirmLabel: 'Stop sending',
+        }))) return;
         await save({ removeId: d.id }, 'Destination removed. What it holds stays there.');
     };
 
@@ -186,6 +201,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="offbox-backups">
+            {confirmation}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
                 <div className="min-w-0">
                     <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
@@ -224,6 +240,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                 </p>
             )}
 
+            <FreshProofBox proof={proof} testId="offbox-proof" />
             {message && (
                 <p className={`text-xs m-0 p-3 rounded-xl bg-nature-950 border border-nature-800 ${message.isError ? 'text-red-300' : 'text-emerald-300'}`} role={message.isError ? 'alert' : 'status'}>
                     {message.text}

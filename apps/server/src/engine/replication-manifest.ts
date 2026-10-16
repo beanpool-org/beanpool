@@ -627,6 +627,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
     isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },
     joinedAt: { kind: 'per-server', reason: "when this server's admin password was set" },
+    totpLastAcceptedStep: { kind: 'per-server', reason: 'the time step of the last 2FA code this server accepted (totp.ts useTotpCode, AUTH-07): a number, never a code' },
     totpPendingSecret: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
     totpPendingBackupCodesHashes: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
     claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },

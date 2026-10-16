@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -105,11 +105,11 @@
   "Confirm it is you to send your account to another device.": "Confirme que é você para enviar sua conta para outro aparelho.",
   "Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again.": "Seu celular não tem bloqueio de tela, por isso o BeanPool não enviará sua conta. Defina um PIN, padrão ou senha nas Configurações do celular, em Segurança, e tente novamente.",
   "The phone's unlock did not pass, so nothing was sent.": "O desbloqueio do celular não passou, por isso nada foi enviado.",
-  "Your community's server runs an older BeanPool that can't ask for the two digits, so nothing was sent. Ask its host to update it.": "O servidor da sua comunidade usa uma versão antiga do BeanPool que não consegue solicitar os dois dígitos, por isso nada foi enviado. Peça ao responsável para atualizá-lo.",
+  "Your community's server runs an older BeanPool that can't ask for the four digits, so nothing was sent. Ask its host to update it.": "O servidor da sua comunidade usa uma versão antiga do BeanPool que não consegue solicitar os quatro dígitos, por isso nada foi enviado. Peça ao responsável para atualizá-lo.",
   "That code has expired, so nothing was sent. Make a new code on the other device and scan it again.": "Esse código expirou, por isso nada foi enviado. Gere um novo código no outro aparelho e escaneie novamente.",
-  "Your community's server did not ask for the two digits. Ask its host to update BeanPool before you try again.": "O servidor da sua comunidade não solicitou os dois dígitos. Peça ao responsável para atualizar o BeanPool antes de tentar novamente.",
-  "Type these two digits on the other device": "Digite estes dois dígitos no outro aparelho",
-  "The two digits are {digits}": "Os dois dígitos são {digits}",
+  "Your community's server did not ask for the four digits. Ask its host to update BeanPool before you try again.": "O servidor da sua comunidade não solicitou os quatro dígitos. Peça ao responsável para atualizar o BeanPool antes de tentar novamente.",
+  "Type these four digits on the other device": "Digite estes quatro dígitos no outro aparelho",
+  "The four digits are {digits}": "Os quatro dígitos são {digits}",
   "Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.": "Sua conta só abrirá lá depois que os dígitos corretos forem digitados. Se você não solicitou isso em uma tela à sua frente agora, toque em Cancelar e o outro aparelho não receberá nada.",
   "Done": "Concluído",
   "Send your whole account to another device?": "Enviar toda a sua conta para outro aparelho?",
@@ -291,5 +291,7 @@
   "Link a device": "Vincular um aparelho",
   "🌍 Join the global community": "🌍 Entrar na comunidade global",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "Isto abriu a partir de um link. Continue só se você acabou de apontar sua câmera para um código na sua própria tela.",
-  "Copies your own account to a browser, to use BeanPool there as you": "Copia sua própria conta para um navegador, para usar o BeanPool lá como você"
+  "Copies your own account to a browser, to use BeanPool there as you": "Copia sua própria conta para um navegador, para usar o BeanPool lá como você",
+  "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "O BeanPool não consegue ler a conta neste telemóvel. Reinicie e tente novamente, ou restaure-a com as suas 12 palavras.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "O histórico da área de transferência de um teclado, ou uma área de transferência partilhada com os seus outros dispositivos, pode guardar uma cópia que o BeanPool não consegue apagar."
 }

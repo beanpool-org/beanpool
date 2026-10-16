@@ -46,7 +46,6 @@ const OWNER_ONLY_FOR_TOKENS: readonly RegExp[] = [
     /^\/api\/local\/admin\/standby-health(\/forget)?$/,
     /^\/api\/local\/admin\/offbox-backups\/(?!(status|list|run|download)$)/,
     /^\/api\/local\/change-password$/,
-    /^\/api\/local\/reset$/,
 ];
 
 export function tokenCannotReach(pathname: string): boolean {

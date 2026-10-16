@@ -70,9 +70,18 @@ export const RESTORE_EXIT = { done: 0, refused: 1, usage: 2 } as const;
 const LINE_BREAKS = /[\r\n\u2028\u2029]+/g;
 // eslint-disable-next-line no-control-regex -- these are the characters it removes
 const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
-/** Whole terminal sequences, so none leaves a visible tail ("[30;40m") once its ESC is gone: CSI and OSC (#2017 c2, N12). */
+/**
+ * Whole terminal sequences, so none leaves a visible tail ("[30;40m") once its ESC is gone (#2017 c2, N12), each in its
+ * 7-bit (ESC …) and 8-bit (C1) form:
+ *  - CSI: ESC [ or U+009B, parameters, intermediates, a final;
+ *  - OSC: ESC ] or U+009D, up to BEL or ST (ESC \ or U+009C);
+ *  - DCS, SOS, PM and APC: ESC P, X, ^, _ or U+0090, U+0098, U+009E, U+009F, up to ST;
+ *  - any other: ESC, intermediates, a final, so a charset designation (ESC ( 0, ESC ) B, ESC * <, ESC + A) goes whole.
+ * A string's text stops at ESC, CAN, SUB and every C1, as a terminal's does, so no string can run on over another's
+ * opening and the match stays linear on a megabyte of them. One with no terminator loses only its opening.
+ */
 // eslint-disable-next-line no-control-regex -- these are the sequences it removes
-const ESCAPES = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u009b[0-?]*[ -/]*[@-~]/g;
+const ESCAPES = /(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]|(?:\u001b\]|\u009d)[^\u0007\u0018\u001a\u001b\u0080-\u009f]*(?:\u0007|\u001b\\|\u009c)|(?:\u001b[PX^_]|[\u0090\u0098\u009e\u009f])[^\u0018\u001a\u001b\u0080-\u009f]*(?:\u001b\\|\u009c)|\u001b[ -/]*[0-~]/g;
 /** Characters that draw nothing: format characters (zero-width, BOM, tags, soft hyphen, bidi) and the grapheme joiner. */
 const INVISIBLE = /[\p{Cf}\u034f]/gu;
 /** Whitespace and the fillers that draw as blank space (Hangul fillers, the braille blank). */

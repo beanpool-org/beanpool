@@ -1,12 +1,13 @@
 /**
  * What goes with an account's 12 words wherever they are on screen (utils/words-on-screen.ts, utils/words-clipboard.ts):
  * no screenshots while they show, one plain line on a phone with no screen lock, and one next to Copy saying the copy
- * clears in a minute.
+ * clears in a minute, and what it can't clear (a keyboard's clipboard history, a clipboard shared with other devices).
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Text, type StyleProp, type TextStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { COPY_CLEARS_LINE } from '../utils/words-clipboard';
+import { useWords } from './LanguageProvider';
 import { NO_SCREEN_LOCK_LINE, holdNoScreenCapture, useNoScreenLock } from '../utils/words-on-screen';
 
 /**
@@ -73,8 +74,18 @@ export function NoScreenLockNote({ style }: { style?: StyleProp<TextStyle> }): R
     return <Text style={style}>{NO_SCREEN_LOCK_LINE}</Text>;
 }
 
-/** Next to every Copy of the words. Not in the web build, which leaves the clipboard alone. */
+/**
+ * Next to every Copy of the words. Not in the web build, which leaves the clipboard alone. The app clears only the
+ * phone's clipboard: a keyboard's own history (Gboard, Samsung) or a clipboard shared with the member's other devices
+ * may keep a copy it can't reach, and the line says so (verify-audit-key-paths KEY-07).
+ */
 export function CopyClearsNote({ style }: { style?: StyleProp<TextStyle> }): React.JSX.Element | null {
+    const { t } = useWords();
     if (Platform.OS === 'web') return null;
-    return <Text style={style}>{COPY_CLEARS_LINE}</Text>;
+    return (
+        <Text style={style}>
+            {COPY_CLEARS_LINE}{' '}
+            <Text>{t("A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.")}</Text>
+        </Text>
+    );
 }

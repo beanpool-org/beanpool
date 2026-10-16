@@ -138,7 +138,7 @@ async function main() {
         // Not /api/activity/feed: it names the members in every trade and the Beans, so it is members-only
         // (test-activity-feed-members-only). It was listed here while the feed was public.
         '/api/pricing-guide',
-        '/api/federation/links',
+        // Not /api/federation/links: the link cards carry Beans balances, members' business (FED-10): refused below.
         '/api/federation/reachable-peers',
         // Not /api/community/membership/<key>: it answers only the key it asks about (multi-community review F3,
         // 2026-10-01), so a guest asking about Alice is refused below and asks about itself instead.
@@ -166,6 +166,12 @@ async function main() {
         `the membership probe about Alice is refused unsigned (401) and to the guest (403) (got ${probeUnsigned.status}, ${probeGuest.status})`);
     assert(probeOwnGuest.status === 200 && probeOwnAlice.status === 200,
         `the guest asking about itself, and Alice about herself, are answered (got ${probeOwnGuest.status}, ${probeOwnAlice.status})`);
+    // The federation link cards (FED-10): a balance per link, so members only, like the enterprises.
+    const linksUnsigned = await get('/api/federation/links');
+    const linksGuest = await get('/api/federation/links', guest);
+    const linksMember = await get('/api/federation/links', alice);
+    assert(linksUnsigned.status === 401 && linksGuest.status === 403 && linksMember.status === 200,
+        `GET /api/federation/links: unsigned 401, non-member guest 403, alice 200 (got ${linksUnsigned.status}, ${linksGuest.status}, ${linksMember.status})`);
     // The listings: refused to both, in words that send them to the global community.
     const boardUnsigned = await get('/api/marketplace/posts');
     const boardGuest = await get('/api/marketplace/posts', guest);

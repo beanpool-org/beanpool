@@ -22,6 +22,8 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { MAX_NONCE_LENGTH, requestNonces } from './engine/member-signature.js';
+import WebSocket from 'ws';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -136,6 +138,43 @@ async function main() {
     assert(spoofed.status === 403,
         `naming someone else as the BUYER is still rejected (got ${spoofed.status} ${spoofed.error ?? ''}) — `
         + 'the buyer is the payer, so that field must match the signing key');
+
+    // 8. AUTH-03 (2026-10-16): a nonce is 1 to MAX_NONCE_LENGTH characters, refused before the signature is checked
+    //    and before anything is stored. Each spent nonce is held ~10 minutes, so a 15 KB one from a key made on the spot
+    //    let a few addresses fill the node's heap. Every app's nonce (32 hex, or the old web app's UUID) still passes.
+    for (const [len, label] of [[MAX_NONCE_LENGTH + 1, '129-character'], [15_000, '15,000-character']] as const) {
+        const before = requestNonces.size;
+        const r = await signedFetch(ENDPOINT, body, { nonce: 'a'.repeat(len) });
+        assert(r.status === 400 && /nonce/i.test(r.error ?? '') && requestNonces.size === before,
+            `a ${label} nonce is refused with 400 and not stored (got ${r.status} ${r.error ?? ''}, store ${before} → ${requestNonces.size})`);
+    }
+    for (const [nonce, label] of [
+        [crypto.randomBytes(16).toString('hex'), '32-hex'],
+        [crypto.randomUUID(), 'UUID (old web app)'],
+        ['b'.repeat(MAX_NONCE_LENGTH), '128-character'],
+    ] as const) {
+        const before = requestNonces.size;
+        const r = await signedFetch(ENDPOINT, body, { nonce });
+        assert(r.status === 404 && requestNonces.size === before + 1,
+            `a ${label} nonce is accepted and spent (got ${r.status} ${r.error ?? ''}, store ${before} → ${requestNonces.size})`);
+    }
+
+    // The /ws connect token goes through the same verifier: a 129-character nonce is refused (401), a 32-hex one opens.
+    const wsOpen = (nonce: string) => new Promise<boolean>((resolve) => {
+        const ts = Date.now();
+        const sig = sign(`WS\n/ws\n${ts}\n${nonce}\n`);
+        const ws = new WebSocket(`${BASE.replace('https', 'wss')}/ws?pubkey=${pubKeyHex}&ts=${ts}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(sig)}`,
+            { rejectUnauthorized: false });
+        ws.on('open', () => { ws.close(); resolve(true); });
+        ws.on('error', () => resolve(false));
+    });
+    const wsBefore = requestNonces.size;
+    const longWs = await wsOpen('c'.repeat(MAX_NONCE_LENGTH + 1));
+    assert(!longWs && requestNonces.size === wsBefore,
+        `a /ws token with a 129-character nonce is refused and not stored (opened ${longWs}, store ${wsBefore} → ${requestNonces.size})`);
+    const shortWs = await wsOpen(crypto.randomBytes(16).toString('hex'));
+    assert(shortWs && requestNonces.size === wsBefore + 1,
+        `a /ws token with a 32-hex nonce opens (opened ${shortWs}, store ${wsBefore} → ${requestNonces.size})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
 import type { NodeProfile } from '../../lib/profiles';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 const node: NodeProfile = {
     id: 'local-node',
@@ -136,12 +137,14 @@ describe('AutomationTokensPanel', () => {
     });
 
     it('shows the node\'s own words when it refuses (step_up_required) and shows no token', async () => {
-        fakeNode({ tokens: [], makeStatus: 403, makeBody: { error: 'Press Manage on your phone again to do this', code: 'step_up_required' } });
+        // The server's sentence (admin-auth.ts FRESH_PROOF_STEP_UP_ERROR), which the fresh-proof box says (owner-delete S4a).
+        fakeNode({ tokens: [], makeStatus: 403, makeBody: { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' } });
         render(<AutomationTokensPanel activeNode={node} viewer={OWNER_KEY} />);
         await screen.findByText('No tokens yet.');
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dash' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Make token' })); });
-        expect(screen.getByRole('alert')).toHaveTextContent('Press Manage on your phone again to do this');
+        expect(screen.getByRole('alert')).toHaveTextContent('Press Manage on your phone again, then make this change within 90 seconds.');
+        expect(screen.getByTestId('token-proof-step-up')).toBeInTheDocument();
         expect(screen.queryByTestId('automation-token-value')).not.toBeInTheDocument();
     });
 
@@ -163,15 +166,19 @@ describe('AutomationTokensPanel', () => {
 
     it('a password session sees no "Make a token" form, only why, and still lists and revokes', async () => {
         const calls = fakeNode({ tokens: [row] });
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         render(<AutomationTokensPanel activeNode={node} viewer={{ kind: 'password' }} />);
         expect(await screen.findAllByTestId('automation-token-row')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Make token' })).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
         expect(screen.getByTestId('automation-token-needs-key')).toHaveTextContent(/owner.s key/i);
-        expect(screen.getByTestId('automation-token-needs-key')).toHaveTextContent(/scanning a code/i);
+        // A computer's session can no longer make one (the fresh proof, C10): the line says the phone (opus-1984 N4).
+        expect(screen.getByTestId('automation-token-needs-key')).toHaveTextContent(/open BeanPool on your phone, press Manage/i);
+        expect(screen.getByTestId('automation-token-needs-key')).not.toHaveTextContent(/scanning a code/i);
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Revoke Nightly backups' })); });
+        await answerInPageConfirm('Revoke');
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(calls.some((c) => c.url.endsWith('/api/local/admin/automation-tokens/abc123/revoke'))).toBe(true);
         await waitFor(() => expect(screen.getByText('No tokens yet.')).toBeInTheDocument());
         expect(calls.some((c) => c.url.endsWith('/api/local/admin/automation-tokens') && c.init?.method === 'POST')).toBe(false);
@@ -213,15 +220,20 @@ describe('AutomationTokensPanel', () => {
 
     it('Revoke asks first, then calls the revoke route and refreshes the list', async () => {
         const calls = fakeNode({ tokens: [row] });
-        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         render(<AutomationTokensPanel activeNode={node} />);
         const revoke = await screen.findByRole('button', { name: 'Revoke Nightly backups' });
 
+        // Asked in the page (never window.confirm()): Cancel sends nothing, Revoke sends it.
         await act(async () => { fireEvent.click(revoke); });
-        expect(confirmSpy).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('alertdialog')).toHaveTextContent('Revoke the token "Nightly backups"?');
+        await answerInPageConfirm('Cancel');
+        expect(screen.queryByRole('alertdialog')).toBeNull();
         expect(calls.some((c) => c.url.endsWith('/revoke'))).toBe(false);
 
         await act(async () => { fireEvent.click(revoke); });
+        await answerInPageConfirm('Revoke');
+        expect(confirmSpy).not.toHaveBeenCalled();
         const post = calls.find((c) => c.url.endsWith('/api/local/admin/automation-tokens/abc123/revoke'));
         expect(post).toBeTruthy();
         expect(post!.init!.method).toBe('POST');

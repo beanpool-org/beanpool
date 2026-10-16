@@ -143,7 +143,9 @@ describe('App Component', () => {
             expect(screen.getByText('Node Settings')).toBeInTheDocument();
             expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
-            expect(screen.getByText('Switch to Legacy Settings Page')).toHaveAttribute('href', '/settings-legacy');
+            // The old static Settings page is gone (design case 18, D9): no link to it.
+            expect(screen.queryByText(/legacy settings/i)).not.toBeInTheDocument();
+            expect(document.querySelector('a[href="/settings-legacy"]')).toBeNull();
             expect(document.title).not.toContain('Fleet');
             expect(document.title).not.toMatch(/fleet/i);
             expect(document.title).toBe('BeanPool — Node Settings');

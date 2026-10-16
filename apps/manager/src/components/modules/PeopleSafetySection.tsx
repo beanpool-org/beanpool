@@ -20,6 +20,7 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBr
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -27,13 +28,13 @@ interface PeopleSafetySectionProps {
     nodeDataLoading: boolean;
     onRefresh: () => void;
     onFreezeUser: (pubkey: string, freeze: boolean) => Promise<void>;
-    onPruneUser: (pubkey: string) => Promise<void>;
-    onPruneBranch?: (pubkey: string) => Promise<void>;
+    onPruneUser: (pubkey: string, code?: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
-    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     initialSubTab?: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles') => void;
@@ -116,17 +117,20 @@ export function PeopleSafetySection({
         }
     }, [subTab, reportFilter, activeNode?.url, activeNode?.id, nodeData?.reports]);
 
-    const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
-        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+    const handlePruneBranch = onPruneBranch || (async (pubkey: string, code?: string) => {
+        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), ...(code ? [code] : []));
         onRefresh();
     });
     const [bulkDeleting, setBulkDeleting] = useState(false);
+    // Bulk delete is an owner's (design case 18 D1; the server answers an admin 403): an admin sees no such card.
+    const isOwnerViewer = rolesViewer.kind === 'password' || rolesViewer.role === 'owner';
+    const [ask, confirmation] = useInPageConfirm();
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
     const [removingReportId, setRemovingReportId] = useState<string | null>(null);
     const [pulseRemoveError, setPulseRemoveError] = useState<string | null>(null);
 
     const handleRemovePulseItem = async (reportId: string) => {
-        if (!confirm('Remove this item from the Pulse? The member is not suspended.')) return;
+        if (!(await ask({ title: 'Remove this item from the Pulse?', body: 'The member is not suspended.', confirmLabel: 'Remove it' }))) return;
         setRemovingReportId(reportId);
         setPulseRemoveError(null);
         try {
@@ -165,22 +169,25 @@ export function PeopleSafetySection({
         : rawReports.filter((r) => getOutcome(r) === 'open').length;
 
     const handleBulkDeletePosts = async () => {
-        if (!confirm(`Permanently delete all posts older than ${bulkDeleteDays} days?`)) return;
-        setBulkDeleting(true);
+        if (!isOwnerViewer) return;
         setBulkDeleteResult(null);
+        const cutoffMs = Date.now() - bulkDeleteDays * 24 * 60 * 60 * 1000;
+        const posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
+        const stalePostIds = posts
+            .filter((p) => p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
+            .map((p) => p.id);
+        if (stalePostIds.length === 0) {
+            setBulkDeleteResult(`No posts older than ${bulkDeleteDays} days found.`);
+            return;
+        }
+        if (!(await ask({
+            title: `Delete ${stalePostIds.length} post${stalePostIds.length === 1 ? '' : 's'} older than ${bulkDeleteDays} days?`,
+            body: 'They are deleted for good, and any Beans held for them go back to their members. This cannot be undone from Settings.',
+            confirmLabel: 'Delete them',
+        }))) return;
+        setBulkDeleting(true);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/posts/bulk-delete');
-            const cutoffMs = Date.now() - bulkDeleteDays * 24 * 60 * 60 * 1000;
-            const posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
-            const stalePostIds = posts
-                .filter((p) => p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
-                .map((p) => p.id);
-
-            if (stalePostIds.length === 0) {
-                setBulkDeleteResult(`No posts older than ${bulkDeleteDays} days found.`);
-                setBulkDeleting(false);
-                return;
-            }
 
             // The node takes at most BULK_DELETE_BATCH_SIZE ids per request: send them in batches, one after another,
             // stopping at the first that fails (lib/bulk-delete-posts.ts).
@@ -614,8 +621,9 @@ export function PeopleSafetySection({
                         )}
                     </div>
 
-                    {/* Bulk Post Cleanup (Absorbs capability from old moderation tab) */}
-                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
+                    {/* Bulk Post Cleanup: an owner's (design case 18 D1), hidden for an admin as the server refuses one */}
+                    {isOwnerViewer && (
+                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4" data-testid="bulk-cleanup-card">
                         <div className="border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                 <span>🧹</span>
@@ -655,6 +663,7 @@ export function PeopleSafetySection({
                             )}
                         </div>
                     </div>
+                    )}
 
                     {/* Individual Post Search, Filtering & Deletion Panel */}
                     <SectionErrorBoundary sectionName="Post Moderation" resetKey={activeNode.id}>
@@ -697,6 +706,7 @@ export function PeopleSafetySection({
                     }}
                 />
             )}
+            {confirmation}
         </div>
     );
 }

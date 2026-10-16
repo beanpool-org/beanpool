@@ -76,7 +76,7 @@ export function isUnreadablePairingQr(raw: unknown): boolean {
  * What one code means to the pairing screen, read the same way however it arrived: the camera on the screen, or a
  * `beanpool://pair` link the phone's camera app (or any other) opened (utils/pair-link.ts, app/+native-intent.ts).
  *  - 'pairing': the strict grammar read it; the screen still asks transferTarget where it may go, and sends nothing
- *    before the member's tap, the phone's unlock and the two digits.
+ *    before the member's tap, the phone's unlock and the four digits.
  *  - 'unreadable': refused, said so, nothing sent. Any link is, when the grammar refuses it: a link was opened on
  *    purpose, so it is never silently dropped.
  *  - 'ignore': some other QR in the camera's view.

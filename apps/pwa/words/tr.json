@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-16",
@@ -458,8 +458,9 @@
   "Too many wrong digits, so nothing was sent. Make a new code and try again.": "Çok fazla yanlış basamak girildi, bu yüzden hiçbir şey gönderilmedi. Yeni bir kod oluşturup tekrar deneyin.",
   "That code has expired, so nothing was sent. Make a new code and try again.": "Bu kodun süresi doldu, bu yüzden hiçbir şey gönderilmedi. Yeni bir kod oluşturup tekrar deneyin.",
   "That did not go through. Try again.": "Bu işlem tamamlanamadı. Tekrar deneyin.",
-  "Type the two digits your phone shows": "Telefonunuzun gösterdiği iki basamağı yazın",
+  "Type the four digits your phone shows": "Telefonunuzun gösterdiği dört basamağı yazın",
   "Confirm": "Onayla",
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Hesabınız ancak doğru basamaklardan sonra burada açılır. Üç yanlış denemede hiçbir şey gönderilmez.",
-  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Telefonunuzdan henüz bir şey gelmedi. Bu kod {host} sunucusundan. Telefonunuz kodun kullanmadığı bir sunucudan geldiğini söylüyorsa BeanPool'u kendi topluluğunuzun adresinde açın veya önce telefonunuzda {host} topluluğuna katılın, sonra yeniden tarayın. Telefonunuz hiç rakam göstermiyorsa üzerindeki BeanPool uygulamasını güncelleyin, sonra yeniden tarayın."
+  "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Telefonunuzdan henüz bir şey gelmedi. Bu kod {host} sunucusundan. Telefonunuz kodun kullanmadığı bir sunucudan geldiğini söylüyorsa BeanPool'u kendi topluluğunuzun adresinde açın veya önce telefonunuzda {host} topluluğuna katılın, sonra yeniden tarayın. Telefonunuz hiç rakam göstermiyorsa üzerindeki BeanPool uygulamasını güncelleyin, sonra yeniden tarayın.",
+  "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Bir klavyenin pano geçmişi veya diğer cihazlarınızla paylaşılan bir pano, BeanPool'un silemeyeceği bir kopya tutabilir."
 }

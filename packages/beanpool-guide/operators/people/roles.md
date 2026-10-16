@@ -17,7 +17,7 @@ Owners can do everything in Settings. Only owners can:
 - suspend an owner, or suspend an owner or an admin through a report;
 - lift a suspension that took away an owner's or an admin's role, which gives that role back;
 - end the waiting time early when an owner or admin is being removed;
-- change or retire the admin password, reset the node, and turn two-factor sign-in on or off;
+- change or retire the admin password, and turn two-factor sign-in on or off;
 - choose who may invite, set the known floor and the cap, and move the exception lines;
 - make or revoke automation tokens, set the alerts, and choose where off-box backups go;
 - make the recovery code, or take over;
@@ -25,17 +25,19 @@ Owners can do everything in Settings. Only owners can:
 - write off a stuck escrow from the Commons;
 - sign other people out of Settings;
 - switch break-glass mode on or off, and be issued a break-glass code;
-- restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
-- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;
-- claim, rename or take offline the community's public address, and see its tunnel token.
+- restore a backup or roll back to a restore point, download a backup or a snapshot, or change when snapshots are taken and how many are kept;
+- make, replace or remove the replication token, switch token-only on or off, set which server a standby copies from, forget a standby, and make a standby copy everything again (a full resync);
+- link with another community as a mirror, or change, disconnect or remove a mirror link;
+- claim, rename, release or take offline the community's public address, make a new tunnel key, restart the tunnel, see its tunnel token, and remove an app address;
+- delete posts in bulk, set a new ledger baseline, and prune a whole invite branch.
 
-From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in.
+From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in. The rarest of them, on the fresh-proof list in Access and security, ask more, every time: a current code from the authenticator with the password, or Manage pressed within 90 seconds on the phone. A computer signed in with the phone cannot make them.
 
 The **admin password** counts as an owner. Anyone who knows it can do all of the above.
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, and they cannot act against an owner. They can suspend another admin from that person's page, which sets the admin role aside (see Decisions and emergencies), but not through a report, and they cannot re-key another admin. An admin can re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, and they cannot act against an owner. They cannot make a new tunnel key, delete posts in bulk, set a new ledger baseline or prune a whole invite branch. They can suspend another admin from that person's page, which sets the admin role aside (see Decisions and emergencies), but not through a report, and they cannot re-key another admin. An admin can re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin.
 
 ## Moderator
 

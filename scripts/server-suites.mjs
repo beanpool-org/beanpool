@@ -192,7 +192,9 @@ export const SUITES = [
     'test-backup-identity-bundle',
     'test-backup-owner-gate',
     'test-owner-delete-gates',
+    'test-owner-delete-alerts',
     'test-restore-points',
+    'test-restore-verified',
     'test-sealed-backups',
     'test-offbox-backups',
     'test-alerts',
@@ -483,10 +485,12 @@ export const SUITES = [
     'test-dm-never-plaintext',
     'test-group-keys-http',
     'test-group-keys-over-time',
+    'test-tls-first-boot',
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',
     'test-dm-line-relay',
+    'test-federation-hardening',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',
@@ -540,6 +544,8 @@ export const VARIANTS = [
     // route can draw on the Commons pot.
     { name: 'test-federation-purchase-route', tag: 'on', label: 'settlement ON', env: { FEDERATION_SETTLEMENT: 'true' } },
     { name: 'test-federation-commission', tag: 'on', label: 'settlement ON', env: { FEDERATION_SETTLEMENT: 'true' } },
+    // FED-06: with peer connectors switched off, a configured peer's lookups, relays, listing pulls and purchases are refused.
+    { name: 'test-federation-hardening', tag: 'peers-off', label: 'ENABLE_PEER_CONNECTORS unset', env: { ENABLE_PEER_CONNECTORS: null } },
 
     // The keeper HTTP reachability suite with read enforcement switched OFF by the operator opt-out. Read auth is ON by
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a

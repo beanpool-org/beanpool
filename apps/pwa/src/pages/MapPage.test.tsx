@@ -2062,3 +2062,50 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         expect(update).toHaveBeenCalledWith('ev-lagos', mockIdentity.publicKey, { eventStartLocal: '2030-10-19T21:00', eventEndLocal: '2030-10-19T22:50' });
     });
 });
+
+/*
+ * Review of #2035, N1: where the light statuses read fails, the Map read the whole enterprise list instead. On the global
+ * node (enterprises a preview) that read is refused too, and there is no enterprise to hide: never asked. A local
+ * community whose node is older (no statuses route): asked, as before.
+ */
+describe("the Map's enterprise list where the statuses read fails (review of #2035, N1)", () => {
+    const WORLDWIDE = { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true };
+    const refusal = (code?: string) => Object.assign(new Error('Not found'), { status: 404, ...(code ? { code } : {}) });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0 } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    async function openMap(features: Record<string, unknown>, statusesError: Error) {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: features.showcase ? 'global' : 'local', features } as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockRejectedValue(statusesError);
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(api.getEnterpriseStatuses).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+    }
+
+    it('global, the statuses refused as feature_off: the list is not asked', async () => {
+        await openMap(WORLDWIDE, refusal('feature_off'));
+        expect(api.getTreasuries).not.toHaveBeenCalled();
+    });
+
+    it('global, the statuses read failing any other way: not asked either (enterprises are a preview)', async () => {
+        await openMap(WORLDWIDE, new TypeError('Failed to fetch'));
+        expect(api.getTreasuries).not.toHaveBeenCalled();
+    });
+
+    it('local, an older node with no statuses route: the list is asked, as before', async () => {
+        await openMap({}, refusal());
+        await waitFor(() => expect(api.getTreasuries).toHaveBeenCalledTimes(1));
+    });
+});

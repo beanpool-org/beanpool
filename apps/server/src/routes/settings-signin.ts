@@ -20,7 +20,7 @@
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
-import { setAdminSessionCookie } from '../admin-key-auth.js';
+import { ADMIN_SESSION_COOKIE, revokeAdminSession, setAdminSessionCookie } from '../admin-key-auth.js';
 import { verifyMemberSignature } from '../engine/member-signature.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { SIGNED_FOR_HEADER } from '@beanpool/core';
@@ -99,6 +99,9 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
                 ctx.body = { status: 'confirm', confirmExpiresAt: res.confirmExpiresAt, confirmInSeconds: Math.max(0, Math.round((res.confirmExpiresAt - Date.now()) / 1000)) };
                 return;
             case 'signed-in':
+                // The session this browser held is ended, as a password sign-in ends it (AUTH-06): replaced here, it would otherwise
+                // stay valid until its idle limit.
+                { const held = ctx.cookies.get(ADMIN_SESSION_COOKIE); if (held) revokeAdminSession(held); }
                 setAdminSessionCookie(ctx, res.sessionId);
                 ctx.cookies.set(bindingCookieName(id), '', { maxAge: 0, path: COOKIE_PATH });
                 if (res.csrfToken) ctx.set('X-CSRF-Token', res.csrfToken);

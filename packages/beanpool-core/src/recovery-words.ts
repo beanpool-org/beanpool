@@ -22,6 +22,7 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { BIP39_ENGLISH } from './bip39-english.js';
 import { toEd25519Seed } from './ed25519-key.js';
@@ -140,6 +141,26 @@ export function recoveryWordsMatchSeed(input: string | readonly string[], privat
         return false;
     }
     return recoveryWordsMatchPublicKey(input, publicKey);
+}
+
+/** The random bytes a new account's 12 words are made from: 128 bits. */
+export const RECOVERY_ENTROPY_LEN = 16;
+
+/**
+ * A new account's 12 words from 16 bytes of secure random entropy, as BIP-39 makes them: the 128 bits, then the first 4
+ * bits of SHA-256 of them as the checksum, 11 bits a word. Both apps make new words here (native utils/crypto.ts, web
+ * lib/mnemonic.ts `generateMnemonic`), each from its own secure random source, so the same entropy is the same words on
+ * either, and an outside BIP-39 checker accepts them (verify-audit-key-paths KEY-02: the web used to end the 12th word in
+ * a home-made hash). Words made before still restore: nothing checks the checksum, and the key is made from the words.
+ */
+export function recoveryWordsFromEntropy(entropy: Uint8Array): string[] {
+    if (!(entropy instanceof Uint8Array) || entropy.length !== RECOVERY_ENTROPY_LEN) {
+        throw new Error(`Recovery words are made from ${RECOVERY_ENTROPY_LEN} bytes of entropy.`);
+    }
+    const bits = new Uint8Array(PACKED_RECOVERY_WORDS_LEN);
+    bits.set(entropy);
+    bits[RECOVERY_ENTROPY_LEN] = sha256(entropy)[0] & 0xf0;
+    return unpackRecoveryWords(bits);
 }
 
 /**

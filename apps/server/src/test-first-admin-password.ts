@@ -129,8 +129,7 @@ async function started(dataDir: string, env: Record<string, string | undefined> 
         throw new Error(`the node on ${dataDir} exited (${b.exited}) before it served`);
     }
     bootDirs.set(b, dataDir);
-    const t = twoFactorOf.get(dataDir);
-    if (t) t.lastStep = 0; // a new process has taken no code yet
+    // A restart keeps the last 2FA step accepted (local-config, AUTH-07), so t.lastStep carries over.
     return b;
 }
 

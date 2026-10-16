@@ -6,6 +6,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
+import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface BulletinSectionProps {
     activeNode: NodeProfile;
@@ -33,6 +34,8 @@ interface PulseChannel {
 }
 
 export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announcements', onSubTabChange }: BulletinSectionProps) {
+    // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [subTab, setSubTab] = useSectionSubTab<'announcements' | 'pulse'>(initialSubTab, onSubTabChange);
 
     // Announcements state
@@ -139,7 +142,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
     };
 
     const handleRemoveChannel = async (channelId: string) => {
-        if (!confirm('Remove this Pulse feed channel?')) return;
+        if (!(await ask({ title: 'Remove this Pulse feed channel?', confirmLabel: 'Remove it' }))) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels/remove');
             const res = await fetch(url, {
@@ -160,6 +163,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
 
     return (
         <div className="space-y-6 font-sans animate-fade-in">
+            {confirmation}
             {/* Header & Subtabs */}
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 126,
-  "hash": "21e5d54b8a631c37e15d981461539f37586c9eff2cce1450fb250520707b62c5",
+  "version": 129,
+  "hash": "0f2793305eab426bd5e0e2bfde3b84f5816ec7f7bd51fce08eceabf092a213c5",
   "sections": [
     {
       "id": "setup",
@@ -397,7 +397,8 @@
           "items": [
             "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords, and asks for no two-factor code. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
             "No owner can sign in any more (every owner's phone and 12 words are gone, and no second owner is left): first try the 12 words on a new phone, a second owner, or your break-glass code. If none of those is left, the fix is on the server: the person who should be owner must be a member (they join first if not), then run this in the server folder: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). It makes that member an owner and prints their break-glass code once; give it only to them. It changes nothing else: the community's name, the gateway settings, the money thresholds, two-factor sign-in, break-glass mode, the backup settings and the replication token all stay as they are. It is never silent: every member gets a critical notice that an owner was added from the server, and the log keeps a SECURITY line. Anyone who can run commands on the server can already read all of its data, so this gives nobody anything new. Running it again for the same person gives them a new break-glass code and the old one stops working.",
-            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer (if no owner can, use beanpool recover, above). Nobody can change the password without knowing the old one, and there is no way to a new one: deleting data/local-config.json does not give you one, because the server then starts as a new install, which has no admin password and ignores ADMIN_PASSWORD (and that file holds two-factor sign-in, the gateway and backup settings and more besides). Use beanpool recover, above, instead. Members, posts and beans are in data/state.db."
+            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer (if no owner can, use beanpool recover, above). Nobody can change the password without knowing the old one, and there is no way to a new one: deleting data/local-config.json does not give you one, because the server then starts as a new install, which has no admin password and ignores ADMIN_PASSWORD (and that file holds two-factor sign-in, the gateway and backup settings and more besides). Use beanpool recover, above, instead. Members, posts and beans are in data/state.db.",
+            "Settings will not open at all and you need a backup back: restore it on the server, with the node stopped: put the file in the data folder, then in the server folder run docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, then docker compose up -d. It asks for the recovery code. An old backup that is not locked restores with beanpool restore --unlocked /data/FILE.tar.gz instead, database and photos only. A restore point of the server as it was is kept first: docker compose exec beanpool-node beanpool restore-point list shows them, and docker compose run --rm beanpool-node beanpool restore-point roll-back NAME, with the node stopped, puts one back (then docker compose up -d). See Backups and replicas."
           ]
         }
       ]
@@ -674,7 +675,7 @@
     {
       "slug": "access-and-security",
       "title": "Access and security",
-      "summary": "Changing or retiring the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.",
+      "summary": "Changing or retiring the admin password, two-factor sign-in, the changes that ask a fresh proof, break-glass codes, signing out everywhere, and starting over. Under Appliance & Data, then Access & Security.",
       "section": "setup",
       "related": [
         "signing-in",
@@ -736,11 +737,11 @@
         },
         {
           "type": "p",
-          "text": "What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more, and the old settings page points to the phone."
+          "text": "What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more."
         },
         {
           "type": "p",
-          "text": "It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so at every start until you take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in)."
+          "text": "It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so at every start until you take it out of .env). Starting over with the settings only (below) leaves the server with no password at all. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in)."
         },
         {
           "type": "h2",
@@ -753,10 +754,6 @@
         {
           "type": "p",
           "text": "**Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with \"Turn on two-factor sign-in in Settings, or use an automation token made from your phone\". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before."
-        },
-        {
-          "type": "p",
-          "text": "**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says \"Turn on two-factor sign-in in Settings, or use an automation token made from your phone. Open Settings (the new page) to turn it on, then come back.\" Turn it on in Settings, then sign in there with the password and a code."
         },
         {
           "type": "p",
@@ -791,7 +788,7 @@
         {
           "type": "ul",
           "items": [
-            "It covers every action in Settings: changing the password, the factory reset, the community's name and address, invites, peer links and the money thresholds all ask for the code as well as the password.",
+            "It covers every action in Settings: changing the password, the community's name and address, invites, peer links and the money thresholds all ask for the code as well as the password.",
             "Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.",
             "Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.",
             "Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.",
@@ -870,7 +867,7 @@
         },
         {
           "type": "p",
-          "text": "No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup, reset the node or sign anyone in to Settings. Do those signed in as an owner."
+          "text": "No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup or sign anyone in to Settings. Do those signed in as an owner."
         },
         {
           "type": "ul",
@@ -928,15 +925,55 @@
         },
         {
           "type": "h2",
-          "text": "Factory reset"
+          "text": "Changes that ask a fresh proof"
         },
         {
           "type": "p",
-          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run beanpool claim on the server to see it. To add an owner when nobody can sign in, run beanpool recover on the server."
+          "text": "A few changes are rare, and are the kind a stolen sign-in would make in its first minute. For these, being signed in is not enough: the owner proves it is them again, each time. The fresh-proof list:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "make, remove or demote an owner or admin, enrol an owner's or admin's key, or re-key one;",
+            "remove or suspend an owner;",
+            "replace the recovery code;",
+            "make a break-glass code, or turn break-glass mode on or off;",
+            "retire the admin password;",
+            "make an automation token;",
+            "change the gateway settings;",
+            "take this community offline, release a name, or replace this community's live address;",
+            "add or change a mirror link, disconnect one or remove one, and change which server a standby copies from;",
+            "remove, change or shorten where backups go off the box, or keep fewer snapshots, or make them cover less time;",
+            "roll back to a restore point."
+          ]
         },
         {
           "type": "p",
-          "text": "To start a community again from nothing, stop the server and move the whole data folder away. Keep that copy until you are sure."
+          "text": "What the proof is depends on how you signed in:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**With the admin password**: Settings opens a box with a **Current code** field and the server's ask, such as \"Enter a current code from your authenticator app (or a backup code) to roll back to a restore point\". Type the code your authenticator shows now, or an unused backup code, and press **Confirm**: the same change is sent again with it. A code that was already used keeps the box open, and **Confirm** waits for a new one. A code typed earlier in the 4 hours does not count. With two-factor sign-in off the change is refused: \"Turn on two-factor sign-in first: this change asks for a current code each time.\"",
+            "**From your phone (Manage)**: the change goes through within 90 seconds of your phone's unlock. Later, Settings says \"Press Manage on your phone again, then make this change within 90 seconds.\"",
+            "**On a computer signed in with your phone (the code you scanned)**: these changes are not made there. Settings says \"Do this from your phone: open BeanPool, press Manage, then make this change there.\"",
+            "An automation token or a break-glass code never makes them."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Starting over"
+        },
+        {
+          "type": "p",
+          "text": "There is no button and no command that wipes a server: a stolen sign-in could use either. Both ways to start over are done on the server's own machine, in the folder with docker-compose.yml."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The settings only, keeping members, posts, deals and Beans**: docker compose stop beanpool-node, then move data/local-config.json out of the data folder (for example to your home folder), then docker compose up -d. That file holds the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its main server, and on a main server the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It keeps the community's own key. Delete data/first-admin-password.txt too if it is still there: the password in it no longer works. After the start the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run docker compose exec beanpool-node beanpool claim to see it. To add an owner when nobody can sign in, run beanpool recover on the server (Signing in).",
+            "**The whole community, from nothing**: docker compose down, then move the whole data folder away, then docker compose up -d, then claim the server as in First-time setup (docker compose exec beanpool-node beanpool claim). Keep the old data folder until you are sure."
+          ]
         }
       ]
     },
@@ -973,7 +1010,7 @@
             "suspend an owner, or suspend an owner or an admin through a report;",
             "lift a suspension that took away an owner's or an admin's role, which gives that role back;",
             "end the waiting time early when an owner or admin is being removed;",
-            "change or retire the admin password, reset the node, and turn two-factor sign-in on or off;",
+            "change or retire the admin password, and turn two-factor sign-in on or off;",
             "choose who may invite, set the known floor and the cap, and move the exception lines;",
             "make or revoke automation tokens, set the alerts, and choose where off-box backups go;",
             "make the recovery code, or take over;",
@@ -981,14 +1018,16 @@
             "write off a stuck escrow from the Commons;",
             "sign other people out of Settings;",
             "switch break-glass mode on or off, and be issued a break-glass code;",
-            "restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;",
-            "make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;",
-            "claim, rename or take offline the community's public address, and see its tunnel token."
+            "restore a backup or roll back to a restore point, download a backup or a snapshot, or change when snapshots are taken and how many are kept;",
+            "make, replace or remove the replication token, switch token-only on or off, set which server a standby copies from, forget a standby, and make a standby copy everything again (a full resync);",
+            "link with another community as a mirror, or change, disconnect or remove a mirror link;",
+            "claim, rename, release or take offline the community's public address, make a new tunnel key, restart the tunnel, see its tunnel token, and remove an app address;",
+            "delete posts in bulk, set a new ledger baseline, and prune a whole invite branch."
           ]
         },
         {
           "type": "p",
-          "text": "From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in."
+          "text": "From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in. The rarest of them, on the fresh-proof list in Access and security, ask more, every time: a current code from the authenticator with the password, or Manage pressed within 90 seconds on the phone. A computer signed in with the phone cannot make them."
         },
         {
           "type": "p",
@@ -1000,7 +1039,7 @@
         },
         {
           "type": "p",
-          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, and they cannot act against an owner. They can suspend another admin from that person's page, which sets the admin role aside (see Decisions and emergencies), but not through a report, and they cannot re-key another admin. An admin can re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin."
+          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, and they cannot act against an owner. They cannot make a new tunnel key, delete posts in bulk, set a new ledger baseline or prune a whole invite branch. They can suspend another admin from that person's page, which sets the admin role aside (see Decisions and emergencies), but not through a report, and they cannot re-key another admin. An admin can re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin."
         },
         {
           "type": "h2",
@@ -2580,7 +2619,7 @@
         },
         {
           "type": "p",
-          "text": "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can keep up to **14**, and the server refuses more. Whatever you choose, no snapshot is kept once it is **14 days** old: each server checks every hour, and at every start. You can take one now, check one for damage or delete one. Settings has no button to download one. On a server that still has an admin password, with two-factor sign-in on, the older page has one (**Switch to Legacy Settings Page** on the sign-in card)."
+          "text": "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can keep up to **14**, and the server refuses more. Whatever you choose, no snapshot is kept once it is **14 days** old: each server checks every hour, and at every start. You can take one now or check one for damage. Nobody can delete one from Settings: each goes when it ages out. Settings has no button to download one."
         },
         {
           "type": "ul",
@@ -2834,7 +2873,7 @@
           "items": [
             "the latest backup from that server was locked;",
             "that backup has a recovery code in it;",
-            "it is signed by the server's key as the fleet manager already knows it: either the key file it collected from that server before this update, or a \"peerId\" you add to that server's entry in manager-nodes.json in the fleet manager's data folder (the PeerId shown at the top of the older Settings page, /settings-legacy)."
+            "it is signed by the server's key as the fleet manager already knows it: either the key file it collected from that server before this update, or a \"peerId\" you add to that server's entry in manager-nodes.json in the fleet manager's data folder (the PeerId the server's log prints at every start, in the line \"libp2p started — PeerId: …\")."
           ]
         },
         {
@@ -2867,15 +2906,17 @@
         {
           "type": "ul",
           "items": [
-            "**A locked backup (.bpsealed)** opens with the recovery code or with any one owner's phone. In the **Restore Database Wizard** (Appliance & Data, Backups & Restore), choose the file and press **Restore from Backup**. The wizard says the file is locked, when it was made and who can open it, and offers both ways.",
+            "**A locked backup (.bpsealed)** opens with the recovery code or with any one owner's phone. In **Restore from a locked backup** (Appliance & Data, Backups & Restore), choose the file and press **Restore from Backup**. Before anything changes, it shows the file's name and when it was made, its community and the server key that locked it beside this server's own, who can open it, and that everything since then will be lost and a restore point is taken first. Then it offers both ways to open it.",
             "**Open with an owner's phone**: the file waits on the server and a code appears. An owner scans it in the BeanPool app (**Settings**, **Community keys**, **Take over or restore with this phone**), or pastes the link under it into the web app (**Settings**, **Take over or restore with this browser**, **Paste a code**). Their phone shows what it is about to open and asks for its own unlock; then the server opens the file and restores it. The phone never sees what is in the file. The code works once, for 10 minutes.",
             "**Or type the printed recovery code**, then press **Open with the code and restore**.",
-            "Without Settings, on the server's own machine, in the folder that holds the file: curl -k -X POST --data-binary @FILE -H \"X-Admin-Password: PASSWORD\" -H \"X-Recovery-Code: CODE\" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE, and add -H \"X-Admin-TOTP: 123456\" with the code the authenticator shows. This works only on a server that has an admin password and has two-factor sign-in on; a new server has no password, so use Settings. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.",
+            "**Without Settings**, on the server's own machine, with the node stopped: put the file in the data folder, then in the server folder run docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, then docker compose up -d. It asks for the recovery code on the terminal (or reads it from a file with --code-file F; never put it on the command line). Before it asks, it shows the file's community and the machine that locked it beside this server's own. beanpool on its own prints every command and what it takes.",
             "This works on a **fresh server** too: install BeanPool, claim it (docker compose exec beanpool-node beanpool claim, then scan the code with the BeanPool app, as in First-time setup), sign in to its Settings as its owner, and restore. The whole community comes back onto it.",
-            "**From a backup off the server**: on the fresh server, add the same destination under **Backups off the server** (or put it in .env), and press **Show backups**. It lists the lost community's backups, newest first, marked \"another community\" until the restore. Press **Download** on the newest: the server checks it against the fingerprint it was sent with, and a file the storage gives back changed stops short rather than arriving whole. Then restore that file with the Restore Database Wizard and the recovery code, as above. You can also take the file from the storage's own website or tools: it is in the folder you chose, then the community's id. The fresh server sends nothing off the box until it has a recovery code; after the restore it has the community's, and carries on sending to the same folder.",
+            "**From a backup off the server**: on the fresh server, add the same destination under **Backups off the server** (or put it in .env), and press **Show backups**. It lists the lost community's backups, newest first, marked \"another community\" until the restore. Press **Download** on the newest: the server checks it against the fingerprint it was sent with, and a file the storage gives back changed stops short rather than arriving whole. Then restore that file with **Restore from a locked backup** and the recovery code, as above. You can also take the file from the storage's own website or tools: it is in the folder you chose, then the community's id. The fresh server sends nothing off the box until it has a recovery code; after the restore it has the community's, and carries on sending to the same folder.",
             "It brings back everything in the file: the database, the server's keys (the key that opens members' sign-in recovery copies and, on the global community, open-join.key among them), the community's genesis, its links with other communities, and its admin password and two-factor sign-in. If this server had a different recovery-seal.key of its own, it is kept as a recovery-seal-retired- file, and a different open-join.key as an open-join-retired- file. When the backup holds sign-in recovery copies locked with such a key, the server's log then says whether they open on this server. After the restart, sign in as one of the community's owners with the BeanPool app. If the community has an admin password, that one works now, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)",
-            "If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. If you know the machine, send the same command again with -H \"X-Accept-Signer: NAME\", putting the name it gave. A file let through this way brings back its **database only**: the server never takes keys or an admin password from it. Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.",
-            "**A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key, recovery-seal.key, open-join.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again. The phones' push addresses don't open either: the server removes them at its start and its log says how many (\"Push tokens: removed …\"); each phone gets notifications again once its app next opens. Without its open-join.key, a global community refuses anyone joining with a sign-in: the restore's answer and the server's log say so in one line starting \"Open door: this server holds …\", and every start repeats it. Copy the community's open-join.key into the data folder and the next person to join is let in (or told they already have an account), with no restart.",
+            "If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. Settings never lets such a file through. If you know the machine (this community's previous server, say), restore it on the server's own machine, as its refusal says, with the file in the data folder and the node stopped: docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore --accept-signer NAME /data/FILE, putting the name it gave and the file's name, then docker compose up -d. A file let through this way brings back its **database only** (add --with-keys for its keys too). Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.",
+            "**A restore point is kept first.** Before a restore replaces anything, the server keeps a copy of itself as it is (its database, photos and keys) in data/restore-points. The newest 5 are kept, none younger than 7 days is removed, none older than 30 days is kept, and nobody can delete one from Settings. When a restore cannot keep one first, it is refused: \"Nothing was restored: this server could not keep a restore point first\". After the restart, every member is told the server was restored, and the log names the restore point.",
+            "**Rolling back**: in Backups & Restore, **Restore points** lists them. An owner presses **Roll back to this point**, then **Roll back**. That asks the fresh proof each time (Access & Security), and keeps a restore point of the server as it is first. On the server, docker compose exec beanpool-node beanpool restore-point list shows them. To put one back, with the node stopped: docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore-point roll-back NAME, then docker compose up -d.",
+            "**A backup that is not locked (.tar.gz)** no longer restores from Settings, which says \"Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked.\" Restore it on the server, with the node stopped, as above: beanpool restore --unlocked /data/FILE.tar.gz. It asks you to type UNLOCKED first. It brings back the database and photos only, never keys; copy genesis.json, community.key, recovery-seal.key, open-join.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again. The phones' push addresses don't open either: the server removes them at its start and its log says how many (\"Push tokens: removed …\"); each phone gets notifications again once its app next opens. Without its open-join.key, a global community refuses anyone joining with a sign-in: the restore's answer and the server's log say so in one line starting \"Open door: this server holds …\", and every start repeats it. Copy the community's open-join.key into the data folder and the next person to join is let in (or told they already have an account), with no restart.",
             "A restore also puts back the photos and attachments in the file. A server that keeps its photos in a bucket (IMAGE_STORE=s3) refuses a backup that carries them, and changes nothing.",
             "Stop and think before restoring over a live community: everything since the backup is lost."
           ]
@@ -2902,7 +2943,7 @@
             "**The standby keeps the locked take-over keys.** Each time it copies, it also asks your server for takeover-envelope.json, with the token only. If nothing changed, your server answers \"no change\" and nothing is sent. The standby keeps the last 5 in the folder data/held-takeover-envelopes on its own disk. A sixth deletes only the oldest, so a bad copy from your server can't wipe out a good one.",
             "The standby **can't open them**. It has no owner's key and no recovery code. Only an owner's phone or the recovery code opens them, as with a locked backup, and only when you take over. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.",
             "The standby only keeps a copy signed by the server it copies from (the one it was set up to trust). It refuses any other copy, keeps what it had, and writes a line to its log starting \"Refused a take-over envelope\".",
-            "Settings does not show yet which keys a standby holds. The older page at /settings-legacy (**Switch to Legacy Settings Page** on the sign-in card) does: on the standby, **Live Backup Server** says when the newest copy was locked and who can open it, and on your server, **Replication Access** says which standby holds which copy, or that it holds keys \"from before the latest change\" until it next copies. In Settings, **Take over as the main server**, Step 3, shows when the keys were locked and who opened them.",
+            "Settings does not show yet which keys a standby holds. In Settings, **Take over as the main server**, Step 3, shows when the keys were locked and who opened them.",
             "**Replication Access** shows the internet address each copy came from, and each refused try, for 7 days. After that it says \"address no longer kept\", and keeps the time and whether it was let in. The same goes for which standby holds which keys, and for the standby watch. Snapshots and backups never hold these addresses (a server updated to this version takes them out of the snapshots it already has), so a server restored from one shows none. See Privacy and what your server can see.",
             "**The standby watch.** Your server watches its standbys. A standby that has made no copy for an hour, or had three copies in a row refused, or whose last whole copy was not exact and could not be mended, gets the owners one notification, and Home shows \"Your standby server needs attention\" until it copies again. For a standby you have retired, press \"(name) is gone for good: stop watching it\".",
             "A main server running a BeanPool from before this has nothing to send. The standby says \"the main server is too old to send a take-over envelope\" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.",
@@ -3260,8 +3301,18 @@
             "more than 20 wrong claim proofs arrive in a minute;",
             "the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until every address it watches is this community's again. The server reads this from its list of addresses every minute, so a database restored from a backup says what that backup's list says;",
             "another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card;",
-            "an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off)."
+            "an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off).",
+            "the community was restored from a backup or rolled back to a restore point (high), told at the next start: \"A backup made 2026-10-01 was restored, by an owner. A restore point was kept.\" A restore with beanpool restore or beanpool restore-point says \"from the server's shell\" instead, and an unlocked backup, whose date is not known, says \"A backup was restored from the server's shell.\". Uploads of another community's backup that Settings refused are counted on one line, for 24 hours from the first: \"2 backups from another community were refused in the last day.\" Past three in an hour, the rest come as one line when the hour is over: \"5 more backups from another community were refused in the hour after the first ones were pushed.\";",
+            "an owner takes the community's address offline, or claims a new name in place of the live one (high), titled \"its address changed\", never as the address taken by another community. When the address was live, every member is told too: \"This community's address changed. Open the app to follow it.\" for a new name, or \"This community's address was taken offline by an owner. Ask your owners for the new one.\" when it was taken offline. Also an owner releasing a name the community held unused, or giving the tunnel a new key;",
+            "an owner replaces the recovery code (high): \"The recovery code was replaced, by an owner. Backups made before still open with the old one.\";",
+            "a backup setting changes, one line each: a replication token made or cleared, a standby forgotten, the server a standby copies from changed, an off-box destination removed or changed, off-box backups kept for fewer days, fewer snapshots kept, snapshots turned off or covering less time, or a standby's own replication token cleared. Past three changes by the same person in an hour, the rest come as one line when the hour is over: \"2 more changes by the same owner\";",
+            "members are removed by an admin (pruned, offboarded or removed with a burst), or a branch of invites is pruned by an owner, as one line counting 24 hours from the first removal: \"2 members were removed in the last day, by an admin.\" Removals after those 24 hours start a line of their own. Past the first three changes by the same admin in an hour, the line is not sent or pushed again, but its count still goes up in the alert history and the Alerts card. A member already removed is not counted again, and an owner's own removals are not told. (A removed owner, admin or moderator is also told as a role taken away, and pushed once.);",
+            "an admin changes the community's name, its callsign or its contact details (low)."
           ]
+        },
+        {
+          "type": "p",
+          "text": "When an owner moves the alert channel to another address or removes it, the old channel gets one last message: \"the alert channel was changed, by an owner. This is the last alert sent here.\" When only the token changes (a new one, or none), the channel gets one line instead, sent with the old token: \"The token for this alert channel was changed in Settings.\""
         },
         {
           "type": "p",
@@ -3552,7 +3603,8 @@
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
             "You can also give the name at install, before anyone signs in: docker compose exec beanpool-node beanpool claim --name NAME (see First-time setup). Your server claims it with its own key. Once your server has an address, it changes only here, by an owner.",
             "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
-            "Claiming the name, changing the community's name or contact on it, and **Take offline** are an owner's: an owner signed in with their key, or the admin password, which counts as one. An admin sees the address and the tunnel, and can press **Restart tunnel** and **New tunnel key**; asked for the rest, the server answers \"Only an owner of this node can change its public address\".",
+            "Claiming the name, changing the community's name or contact on it, **Take offline**, **Release**, **Restart tunnel** and **New tunnel key** are an owner's: an owner signed in with their key, or the admin password, which counts as one. An admin sees the address and the tunnel; asked to change the address, the server answers \"Only an owner of this node can change its public address\", and asked to restart the tunnel or give it a new key, \"Only an owner of this node can restart its tunnel or give it a new key\".",
+            "**Take offline**, **Release**, and claiming a different name over the community's live address ask the fresh proof each time (claiming a first name, or the same name again, does not) (Access and security): with the password, a **Current code** box opens for the code the authenticator shows now; from the phone, the change goes through within 90 seconds of pressing Manage; on a computer signed in with the phone, Settings says \"Do this from your phone: open BeanPool, press Manage, then make this change there.\"",
             "Your server's key can hold a second name it doesn't use: the name asked for at install, if the address service gave it only after an owner had picked another one here. Your community stays on the name it has; it is never moved onto the other one. An owner sees one line about it: \"This community also holds NAME.beanpool.org from the install; it is not used. Release it?\" **Release** asks first (\"Release NAME.beanpool.org? Your community's address stays …\"), then lets go of that name only, never your community's address. If the address service answers about any other name, Settings says it was not released, and if that other name is your community's address, your server claims it straight back. If the address service can't release a single name by name (an older one), the line has no button.",
             "Only an owner sees the tunnel's key (the **Tunnel Token**). Anyone holding it could answer at your address and see some of your visitors' traffic, owners' sign-ins included, so an admin sees \"Only an owner can see the tunnel token\" instead.",
             "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
@@ -4422,7 +4474,7 @@
             "**The log.** Every line that names them, or shows the start of their key, then reads \"a deleted member\", and so do the old lines that **Clean Orphaned Media & Compress Logs** moved out of the log. A line is never kept past 30 days anyway.",
             "**A standby** takes the delete at its next copy.",
             "**Notices kept for other members.** For 7 days your server keeps the details of each push it sent to a member (who wrote, which chat, which listing). On a delete it rewrites every such notice of other members that names the member or shows the start of their key: \"Wren sent you a message\" becomes \"A member sent you a message\". The rest of those notices (the chat or listing they point to) stays for the 7 days. They are the server's own: a standby does not copy them.",
-            "**Snapshots** keep everything as it was when each was taken, until the snapshot is deleted: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.",
+            "**Snapshots** keep everything as it was when each was taken, until it ages out: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.",
             "**A backup you downloaded** is a file out of the server's reach. It keeps everything until you delete it. A fleet manager keeps one copy a day for 30 days.",
             "**Backups off the server**, if you set them up (see Backups and replicas), keep everything as it was until the server deletes them there: after 30 days at most, sooner if you chose. A copy the storage keeps on its own beyond that (an old version, a destination you removed) is yours to delete.",
             "**Deletion records.** A short record of each delete (which row went, such as which two members were friends) stays on every server for 30 days, so a standby can copy the delete.",
@@ -4560,7 +4612,7 @@
     {
       "slug": "troubleshooting",
       "title": "When things go wrong",
-      "summary": "The server has stopped answering, an update stopped part-way, members see \"too many requests\", the disk is full, or you cannot sign in.",
+      "summary": "The server has stopped answering, an update stopped part-way, members see \"too many requests\", the disk is full, you cannot sign in, Settings will not open and you need to restore, or you want to start again.",
       "section": "help",
       "related": [
         "updates-and-health",
@@ -4644,6 +4696,28 @@
             "Lost the password: see Signing in.",
             "Lost the two-factor code: see Access and security.",
             "Settings keeps signing you out: a sign-in from the app's Manage button ends after 15 minutes unused (press Manage again to come straight back). A computer signed in by scanning a code ends after 2 hours unused. Both end after 12 hours at most, and when the server restarts."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Settings will not open and you need to restore"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "First try to sign in another way: the app's Manage button, a computer signed in with your phone, a second owner, or beanpool recover on the server (Signing in).",
+            "If the community needs a backup back and Settings still will not open, restore it on the server, with the node stopped: put the file in the data folder, then in the server folder run docker compose stop beanpool-node, then docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, then docker compose up -d. It asks for the recovery code. An old backup that is not locked restores with beanpool restore --unlocked /data/FILE.tar.gz instead, database and photos only. A restore point of the server as it was is kept first: docker compose exec beanpool-node beanpool restore-point list shows them, and docker compose run --rm beanpool-node beanpool restore-point roll-back NAME, with the node stopped, puts one back (then docker compose up -d). See Backups and replicas."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Start again"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "There is no button and no command that wipes a server. To start over, see Starting over in Access and security: move data/local-config.json aside to clear the settings and keep members, posts, deals and Beans, or move the whole data folder away to start the community again from nothing.",
+            "Keep what you moved until you are sure."
           ]
         },
         {

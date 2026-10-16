@@ -71,6 +71,7 @@ import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
 import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
+import { FreshProofRequiredError } from './lib/fresh-proof';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
@@ -78,10 +79,12 @@ import { defaultSubTab } from './lib/sections';
 import { PhoneReturnLink } from './components/layout/ReturnLinks';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
+import { SecondFactorPromptContext } from './components/common/FreshProofBox';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
+import { useInPageConfirm } from './components/common/InPageConfirm';
 
 /**
  * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
@@ -147,6 +150,8 @@ export function App(props: { isFleetMode?: boolean } = {}) {
 }
 
 function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}) {
+    // Removing a saved node (its address and admin password in this browser) is confirmed in the page (owner-delete S4b).
+    const [ask, confirmation] = useInPageConfirm();
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => {
         const savedId = loadActiveProfileId();
@@ -203,6 +208,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const isModerator = !isFleetMode && isModeratorSession(keySession);
     const moderatorRef = useRef(false);
     moderatorRef.current = isModerator;
+    /**
+     * Who the open screens work for. A new Manage link that signs this page in as someone else (another key, another
+     * role, or the password instead of a key) starts the screens afresh: an open modal or wizard, and what it holds, was
+     * the earlier session's (opus-2028 confirm N1). The same session carried on keeps them (opus-2028 B3).
+     */
+    const sessionIdentity = isFleetMode ? 'fleet' : keySession ? `key:${keySession.memberPubkey}:${keySession.role}` : 'password';
 
     // Where the member came from (the app, the web app or neither), read from the fragment before
     // startKeySession strips it, and the way back there (lib/came-from.ts). Single-node Settings only.
@@ -439,6 +450,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         });
     };
 
+    /** The 2FA prompt for the node on screen, opened by a fresh-proof screen that met checkAdminAuth's own 2FA ask (fleet only). */
+    const secondFactorPrompt = useMemo(() => (isFleetMode && activeNode
+        ? () => { promptForTotp(activeNode.id, activeNode.name, activeNode.url).catch(() => { /* busy or cancelled: the poll asks again */ }); }
+        : undefined
+    ), [isFleetMode, activeNode?.id, activeNode?.name, activeNode?.url]);
+
     /**
      * Handle TOTP code submission from the modal.
      * Attempts login and stores the session token on success.
@@ -498,6 +515,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const lastGatewayFetchRef = useRef<Record<string, number>>({});
     const dataInFlightRef = useRef<Record<string, boolean>>({});
     const gatewayInFlightRef = useRef<Record<string, boolean>>({});
+    /**
+     * The gateway form holds edits not saved yet. A refresh (the poll, or the one a second Manage press starts after a
+     * stale refusal) must not put the node's old values back under the owner's hands, or the next Save would send them
+     * and say it worked (opus-2028 B3). Cleared by a Save that went through, and by a change of node.
+     */
+    const gatewayEditedRef = useRef(false);
     const diagInFlightRef = useRef<Record<string, boolean>>({});
 
     /** The newest data payload per profile, readable from callbacks the poll captured. */
@@ -905,7 +928,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         const requestedFor = activeNode.id;
         try {
             const data = await fetchGatewayConfig(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
-            if (requestedFor === activeNodeIdRef.current) {
+            if (requestedFor === activeNodeIdRef.current && !gatewayEditedRef.current) {
                 setGateway(data);
             }
         } catch (e: unknown) {
@@ -1085,23 +1108,27 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     useEffect(() => {
         setDiag(null);
+        gatewayEditedRef.current = false;
         setGateway(null);
         setNodeData(null);
         setNodeLogs([]);
         refreshAll();
     }, [activeProfileId]);
 
-    const handleSaveGateway = async () => {
+    /** Rejects with FreshProofRequiredError when the node asks an owner's fresh proof: GatewayModule opens the box. */
+    const handleSaveGateway = async (code?: string) => {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         setGatewaySaving(true);
         try {
-            const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), ...(code ? [code] : []));
+            gatewayEditedRef.current = false;
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
             gatewaySuccessTimer.schedule(() => setGatewaySuccess(null), 3000);
         } catch (e: unknown) {
+            if (e instanceof FreshProofRequiredError) throw e;
             alert('Failed to update gateway: ' + (e instanceof Error ? e.message : String(e)));
         } finally {
             setGatewaySaving(false);
@@ -1132,12 +1159,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setRefreshToken((n) => n + 1);
     };
 
-    const handleRemoveNode = (id: string) => {
+    const handleRemoveNode = async (id: string) => {
         if (profiles.length <= 1) {
             alert('Cannot delete the last node profile.');
             return;
         }
-        if (confirm('Are you sure you want to remove this node profile from Fleet Manager?')) {
+        if (await ask({ title: 'Remove this node from Fleet Manager?', body: 'Its address and the admin password saved for it leave this browser. Nothing on the node changes; add it again to undo.', confirmLabel: 'Remove it' })) {
             removeNodeProfile(id);
             delete authBlockedRef.current[id];
             const remaining = loadNodeProfiles();
@@ -1356,6 +1383,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     return (
         <div className={`min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased ${isFleetMode ? '' : 'bp-settings'}`}>
+            {confirmation}
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
             <FleetSidebar
                 profiles={profiles}
@@ -1477,7 +1505,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 <IdlePausedBanner />
 
                 {/* Workspace Body */}
-                <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                {/* Fleet mode: a 401 "2FA code required" (the 2FA session ended) opens the 2FA prompt, not a screen's code box. */}
+                <SecondFactorPromptContext.Provider value={secondFactorPrompt}>
+                <main key={sessionIdentity} className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
                     {/* The phone's link couldn't be used, so this is the same account's earlier sign-in, carried on. */}
                     {!isFleetMode && keySession && keySessionNotice && (
                         <div role="status" className="bg-nature-900 border border-terra-600 text-nature-100 text-sm rounded-lg px-4 py-3 flex items-start gap-3">
@@ -1575,14 +1605,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onPruneUser={async (pubkey) => {
+                                        onPruneUser={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                             }
                                         }}
-                                        onPruneBranch={async (pubkey) => {
+                                        onPruneBranch={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1601,15 +1631,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onGrantNodeRole={async (pubkey, role) => {
+                                        onGrantNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
-                                        onRevokeNodeRole={async (pubkey, role) => {
+                                        onRevokeNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1658,7 +1688,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         gatewaySuccess={gatewaySuccess}
                                         gatewaySaving={gatewaySaving}
                                         nodeLogs={nodeLogs}
-                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onChangeGateway={(updated) => { gatewayEditedRef.current = true; setGateway(updated); }}
                                         onSaveGateway={handleSaveGateway}
                                         onRefreshDiag={() => loadDiagnostics()}
                                         onRefreshLogs={() => loadLogs()}
@@ -1715,7 +1745,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         gatewaySuccess={gatewaySuccess}
                                         gatewaySaving={gatewaySaving}
                                         activeWsConnections={diag?.activeWsConnections || 3}
-                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onChangeGateway={(updated) => { gatewayEditedRef.current = true; setGateway(updated); }}
                                         onSaveGateway={handleSaveGateway}
                                         onAuthenticate={(pwd) => {
                                             if (activeNode) {
@@ -1740,14 +1770,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onPruneUser={async (pubkey) => {
+                                        onPruneUser={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                             }
                                         }}
-                                        onPruneBranch={async (pubkey) => {
+                                        onPruneBranch={async (pubkey, code) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1766,15 +1796,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onGrantNodeRole={async (pubkey, role) => {
+                                        onGrantNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
-                                        onRevokeNodeRole={async (pubkey, role) => {
+                                        onRevokeNodeRole={async (pubkey, role, code) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1817,6 +1847,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </>
                     )}
                 </main>
+                </SecondFactorPromptContext.Provider>
             </div>
 
             {/* Add Node Modal */}

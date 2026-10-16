@@ -189,6 +189,11 @@ export const countAwaitingApproval = async (env) => Number((await env.DB.prepare
 ).first())?.n) || 0;
 export const countLive = async (env) =>
     Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status = 'live'").first())?.n) || 0;
+// The new-name budget (index.js newNameBudget): auto-approved names that went live after `since` (unix s), whatever their
+// state now: each made a tunnel and a record at Cloudflare. No table of its own, and no IP stored.
+export const autoNamesSince = async (env, since) => Number((await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM name_allocations WHERE decided_by = 'auto' AND decided_at > ?"
+).bind(since).first())?.n) || 0;
 // Deletions Cloudflare has refused since before `before` (unix s): how many, and the oldest's time.
 export const owedSince = async (env, before) => {
     const r = await env.DB.prepare('SELECT COUNT(*) AS n, MIN(since) AS oldest FROM teardown WHERE since < ?').bind(before).first();

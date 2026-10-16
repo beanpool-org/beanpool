@@ -49,10 +49,12 @@ export const PROTOCOLS = {
 export type Proto = keyof typeof PROTOCOLS;
 /**
  * What this node signs with. Moves only in a release after a Worker accepting it is live (step 2 above). v2 (the
- * one-use nonce, 2026-10-01) is at step 1: the live Worker may be one that predates even `accepted_proto` in its 401,
- * and a node sending v2 to it could not fall back, so this stays v1 until the deploy workflow has put a v2 Worker live.
+ * one-use nonce, 2026-10-01) is at step 2: the live Worker has accepted v2 since 11 Oct (its health answers
+ * accepted_proto [v1, v2]), so a captured request can no longer be replayed inside the clock window (SEC-REG-04, verified
+ * 2026-10-16). A Worker that answers a v2 request 401 with accepted_proto [v1] still gets v1 (signedAnswer's retry).
+ * The Worker drops v1 two node releases after this one (sign.js).
  */
-export const SEND_PROTO: Proto = 'v1';
+export const SEND_PROTO: Proto = 'v2';
 /**
  * The protocol of a request without x-bp-proto, or an attestation without `proto`. v1 predates both, so the node
  * sends neither for it: a v1 request or attestation is byte for byte what it was before versions existed, and any
@@ -197,14 +199,25 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
 }
 
 // The labels go out as the registrar accepts them (config/clean-label.ts): a character it can't see never keeps a name dark.
-export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string) =>
+// `publicIp`: a direct name's A record (IPv4). The registrar refuses a direct claim of a new name without one (SEC-REG-01);
+// a direct name it already holds keeps the address it has.
+export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string, publicIp?: string) =>
     signedFetch('POST', '/api/registrar/claim', {
         name, mode, origin, contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX), community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX),
+        ...(mode === 'direct' && publicIp ? { public_ip: publicIp } : {}),
     });
-export const updateAddressMetadata = (communityName?: string, contact?: string) =>
+/**
+ * The labels of `name`, the name this server stores (SEC-REG-02): a key can hold more than one, and without it the
+ * registrar changes its newest. An older registrar ignores `name`, as it always did.
+ */
+export const updateAddressMetadata = (communityName?: string, contact?: string, name?: string | null) =>
     signedFetch('POST', '/api/registrar/update', {
+        ...(name ? { name } : {}),
         community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX), contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX),
     });
+/** A direct name's address as the registrar takes it: an IPv4 address (its IPV4_RE). */
+export const isPublicIpv4 = (v: unknown): v is string =>
+    typeof v === 'string' && /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(v);
 /**
  * What the registrar holds for this key. `name`: the name this server stores, asked about by name. A registrar that reads
  * it answers about that name while this key holds it; an older one answers about the key's first name (live, then

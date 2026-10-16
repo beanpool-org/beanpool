@@ -73,7 +73,6 @@ export default function PairDeviceScreen() {
     useEffect(() => {
         if (linkCode === undefined || isTransferringRef.current || confirmCodeRef.current || lockBusyRef.current) return;
         void readCode(linkCode, 'link');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [linkCode]);
 
     useEffect(() => {

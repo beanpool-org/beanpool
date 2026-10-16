@@ -321,10 +321,10 @@ async function main(): Promise<void> {
             node = await boot(LOCAL, 'local');
             const before = await node.send('records');
             await stop(node);
-            for (const env of [LOCAL_PREVIEW, LOCAL]) {
+            for (const [env, step] of [[LOCAL_PREVIEW, 'into'], [LOCAL, 'out of']] as const) {
                 node = await boot(env, 'local');
                 const rec = await node.send('records');
-                assert(rec.shape === before.shape && rec.since === before.since, `${env.PRIVATE_PREVIEW ? 'into' : 'out of'} the preview: the same shape, avatarKeysSince kept (${rec.since})`);
+                assert(rec.shape === before.shape && rec.since === before.since, `${step} the preview: the same shape, avatarKeysSince kept (${rec.since})`);
                 const d = await delta(node, lastSync);
                 assert(d.status === 200 && pks(d).length === 0, `the phone's delta is a plain delta (${show(d)})`);
                 await stop(node);

@@ -34,7 +34,7 @@ import {
     vaultStatus,
     type VaultHold,
 } from '../utils/vault';
-import { VAULT_WORDS } from '../utils/vault-words';
+import { VAULT_WORDS, vaultTooMany } from '../utils/vault-words';
 
 export const RECOVERY_ALERT_COPY = {
     /** The title over a final answer to a Stop or "Yes, it's me" (utils/vault.ts `holdAnswerIsFinal`). */
@@ -248,7 +248,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         } catch (e) {
                             // Too late (collected), already stopped, or gone: a final answer, never "try again".
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
-                            else Alert.alert('Not stopped', `${(e as Error).message} Try again.`);
+                            else Alert.alert('Not stopped', vaultTooMany(e) ? t(VAULT_WORDS.tooMany) : `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);
@@ -279,7 +279,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             Alert.alert('Let through', t('Your other phone gets your account the next time it checks, in about a minute.'));
                         } catch (e) {
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
-                            else Alert.alert('Not let through', `${(e as Error).message} Try again.`);
+                            else Alert.alert('Not let through', vaultTooMany(e) ? t(VAULT_WORDS.tooMany) : `${(e as Error).message} Try again.`);
                             void fetchHolds();
                         } finally {
                             setBusyHold(null);

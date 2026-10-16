@@ -10,6 +10,7 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { signInReplacedNote } from '../utils/no-words-copy';
 import { connectAndDeposit } from '../utils/sso-sheet-connect';
+import { VAULT_WORDS } from '../utils/vault-words';
 import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
@@ -103,7 +104,7 @@ export function SsoEnrolSheet({
             });
 
             if (result.error) {
-                setErrorMessage(result.error);
+                setErrorMessage(result.failure === 'rate_limited' ? t(VAULT_WORDS.tooMany) : result.error);
                 setStep('error');
             } else {
                 setEnrolResult(result);

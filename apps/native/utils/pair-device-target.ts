@@ -71,6 +71,23 @@ export function isUnreadablePairingQr(raw: unknown): boolean {
     return typeof raw === 'string' && raw.trim().toLowerCase().startsWith('beanpool://pair') && parsePairingQr(raw) === null;
 }
 
+/**
+ * What one code means to the pairing screen, read the same way however it arrived: the camera on the screen, or a
+ * `beanpool://pair` link the phone's camera app (or any other) opened (utils/pair-link.ts, app/+native-intent.ts).
+ *  - 'pairing': the strict grammar read it; the screen still asks transferTarget where it may go, and sends nothing
+ *    before the member's tap, the phone's unlock and the two digits.
+ *  - 'unreadable': refused, said so, nothing sent. Any link is, when the grammar refuses it: a link was opened on
+ *    purpose, so it is never silently dropped.
+ *  - 'ignore': some other QR in the camera's view.
+ */
+export type PairingRead = { kind: 'pairing'; qr: PairingQr } | { kind: 'unreadable' } | { kind: 'ignore' };
+
+export function readPairingCode(raw: unknown, source: 'camera' | 'link'): PairingRead {
+    const qr = parsePairingQr(raw);
+    if (qr) return { kind: 'pairing', qr };
+    return source === 'link' || isUnreadablePairingQr(raw) ? { kind: 'unreadable' } : { kind: 'ignore' };
+}
+
 export type TransferTarget =
     /** `nodeUrl`: the phone's own saved address for that server, in its canonical origin. Where the account goes. */
     | { kind: 'ok'; nodeUrl: string }

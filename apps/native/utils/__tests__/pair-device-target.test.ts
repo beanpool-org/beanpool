@@ -184,7 +184,10 @@ const pair = () => code(fs.readFileSync(path.resolve(__dirname, '../../app/pair-
 describe('pair-device: the rule is wired in (the screen cannot be rendered here, see vitest.config.ts)', () => {
     it('reads the QR with the strict grammar and checks it at scan, against its community and its saved ones', () => {
         const scan = pair().slice(pair().indexOf('async function handleBarcodeScanned('), pair().indexOf('async function handleConfirmLink('));
-        expect(scan).toContain('const parsed = parsePairingQr(result.data);');
+        // A scan and a link from the camera app (utils/__tests__/pair-link.test.ts) are both read here, by one reader.
+        expect(scan).toContain("await readCode(result.data, 'camera');");
+        expect(scan).toContain('const read = readPairingCode(data, source);');
+        expect(scan).toContain('const parsed = read.qr;');
         expect(scan).toContain('const target = transferTarget(parsed.nodeUrl, anchor, saved);');
         expect(scan).toContain("await AsyncStorage.getItem('beanpool_anchor_url')");
         expect(scan).toContain('await getSavedNodes()');
@@ -227,12 +230,12 @@ describe('pair-device: the rule is wired in (the screen cannot be rendered here,
 
     it('a pairing code that fails the grammar: one sentence, the scanner held until OK, nothing sent', () => {
         const scan = pair().slice(pair().indexOf('async function handleBarcodeScanned('), pair().indexOf('function targetRefusal('));
-        const from = scan.indexOf('if (!parsed) {');
+        const from = scan.indexOf("if (read.kind !== 'pairing') {");
         const to = scan.indexOf('Haptics.NotificationFeedbackType.Success');
         expect(from).toBeGreaterThan(-1);
         expect(to).toBeGreaterThan(from);
         const refused = scan.slice(from, to);
-        expect(refused).toContain('if (isUnreadablePairingQr(result.data)) {');
+        expect(refused).toContain("if (read.kind === 'unreadable') {");
         expect(refused).toContain('isScanningLocked.current = true;');
         expect(refused).toMatch(/Alert\.alert\('', t\('This code can\\'t be read safely, so nothing was sent: make a new code on the other device and scan that one\.'\), \[\{ text: t\('OK'\), onPress: resumeScanning \}\], \{ cancelable: false \}\)/);
         expect(refused).toContain('return;');

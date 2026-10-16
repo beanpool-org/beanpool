@@ -560,8 +560,8 @@ describe('ApplianceSection Component', () => {
         );
     });
 
-    it('sends raw binary body instead of FormData when restoring database archive', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    it('sends raw binary body instead of FormData when restoring, with no window confirm(): the first upload only reads the header', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
         await act(async () => {
             render(
@@ -585,7 +585,7 @@ describe('ApplianceSection Component', () => {
             );
         });
 
-        const dummyFile = new File(['fake-tarball-data'], 'backup.tar.gz', { type: 'application/gzip' });
+        const dummyFile = new File(['fake-sealed-data'], 'beanpool-backup.bpsealed');
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
         expect(fileInput).toBeInTheDocument();
 
@@ -606,14 +606,64 @@ describe('ApplianceSection Component', () => {
                 body: dummyFile,
             })
         );
+        expect(confirmSpy).not.toHaveBeenCalled();
     });
 
-    it('a plain restore that came back SHORT of photos says so, instead of a flat success (round 4)', async () => {
+    it('sealed backups only: the file picker asks for .bpsealed, and a plain archive gets the server\'s words and its shell command', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/restore')) {
+                return Promise.resolve({
+                    ok: false, status: 400,
+                    json: () => Promise.resolve({
+                        error: 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is '
+                            + 'locked. An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
+                        notLocked: true, command: 'beanpool restore --unlocked FILE',
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+        }));
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput.accept).toBe('.bpsealed');
+        expect(screen.getByText(/Restore this server from a locked backup \(\.bpsealed\)/)).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.change(fileInput, { target: { files: [new File(['tar'], 'backup.tar.gz', { type: 'application/gzip' })] } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
+        });
+        const status = await screen.findByTestId('restore-status');
+        expect(status.textContent).toContain('Backups that are not locked no longer restore from Settings');
+        expect(status.textContent).toContain('On the server: beanpool restore --unlocked FILE');
+        expect(screen.queryByTestId('restore-locked-backup')).toBeNull();
+    });
+
+    it('a restore that came back SHORT of photos says so, instead of a flat success (round 4)', async () => {
         // This path answers 200 directly — no locked-backup hand-off — and used to set
         // 'Database successfully restored!' without reading the body at all. A harvested short backup
         // restored through the fleet manager therefore showed a clean success over a node whose photos
         // would 503. Same `shortfall` helper as RestoreLockedBackup, one more call site.
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -661,13 +711,12 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
         });
 
-        expect(await screen.findByText(/Restored, but not complete/)).toBeInTheDocument();
-        expect(screen.getByText(/1 of the 412 photo\(s\) or attachment\(s\)/)).toBeInTheDocument();
-        expect(screen.queryByText('Database successfully restored! State engine refreshed.')).not.toBeInTheDocument();
+        const status = await screen.findByTestId('restore-status');
+        expect(status.textContent).toMatch(/1 of the 412 photo\(s\) or attachment\(s\)/);
+        expect(status.textContent).toContain('The server restarts now; sign in again.');
     });
 
-    it('a plain restore that came back whole still reports a clean success', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    it('a restore that came back whole says so, with the restore point it kept and the restart (design case 18 §3.4)', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -675,6 +724,8 @@ describe('ApplianceSection Component', () => {
                     json: () => Promise.resolve({
                         success: true, complete: true,
                         images: { restored: 412, error: null, referenced: 412, missing: 0, missingKeys: [], labelledShort: false },
+                        restorePointNote: 'Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23.',
+                        restartNote: 'The server restarts now; sign in again.',
                     }),
                 });
             }
@@ -711,11 +762,11 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
         });
 
-        expect(await screen.findByText('Database successfully restored! State engine refreshed.')).toBeInTheDocument();
+        expect(await screen.findByText('Backup restored. Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23. The server restarts now; sign in again.')).toBeInTheDocument();
     });
 
     it('a locked backup (.bpsealed) turns the wizard to "open it": the recovery code or an owner\'s phone (slice 6)', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const confirmSpy = vi.spyOn(window, 'confirm');
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/restore')) {
                 return Promise.resolve({
@@ -762,7 +813,9 @@ describe('ApplianceSection Component', () => {
         });
 
         expect(await screen.findByTestId('restore-locked-backup')).toBeInTheDocument();
-        expect(screen.getByText(/It opens with: @anna, recovery code #1/)).toBeInTheDocument();
+        expect(screen.getByText('Restore this backup?')).toBeInTheDocument();
+        expect(screen.getByText('@anna, recovery code #1')).toBeInTheDocument();
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: "Open with an owner's phone" })).toBeInTheDocument();
         expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
     });

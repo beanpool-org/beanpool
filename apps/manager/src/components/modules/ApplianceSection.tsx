@@ -18,7 +18,7 @@ import {
     fetchStorageCleanPreview,
     cleanStorageAndCompressLogs,
 } from '../../lib/node-client';
-import { restoreShortfall } from '../../lib/backup-shortfall';
+import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { AppAddressesPanel } from './AppAddressesPanel';
@@ -124,6 +124,7 @@ export function ApplianceSection({
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
     const [restoring, setRestoring] = useState(false);
     const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+    const [restoreCommand, setRestoreCommand] = useState<string | null>(null);
     // A locked backup (.bpsealed): who can open it, from its public header; the wizard then asks for one of them.
     const [lockedRestore, setLockedRestore] = useState<{ file: File; backup: LockedBackupInfo; canUseCode: boolean; canUsePhone: boolean } | null>(null);
 
@@ -369,13 +370,17 @@ export function ApplianceSection({
         }
     };
 
+    // The first upload carries no code: the server reads the file's public header and changes nothing (sealed only; a plain
+    // archive is refused before a byte of it is read, naming the shell command). A locked file turns the wizard into the
+    // confirmation (RestoreLockedBackup): the file's community and signer beside this server's, then the code or a phone.
+    // No window confirm(): the proof is the confirmation (design case 18 §3.4).
     const handleRestoreSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!restoreFile) return;
-        if (!confirm('Warning: Restoring will overwrite the active node database and restart the state engine. Continue?')) return;
 
         setRestoring(true);
         setRestoreStatus(null);
+        setRestoreCommand(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
             const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
@@ -387,25 +392,20 @@ export function ApplianceSection({
                 body: restoreFile,
             });
 
+            const body = await res.json().catch(() => ({}));
             if (res.ok) {
-                // The body, not just the status. This is the path a plain `.tar.gz` takes when the server
-                // answers 200 directly, and it used to report a flat success over an archive that came back
-                // short of photos — the same hole `RestoreLockedBackup` closed for the locked path, through
-                // the same helper.
-                const body = await res.json().catch(() => ({}));
-                const short = restoreShortfall(body);
-                setRestoreStatus(short
-                    ? `⚠️ Restored, but not complete. ${short} The state engine has been refreshed.`
-                    : 'Database successfully restored! State engine refreshed.');
+                setRestoreStatus(restoreDoneWords(body));
                 setRestoreFile(null);
                 onRefreshDiag();
             } else {
-                const err = await res.json().catch(() => ({}));
-                if (res.status === 400 && err.backup && (err.needsRecoveryCode || err.ownerPhoneCanOpen)) {
-                    setLockedRestore({ file: restoreFile, backup: err.backup, canUseCode: !!err.needsRecoveryCode, canUsePhone: !!err.ownerPhoneCanOpen });
+                if (res.status === 400 && body.backup && (body.needsRecoveryCode || body.ownerPhoneCanOpen)) {
+                    setLockedRestore({ file: restoreFile, backup: body.backup, canUseCode: !!body.needsRecoveryCode, canUsePhone: !!body.ownerPhoneCanOpen });
                     return;
                 }
-                setRestoreStatus(`Restore failed: ${err.error || 'Server rejected backup file'}`);
+                // A plain archive, another community's file on a lived-in server, a signer this server does not pin: the
+                // server's own words, and the command it names for the server's shell.
+                setRestoreStatus(typeof body.error === 'string' ? body.error : `Restore failed: the server answered HTTP ${res.status}.`);
+                if (typeof body.command === 'string') setRestoreCommand(body.command);
             }
         } catch (e: unknown) {
             setRestoreStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -1048,15 +1048,20 @@ export function ApplianceSection({
                         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                             <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                 <span>🔄</span>
-                                <span>Restore Database Wizard</span>
+                                <span>Restore from a locked backup</span>
                             </h3>
                             <p className="text-xs text-nature-400 m-0">
-                                Restore this node from a backup: a locked .bpsealed file (opened with the recovery code or an owner's phone), or an older .tar.gz. Overwrites existing database tables.
+                                Restore this server from a locked backup (.bpsealed), opened with the recovery code or an owner's phone. It replaces the
+                                community's database with the backup's; a restore point is taken first, so you can roll back. An older unlocked
+                                (.tar.gz) backup restores on the server itself: <code className="font-mono">beanpool restore --unlocked FILE</code>.
                             </p>
 
                             {restoreStatus && (
-                                <div className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra font-mono">
-                                    {restoreStatus}
+                                <div role="status" data-testid="restore-status" className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra space-y-2" style={{ overflowWrap: 'anywhere' }}>
+                                    <p className="m-0">{restoreStatus}</p>
+                                    {restoreCommand && (
+                                        <p className="m-0">On the server: <code className="font-mono text-white">{restoreCommand}</code></p>
+                                    )}
                                 </div>
                             )}
 
@@ -1077,8 +1082,9 @@ export function ApplianceSection({
                             >
                                 <input
                                     type="file"
-                                    accept=".bpsealed,.sqlite,.db,.tar.gz"
-                                    onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                                    accept=".bpsealed"
+                                    aria-label="Locked backup file (.bpsealed)"
+                                    onChange={(e) => { setRestoreFile(e.target.files?.[0] || null); setRestoreStatus(null); setRestoreCommand(null); }}
                                     className="block w-full text-xs text-nature-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-nature-800 file:text-white hover:file:bg-nature-700"
                                 />
                                 <button
@@ -1086,7 +1092,7 @@ export function ApplianceSection({
                                     disabled={!restoreFile || restoring}
                                     className="w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all disabled:opacity-50"
                                 >
-                                    {restoring ? 'Restoring Database...' : 'Restore from Backup'}
+                                    {restoring ? 'Reading the backup…' : 'Restore from Backup'}
                                 </button>
                             </form>
                             )}

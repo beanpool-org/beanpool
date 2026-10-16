@@ -28,13 +28,14 @@ function stubFetch(handler: (path: string, headers: Record<string, string>) => {
 describe('RestoreLockedBackup', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('says who can open it and offers both ways', () => {
+    it('says who can open it and offers both ways', async () => {
         stubFetch(() => ({ status: 500, body: {} }));
         render(<RestoreLockedBackup activeNode={node} file={file} backup={BACKUP} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
-        expect(screen.getByText(/It opens with: @anna, recovery code #1/)).toBeInTheDocument();
+        expect(screen.getByText('@anna, recovery code #1')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: "Open with an owner's phone" })).toBeInTheDocument();
         expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
         for (const b of screen.getAllByRole('button')) expect(b.className).toMatch(/min-h-\[48px\]/);
+        await waitFor(() => expect(screen.getByTestId('restore-community').textContent).toContain('This server: could not be read'));
     });
 
     it('with a phone: re-sends the file asking for a phone, shows the QR, follows it with its token to "restored"', async () => {
@@ -73,13 +74,64 @@ describe('RestoreLockedBackup', () => {
     });
 
     it('with the code: re-sends the file with the code', async () => {
-        const calls = stubFetch(() => ({ status: 200, body: { success: true } }));
+        const calls = stubFetch((path) => path === '/api/local/admin/restore'
+            ? { status: 200, body: { success: true, complete: true, images: { restored: 0, error: null, referenced: 0, missing: 0, missingKeys: [] }, restoredKeys: true,
+                restorePointNote: 'Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23. You can roll back to it from Backups & Restore, or on the server with `beanpool restore-point roll-back 2026-10-16T02-30-00.123Z-before-restore`.',
+                restartNote: 'The server restarts now; sign in again.' } }
+            : { status: 404, body: {} });
         const onDone = vi.fn();
         render(<RestoreLockedBackup activeNode={node} file={file} backup={BACKUP} canUseCode canUsePhone={false} onDone={onDone} onCancel={vi.fn()} />);
         expect(screen.queryByRole('button', { name: "Open with an owner's phone" })).toBeNull();
         fireEvent.change(screen.getByLabelText(/printed recovery code/), { target: { value: 'BPRC-1 ABCD' } });
         fireEvent.click(screen.getByRole('button', { name: 'Open with the code and restore' }));
         await waitFor(() => expect(onDone).toHaveBeenCalled());
-        expect(calls[0].headers).toMatchObject({ 'X-Recovery-Code': 'BPRC-1 ABCD' });
+        expect(calls.find((c) => c.path === '/api/local/admin/restore')!.headers).toMatchObject({ 'X-Recovery-Code': 'BPRC-1 ABCD' });
+        // After (design case 18 §3.4): the restore point it kept, the restart, and the backup's password.
+        const said = onDone.mock.calls[0][0] as string;
+        expect(said).toMatch(/^Backup restored\./);
+        expect(said).toContain('Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23.');
+        expect(said).toContain('The server restarts now; sign in again.');
+        expect(said).toMatch(/admin password and two-factor sign-in it had when it was made/);
+    });
+
+    // The confirmation (design case 18 §3.4; the shell's prompt does the same, #2017): the file's community and the key that
+    // locked it beside this server's own, what is lost, the restore point; and never a window confirm().
+    const HERE = { communityId: 'c0ffee00c0ffee00', primaryPeerId: '12D3KooWThisServerXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' };
+    it('shows the file\'s community and signer beside this server\'s, what is lost and the restore point, with no confirm()', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm');
+        const calls = stubFetch((path) => path === '/api/local/admin/backup-enroll' ? { status: 200, body: HERE } : { status: 404, body: {} });
+        const mine = { ...BACKUP, communityId: HERE.communityId, sealedBy: HERE.primaryPeerId };
+        render(<RestoreLockedBackup activeNode={node} file={file} backup={mine} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        expect(await screen.findByText("This community's backup, locked by this server.")).toBeInTheDocument();
+        const community = screen.getByTestId('restore-community');
+        expect(community.textContent).toContain(`This backup: ${HERE.communityId}`);
+        expect(community.textContent).toContain(`This server: ${HERE.communityId}`);
+        const signer = screen.getByTestId('restore-signer');
+        expect(signer.textContent).toContain(`This backup: ${HERE.primaryPeerId}`);
+        expect(signer.textContent).toContain(`This server: ${HERE.primaryPeerId}`);
+        expect(screen.getByText(/beanpool-backup\.bpsealed, made/)).toBeInTheDocument();
+        expect(screen.getByText(/will be lost\. A restore point is taken first/)).toBeInTheDocument();
+        expect(calls.find((c) => c.path === '/api/local/admin/backup-enroll')!.headers).toMatchObject({ 'X-Admin-Password': 'fresh-pw' });
+        // Nothing is sent to the restore route until a way to open it is chosen.
+        expect(calls.some((c) => c.path === '/api/local/admin/restore')).toBe(false);
+        expect(confirmSpy).not.toHaveBeenCalled();
+    });
+
+    it('another community\'s file, or one locked by another machine, says so beside this server\'s', async () => {
+        stubFetch((path) => path === '/api/local/admin/backup-enroll' ? { status: 200, body: HERE } : { status: 404, body: {} });
+        const theirs = { ...BACKUP, communityId: 'beefbeefbeefbeef', sealedBy: '12D3KooWOtherMachineYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY' };
+        const view = render(<RestoreLockedBackup activeNode={node} file={file} backup={theirs} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        expect(await screen.findByText(/A different community's backup\. Restoring it replaces the community on this server/)).toBeInTheDocument();
+        expect(screen.getByTestId('restore-community').textContent).toContain('This server: c0ffee00c0ffee00');
+        view.unmount();
+        render(<RestoreLockedBackup activeNode={node} file={file} backup={{ ...theirs, communityId: HERE.communityId }} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        expect(await screen.findByText("This community's backup, locked by another machine.")).toBeInTheDocument();
+    });
+
+    it('when this server\'s own IDs cannot be read, it says so and claims no match', async () => {
+        stubFetch((path) => path === '/api/local/admin/backup-enroll' ? { status: 503, body: { error: 'Genesis not initialized yet' } } : { status: 404, body: {} });
+        render(<RestoreLockedBackup activeNode={node} file={file} backup={{ ...BACKUP, communityId: HERE.communityId, sealedBy: HERE.primaryPeerId }} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        await waitFor(() => expect(screen.getByTestId('restore-community').textContent).toContain('This server: could not be read'));
+        expect(screen.queryByTestId('restore-verdict')).toBeNull();
     });
 });

@@ -273,6 +273,11 @@ interface ActorHour {
     folded: number;
     foldedHigh: number;
     role: string;
+    /**
+     * Quiet notes told this hour (SecurityNote.quiet), unpushed: their own allowance, so they never use the pushes of the
+     * act's own pushed line (#2033 C1-B1: two role holders removed folded the admin's next role grant). Left out: none yet.
+     */
+    quietTold?: number;
     /** The fold line's own words (SecurityNote.foldAs), `{n}` the count. */
     foldAs?: { one: string; many: string };
 }
@@ -317,8 +322,17 @@ interface BookState {
     reports: ReportWindow | null;
     /** Child-safety reports (noteNewReport): those told at once in the last hour, each reporter's hour, the open summary. */
     child: ChildReports;
-    /** The counts of SecurityNote.perDay lines, by key and words: how many in each hour of the last 24 (hour number → n). */
-    dayCounts: Record<string, Record<string, number>>;
+    /** The counts of SecurityNote.perDay lines, by key and words: the open window's first event and how many since. */
+    dayCounts: Record<string, DayCount>;
+}
+
+/**
+ * A count's window (SecurityNote.perDay): it opens at its first event and runs a day (#2033 C1-N1), so its line counts
+ * everything since then and a later window's line never takes its place.
+ */
+interface DayCount {
+    from: number;
+    n: number;
 }
 
 interface ChildReports {
@@ -361,11 +375,25 @@ function readState(): BookState {
     if (state) return state;
     try {
         const parsed = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
-        state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) } };
+        state = { ...emptyState(), ...parsed, channel: { ...emptyChannel(), ...(parsed?.channel ?? {}) }, dayCounts: dayCountsOf(parsed?.dayCounts) };
     } catch {
         state = emptyState();
     }
     return state!;
+}
+
+/**
+ * The count windows a book on disk holds, read at boot: an entry of another shape (the hour buckets kept before
+ * #2033 C1-N1, `{ "<hour>": n }`) is dropped, so its count starts again with its next event.
+ */
+function dayCountsOf(raw: unknown): Record<string, DayCount> {
+    const out: Record<string, DayCount> = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [id, c] of Object.entries(raw as Record<string, unknown>)) {
+        const { from, n } = (c && typeof c === 'object' ? c : {}) as Partial<Record<keyof DayCount, unknown>>;
+        if (typeof from === 'number' && Number.isFinite(from) && typeof n === 'number' && Number.isFinite(n) && n > 0) out[id] = { from, n };
+    }
+    return out;
 }
 
 function writeState(): void {
@@ -488,8 +516,10 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
         : input.token === undefined && before?.source === 'settings' && before.url === url ? before.token : null;
     writeFileAtomic(file, JSON.stringify({ url, format: input.format === 'json' ? 'json' : 'ntfy', token }, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
-    // A new token for the same channel is the same channel: nothing to say (#2033 N3).
+    // A new or cleared token for the same channel can cut it off as surely as a new address (a protected ntfy topic), so
+    // the old token's holder is told, in words that say what changed and nothing else (#2033 N3, C1-N2).
     if (old && old.url !== url) tellOldChannel(old, 'changed');
+    else if (old && old.token !== token) tellOldChannel(old, 'token');
     const s = readState();
     s.channel = emptyChannel();
     writeState();
@@ -498,17 +528,19 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
 
 /**
  * The last message to a channel an owner changed or took away (design case 18 §7, C11): sent to the OLD channel, so
- * whoever watched it learns it no longer hears from this server. Straight to it, outside the book and its queue, under
- * the hard ceiling; never retried.
+ * whoever watched it learns it no longer hears from this server. For a token changed on the same channel ('token'), one
+ * line saying so, with the old token. Straight to it, outside the book and its queue, under the hard ceiling; never retried.
  */
-function tellOldChannel(old: AlertChannel, how: 'changed' | 'removed'): void {
+function tellOldChannel(old: AlertChannel, how: 'changed' | 'removed' | 'token'): void {
     const s = readState();
     const t = now();
     if (sentThisHour(s, t) >= ALERT_HOURLY_CEILING) return;
     s.sentAt.push(t);
     const community = communityName();
-    const text = how === 'removed' ? OWNER_ALERT_WORDS.channelRemoved(community) : OWNER_ALERT_WORDS.channelChanged(community);
-    void sendToChannel(old, { subject: `${community}: the alert channel was ${how}`, priority: 4, click: settingsLink(), events: [], text })
+    const text = how === 'removed' ? OWNER_ALERT_WORDS.channelRemoved(community)
+        : how === 'token' ? OWNER_ALERT_WORDS.channelTokenChanged : OWNER_ALERT_WORDS.channelChanged(community);
+    const subject = how === 'token' ? `${community}: the alert channel's token was changed` : `${community}: the alert channel was ${how}`;
+    void sendToChannel(old, { subject, priority: 4, click: settingsLink(), events: [], text })
         .catch(() => undefined);
 }
 
@@ -875,8 +907,9 @@ const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.prio
  * lines, which the coalescing keeps to a handful). A new report line with no older one to drop makes room with the oldest
  * disk, backup or other condition line that is not high, never a security line, and only then drops itself: so a
  * history full of daily reminders still shows the reports (the deciding review of #1850, confirmation 2, finding 1).
- * A count's line (dayLine) takes the place of the same count's earlier line of the last day that is not on its way: a
- * day's removals are one line, the newest count, however many there were (#2033 B2).
+ * A count's line (dayLine) takes the place of the same count's earlier line of its day that is not on its way: a day's
+ * removals are one line, the newest count, however many there were (#2033 B2). The id carries when the day opened, so a
+ * later day's line is a line of its own (#2033 C1-N1).
  * Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
@@ -927,8 +960,9 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
         return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
     }
     if (!happened(note)) return Promise.resolve([]);
-    if (note.perDay) note = { ...note, detail: dayCountWords(note.key, note.perDay, note.perDayAdds ?? 1) };
-    if (note.state === undefined) return raiseBounded(note);
+    let lineId: string | undefined;
+    if (note.perDay) { const c = dayCountWords(note.key, note.perDay, note.perDayAdds ?? 1); lineId = c.lineId; note = { ...note, detail: c.words }; }
+    if (note.state === undefined) return raiseBounded(note, lineId);
     if (note.state === 'seen') {
         readState().seenAt[note.key] = now();
     }
@@ -941,21 +975,20 @@ const HOUR_MS = 60 * 60_000;
 const dayLineOf = (key: AlertKey, words: { one: string }) => `${key}:${words.one}`;
 
 /**
- * `adds` more of a counted line, in its words for the last 24 hours (#2033 N8: a rolling day, not the UTC one, which
- * restarted mid-morning in Australia): `one` while the count is 1, else `many` with the count. Kept by the hour.
+ * `adds` more of a counted line, in its words for its day (#2033 N8: not the UTC day, which restarted mid-morning in
+ * Australia): `one` while the count is 1, else `many` with the count. The day opens at the count's first event and
+ * runs 24 hours (#2033 C1-N1); the line's id carries when it opened, so a line only ever takes the place of its own
+ * day's earlier line, never one whose events it does not count.
  */
-function dayCountWords(key: AlertKey, words: { one: string; many: string }, adds: number): string {
+function dayCountWords(key: AlertKey, words: { one: string; many: string }, adds: number): { words: string; lineId: string } {
     const s = readState();
-    const hour = Math.floor(now() / HOUR_MS);
-    const counts = (s.dayCounts ??= {});
-    for (const [id, hours] of Object.entries(counts)) {
-        for (const h of Object.keys(hours)) if (hour - Number(h) >= 24 || !Number.isFinite(Number(h))) delete hours[h];
-        if (!Object.keys(hours).length) delete counts[id];
-    }
-    const hours = (counts[dayLineOf(key, words)] ??= {});
-    hours[hour] = (hours[hour] ?? 0) + Math.max(1, Math.floor(adds));
-    const n = Object.values(hours).reduce((a, b) => a + b, 0);
-    return n === 1 ? words.one : words.many.replace('{n}', String(n));
+    const t = now();
+    const counts = s.dayCounts;
+    for (const [id, c] of Object.entries(counts)) if (t - c.from >= DAY) delete counts[id];
+    const id = dayLineOf(key, words);
+    const c = (counts[id] ??= { from: t, n: 0 });
+    c.n += Math.max(1, Math.floor(adds));
+    return { words: c.n === 1 ? words.one : words.many.replace('{n}', String(c.n)), lineId: `${id}@${c.from}` };
 }
 
 function actorId(actor: string): string {
@@ -967,9 +1000,10 @@ function actorId(actor: string): string {
  * and pushed at once, and as many high ones (an owner made or removed, break-glass) besides. Past that, a high one is
  * still told on the channel and in the card, unpushed; any other is only counted. When the hour is over, what was
  * counted is told as one line, pushed: "N more changes by the same admin". One admin flipping a moderator 200 times
- * an hour sends each owner 4 pushes, not 200, and never pushes a real owner grant out of the channel.
+ * an hour sends each owner 4 pushes, not 200, and never pushes a real owner grant out of the channel. A quiet note (its act
+ * pushed another line) has as many tellings of its own, unpushed, and past them is counted for the hour's line.
  */
-function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
+function raiseBounded(note: SecurityNote, lineId?: string): Promise<AlertEvent[]> {
     const s = readState();
     const t = now();
     const id = actorId(note.actor ?? 'server');
@@ -977,10 +1011,14 @@ function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
     const w = s.actors[id] ??= {
         from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server', ...(note.foldAs ? { foldAs: note.foldAs } : {}),
     };
-    // A quiet note counts against its actor's hour as any other (#2033 B2): one admin removing 55 role holders tells the
-    // first few, unpushed, and folds the rest into the hour's line, so their lines never push an earlier one out.
+    // A quiet note is bounded in its actor's hour too (#2033 B2): one admin removing 55 role holders tells the first few,
+    // unpushed, and folds the rest into the hour's line, so their lines never push an earlier one out. Its own allowance
+    // (#2033 C1-B1): it never uses a push, so the act's pushed line (sec.role) and the admin's next grant still push.
     let push = true;
-    if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
+    if (note.quiet) {
+        if ((w.quietTold ?? 0) < SECURITY_PUSHES_PER_HOUR) w.quietTold = (w.quietTold ?? 0) + 1;
+        else { push = false; w.folded++; }
+    } else if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
     else if (!note.high && w.pushed < SECURITY_PUSHES_PER_HOUR) w.pushed++;
     else {
         push = false;
@@ -989,11 +1027,14 @@ function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
     }
     const tellIt = push || !!note.high;
     if (note.quiet) push = false;
+    // A count past the bound is not told again, but its line in the history and the card says the count (#2033 C1-N3):
+    // the same line's words, in place. Not sent, not pushed: the hour's line tells the channel and the owners.
+    if (!tellIt && lineId) for (const x of [...s.history, ...s.recent]) if (x.dayLine === lineId) x.detail = note.detail;
     const conditions = [...before];
     if (tellIt) {
         conditions.push({
             key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push,
-            alsoPush: push ? note.alsoPush : undefined, ...(note.perDay ? { dayLine: dayLineOf(note.key, note.perDay) } : {}),
+            alsoPush: push ? note.alsoPush : undefined, ...(lineId ? { dayLine: lineId } : {}),
         });
     }
     if (!conditions.length) {

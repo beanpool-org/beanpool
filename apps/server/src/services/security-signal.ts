@@ -63,6 +63,8 @@ export const OWNER_ALERT_WORDS = {
     contactsChanged: "The community's contact details were changed, by an admin.",
     channelChanged: (community: string) => `${community}: the alert channel was changed, by an owner. This is the last alert sent here.`,
     channelRemoved: (community: string) => `${community}: the alert channel was removed, by an owner. This is the last alert sent here.`,
+    /** To the same channel, with its old token, when only the token changed (#2033 C1-N2): not "the last alert sent here". */
+    channelTokenChanged: 'The token for this alert channel was changed in Settings.',
 } as const;
 
 /** The first this many one-shot pushes per actor and hour go at once (as many again for high ones); the rest fold into one hourly line. */

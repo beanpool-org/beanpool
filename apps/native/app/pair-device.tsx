@@ -27,7 +27,7 @@ import {
     Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { claimRouteFor, parseClaimLink } from '../utils/claim-link';
 import * as Haptics from 'expo-haptics';
 
@@ -63,9 +63,14 @@ export default function PairDeviceScreen() {
     const isScanningLocked = useRef(false);
     const scannedDataRef = useRef(scannedData);
     scannedDataRef.current = scannedData;
+    /** The scanned code was refused (another server, or not readable): its sentence goes first in the sheet. */
+    const refusedFirst = !!scannedData?.target && scannedData.target.kind !== 'ok';
     const lockBusyRef = useRef(false);
     const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { qr } = useLocalSearchParams<{ qr?: string | string[] }>();
+    // This screen's own route: setParams on it needs no root-ready check (router.setParams throws before the root
+    // navigator mounts, which a cold start from a link could hit; PR #2025 confirm-1 NB2).
+    const navigation = useNavigation();
     // The link as hex (utils/pair-link.ts says why), turned back into exactly the link; no `qr`: no link.
     const qrParam = typeof qr === 'string' ? qr : Array.isArray(qr) ? qr[0] : undefined;
     const linkCode = qrParam === undefined ? undefined : pairLinkFromRoute(qrParam);
@@ -79,8 +84,8 @@ export default function PairDeviceScreen() {
     // link is cleared from the route, so the same link opened again (after Cancel, or "scan again") is read again.
     useEffect(() => {
         if (linkCode === undefined) return;
-        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');
-        router.setParams({ qr: undefined });
+        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');
+        navigation.setParams({ qr: undefined } as never);
     }, [linkCode]);
 
     useEffect(() => {
@@ -537,6 +542,15 @@ export default function PairDeviceScreen() {
                     ) : (
                         <>
                             <Text style={styles.sheetTitle}>{t('Send your whole account to another device?')}</Text>
+                            {/* A refused code: the refusal first, so at 320 dp and 1.3x text it is on the first screen (confirm-1 NB4). */}
+                            {refusedFirst && errorMessage && (
+                                <Text
+                                    style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
+                                    accessibilityRole="alert"
+                                >
+                                    {errorMessage}
+                                </Text>
+                            )}
                             <Text style={styles.sheetSubtitle}>
                                 {t('The other device receives this account\'s key AND your 12 words: whoever has them is you, in every community.')}
                             </Text>
@@ -568,7 +582,7 @@ export default function PairDeviceScreen() {
                                 </View>
                             </View>
     
-                            {errorMessage && (
+                            {!refusedFirst && errorMessage && (
                                 <Text
                                     style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
                                     accessibilityRole="alert"

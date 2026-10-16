@@ -130,6 +130,10 @@ describe('linking with the phone: the two digits', () => {
         // From the countdown the page shows, not from the wall clock: real time also moves these timers, and on a busy
         // machine whole seconds pass between the code going up and the QR being found (one run in four failed at load 60).
         const left = () => Number(/Expires in (\d+) seconds/.exec(screen.getByLabelText(/Expires in \d+ seconds/).getAttribute('aria-label') ?? '')?.[1]);
+        // The countdown's interval is set by an effect that, under load, runs after the QR is found: wait until it ticks
+        // (real time moves it once it exists), or the advance below moves nothing (PR #2025 confirm-1 B1).
+        await waitFor(() => expect(left()).toBeLessThan(120));
+        expect(left()).toBeGreaterThanOrEqual(115);
         await act(async () => { vi.advanceTimersByTime((left() - 103) * 1_000); });
         expect(left()).toBeGreaterThan(100);
         expect(screen.queryByText(SILENT)).toBeNull();

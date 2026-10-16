@@ -216,7 +216,8 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
 
     it("a link never replaces an open sheet (as a camera scan can't): not while it asks, sends, shows the digits, or at all (review N2)", () => {
         const effect = slice(pair(), 'useEffect(() => {\n        if (linkCode === undefined', '}, [linkCode]);');
-        expect(effect).toContain("if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');");
+        expect(effect).toContain("if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');");
+        // Not while a camera scan is being read either (confirm-1 N2 race note).
         // The camera's own guard, for comparison: an open sheet stops it too.
         expect(pair()).toContain('if (isScanningLocked.current || isTransferring || scannedData) return;');
     });
@@ -224,7 +225,9 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
     it('the link is cleared from the route once read (or dropped), so the same link opened again is read again (review N3)', () => {
         const effect = slice(pair(), 'useEffect(() => {\n        if (linkCode === undefined', '}, [linkCode]);');
         const read = effect.indexOf("void readCode(linkCode, 'link');");
-        const cleared = effect.indexOf('router.setParams({ qr: undefined });');
+        // On this screen's own route: router.setParams throws before the root navigator mounts (confirm-1 NB2).
+        expect(effect).not.toContain('router.setParams');
+        const cleared = effect.indexOf('navigation.setParams({ qr: undefined } as never);');
         expect(read).toBeGreaterThan(-1);
         // After the read starts, and on its own line: whether the link was read or dropped, it is cleared.
         expect(cleared).toBeGreaterThan(read);

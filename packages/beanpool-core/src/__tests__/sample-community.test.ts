@@ -241,7 +241,7 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
             expect(parseInviteTicketText(code)).toBeNull();
             // 8 letters and digits once the dashes go would read as INV-XXXX-XXXX in the phone's normaliser: never 8.
             // (The web's join box rewrites any code that isn't INV- as a ticket, BP-EXAM-PLE1, which a node refuses as
-            // malformed: apps/pwa/src/lib/invite-code.test.ts runs every spelling through the node's own check.)
+            // malformed: apps/pwa/src/components/ShowcasePreviews.test.tsx runs every spelling through the node's own check.)
             expect(code.replace(/[^a-zA-Z0-9]/g, '').length).not.toBe(8);
             expect(code).not.toMatch(/[/:.?=&#@]/);
             expect(isSampleId(code)).toBe(false);

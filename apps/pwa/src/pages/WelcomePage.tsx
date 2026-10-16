@@ -44,6 +44,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
+import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -60,65 +61,6 @@ interface Props {
     onBack?: () => void;
     /** `/api/community/info` as the lobby already read it, so the page doesn't ask again. */
     initialInfo?: CommunityInfo;
-}
-
-// ===================== INVITE CODE FORMATTING =====================
-
-function extractInviteToken(raw: string): string {
-    const inviteMatch = raw.match(/[?&]invite=([^&]+)/);
-    if (inviteMatch) {
-        return decodeURIComponent(inviteMatch[1]);
-    }
-    return raw;
-}
-
-/** Strip everything except alphanumeric, uppercase, and format as BP-XXXX-XXXX */
-function formatInviteCode(raw: string): string {
-    const extracted = extractInviteToken(raw);
-    const trimmed = extracted.trim();
-    if (trimmed.length > 20 && trimmed.startsWith('BP-')) {
-        return trimmed; // It's an offline cryptographic ticket. Just return it cleanly.
-    }
-
-    // Strip non-alphanumeric
-    const clean = extracted.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    
-    // Legacy support for Node Genesis invites
-    if (clean.startsWith('INV')) {
-        const body = clean.slice(3);
-        if (body.length === 0) return '';
-        if (body.length <= 4) return `INV-${body}`;
-        return `INV-${body.slice(0, 4)}-${body.slice(4, 8)}`;
-    }
-
-    const withoutPrefix = clean.startsWith('BP') ? clean.slice(2) : clean;
-    const body = withoutPrefix.slice(0, 8);
-
-    if (body.length === 0) return '';
-    if (body.length <= 4) return `BP-${body}`;
-    return `BP-${body.slice(0, 4)}-${body.slice(4)}`;
-}
-
-/** Normalise any input to the canonical format for API submission */
-function normaliseInviteCode(raw: string): string {
-    const extracted = extractInviteToken(raw);
-    const trimmed = extracted.trim();
-    if (trimmed.length > 20 && trimmed.startsWith('BP-')) {
-        return trimmed; // Offline cryptographic bulk token
-    }
-
-    const clean = extracted.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    
-    if (clean.startsWith('INV')) {
-        const body = clean.slice(3);
-        if (body.length < 8) return extracted.trim().toUpperCase();
-        return `INV-${body.slice(0, 4)}-${body.slice(4, 8)}`;
-    }
-
-    const withoutPrefix = clean.startsWith('BP') ? clean.slice(2) : clean;
-    const body = withoutPrefix.slice(0, 8);
-    if (body.length < 8) return extracted.trim().toUpperCase(); // partial — return as-is
-    return `BP-${body.slice(0, 4)}-${body.slice(4)}`;
 }
 
 /** What an invite-sent record keeps of the code or ticket a key went with: its SHA-256, never the code itself. */

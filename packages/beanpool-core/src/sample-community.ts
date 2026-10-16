@@ -13,8 +13,8 @@
  * - **Never a working invitation.** An example invite's code (`EXAMPLE-1234`) is a shape no node mints, and carries no
  *   address: copied, typed or drawn as a QR, it joins nobody. The phone reads it as no invite, ticket, pairing or claim.
  *   The web's join box rewrites any code that isn't `INV-` as a ticket (`BP-EXAM-PLE1`), which a node refuses as
- *   malformed, since a ticket is signed (apps/pwa/src/lib/invite-code.test.ts runs every spelling through the node's
- *   own check).
+ *   malformed, since a ticket is signed (apps/pwa/src/components/ShowcasePreviews.test.tsx runs every spelling through
+ *   the node's own check).
  * - **Words to translate.** Every sentence a screen draws is marked with `word()`, so it is translated where it is shown
  *   (`t(sample.what)`); ids, codes and states are not words.
  *

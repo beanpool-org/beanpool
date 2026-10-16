@@ -12,17 +12,21 @@
  *     pairOnShell; another server's address and token → 200 and the pin as it was; standby-main.json byte for byte. A
  *     same-community file signed by K4, locked to her own code → 409 signerNotPinned, naming both keys; the phone way
  *     (X-Unlock-With: phone) too; a file naming K1 that K1 never signed → 400 altered. (test-owner-delete-gates 3a has
- *     every other credential.)
+ *     every other credential.) The K4 files are counted for the owners: one sec.restore line, "2 backups locked by a key
+ *     that is not this standby's main server were refused today."; the altered one is not counted.
  *  b. The hostile copy source: the standby pinned to K4 pulls from K1: refused at the first page, the copied tables
  *     unchanged, its cursor kept, the report says signer-not-pinned (`signature` + whyDetail for an older main server),
- *     standby.source-not-main raised; the main server's watch opens its incident after an hour, saying why. Pointed back
- *     (the pin is K1's): the next copy lands from the cursor, the condition clears.
+ *     standby.source-not-main raised; the main server's watch opens its incident after an hour, saying why; its first
+ *     report naming the main server's key tells the owners "A standby was paired with this main server." once. Pointed
+ *     back (the pin is K1's): the next copy lands from the cursor, the condition clears.
  *  c. Honest pairing: an unpaired standby (standby.unpaired raised); the main server's code pasted into Live Backup
  *     Server → 409 pairOnShell, nothing written; `beanpool pair --code-file F` → exit 0, the pin (0600, how 'shell'), the
- *     copy source and token, the cursor dropped, the condition gone; the copy lands; a file K1 signed passes the pin.
+ *     copy source and token, the cursor dropped, the condition gone, one sec.backups line "This standby was paired with
+ *     its main server, from the server's shell."; the copy lands; a file K1 signed passes the pin.
  *  d. Re-pair: a K2 code → exit 1, nothing changed; with --follow-new-server → the pin replaced, the cursor dropped (the
- *     next copy is whole), the security line; the code's address answering as K1 → the amber line, paired anyway. A K1
- *     code on the K1 standby: address and token updated, the cursor kept.
+ *     next copy is whole), the security line, sec.backups high "This standby now follows a different main server (paired
+ *     again from the server's shell)."; the code's address answering as K1 → the amber line, paired anyway. A K1 code on
+ *     the K1 standby: address and token updated, the cursor kept, no line; at another address, the copy-source line.
  *  e. Promotion needs no re-pair: a code the standby's own key made (a promoted standby's) pasted into Live Backup
  *     Server with the fresh hand-off → 200, its address and token taken, the pin unchanged.
  *  f. Migration: today's shape (one mirror link, a copy taken) → pinned, how 'migrated', connectors.json without the
@@ -194,6 +198,18 @@ async function main(): Promise<void> {
     const { standbyReportHeader, parseStandbyReport } = await import('./services/standby-report.js');
     const alertsMod: any = await import('./services/alerts.js');
     const pinConditions = (): Array<{ key: string; active: boolean; detail: string }> => alertsMod.standbyPinConditions?.() ?? [];
+    /** The owners' lines the alert book kept with these words (S5's sec.*), once the book has had a moment to tell them. */
+    const toldLines = async (key: string, words: string | RegExp): Promise<Array<{ detail: string; priority: number; high?: boolean; count?: number }>> => {
+        await sleep(200);
+        return ((alertsMod.getAlertsStatus?.().history ?? []) as Array<{ key: string; detail: string; priority: number; high?: boolean; count?: number }>)
+            .filter((e) => e.key === key && (typeof words === 'string' ? e.detail === words : words.test(e.detail)));
+    };
+    /** How many times it was told: the book folds a repeat of the same words into one line with a count. */
+    const toldTimes = async (key: string, words: string | RegExp): Promise<number> => (await toldLines(key, words)).reduce((n, e) => n + (e.count ?? 1), 0);
+    const PAIRED_FROM_SHELL = "This standby was paired with its main server, from the server's shell.";
+    const FOLLOWS_NEW = "This standby now follows a different main server (paired again from the server's shell).";
+    const COPY_FROM_CHANGED = 'The server this standby copies from was changed.';
+    const MAIN_PAIRED = 'A standby was paired with this main server.';
     const { noteStandbyReport, checkStandbyHealth, getStandbyHealthBanner, setStandbyHealthClockForTests, forgetStandby } = await import('./services/standby-health.js');
     // The module under test, when this server has it: its node half takes `beanpool pair`'s request.
     const sm: any = await import('./services/standby-main.js').catch(() => null);
@@ -325,6 +341,7 @@ async function main(): Promise<void> {
         const codeFile = path.join(work, 'code');
         fs.writeFileSync(codeFile, `${code}\n`, { mode: 0o600 });
         setSyncCursor('backup:primary', new Date(Date.now() - 3600_000).toISOString());
+        const toldBefore = await toldTimes('sec.backups', PAIRED_FROM_SHELL);
         const paired = await pairCli(['--code-file', codeFile]);
         const pin = readPin();
         assert(paired.code === 0 && pin?.peerId === K1 && pin.how === 'shell' && pin.communityId === community && pin.url === base
@@ -335,6 +352,9 @@ async function main(): Promise<void> {
         assert(getLocalConfig().backupPrimaryUrl === base && getLocalConfig().backupReplicationToken === token && savedPullCursor() === null,
             'c. the copy source and token are in local-config, and the cursor is dropped: the next copy is whole');
         assert(!pinConditions().find((c) => c.key === 'standby.unpaired')?.active, 'c. standby.unpaired is over');
+        const pairedTimes = await toldTimes('sec.backups', PAIRED_FROM_SHELL);
+        assert(pairedTimes === toldBefore + 1 && !(await toldLines('sec.backups', PAIRED_FROM_SHELL)).at(-1)?.high,
+            `c. the owners are told once, sec.backups: "${PAIRED_FROM_SHELL}" (${pairedTimes - toldBefore} time(s))`);
         // That whole copy is built in the stager and swapped in at a restart (its own suites); here, as after that restart,
         // the standby holds a cursor and the copy's format (engine/sync.ts noteReplicaFormat), and copies on from it.
         setSyncCursor('backup:primary', new Date(Date.now() - 600_000).toISOString());
@@ -392,6 +412,12 @@ async function main(): Promise<void> {
         assert(!!banner.incident && banner.incident.lines.some((l) => /it refuses copies: the server it copies from is not its main server/.test(l))
             && banner.standbys.some((s) => s.paired === 'other') && banner.incident.whatToDo.some((w) => /beanpool pair/.test(w)),
             `b. the main server's watch opens its incident after an hour, saying why (${banner.incident?.lines.join(' | ')})`);
+        const mainBefore = await toldTimes('sec.backups', MAIN_PAIRED);
+        assert(mainBefore === 0, `b. a report naming another key tells the main server's owners nothing of a pairing (${mainBefore})`);
+        noteStandbyReport(standbyReportHeader({ ...report, pin: K1 }), '127.0.0.1');
+        noteStandbyReport(standbyReportHeader({ ...report, pin: K1 }), '127.0.0.1');
+        const mainPaired = await toldTimes('sec.backups', MAIN_PAIRED);
+        assert(mainPaired === 1, `b. its first report naming this server's key: "${MAIN_PAIRED}" once, not at the next report (${mainPaired})`);
         for (const s of banner.standbys) forgetStandby(s.id);
         setStandbyHealthClockForTests(0);
         setNodeRole('backup');
@@ -439,6 +465,8 @@ async function main(): Promise<void> {
             return { status: res.status, json: await res.json().catch(() => null) as any };
         };
         const forgedFile = await sealedBy(K4);
+        const notMain = /locked by a key that is not this standby's main server/;
+        const notMainBefore = (await toldLines('sec.restore', notMain)).length;
         for (const [who, headers] of [
             ['a fresh phone hand-off', asPhone()],
             ['a fresh phone hand-off, opened with the phone', { ...asPhone(), 'X-Unlock-With': 'phone' }],
@@ -450,6 +478,10 @@ async function main(): Promise<void> {
         }
         const posing = await upload(await sealedBy(K1), asPhone());
         assert(posing.status === 400 && posing.json?.badSignature === true, `a. a file naming K1 that K1 never signed → 400 altered (${posing.status})`);
+        const notMainLines = await toldLines('sec.restore', notMain);
+        assert(notMainBefore === 0 && notMainLines.length === 1
+            && notMainLines[0].detail === "2 backups locked by a key that is not this standby's main server were refused today.",
+            `a. the two K4 files are counted for the owners on one sec.restore line, the altered one not (${JSON.stringify(notMainLines.map((e) => e.detail))})`);
         assert(JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()) === rolesBefore
             && fs.readdirSync(dataDir).sort().join(',') === filesBefore && trusted() === pinBytes,
             'a. nothing moved: the roles, the pin, no restore point, no file kept for a phone');
@@ -503,20 +535,39 @@ async function main(): Promise<void> {
             && trusted() === pinBytes && getLocalConfig().backupReplicationToken === token && savedPullCursor() === cursorKept,
             `d. a K2 code on the K1 standby → exit 1, nothing changed (${refusedRepair.out.trim().slice(-160)})`);
         const secBefore = printed.length;
+        const followsBefore = await toldTimes('sec.backups', FOLLOWS_NEW);
         const repaired = await pairCli(['--code-file', k2CodeFile, '--follow-new-server']);
         assert(repaired.code === 0 && readPin()?.peerId === K2 && savedPullCursor() === null && getLocalConfig().backupReplicationToken === 'e'.repeat(64),
             `d. --follow-new-server → exit 0, the pin is K2, the cursor dropped: the next copy is built from nothing (${repaired.out.trim().slice(-200)})`);
         assert(/answers as another key/.test(repaired.out) && /paired anyway/.test(repaired.out),
             `d. the code's address answering as another key: the amber line, paired anyway (${repaired.out.trim().slice(-200)})`);
         assert(printed.slice(secBefore).some((l) => /now follows a different main server/.test(l) && l.includes(K2)), 'd. the security log line says it');
+        const follows = await toldLines('sec.backups', FOLLOWS_NEW);
+        assert(followsBefore === 0 && follows.length === 1 && (follows[0].count ?? 1) === 1 && (follows[0].high === true || follows[0].priority >= 4),
+            `d. the owners are told, sec.backups high: "${FOLLOWS_NEW}" (${JSON.stringify(follows)})`);
         // Back to K1, and a K1 code on the K1 standby: address and token, no copy from nothing.
         writePin(K1, base);
         setSyncCursor('backup:primary', cursorKept);
         const sameFile = path.join(work, 'same-code');
         fs.writeFileSync(sameFile, makeCode({ url: base, communityId: community, peerId: K1, token }));
+        const copyFromBefore = await toldTimes('sec.backups', COPY_FROM_CHANGED);
         const same = await pairCli(['--code-file', sameFile]);
         assert(same.code === 0 && readPin()?.peerId === K1 && savedPullCursor() === cursorKept && /already follows/.test(same.out) && !/answers as another key/.test(same.out),
             `d. a K1 code on the K1 standby → address and token updated, the cursor kept (${same.out.trim().slice(-160)})`);
+        assert((await toldTimes('sec.backups', FOLLOWS_NEW)) === 1 && (await toldTimes('sec.backups', PAIRED_FROM_SHELL)) === pairedTimes
+            && (await toldTimes('sec.backups', COPY_FROM_CHANGED)) === copyFromBefore,
+            'd. the same key at the same address: no pairing line, no copy-source line');
+        // The same key at another address (this server, by its IP): the copy source changed, told as Live Backup Server tells it.
+        const movedFile = path.join(work, 'moved-code');
+        const movedUrl = `https://127.0.0.1:${port}`;
+        fs.writeFileSync(movedFile, makeCode({ url: movedUrl, communityId: community, peerId: K1, token }));
+        const moved = await pairCli(['--code-file', movedFile]);
+        const movedTimes = await toldTimes('sec.backups', COPY_FROM_CHANGED);
+        assert(moved.code === 0 && getLocalConfig().backupPrimaryUrl === movedUrl && movedTimes === copyFromBefore + 1
+            && (await toldTimes('sec.backups', PAIRED_FROM_SHELL)) === pairedTimes && (await toldTimes('sec.backups', FOLLOWS_NEW)) === 1,
+            `d. the same key at another address: one sec.backups line, "${COPY_FROM_CHANGED}" (${moved.out.trim().slice(-120)})`);
+        updateLocalConfig({ backupPrimaryUrl: base } as any);
+        writePin(K1, base);
 
         // ── h. Restore points and a new install ──
         console.log('\n── h. the pin in a restore point; a data folder with it is no new install ──');

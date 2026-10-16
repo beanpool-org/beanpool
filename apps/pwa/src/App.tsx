@@ -27,7 +27,7 @@ import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
-import { useFeatureMode } from './lib/features';
+import { readsOwn, useFeatureMode } from './lib/features';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
 import { webAppBehindServer } from './lib/app-version';
@@ -489,6 +489,8 @@ export function App() {
         if (!identity) return;
         const currentPubkey = identity.publicKey;
         try {
+            // Deals in preview (the global node): My Deals is Example Valley's, and the member's own are never asked.
+            if (!(await readsOwn('escrow'))) return;
             const txs = await getMyMarketplaceTransactions(currentPubkey);
             if (identityPubkeyRef.current !== currentPubkey) return;
             setMyTransactions(txs);
@@ -519,9 +521,11 @@ export function App() {
                     // /api/conversations threw out of the try before transactions were ever fetched —
                     // and since MarketplacePage stopped polling transactions itself and now reads them
                     // from here, one unrelated endpoint erroring starved the whole marketplace view.
+                    // The member's own deals only where deals are not in preview (lib/features readsOwn): on the
+                    // global node My Deals is Example Valley's, and null here leaves the counts as they are.
                     const [convResult, txResult] = await Promise.allSettled([
                         getConversations(identity.publicKey),
-                        getMyMarketplaceTransactions(identity.publicKey),
+                        readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),
                     ]);
                     if (cancelled) return;
 
@@ -529,7 +533,7 @@ export function App() {
                         setTotalUnread(convResult.value.totalUnread || 0);
                     }
 
-                    if (txResult.status === 'fulfilled') {
+                    if (txResult.status === 'fulfilled' && txResult.value) {
                         const txs = txResult.value;
                         setMyTransactions(txs);
 

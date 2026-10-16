@@ -28,7 +28,7 @@ vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
 import { InvitePage } from './InvitePage';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { buildOfflineInviteCode, generateInvite, getInviteTree } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getInviteTree, getMyInvites } from '../lib/api';
 import { communityLinkText, invitesOn, invitesOffRefusal, INVITES_OFF_FALLBACK } from '../lib/node-invites';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 
@@ -168,5 +168,38 @@ describe('the Invites page everywhere else: as before', () => {
         fireEvent.click(await screen.findByRole('button', { name: /Generate New Invite/ }));
         await waitFor(() => expect(buildOfflineInviteCode).toHaveBeenCalled());
         expect(screen.queryByText(/Bring someone here/)).toBeNull();
+    });
+});
+
+describe('the Invites page reads nothing of the member\'s where invites are in preview (global previews audit, P3)', () => {
+    const SHOWCASE = { ...GLOBAL, features: { ...GLOBAL.features, escrow: false, enterprises: false, showcase: true } };
+
+    it('global (previews): the line, and neither the member\'s codes nor the invite tree is asked', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue(SHOWCASE as never);
+        render(<InvitePage identity={IDENTITY} />);
+        await screen.findByTestId('invites-local-line');
+        await new Promise(r => setTimeout(r, 0));
+        expect(getMyInvites).not.toHaveBeenCalled();
+        expect(getInviteTree).not.toHaveBeenCalled();
+    });
+
+    it('with a paper ticket kept in this browser: the node is still asked for nothing', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue(SHOWCASE as never);
+        localStorage.setItem(`bp_offline_invites_${IDENTITY.publicKey}`, JSON.stringify([{ code: 'BP-kept-ticket', createdBy: 'me', createdAt: new Date().toISOString(), usedBy: null, usedAt: null }]));
+        render(<InvitePage identity={IDENTITY} />);
+        await screen.findByTestId('invites-local-line');
+        await new Promise(r => setTimeout(r, 0));
+        expect(getMyInvites).not.toHaveBeenCalled();
+    });
+
+    it('local (live): both are asked, as before', async () => {
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => { expect(getMyInvites).toHaveBeenCalledWith(IDENTITY.publicKey); expect(getInviteTree).toHaveBeenCalled(); });
+    });
+
+    it('invites off with no previews (hidden): both still asked, as before', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue(GLOBAL as never);
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => { expect(getMyInvites).toHaveBeenCalled(); expect(getInviteTree).toHaveBeenCalled(); });
     });
 });

@@ -40,6 +40,16 @@ export function featureModeFor(feature: ShowcaseFeature, node: FeatureSet, reade
     return featureMode({ showcase: node?.showcase === true, node: nodeOn, effective: readerOn });
 }
 
+/**
+ * Whether a screen may read the reader's own data for a feature in this mode (design §6 W2's net spy, "a marked feature
+ * reads nothing of the reader's"): their balance, deals, voice credits or invites. Not until the mode is known
+ * (`undefined`), and never in preview, which is drawn from the sample community alone. Live, read-only and hidden read as
+ * they always have: a local node makes the same requests as before. Each app's `readsOwn(feature)` asks this.
+ */
+export function readsOwnData(mode: FeatureMode | undefined): boolean {
+    return mode !== undefined && mode !== 'preview';
+}
+
 /** The marker itself: the pill, and the emoji every line starts with. */
 export const LOCAL_COMMUNITY_EMOJI = '🏘️';
 export const LOCAL_COMMUNITY_MARK = 'Local community';

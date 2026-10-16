@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { featureModeFor, SHOWCASE_FEATURES, START_COMMUNITY_URL_DEFAULT, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
+import { featureModeFor, readsOwnData, SHOWCASE_FEATURES, START_COMMUNITY_URL_DEFAULT, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
 import { getCommunityMe, type CommunityInfo } from './api';
 import { loadIdentity } from './identity';
 import { communityInfoOnce } from './visitor-lobby-gate';
@@ -117,6 +117,40 @@ export function useReaderFeatures(info: CommunityInfo | null | undefined, enable
 export function useFeatureMode(feature: ShowcaseFeature, enabled = true): FeatureMode {
     const info = useCommunityInfo(enabled);
     return modeFor(feature, info, useReaderFeatures(info, enabled));
+}
+
+/**
+ * Whether a screen may ask the node for the reader's own data that belongs to `feature` (their balance, deals, voice
+ * credits, invites): the one guard every such read on the web goes through (design §6 W2, "a marked feature reads
+ * nothing of the reader's"; core's `readsOwnData`). It waits for the node's info, then answers no only where the
+ * feature is in preview: the page draws Example Valley and needs nothing of the reader's. Live, read-only and hidden
+ * read as before, and a node whose info can't be read is hidden here, so it reads as before too: a local community
+ * makes the same requests as it always has, and never waits on the reader's own set.
+ *
+ * The reader's own set can only turn a preview live (BeanID's verified member: `featureModeFor`), so it is waited for
+ * only where the node's set alone says preview.
+ */
+export async function readsOwn(feature: ShowcaseFeature): Promise<boolean> {
+    // Inside a promise, so a read that throws at once is a read that failed: hidden, as useCommunityInfo reads it.
+    const info = await Promise.resolve().then(() => communityInfoOnce()).catch(() => null);
+    if (readsOwnData(modeFor(feature, info))) return true;
+    const reader = await readerFeaturesOnce(info).catch(() => null);
+    return readsOwnData(modeFor(feature, info, reader));
+}
+
+/**
+ * `readsOwn` for a component: false until it has answered, so an effect that reads the reader's own data waits for it
+ * and runs again when it turns true. `enabled` false: false, and nothing is asked.
+ */
+export function useReadsOwn(feature: ShowcaseFeature, enabled = true): boolean {
+    const [reads, setReads] = useState(false);
+    useEffect(() => {
+        if (!enabled) { setReads(false); return; }
+        let cancelled = false;
+        readsOwn(feature).then((r) => { if (!cancelled) setReads(r); }, () => {});
+        return () => { cancelled = true; };
+    }, [feature, enabled]);
+    return reads;
 }
 
 /** Preview or read-only: the feature lives in a local community for this reader, so its actions carry the marker. */

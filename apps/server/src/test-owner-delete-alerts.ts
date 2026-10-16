@@ -316,6 +316,12 @@ async function main(): Promise<void> {
     const words2 = received.filter((m) => /taken offline|address was changed/.test(m.body)).map((m) => m.title);
     assert(words2.length >= 2 && words2.every((t) => /its address changed/.test(t) && !/not its own/.test(t)),
         `2d. an owner's act is titled "its address changed", never "not its own" (${JSON.stringify(words2)})`);
+    // A new tunnel key and a released spare name: sec.address too (a source check: the rotate and release routes need
+    // the address service's signed answers).
+    const addressSource = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'routes', 'public-address.ts'), 'utf8');
+    assert(/key: 'sec\.address', detail: OWNER_ALERT_WORDS\.tunnelKey, priority: 3/.test(addressSource)
+        && /key: 'sec\.address', detail: OWNER_ALERT_WORDS\.nameReleased/.test(addressSource) && !/key: 'sec\.name'/.test(addressSource),
+        '2f. a new tunnel key (normal) and a released spare name note sec.address; no address route notes sec.name');
     fresh();
     // A real hijack inside the same day as an owner's address act still pushes the owners (#2033 B1, the review's P1).
     recordRegistrarAnswer({ status: 'live', name: 'hijackvale', hostname: 'hijackvale.beanpool.org' } as any, 'claim');

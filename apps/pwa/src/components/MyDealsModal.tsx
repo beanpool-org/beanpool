@@ -223,6 +223,7 @@ export function MyDealsModal({
             <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
                 <div
                     ref={modalRef}
+                    data-testid={preview ? 'deals-preview' : undefined}
                     className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-[80vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300"
                     onClick={e => e.stopPropagation()}
                 >
@@ -236,7 +237,7 @@ export function MyDealsModal({
                             ref={closeBtnRef}
                             onClick={onClose}
                             aria-label={t('Close My Deals')}
-                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
+                            className={`rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500 ${preview ? 'min-h-[44px] min-w-[44px]' : 'w-8 h-8'}`}
                         >
                             ✕
                         </button>
@@ -253,7 +254,7 @@ export function MyDealsModal({
                             <button
                                 key={tab.id}
                                 onClick={() => setDealsTab(tab.id)}
-                                className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${
+                                className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${preview ? 'min-h-[44px]' : ''} ${
                                     dealsTab === tab.id
                                         ? 'bg-white dark:bg-nature-900 text-nature-900 dark:text-white shadow-sm'
                                         : 'text-nature-500 hover:text-nature-700 dark:text-nature-300 dark:hover:text-nature-300'
@@ -276,7 +277,9 @@ export function MyDealsModal({
                                 <button
                                     key={f.id}
                                     onClick={() => setHistoryFilter(f.id)}
-                                    className={`px-3 py-1 text-xs font-bold rounded-full border transition-colors ${
+                                    className={`text-xs font-bold rounded-full border transition-colors ${
+                                        preview ? 'min-h-[44px] min-w-[44px] px-3.5 py-2 flex items-center justify-center' : 'px-3 py-1'
+                                    } ${
                                         historyFilter === f.id
                                             ? 'bg-nature-800 dark:bg-nature-200 text-white dark:text-nature-900 border-nature-900 dark:border-nature-100'
                                             : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
@@ -422,7 +425,7 @@ export function MyDealsModal({
                                                     <LocalCommunityAction
                                                         feature="escrow"
                                                         label={t('Approve and hold in trust')}
-                                                        className="w-full text-xs"
+                                                        className="w-full text-xs min-h-[44px]"
                                                         onNearYou={onNearYou ? () => { onClose(); onNearYou(); } : undefined}
                                                         onGuide={onGuide ? (slug) => { onClose(); onGuide(slug); } : undefined}
                                                     />
@@ -435,7 +438,7 @@ export function MyDealsModal({
                                                     <LocalCommunityAction
                                                         feature="escrow"
                                                         label={t('Approve and release')}
-                                                        className="w-full text-xs"
+                                                        className="w-full text-xs min-h-[44px]"
                                                         onNearYou={onNearYou ? () => { onClose(); onNearYou(); } : undefined}
                                                         onGuide={onGuide ? (slug) => { onClose(); onGuide(slug); } : undefined}
                                                     />
@@ -453,7 +456,7 @@ export function MyDealsModal({
                                                             <LocalCommunityAction
                                                                 feature="escrow"
                                                                 label={t('Leave Review')}
-                                                                className="text-xs py-1.5 px-3"
+                                                                className="text-xs py-1.5 px-3 min-h-[44px] min-w-[44px]"
                                                                 onNearYou={onNearYou ? () => { onClose(); onNearYou(); } : undefined}
                                                                 onGuide={onGuide ? (slug) => { onClose(); onGuide(slug); } : undefined}
                                                             />

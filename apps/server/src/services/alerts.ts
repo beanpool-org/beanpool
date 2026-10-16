@@ -79,6 +79,9 @@ import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } fr
 import { getOffboxStatus } from './offbox-backups.js';
 import { backupLockState } from './sealed-backup.js';
 import { standbyIncidentOpen } from './standby-health.js';
+import { readStandbyMain } from './standby-main.js';
+import { readCopyRecord } from './standby-copy-record.js';
+import { timeInWords } from './standby-report.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
@@ -136,6 +139,7 @@ export type AlertKey =
     | 'boot.crashloop' | 'boot.unclean'
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
+    | 'standby.unpaired' | 'standby.source-not-main'
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
     | 'sec.agent'
@@ -169,6 +173,9 @@ const ROWS: Record<AlertKey, Row> = {
     'freeze.recovered': { title: 'restarted by its watchdog', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     'freeze.nowatchdog': { title: 'watchdog quiet', priority: 2, webhook: true, pushEveryMs: 0, banner: true },
     'standby.incident': { title: 'standby needs attention', priority: 3, webhook: true, pushEveryMs: 0, banner: false },
+    /** On a standby (design case 19 D3, D4): it is paired with no main server, or its copy source signs with another key. */
+    'standby.unpaired': { title: 'standby not paired', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    'standby.source-not-main': { title: 'standby copies from the wrong server', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'tls.fallback': { title: 'certificate fell back to self-signed', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.role': { title: 'a role changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.password-burst': { title: 'wrong admin passwords', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
@@ -1362,6 +1369,31 @@ function standbyCondition(): Condition {
         : { key: 'standby.incident', active: false, detail: 'The standby is healthy again.' };
 }
 
+/** A standby's own two (design case 19): paired with no main server, or its copy source answers with another key. */
+function standbyPinConditions(): Condition[] {
+    const off = (key: AlertKey, detail: string): Condition => ({ key, active: false, detail });
+    const paired = off('standby.unpaired', 'This standby is paired with its main server.');
+    const fromMain = off('standby.source-not-main', 'This standby copies from its main server again.');
+    if (getNodeRole() !== 'backup') return [paired, fromMain];
+    if (!readStandbyMain()) {
+        return [{
+            key: 'standby.unpaired', active: true,
+            detail: 'This standby is not paired with a main server, so it copies nothing. On the main server make a pairing code under '
+                + 'Replication Access, then on this server: `docker compose exec beanpool-node beanpool pair`.',
+        }, fromMain];
+    }
+    const r = readCopyRecord();
+    if (r.lastOutcome === 'refused' && r.lastWhy === 'signer-not-pinned') {
+        return [paired, {
+            key: 'standby.source-not-main', active: true,
+            detail: "The server this standby copies from answers with a key that is not its main server's. "
+                + (r.lastOkAt ? `Nothing has been copied since ${timeInWords(r.lastOkAt)}. ` : 'Nothing has been copied yet. ')
+                + 'If the main server was set up again with a new key, pair this standby again from its shell.',
+        }];
+    }
+    return [paired, fromMain];
+}
+
 function tlsCondition(): Condition {
     return tlsFellBackToSelfSigned()
         ? { key: 'tls.fallback', active: true, detail: "The Let's Encrypt certificate could not be renewed: browsers now see a self-signed one. It is retried every 2 hours." }
@@ -1380,6 +1412,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...bootConditions(t),
             ...watchdogConditions(s, t),
             standbyCondition(),
+            ...standbyPinConditions(),
             tlsCondition(),
             ...replacedCondition(s),
             ...securityQuietConditions(s, t),

@@ -26,6 +26,8 @@ import {
 import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
 import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
+import { keyEnd, looksLikePairingCode, makePairingCode, otherKeyWords, parsePairingCode, readStandbyMain } from '../services/standby-main.js';
+import { readNodeIdentity } from '../services/takeover-envelope.js';
 import { getEnvelopeHolders } from '../services/takeover-envelope.js';
 import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js';
 import {
@@ -928,6 +930,9 @@ router.post('/api/local/admin/backup-status', async (ctx) => {
         intervalMs: Number(process.env.BACKUP_PULL_INTERVAL_MS) || 60000,
         ...getBackupStatus(),
         credential: getNodeRole() === 'backup' ? getStandbyCredentialState() : null,
+        // A standby: which main server it is pinned to (services/standby-main.ts), for the Live Backup Server card's
+        // read-only sentence; null when it is not paired. Public: a key, an address, a date.
+        standbyMain: getNodeRole() === 'backup' ? standbyMainView() : null,
         // A standby: the main server's locked take-over keys it holds (never opened here), and whether they changed.
         takeoverEnvelopes: getNodeRole() === 'backup' ? getHeldEnvelopesStatus() : null,
         // Whether the next backup leaves locked, and if not why, in words the manager can show as they are.
@@ -952,19 +957,50 @@ router.post('/api/local/admin/replication-config/get', async (ctx) => {
 // refused: a standby that kept it held it in plain text, so anyone with the standby's disk,
 // or a backup of it, had the main server's admin password.
 // Which server it copies from is a fresh proof's (design case 18 S2b, D2): the copy source feeds the standby's database, and
-// its restore trusts what that database holds.
+// its restore trusts what that database holds. Which KEY it trusts is the shell's (design case 19 D1): a pairing code pasted
+// here is taken only when it names the key this standby is pinned to (its main server moved, or a promoted standby's
+// code); any other key is refused 409 `pairOnShell`, on a standby never paired too. Nothing here writes the pin.
 router.post('/api/local/admin/replication-config/save', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
     if (!(await ownerOnly(ctx, COPY_FROM_OWNER_ONLY))) return;
-    const { primaryUrl, primaryPassword, primaryToken, code } = (ctx as any).requestBody || {};
+    const { primaryUrl, primaryPassword, primaryToken, pairingCode, code } = (ctx as any).requestBody || {};
     if (primaryPassword) {
         ctx.status = 400;
         ctx.body = {
             error: "A standby copies with a replication token, not the main server's admin password. " +
-                'On the main server open Replication Access, make a token, and paste it here.',
+                'On the main server open Replication Access, make a pairing code, and paste it here.',
         };
         return;
     }
-    if (typeof primaryUrl !== 'string') {
+    // A pairing code in either field: its address and token, when its key is this standby's pin.
+    const codeText = pairingCode !== undefined && pairingCode !== null && pairingCode !== '' ? pairingCode
+        : looksLikePairingCode(primaryToken) ? primaryToken : null;
+    let fromCode: { url: string; token: string } | null = null;
+    if (codeText !== null) {
+        const parsed = parsePairingCode(codeText);
+        if (!parsed.ok) {
+            ctx.status = 400;
+            ctx.body = { error: `${parsed.why} Nothing was changed.`, badPairingCode: true };
+            return;
+        }
+        const pin = readStandbyMain();
+        if (!pin || pin.peerId !== parsed.code.peerId) {
+            ctx.status = 409;
+            ctx.body = {
+                error: pin
+                    ? `${otherKeyWords(pin.peerId, parsed.code.peerId)} To follow that server instead, pair this standby again from its shell: `
+                        + '`beanpool pair --follow-new-server`. Nothing was changed.'
+                    : 'This standby is not paired with a main server yet. Pair it from its shell: '
+                        + '`docker compose exec beanpool-node beanpool pair`, and paste this code there. Nothing was changed.',
+                pairOnShell: true,
+                command: pin ? 'beanpool pair --follow-new-server' : 'beanpool pair',
+                mainServer: pin?.peerId ?? null,
+                codeKey: parsed.code.peerId,
+            };
+            return;
+        }
+        fromCode = { url: parsed.code.url, token: parsed.code.token };
+    } else if (typeof primaryUrl !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'primaryUrl is required' };
         return;
@@ -973,17 +1009,38 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
     if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'change which server this standby copies from'))) return;
 
     const config = getLocalConfig();
-    config.backupPrimaryUrl = primaryUrl.trim() || null;
-    // Replication token this standby presents to its main server. Empty string clears it
-    // (copying stops until a new one is saved); undefined leaves it unchanged.
-    if (primaryToken !== undefined) {
-        config.backupReplicationToken = (typeof primaryToken === 'string' && primaryToken.trim()) ? primaryToken.trim() : null;
+    if (fromCode) {
+        config.backupPrimaryUrl = fromCode.url;
+        config.backupReplicationToken = fromCode.token;
+    } else {
+        config.backupPrimaryUrl = (primaryUrl as string).trim() || null;
+        // Replication token this standby presents to its main server. Empty string clears it
+        // (copying stops until a new one is saved); undefined leaves it unchanged.
+        if (primaryToken !== undefined) {
+            config.backupReplicationToken = (typeof primaryToken === 'string' && primaryToken.trim()) ? primaryToken.trim() : null;
+        }
     }
     // A saved token supersedes a legacy stored admin password: wipe it.
     if (config.backupReplicationToken) config.backupAdminPassword = null;
     saveLocalConfig(config);
-    ctx.body = { success: true, credential: getStandbyCredentialState() };
+    ctx.body = { success: true, credential: getStandbyCredentialState(), standbyMain: standbyMainView() };
 });
+
+/** The pin as the Live Backup Server card shows it (read-only): null when this standby is not paired. */
+function standbyMainView(): { peerId: string; keyEnd: string; communityId: string | null; url: string | null; pairedAt: number; how: string } | null {
+    const pin = readStandbyMain();
+    return pin ? { peerId: pin.peerId, keyEnd: keyEnd(pin.peerId), communityId: pin.communityId, url: pin.url, pairedAt: pin.pairedAt, how: pin.how } : null;
+}
+
+/** The address a standby should copy this server from: its live public address, else the one this request came in on. */
+function pairingAddress(requestOrigin: string): string {
+    try {
+        const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string } | undefined;
+        const pa = row ? JSON.parse(row.value || '{}')?.publicAddress : null;
+        if (pa && pa.status === 'live' && typeof pa.hostname === 'string' && /^[a-z0-9.-]{1,253}$/i.test(pa.hostname)) return `https://${pa.hostname}`;
+    } catch { /* the request's own */ }
+    return requestOrigin;
+}
 
 // ---------- Replication token (primary side) ----------
 // A dedicated, scoped credential for the snapshot-pull endpoint, distinct from the
@@ -1004,10 +1061,19 @@ router.post('/api/local/admin/replication-token/generate', async (ctx) => {
     // The answer is the standby's token: never cached, refusals included (#1548 NB3, as enrol and break-glass answer).
     ctx.set('Cache-Control', 'no-store');
     if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
+    // The pairing code (design case 19 D1) carries this server's own key, from its node key file, never from the request.
+    const me = readNodeIdentity();
+    const communityId = ownCommunityId();
+    if (!me || !communityId) {
+        ctx.status = 409;
+        ctx.body = { error: "This server cannot read its own node key or community record, so it cannot make a pairing code. Nothing was changed." };
+        return;
+    }
     const token = generateReplicationToken();
     setReplicationToken(token);
+    const pairingCode = makePairingCode({ url: pairingAddress(ctx.origin), communityId, peerId: me.peerId, token });
     // Returned ONCE — only the hash is persisted, so it can never be shown again.
-    ctx.body = { success: true, token };
+    ctx.body = { success: true, token, pairingCode, peerId: me.peerId, keyEnd: keyEnd(me.peerId) };
 });
 
 router.post('/api/local/admin/replication-token/mode', async (ctx) => {

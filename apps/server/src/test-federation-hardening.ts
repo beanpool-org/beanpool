@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     });
 
     // A string, so a run against code without these refusals cannot pass on undefined === undefined.
-    const isOff = (r: any) => typeof fp.PEERS_OFF_ERROR === 'string' && isOff(r);
+    const isOff = (r: any): boolean => typeof fp.PEERS_OFF_ERROR === 'string' && r?.error === fp.PEERS_OFF_ERROR;
     if (PEERS_OFF) {
         console.log('\n=== FED-06: ENABLE_PEER_CONNECTORS off reaches inbound ===\n');
         const rita = keyOf();

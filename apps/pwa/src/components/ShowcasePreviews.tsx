@@ -130,11 +130,11 @@ export interface SampleTreeNode {
 /**
  * The community invite tree for Example Valley (InvitePage): the example member at the root, and the two members they brought in.
  */
-export function sampleInviteTree(viewerKey?: string, now: number = Date.now()): SampleTreeNode[] {
+export function sampleInviteTree(now: number = Date.now()): SampleTreeNode[] {
     const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
     const tree = S.inviteTree;
     return [{
-        publicKey: viewerKey ?? tree.id,
+        publicKey: tree.id,
         callsign: t(tree.who),
         joinedAt: at(tree.joinedDaysAgo),
         inviteCode: 'EXAMPLE-ROOT',

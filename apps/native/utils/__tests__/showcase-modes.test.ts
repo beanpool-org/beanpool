@@ -127,9 +127,9 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
         expect(invites[1].usedBy).toBe('sample-member-second');
         expect(invites[2].usedBy).toBe('sample-member-first');
 
-        const tree = sampleInviteTree('test-pubkey');
+        const tree = sampleInviteTree();
         expect(tree).toHaveLength(1);
-        expect(tree[0].publicKey).toBe('test-pubkey');
+        expect(tree[0].publicKey).toBe('sample-member-example');
         expect(tree[0].callsign).toBe('an example member');
         expect(tree[0].children).toHaveLength(2);
         expect(tree[0].children.map(c => c.callsign)).toEqual(['a neighbour', 'a neighbour']);

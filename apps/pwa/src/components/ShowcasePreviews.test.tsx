@@ -275,9 +275,9 @@ describe('sample invites and tree adapters', () => {
     });
 
     it('sampleInviteTree provides the root example member and two invited members', () => {
-        const tree = sampleInviteTree('my-key');
+        const tree = sampleInviteTree();
         expect(tree).toHaveLength(1);
-        expect(tree[0].publicKey).toBe('my-key');
+        expect(tree[0].publicKey).toBe('sample-member-example');
         expect(tree[0].callsign).toBe('an example member');
         expect(tree[0].children).toHaveLength(2);
         expect(tree[0].children.map(c => c.callsign)).toEqual(['a neighbour', 'a neighbour']);

@@ -116,11 +116,11 @@ export function sampleInvites(now: number = Date.now()) {
 /**
  * The community invite tree for Example Valley: the example member at the root, and the two members they brought in.
  */
-export function sampleInviteTree(viewerKey?: string, now: number = Date.now()) {
+export function sampleInviteTree(now: number = Date.now()) {
     const at = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
     const tree = SAMPLE_COMMUNITY.inviteTree;
     return [{
-        publicKey: viewerKey ?? tree.id,
+        publicKey: tree.id,
         callsign: t(tree.who),
         joinedAt: at(tree.joinedDaysAgo),
         inviteCode: 'EXAMPLE-ROOT',

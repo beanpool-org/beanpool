@@ -325,7 +325,7 @@ export default function PeopleScreen() {
         if (view === 'invites') {
             if (invitesPreview) {
                 setInvites(sampleInvites());
-                setTree(sampleInviteTree(identity?.publicKey));
+                setTree(sampleInviteTree());
             } else if (invitesMode !== undefined) {
                 loadOfflineInvites();
             }

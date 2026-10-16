@@ -106,7 +106,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     useEffect(() => {
         if (isPreview) {
             setInvites(sampleInvites());
-            setTree(sampleInviteTree(identity.publicKey));
+            setTree(sampleInviteTree());
             return;
         }
         let cancelled = false;

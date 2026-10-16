@@ -1243,6 +1243,9 @@ a.logo { min-height: 44px; }
     gap: 1.5rem;
     padding: 2rem 2.25rem;
 }
+/* A card across the whole grid, under its set: the detail one card of the set leads to (the safety section's key copy) */
+.feature-wide { grid-column: 1 / -1; }
+.feature-wide p { max-width: 75ch; }
 .feature-highlight .feature-content {
     flex: 1;
 }
@@ -1826,6 +1829,9 @@ footer {
 .section-more { text-align: center; margin-top: 1.25rem; font-weight: 600; }
 .section-more a { display: inline-flex; align-items: center; min-height: 48px; }
 .card-links { margin-top: 0.75rem; line-height: 2.2; }
+/* Each link stays whole ("Deleting your data" broke after its first word at 1280); the lines break at the dots,
+   and each dot is held to the link before it, so no line starts with one */
+.card-links a { white-space: nowrap; }
 .audience-tag {
     display: inline-block;
     margin-bottom: 0.6rem;

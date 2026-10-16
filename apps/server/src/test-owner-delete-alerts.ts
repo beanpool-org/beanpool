@@ -26,6 +26,7 @@
  *  7. sec.settings: an admin renaming the community, its callsign or its contacts is told, low; the owner's own is not.
  *  8. No alert, in the book or on the channel, says a member's callsign or key, the address, the new callsign or a contact.
  *  9. The community's name in a title: a hostile callsign standing in for it is cleaned (#2033 N6).
+ * 10. The counts read back at boot: a day's { from, n } goes on; an entry kept by the hour (before C1-N1) starts again.
  *
  * Run: SERVER_SUITES_ONLY=test-owner-delete-alerts node scripts/run-server-suites.mjs
  */
@@ -654,6 +655,25 @@ async function main(): Promise<void> {
     assert(hostile.status === 200 && msgs9.length >= 1 && msgs9.every((x) => !/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e]/.test(x.title + x.body)),
         `9. no control or bidi character reaches a title or body (${hostile.status} ${JSON.stringify(msgs9.map((x) => x.title))})`);
     await call('/api/local/update-identity', asOwner, { communityName: COMMUNITY, callsign: 'RIVBND' });
+
+    // ── 10. The counts read back at boot ───────────────────────────────────────────────────────────────────────────
+    console.log('\n— 10. the counts at boot —');
+    alerts.resetAlertsForTests();
+    const bookFile = path.join(dataDir!, alerts.ALERTS_STATE_FILE);
+    const onDisk = JSON.parse(fs.readFileSync(bookFile, 'utf8'));
+    onDisk.dayCounts = {
+        [`sec.restore:${OWNER_ALERT_WORDS.otherCommunityRefused.one}`]: { [String(Math.floor(Date.now() / 3_600_000))]: 4 },
+        [`sec.members:${OWNER_ALERT_WORDS.membersRemoved.one}`]: { from: Date.now() - 60_000, n: 2 },
+    };
+    fs.writeFileSync(bookFile, JSON.stringify(onDisk));
+    alerts.rereadAlertsForTests();
+    refusal();
+    noteSecurityEvent({ key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersRemoved, actor: admin, actorRole: 'admin' });
+    await sleep(100);
+    const boot = [...lines('sec.restore'), ...lines('sec.members')].map((e) => e.detail);
+    assert(boot.length === 2 && boot[0] === 'A backup from another community was refused in the last day.' && boot[1] === '3 members were removed in the last day, by an admin.',
+        `10. read back at boot: the hour-kept count starts again (1), the day's { from, n } goes on (3) (${JSON.stringify(boot)})`);
+    alerts.resetAlertsForTests();
 
     registrar.close();
     channel.close();

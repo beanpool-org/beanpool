@@ -405,6 +405,11 @@ function writeState(): void {
     }
 }
 
+/** Read the book from disk again at the next event, as a restart does (a suite checking what a boot keeps). */
+export function rereadAlertsForTests(): void {
+    state = null;
+}
+
 /** Forget everything (a suite starting a step from nothing). */
 export function resetAlertsForTests(): void {
     state = emptyState();

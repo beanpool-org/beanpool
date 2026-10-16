@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
 import type { NodeProfile } from '../../lib/profiles';
-import { answerInPageConfirm } from '../common/InPageConfirm.testing';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 const node: NodeProfile = {
     id: 'local-node',

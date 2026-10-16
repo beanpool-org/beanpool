@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
-import { answerInPageConfirm } from '../common/InPageConfirm.testing';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',

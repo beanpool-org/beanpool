@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BulletinSection } from './BulletinSection';
 import type { NodeProfile } from '../../lib/profiles';
-import { answerInPageConfirm } from '../common/InPageConfirm.testing';
+import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 describe('BulletinSection', () => {
     const mockActiveNode: NodeProfile = {

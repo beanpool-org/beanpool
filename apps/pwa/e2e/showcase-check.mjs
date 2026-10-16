@@ -25,7 +25,7 @@
  * Run: pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element, navigator -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';

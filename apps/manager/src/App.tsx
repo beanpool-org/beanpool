@@ -445,7 +445,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const secondFactorPrompt = useMemo(() => (isFleetMode && activeNode
         ? () => { promptForTotp(activeNode.id, activeNode.name, activeNode.url).catch(() => { /* busy or cancelled: the poll asks again */ }); }
         : undefined
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     ), [isFleetMode, activeNode?.id, activeNode?.name, activeNode?.url]);
 
     /**

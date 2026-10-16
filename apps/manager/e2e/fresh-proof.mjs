@@ -19,7 +19,7 @@
  *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
-/* global console, process, document, window -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, document, window, URL -- Node, plus page.evaluate callbacks run in the browser */
 import { startServer, launch, openSettings, selectSubTab, settle, CSP_VIOLATIONS } from './harness.mjs';
 
 const STALE = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };

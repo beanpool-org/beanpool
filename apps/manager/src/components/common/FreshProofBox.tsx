@@ -125,7 +125,6 @@ export function FreshProofBox({ proof, testId = 'fresh-proof', onCancel }: { pro
         if (!refusal || !box) return;
         showOpened(box, refusal.kind === 'code' && inputRef.current ? inputRef.current : box);
         // Only on opening: a wrong code's answer keeps the person where they are.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [opened]);
 
     if (!refusal) return null;

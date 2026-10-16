@@ -141,12 +141,12 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
     else if (typeof post.photos === 'string') { try { photos = JSON.parse(post.photos); } catch { photos = []; } }
 
     const handleRsvp = async (tapped: EventRsvpStatus) => {
-        if (pending || closed) return;
+        const next = nextRsvp(counts.mine, tapped);
+        if (pending || (closed && next !== null)) return;
         if (!identity?.publicKey) {
             Alert.alert('Sign in to RSVP', 'Set up your member identity to tell the host you are coming.');
             return;
         }
-        const next = nextRsvp(counts.mine, tapped);
         const before = counts;
         hapticTick();
         setCounts(applyRsvp(counts, next));
@@ -156,6 +156,24 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
             if (res?.post) {
                 setView(res.post);
                 setCounts(countsOf(res.post));
+            } else if (res?.success) {
+                setView((v: any) => {
+                    const base = v ?? post;
+                    const curMine = counts.mine ?? base.myRsvp;
+                    let goingCount = Number(base.goingCount ?? base.event_going_count ?? 0) || 0;
+                    let interestedCount = Number(base.interestedCount ?? base.event_interested_count ?? 0) || 0;
+                    if (curMine === 'going') goingCount = Math.max(0, goingCount - 1);
+                    if (curMine === 'interested') interestedCount = Math.max(0, interestedCount - 1);
+                    return {
+                        ...base,
+                        myRsvp: null,
+                        goingCount,
+                        event_going_count: goingCount,
+                        interestedCount,
+                        event_interested_count: interestedCount,
+                    };
+                });
+                setCounts(c => applyRsvp(c, null));
             }
         } catch (err: any) {
             setCounts(before);
@@ -216,14 +234,15 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
     const rsvpButton = (status: EventRsvpStatus, label: string) => {
         const selected = counts.mine === status;
+        const disabled = (closed && !selected) || !!pending;
         return (
             <Pressable
                 onPress={() => handleRsvp(status)}
-                disabled={closed || !!pending}
-                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected]}
+                disabled={disabled}
+                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
                 accessibilityRole="button"
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
-                accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
+                accessibilityState={{ selected, disabled, busy: pending === status }}
             >
                 {/*
                   * The label holds the button's width while the RSVP is in flight (the card does the same): the
@@ -290,7 +309,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
                 {isHost ? (
                     <Text style={styles.hostingLine} accessibilityRole="text">You're hosting this event</Text>
-                ) : !closed && (
+                ) : (
                     <View style={styles.rsvpRow}>
                         {rsvpButton('going', 'Going')}
                         {rsvpButton('interested', 'Interested')}
@@ -519,6 +538,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: colors.surface.card,
         },
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
+        rsvpBtnDisabled: { opacity: 0.5 },
         rsvpText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         rsvpTextSelected: { color: '#fff' },
         rsvpTextBusy: { opacity: 0 },

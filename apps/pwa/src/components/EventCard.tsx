@@ -45,16 +45,16 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
     const [error, setError] = useState<string | null>(null);
     useEffect(() => { setLivePost(post); }, [post]);
 
-    const canRsvp = !!identity && isEventOpen(livePost);
+    const canRsvp = !!identity && (isEventOpen(livePost) || livePost.myRsvp !== null);
 
     const tap = async (status: EventRsvpStatus) => {
         if (!identity) {
             setError('Join this community to RSVP.');
             return;
         }
-        if (!isEventOpen(livePost)) return;
         // Tapping the status you already have takes it back: "not going" is no RSVP at all.
         const next = livePost.myRsvp === status ? null : status;
+        if (!isEventOpen(livePost) && next !== null) return;
         setBusy(next ?? 'none');
         setError(null);
         try {
@@ -62,6 +62,19 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
             if (res?.post) {
                 setLivePost(res.post);
                 onChange?.(res.post);
+            } else if (res?.success) {
+                const updated: MarketplacePost = {
+                    ...livePost,
+                    myRsvp: null,
+                    goingCount: livePost.myRsvp === 'going'
+                        ? Math.max(0, (livePost.goingCount ?? 1) - 1)
+                        : livePost.goingCount,
+                    interestedCount: livePost.myRsvp === 'interested'
+                        ? Math.max(0, (livePost.interestedCount ?? 1) - 1)
+                        : livePost.interestedCount,
+                };
+                setLivePost(updated);
+                onChange?.(updated);
             }
         } catch (e: any) {
             setError(e?.message || 'Could not save your RSVP.');
@@ -109,13 +122,15 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
             </p>
         );
     }
+    const open = isEventOpen(livePost);
     const btn = (status: EventRsvpStatus, label: string) => {
         const mine = livePost.myRsvp === status;
+        const disabled = !canRsvp || (!open && !mine) || busy !== null;
         return (
             <button
                 type="button"
                 aria-pressed={mine}
-                disabled={!canRsvp || busy !== null}
+                disabled={disabled}
                 onClick={(e) => { e.stopPropagation(); tap(status); }}
                 aria-busy={busy === status}
                 className={`relative grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border text-sm font-extrabold leading-tight whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${

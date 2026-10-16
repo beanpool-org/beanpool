@@ -299,7 +299,9 @@ async function globalMember(browser, root, dark) {
             await wait(300);
         }
         const headerPropose = page.getByTestId('local-community-action').filter({ hasText: '+ Propose' }).filter({ hasNotText: 'Decision' });
-        if (await headerPropose.count() > 0) {
+        const headerProposeCount = await headerPropose.count();
+        check(headerProposeCount === 1, `Decide preview: the header's + Propose marker is there (${headerProposeCount})`);
+        if (headerProposeCount > 0) {
             await headerPropose.first().click();
             await page.getByTestId('local-community-sheet').waitFor({ timeout: 5_000 });
             await closeSheet(page);

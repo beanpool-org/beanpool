@@ -68,6 +68,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // mode (lib/features.ts).
     const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
     const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
+    // The node did not answer, so the modes never landed: 'hidden' then means "not known", not "off".
+    const [modesUnknown, setModesUnknown] = useState(false);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
@@ -86,10 +88,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     setVotes(decisions === 'live');
                 });
             })
-            .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
+            .catch(() => {
+                // Not answered: keep what the page shows; the node refuses a vote itself.
+                if (!cancelled) setModesUnknown(true);
+            });
         return () => { cancelled = true; };
     }, []);
     const hasDecide = votes || decisionsMode === 'preview';
+    // The reader's own voice credits: where Decisions are live for them, or, when the node never said, wherever Decide is (as before
+    // the modes). Never before the modes land on a node that answers: on the global node that card would be drawn and then go.
+    const showsOwnVoiceCredits = decisionsMode === 'live' || (modesUnknown && votes);
     const activeSection = !hasDecide && pickedSection === 'decide' ? 'groups' : pickedSection;
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
@@ -403,10 +411,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}
-                {(enterprisesMode !== 'preview' || decisionsMode === 'live') && (
+                {(enterprisesMode !== 'preview' || showsOwnVoiceCredits) && (
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     {enterprisesMode !== 'preview' && (
-                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${decisionsMode !== 'live' ? 'col-span-2' : ''}`}>
+                        <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${!showsOwnVoiceCredits ? 'col-span-2' : ''}`}>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                 Commons Pool
                             </div>
@@ -415,7 +423,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </div>
                         </div>
                     )}
-                    {decisionsMode === 'live' && (
+                    {showsOwnVoiceCredits && (
                         <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                 Voice credits for money votes

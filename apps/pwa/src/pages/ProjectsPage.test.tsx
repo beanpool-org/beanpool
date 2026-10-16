@@ -718,6 +718,14 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
         expect(sectionTabs()).toHaveLength(2);
     });
+
+    it('an unanswered read still draws the reader\'s own voice credits, as before the modes (confirm-1 NB1)', async () => {
+        vi.mocked(communityInfoOnce).mockRejectedValue(new Error('offline'));
+        render(<ProjectsPage identity={backerIdentity} />);
+        const card = await screen.findByTestId('voice-credits-card');
+        await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
+        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+    });
 });
 
 describe('Commons with members on demand (review of #1861, N1)', () => {

@@ -203,7 +203,7 @@ describe('the screens go through the helpers (source check)', () => {
         const src = read('app/(tabs)/projects.tsx');
         expect(src).toContain('const sections = commonsSections(reader.effective, { decisionsPreview });');
         expect(src).toContain("const showsDecide = sections.includes('decide');");
-        expect(src).toContain('const activeSection = commonsSectionFor(');
+        expect(src).toMatch(/const activeSection = commonsSectionFor\([^;]*reader\.effective[^;]*\{ decisionsPreview \}/);
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");

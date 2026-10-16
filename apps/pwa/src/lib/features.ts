@@ -142,14 +142,14 @@ export async function readsOwn(feature: ShowcaseFeature): Promise<boolean> {
  * `readsOwn` for a component: false until it has answered, so an effect that reads the reader's own data waits for it
  * and runs again when it turns true. `enabled` false: false, and nothing is asked.
  */
-export function useReadsOwn(feature: ShowcaseFeature, enabled = true): boolean {
+export function useReadsOwn(feature: ShowcaseFeature, enabled = true, retryKey?: unknown): boolean {
     const [reads, setReads] = useState(false);
     useEffect(() => {
         if (!enabled) { setReads(false); return; }
         let cancelled = false;
         readsOwn(feature).then((r) => { if (!cancelled) setReads(r); }, () => {});
         return () => { cancelled = true; };
-    }, [feature, enabled]);
+    }, [feature, enabled, retryKey]);
     return reads;
 }
 

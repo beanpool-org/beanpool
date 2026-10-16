@@ -499,7 +499,7 @@ export function MyDealsModal({
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                                                        <span className="text-xl text-nature-400 dark:text-nature-500">{isBuyer ? '🛒' : '🏷️'}</span>
+                                                        <span className="text-xl text-nature-600 dark:text-nature-300">{isBuyer ? '🛒' : '🏷️'}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
@@ -689,7 +689,7 @@ export function MyDealsModal({
                                                 </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                                                    <span className="text-xl text-nature-400 dark:text-nature-500">📦</span>
+                                                    <span className="text-xl text-nature-600 dark:text-nature-300">📦</span>
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">

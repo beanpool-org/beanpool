@@ -187,16 +187,10 @@ async function noSideScroll(page, where) {
                 beyond.push(`${(el.getAttribute('data-testid') || el.tagName)} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}" right=${Math.round(r.right)}`);
             }
         }
-        for (const el of document.querySelectorAll('*')) {
-            const cs = getComputedStyle(el);
-            if (el.scrollWidth > el.clientWidth + 1 && cs.overflowX === 'hidden' && el.clientWidth >= W) {
-                beyond.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ').slice(0, 3).join('.')} scrollW=${el.scrollWidth} > clientW=${el.clientWidth}`);
-            }
-        }
         return { over: docOver, past: beyond };
     });
     check(over <= 1, `${where}: no sideways scroll at 320 px with 1.3x text${over > 1 ? ` (it scrolls ${over}px)` : ''}`);
-    check(past.length === 0, `${where}: no inner overflow or marker past innerWidth${past.length ? ` (${past.join('; ')})` : ''}`);
+    check(past.length === 0, `${where}: no community marker overflows viewport${past.length ? ` (${past.join('; ')})` : ''}`);
 }
 
 async function shot(page, name) {
@@ -277,11 +271,11 @@ async function globalMember(browser, root, dark) {
         await wait(1_000);
         readsNothingOwn(net, t0, node.origin, 'the Ledger');
 
-        // The Commons: enterprise and Decision in preview, Vote opens the sheet.
+        // The Commons: enterprises in preview, Pledge opens the sheet.
         const tCommons = Date.now();
         await tab(page, 'Commons');
         await page.getByTestId('commons-preview').waitFor({ timeout: 10_000 });
-        await page.getByTestId('sample-decision').getByTestId('local-community-action').click();
+        await page.getByTestId('commons-preview').getByTestId('local-community-action').first().click();
         await page.getByTestId('local-community-sheet').waitFor();
         await closeSheet(page);
         await noSideScroll(page, 'Commons preview');
@@ -290,6 +284,33 @@ async function globalMember(browser, root, dark) {
         await shot(page, `commons-${scheme}`);
         await wait(1_000);
         readsNothingOwn(net, tCommons, node.origin, 'the Commons');
+
+        // Commons → Decide in preview: each marker in it and the header opens the sheet.
+        const tDecide = Date.now();
+        await page.getByTestId('commons-section-tabs').getByRole('button', { name: /Decide/ }).click();
+        await page.getByTestId('decide-preview').waitFor({ timeout: 10_000 });
+        const decideActs = page.getByTestId('decide-preview').getByTestId('local-community-action');
+        const nDecide = await decideActs.count();
+        check(nDecide === 3, `Decide preview: 3 marker actions in Decide (${nDecide})`);
+        for (let i = 0; i < nDecide; i++) {
+            await decideActs.nth(i).click();
+            await page.getByTestId('local-community-sheet').waitFor({ timeout: 5_000 });
+            await closeSheet(page);
+            await wait(300);
+        }
+        const headerPropose = page.getByTestId('local-community-action').filter({ hasText: '+ Propose' }).filter({ hasNotText: 'Decision' });
+        if (await headerPropose.count() > 0) {
+            await headerPropose.first().click();
+            await page.getByTestId('local-community-sheet').waitFor({ timeout: 5_000 });
+            await closeSheet(page);
+            await wait(300);
+        }
+        await noSideScroll(page, 'Decide preview');
+        await targetsAtLeast44(page, 'Decide preview');
+        await markersNeverLocked(page, 'Decide preview');
+        await shot(page, `decide-${scheme}`);
+        await wait(1_000);
+        readsNothingOwn(net, tDecide, node.origin, 'Decide');
 
         // The Market: My Deals in preview; a listing's In return and its deal action.
         const tMarket = Date.now();

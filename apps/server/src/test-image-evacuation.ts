@@ -265,8 +265,29 @@ async function main(): Promise<void> {
         db.prepare('SELECT post_id, order_num, updated_at FROM post_photos ORDER BY post_id, order_num').all());
 
     // ── 7a. the attachment, before evacuation ──────────────────────────────────────────────────
-    const attachUrl = `${BASE}/api/messages/${fixture.attachments[0].id}/attachment`;
-    const attachBefore = await (await fetch(attachUrl)).json() as any;
+    const { publicKey: pKey, privateKey: privKey } = crypto.generateKeyPairSync('ed25519');
+    const participantPubkey = pKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Attacher', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(participantPubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(participantPubkey);
+    const convId = crypto.randomUUID();
+    db.prepare(`INSERT OR IGNORE INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(convId, participantPubkey);
+    db.prepare(`INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`).run(convId, participantPubkey);
+    db.prepare(`INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type) VALUES (?, ?, ?, 'c', 'n', 'image')`).run(fixture.attachments[0].id, convId, participantPubkey);
+
+    const attachPath = `/api/messages/${fixture.attachments[0].id}/attachment`;
+    const signAttach = () => {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const canonical = `GET\n${attachPath}\n${ts}\n${nonce}\n`;
+        return {
+            'X-Public-Key': participantPubkey,
+            'X-Signature': crypto.sign(null, Buffer.from(canonical), privKey).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        };
+    };
+    const attachUrl = `${BASE}${attachPath}`;
+    const attachBefore = await (await fetch(attachUrl, { headers: signAttach() })).json() as any;
     assert(attachBefore.data === fixture.attachments[0].data, 'the ciphertext serves from the row before evacuation');
 
     // ── 4. the evacuation job ──────────────────────────────────────────────────────────────────
@@ -432,7 +453,7 @@ async function main(): Promise<void> {
     }
 
     // ── 7b. the attachment, after evacuation ───────────────────────────────────────────────────
-    const attachAfter = await (await fetch(attachUrl)).json() as any;
+    const attachAfter = await (await fetch(attachUrl, { headers: signAttach() })).json() as any;
     assert(attachAfter.data === fixture.attachments[0].data, 'the ciphertext is unchanged, character for character');
     assert(attachAfter.nonce === fixture.attachments[0].nonce, 'the nonce is unchanged');
     assert(attachAfter.mime === attachBefore.mime, 'the mime is unchanged');

@@ -259,7 +259,15 @@ async function main(): Promise<void> {
         const cut = await longRowPng(16_777_216, 0.5);
         const peakBefore = process.resourceUsage().maxRSS;
         const readsBefore = thumbs?.thumbnailReads?.() ?? NaN;
-        const ribbon = make('Thumb ribbon, a hostile shape', [dataUrl('image/png', wide), dataUrl('image/png', cut)]);
+        // Insert the hostile shapes as stored rows ("a row from a peer or a backup"): the route's pixel cap at
+        // ingestion refuses them, but the thumbnailer's decoder bound must still guard a row that entered another way.
+        const ribbon = make('Thumb ribbon, a hostile shape', []);
+        for (const [i, b] of [wide, cut].entries()) {
+            const key = postPhotoKey(ribbon, i, sha256Hex(b), 'image/png');
+            await writeObject(store, key, b, { mime: 'image/png' });
+            db.prepare('INSERT INTO post_photos (post_id, order_num, photo_data, storage_key, sha256, bytes, mime) VALUES (?, ?, NULL, ?, ?, ?, ?)')
+                .run(ribbon, i, key, sha256Hex(b), b.length, 'image/png');
+        }
         await settled();
         const urls = await urlsOf(ribbon);
         for (const [i, [name, bytes]] of ([['a 16,777,216×1 PNG', wide], ['the same, its image data cut short', cut]] as const).entries()) {

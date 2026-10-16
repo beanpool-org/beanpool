@@ -303,16 +303,20 @@ async function main(): Promise<void> {
     const anonPhoto = await call('GET', null, `/api/messages/${boIds[2]}/attachment`);
     assert(boPhoto.status === 200 && boPhoto.body?.data === photo.ciphertext && boPhoto.body?.nonce === photo.nonce,
         `Bo's photo comes back to him (${show(boPhoto)})`);
-    // Served by its id as any stored chat photo is, to anyone, unsigned too: a 404 for others would tell its sender they
-    // are blocked (#1403 re-review). Only its sender ever has the id; the blocker never does.
+    // Refused alike: the sender gets 200 for both, anyone else the same refusal for both (404 for a member outside,
+    // 401 unsigned). A 404 for others tells its sender nothing: the blocker never has the id, and anyone else gets
+    // the same answer as for an id with no photo.
     const ctrlConvId: string = cc.body?.conversation?.id;
     const ctrlSend = await call('POST', cy, '/api/messages/send', dm(ctrlConvId, cy, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } }));
-    const ctrlPhoto = await call('GET', null, `/api/messages/${ctrlSend.body?.message?.id}/attachment`);
-    assert(annPhoto.status === 200 && anonPhoto.status === 200 && annPhoto.body?.data === photo.ciphertext && anonPhoto.body?.data === photo.ciphertext
-        && JSON.stringify(anonPhoto.body) === JSON.stringify(boPhoto.body)
-        && ctrlPhoto.status === 200 && keysOf(ctrlPhoto.body) === keysOf(anonPhoto.body)
-        && ctrlPhoto.headers['cache-control'] === anonPhoto.headers['cache-control'] && ctrlPhoto.headers['content-type'] === anonPhoto.headers['content-type'],
-        `served to anyone by its id as a stored photo is (${annPhoto.status}, ${anonPhoto.status})`);
+    const ctrlStoredId: string = ctrlSend.body?.message?.id;
+    const cyPhoto = await call('GET', cy, `/api/messages/${ctrlStoredId}/attachment`);
+    const ctrlAnnPhoto = await call('GET', ann, `/api/messages/${ctrlStoredId}/attachment`);
+    const ctrlAnonPhoto = await call('GET', null, `/api/messages/${ctrlStoredId}/attachment`);
+    assert(boPhoto.status === 200 && cyPhoto.status === 200
+        && boPhoto.body?.data === photo.ciphertext && cyPhoto.body?.data === photo.ciphertext
+        && annPhoto.status === ctrlAnnPhoto.status && annPhoto.status === 404
+        && anonPhoto.status === ctrlAnonPhoto.status && anonPhoto.status === (process.env.ENFORCE_READ_AUTH === 'false' ? 404 : 401),
+        `refused alike: the sender gets 200 for both, anyone else the same refusal for both (${annPhoto.status}, ${anonPhoto.status})`);
     // Kept in the image store as a chat photo is, never whole in the database's row (#1403 review, NON-BLOCKING).
     const photoRow = attempt(() => db.prepare('SELECT attachment_data, storage_key FROM withheld_lines WHERE id = ?').get(boIds[2]) as any);
     const photoKey: string | undefined = photoRow?.storage_key ?? undefined;

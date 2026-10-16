@@ -390,6 +390,7 @@ export const SUITES = [
     'test-photo-off-listing-urls',
     'test-photo-thumbnails',
     'test-photo-key-collision',
+    'test-photo-pixel-cap-attachment-read',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',
     'test-directory-hold-back',

@@ -282,6 +282,42 @@ describe('everything else, as before', () => {
     });
 });
 
+// A posts read refused 401 is said in the log, for whoever diagnoses a failed first sync: in the node's own words, and
+// "unsigned" only when this phone had no key to sign with. A signed read is refused 401 too, its timestamp stale on a phone
+// whose clock is off (apps/server/src/engine/member-signature.ts), and said "unsigned" sent a diagnosis the wrong way
+// (review of PR #2127).
+describe('what the log says of a posts read refused 401', () => {
+    const refusedLine = (warn: { mock: { calls: unknown[][] } }) =>
+        warn.mock.calls.map(c => String(c[0])).find(l => l.includes('refused the posts read')) ?? '';
+
+    it("a signed read: the node's words, never \"unsigned\" or a key it could not read", async () => {
+        node.posts = { status: 401, body: { error: 'Request timestamp is stale or invalid' } };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect((await sync()).success).toBe(false);
+            const line = refusedLine(warn);
+            expect(line).toContain('(401: "Request timestamp is stale or invalid")');
+            expect(line).not.toMatch(/unsigned|could not read its key/);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it("a phone with no key to sign with: the node's words, and that the read went unsigned", async () => {
+        vi.mocked(loadIdentity).mockImplementation(async () => null as any);
+        node.posts = { status: 401, body: { error: 'Members only', code: 'members_only' } };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect((await sync()).success).toBe(false);
+            const line = refusedLine(warn);
+            expect(line).toContain('(401: "Members only")');
+            expect(line).toContain('this phone could not read its key, so it went unsigned');
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});
+
 // Android 1.2.66, 18 Oct: at a cold start just after an update the key was slow to read. The sync found none, so its posts
 // read went unsigned, and the community, which keeps its listings for its members, refused it (401): the Market's first
 // sync failed, and it said "Having trouble connecting". The sync now reads the key once more a moment later

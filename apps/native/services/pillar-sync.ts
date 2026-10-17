@@ -872,8 +872,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     : refusal?.code === 'private_preview' ? await noteForPreview(anchorUrl, signer, refusal)
                     : refusal;
                 // Said in the log, never a quiet end: the cycle fails, and the Market's wait asks for one more (market.tsx).
+                // In the node's own words: a signed read is refused 401 too, its timestamp stale on a phone whose clock is
+                // off (apps/server/src/engine/member-signature.ts), which no second try clears. Unsigned only when this
+                // phone had no key to sign with, the one thing it knows (review of PR #2127).
                 if (postsRes.status === 401) {
-                    console.warn(`[Pillar Sync] ${anchorUrl} refused the posts read as unsigned (401)${signer ? '' : ': this phone could not read its key'}.`);
+                    const said = typeof answer?.error === 'string' ? `: "${answer.error.slice(0, 200)}"` : '';
+                    console.warn(`[Pillar Sync] ${anchorUrl} refused the posts read (401${said})${signer ? '' : '; this phone could not read its key, so it went unsigned'}.`);
                 }
                 if (note !== undefined) await noteRefusal(anchorUrl, note);
                 // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means

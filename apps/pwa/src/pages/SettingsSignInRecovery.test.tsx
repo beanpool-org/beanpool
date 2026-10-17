@@ -267,6 +267,10 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         expect(row.getAttribute('target')).toBe('_blank');
         expect(row.getAttribute('rel')).toBe('noopener noreferrer');
         expect(row).toHaveAccessibleName('Global community, global.example.org, opens in a new tab');
+        // What it is, under its address, and read as the link's description (mothership design §2.5, pick 1).
+        const about = 'The global community is one community among many. Your own community runs on its own server and never needs it.';
+        expect(row).toHaveTextContent(about);
+        expect(row).toHaveAccessibleDescription(about);
         // jsdom serves the page at http://localhost:3000: the address keeps its port (review 4302869884).
         expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, localhost:3000."]);
     });

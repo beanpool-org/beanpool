@@ -151,6 +151,17 @@ export default function BeanPoolSheet() {
         : globalEntry === 'closed' || globalEntry === 'preview' ? openDoor
         : undefined;
     const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press to remove it.') : undefined;
+    // The global community can't be reached, and the community in use is another one this account is a member of and that
+    // answers (online; a guest's isn't "your own"): say so under the line
+    // (DESIGN-global-mothership-fable.md §2.5, pick 1: one community among many, which yours never needs). Not while the
+    // phone is on the global community, nor while the community in use can't be reached either: it would read as false.
+    const globalAside = globalEntry === 'unreachable' && !!communities.active && !isGlobalCommunity(communities.active)
+        && current?.status === 'online' ? t("Your own community isn't affected.") : null;
+    // TalkBack reads the two as sentences: a line without its own stop (the saved row's "Can't reach it right now") gets one,
+    // the language's own as the aside ends with it ("।" in hi and bn, "۔" in ur, "。" in ja and zh), never a second.
+    const globalState = globalAside
+        ? `${globalLine}${/[.!?…。।۔！？]$/.test(globalLine) ? '' : globalAside.match(/[.。।۔]$/)?.[0] ?? '.'} ${globalAside}`
+        : globalLine;
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 
@@ -197,8 +208,8 @@ export default function BeanPoolSheet() {
                 // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the
                 // dot's colour says) or what its line says, and in use; a switch to the one in use does nothing.
                 accessibilityLabel={saved
-                    ? savedRowLabel(saved.name, globalEntry === 'member' ? STATUS_TEXT[saved.status] : globalLine, isCurrent)
-                    : t('Global community, {state}', { state: globalLine })}
+                    ? savedRowLabel(saved.name, globalEntry === 'member' ? STATUS_TEXT[saved.status] : globalState, isCurrent)
+                    : t('Global community, {state}', { state: globalState })}
                 accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
             >
@@ -211,6 +222,9 @@ export default function BeanPoolSheet() {
                     {/* Two lines at most, as the rows beside it; TalkBack reads all of it (the label), and a sentence the floor
                         cuts (the preview's) is whole on the page the row opens. */}
                     <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={2}>{globalLine}</Text>
+                    {/* Never cut: nothing opens it whole, and in de, fr, ru, ml and ta it takes three lines at 320 dp and 1.3×.
+                        It shows only while the global community can't be reached, so the row grows instead. */}
+                    {!!globalAside && <Text style={styles.rowSub}>{globalAside}</Text>}
                 </View>
                 {isCurrent
                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />

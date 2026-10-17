@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "ഇപ്പോൾ എത്താനാകുന്നില്ല. വീണ്ടും ശ്രമിക്കാൻ ടാപ്പ് ചെയ്യൂ.",
   "Can't reach it right now": "ഇപ്പോൾ എത്താനാകുന്നില്ല",
   "Your account there was closed.": "അവിടെയുള്ള നിങ്ങളുടെ അക്കൗണ്ട് അടച്ചു.",
+  "Your own community isn't affected.": "നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയെ ഇത് ബാധിക്കുന്നില്ല.",
   "Global community, {state}": "ആഗോള കമ്മ്യൂണിറ്റി, {state}",
   "Switches to this community. Long press to remove it.": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുന്നു. നീക്കം ചെയ്യാൻ ദീർഘനേരം അമർത്തൂ.",
   "Guest": "അതിഥി",

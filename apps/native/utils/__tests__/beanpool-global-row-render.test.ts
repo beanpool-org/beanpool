@@ -242,7 +242,7 @@ describe('one row for the global community, whatever it answers (the phone does 
         await open();
         expect(title()).toBe('Global community');
         expect(line()).toBe("Can't reach it right now. Tap to try again.");
-        expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+        expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again. Your own community isn't affected.");
         expect(row().getAttribute('data-disabled')).toBeNull();
         // Back online, the tap asks again: the door is open and the key a stranger there, so the row is Join.
         scene.door = 'open';
@@ -328,7 +328,7 @@ describe('one row for the global community, whatever it answers (the phone does 
         await open();
         expect(communityRows()).toEqual([
             'Riverside, Connected. You are a member here., in use',
-            "Global community, Can't reach it right now. Tap to try again.",
+            "Global community, Can't reach it right now. Tap to try again. Your own community isn't affected.",
             'Add a community',
         ]);
     });
@@ -359,6 +359,89 @@ describe('one row for the global community, whatever it answers (the phone does 
         await open();
         expect(communityRows()).toEqual(["Global community, Can't reach it right now. Tap to try again.", 'Add a community']);
     });
+});
+
+describe("the global community can't be reached: the community in use isn't affected (DESIGN-global-mothership-fable.md §2.5, pick 1)", () => {
+    const AFFECTED = "Your own community isn't affected.";
+    const SAVED = { url: GLOBAL, name: 'BeanPool Global', status: 'guest' as const };
+
+    it('on another community that answers: the line, then that one, and TalkBack reads both (fails on origin/main)', async () => {
+        scene.door = 'offline';
+        await open();
+        expect(texts(row())).toEqual(['Global community', "Can't reach it right now. Tap to try again.", AFFECTED]);
+        expect(row().getAttribute('aria-label')).toBe(`Global community, Can't reach it right now. Tap to try again. ${AFFECTED}`);
+    });
+
+    it('is never cut: nothing opens it whole, and in de, fr, ru, ml and ta it takes three lines at 320 dp', async () => {
+        scene.door = 'offline';
+        await open();
+        const aside = Array.from(row().querySelectorAll('span')).find((s) => s.textContent === AFFECTED)!;
+        expect(aside.getAttribute('data-lines')).toBeNull();
+    });
+
+    it('the phone has it saved: the same under the saved row\'s line, read as two sentences', async () => {
+        list.rows = [RIVERSIDE, SAVED];
+        scene.door = 'offline';
+        await open();
+        expect(texts(row()).slice(0, 3)).toEqual(['BeanPool Global', "Can't reach it right now", AFFECTED]);
+        expect(row().getAttribute('aria-label')).toBe(`BeanPool Global, Can't reach it right now. ${AFFECTED}`);
+    });
+
+    it('not while the phone is on the global community itself, where it would be untrue', async () => {
+        list.rows = [RIVERSIDE, SAVED];
+        list.active = GLOBAL;
+        scene.door = 'offline';
+        await open();
+        expect(line()).toBe("Can't reach it right now");
+        expect(texts(row())).not.toContain(AFFECTED);
+        expect(row().getAttribute('aria-label')).not.toContain(AFFECTED);
+    });
+
+    it("not while the community in use can't be reached either (the phone itself is likely offline)", async () => {
+        list.rows = [{ ...RIVERSIDE, status: 'offline' }];
+        scene.door = 'offline';
+        await open();
+        expect(texts(row())).not.toContain(AFFECTED);
+        expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+    });
+
+    it('not while the phone is a guest in the community in use: it answers, but it isn\'t "your own"', async () => {
+        list.rows = [{ ...RIVERSIDE, status: 'guest' }];
+        scene.door = 'offline';
+        await open();
+        expect(texts(row())).not.toContain(AFFECTED);
+        expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+    });
+
+    it('in every catalog TalkBack reads one stop between the two, the language\'s own (hi, bn: "।"; ur: "۔"; ja, zh: "。")', async () => {
+        const dir = path.resolve(__dirname, '../../words');
+        for (const f of fs.readdirSync(dir).filter((x) => /^[A-Za-z-]+\.json$/.test(x))) {
+            const cat = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Record<string, string>;
+            const aside = cat[AFFECTED];
+            const stop = aside.slice(-1);
+            expect(stop, `${f} ends "${aside}" with a full stop`).toMatch(/^[.。।۔]$/);
+            for (const saved of [false, true]) {
+                act(() => root.unmount());
+                root = createRoot(host);
+                forgetGlobalDoorOffer();
+                setLanguage(f.replace(/\.json$/, '') as Parameters<typeof setLanguage>[0], [cat]);
+                list.rows = saved ? [RIVERSIDE, SAVED] : [RIVERSIDE];
+                scene.door = 'offline';
+                await open();
+                // Unsaved, the line has its own stop; saved ("Can't reach it right now"), it takes the aside's.
+                const said = saved ? `${cat["Can't reach it right now"]}${stop} ${aside}` : `${cat["Can't reach it right now. Tap to try again."]} ${aside}`;
+                expect(row().getAttribute('aria-label'), `${f}${saved ? ', saved' : ''}`).toContain(said);
+            }
+        }
+    });
+
+    for (const door of ['open', 'shut', 'preview'] as const) {
+        it(`not when the global community answered (door ${door}): only "can't reach it" says it`, async () => {
+            scene.door = door;
+            await open();
+            expect(texts(row())).not.toContain(AFFECTED);
+        });
+    }
 });
 
 describe('the phone has it saved: the saved row is the global row, never a second one', () => {
@@ -594,6 +677,8 @@ describe('the row\'s words', () => {
             'Join with this account: 12 words or a sign-in', 'Join with this account: a sign-in', 'Checking…',
             "Can't reach it right now. Tap to try again.", "Can't reach it right now", 'Not taking new members right now.',
             'This community is in a private preview. Ask its owner for an invite.', 'Your account there was closed.',
+            // Under the line while the global community can't be reached (DESIGN-global-mothership-fable.md §2.5).
+            "Your own community isn't affected.",
         ];
         const dir = path.resolve(__dirname, '../../words');
         for (const f of fs.readdirSync(dir).filter((x) => /^[A-Za-z-]+\.json$/.test(x))) {
@@ -623,7 +708,7 @@ describe('the row\'s words', () => {
             }
             return lines;
         };
-        for (const key of LINES.slice(0, 6)) expect(linesOf(key), key).toBeLessThanOrEqual(2);
+        for (const key of [...LINES.slice(0, 6), ...LINES.slice(7)]) expect(linesOf(key), key).toBeLessThanOrEqual(2);
         expect(linesOf(LINES[6])).toBeGreaterThan(2);
     });
 });

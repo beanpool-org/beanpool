@@ -406,7 +406,14 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: e.message };
         return;
     }
-    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
+    try {
+        createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
+    } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
+        ctx.status = 400;
+        ctx.body = { error: memberErrorText(e, 'Failed to create project') };
+        return;
+    }
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
     
@@ -465,6 +472,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         deps.broadcast?.({ type: 'project_updated', project });
         ctx.body = { success: true, project };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, 'Failed to update project') };
     }

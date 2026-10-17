@@ -27,6 +27,7 @@ import { ProbationLimitError } from '../engine/probation.js';
 import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { DoorClosedError } from '../config/door.js';
+import { PhotoBudgetExceededError, StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import { BEANS_NOTE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 
 interface GatedRoutes {
@@ -181,6 +182,19 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown; set?
         ctx.status = e.status;
         ctx.body = e.resetsAt ? { error: e.message, code: e.code, resetsAt: e.resetsAt } : { error: e.message, code: e.code };
         if (e.resetsAt) ctx.set?.('Retry-After', String(Math.max(1, Math.ceil((Date.parse(e.resetsAt) - Date.now()) / 1000))));
+        return true;
+    }
+    // Photo upload daily budget (P7): 429 with Retry-After and resetsAt.
+    if (e instanceof PhotoBudgetExceededError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, message: e.message, code: e.code, resetsAt: e.resetsAt };
+        if (e.retryAfterSeconds) ctx.set?.('Retry-After', String(e.retryAfterSeconds));
+        return true;
+    }
+    // Free disk space floor (P7): 507 Insufficient Storage.
+    if (e instanceof StorageNearlyFullError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, message: e.message, code: e.code };
         return true;
     }
     return false;

@@ -772,6 +772,17 @@ CREATE TABLE IF NOT EXISTS keeper_own_posts (
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
 
+-- 11f. Photo upload budget log (engine/photo-upload-budget.ts): records photo bytes stored
+-- per member in a sliding 24-hour window. This server's own, never copied to a standby,
+-- and pruned once older than 48 hours.
+CREATE TABLE IF NOT EXISTS photo_budget_log (
+    member_pubkey TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    bytes INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_photo_budget_log_member_at ON photo_budget_log(member_pubkey, at);
+CREATE INDEX IF NOT EXISTS idx_photo_budget_log_at ON photo_budget_log(at);
+
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
     public_key TEXT NOT NULL REFERENCES members(public_key),

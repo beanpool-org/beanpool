@@ -44,6 +44,7 @@ import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
@@ -7955,6 +7956,10 @@ export function createTreasury(
     if (avatarRefusal) throw photoRefusalError(avatarRefusal, AVATAR_FORMAT_ERROR);
     // Served by /api/avatar/<enterprise key> to anyone who asks, so it is stored without its metadata (G9a-3).
     avatar = stripImageValue(avatar);
+    const incomingBytes = incomingPhotoBytes(avatar);
+    if (incomingBytes > 0 && opts.leadKeeperPubkey) {
+        assertMayStorePhotoBytes(opts.leadKeeperPubkey, incomingBytes);
+    }
     // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
@@ -8030,6 +8035,10 @@ export function createTreasury(
                     VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
     })();
+
+    if (incomingBytes > 0 && opts.leadKeeperPubkey) {
+        recordStoredPhotoBytes(opts.leadKeeperPubkey, incomingBytes);
+    }
 
     clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
@@ -9966,12 +9975,15 @@ function storableGroupPicture(avatarUrl: string | undefined): string | undefined
 }
 
 export function createGroup(params: CreateGroupParams): Group {
+    const incomingBytes = incomingPhotoBytes(params.avatarUrl);
+    if (incomingBytes > 0) assertMayStorePhotoBytes(params.createdBy, incomingBytes);
     // The creator holds the chat's keys from its first epoch (engine/group-keys.ts fromEpochOf), written with the row.
     const res = db.transaction(() => {
         const made = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
         setMembershipFromEpoch(made.id, params.createdBy, 1);
         return made;
     })();
+    if (incomingBytes > 0) recordStoredPhotoBytes(params.createdBy, incomingBytes);
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
@@ -10298,7 +10310,10 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
     assertGroupActorIsMember(convenorPubkey);
+    const incomingBytes = incomingPhotoBytes(updates.avatarUrl);
+    if (incomingBytes > 0) assertMayStorePhotoBytes(convenorPubkey, incomingBytes);
     const res = updateGroupEngine(db, groupId, convenorPubkey, { ...updates, avatarUrl: storableGroupPicture(updates.avatarUrl) });
+    if (incomingBytes > 0) recordStoredPhotoBytes(convenorPubkey, incomingBytes);
     // The chat is titled by the group's name; a rename carries over (and replicates: the conversations import
     // updates name on conflict).
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);

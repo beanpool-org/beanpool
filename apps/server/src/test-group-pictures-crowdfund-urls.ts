@@ -35,6 +35,8 @@ if (!process.argv[2]) delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_READ_AUTH;
 // Never the real communities directory: nothing here starts the mirror, and a stray fetch would go nowhere.
 process.env.DIRECTORY_MIRROR_URL = 'http://127.0.0.1:1/rest/v1/directory_nodes?select=*';
+// The seed child creates 2,120 group pictures (~208 MB from one convenor), past the 100 MB default daily budget.
+process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '0';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';

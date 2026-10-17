@@ -12,6 +12,7 @@ import { PhotoTooBigError, photoValueRefusal } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 
 /**
  * Record activity timestamp for a member.
@@ -486,9 +487,20 @@ export function updateProfile(
     // Deliberately NOT a 400. Those builds are already on members' phones and send this on
     // every bio or name edit; rejecting it would mean they could no longer save a bio or a
     // name at all. Read as "avatar unchanged" instead, which is what the sender meant.
-    const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar);
+    // The PWA reads its avatar out of GET /api/profile/:pk as a data URL, and posts that value
+    // straight back on every Save. Counting it as a new upload would double-charge the member
+    // on every bio edit (B1). Read as unchanged when stripImageValue of the avatar equals the
+    // stored member_photos.photo.
+    const strippedAvatar = update.avatar ? stripImageValue(update.avatar) : update.avatar;
+    const storedPhoto = (typeof update.avatar === 'string' && !isSelfAvatarUrl(update.avatar))
+        ? (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(publicKey) as any)?.photo
+        : undefined;
+    const avatarMatchesStored = typeof strippedAvatar === 'string' && storedPhoto !== undefined && strippedAvatar === storedPhoto;
+    const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar) || avatarMatchesStored;
+    const incomingBytes = avatarUnchanged ? 0 : incomingPhotoBytes(update.avatar);
+    if (incomingBytes > 0) assertMayStorePhotoBytes(publicKey, incomingBytes);
     // A new photo is stored without its metadata (G9a-3): /api/avatar/<pk> serves it to anyone who asks.
-    const avatar = avatarUnchanged ? undefined : stripImageValue(update.avatar);
+    const avatar = avatarUnchanged ? undefined : strippedAvatar;
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
     // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
     // changes — re-saving your own name (e.g. the background profile push) must not
@@ -536,6 +548,8 @@ export function updateProfile(
         // The photo, with its reference in the row, by its one writer (the engine's setMemberPhoto).
         if (avatar !== undefined) setMemberPhoto(db, publicKey, avatar);
     })();
+
+    if (incomingBytes > 0) recordStoredPhotoBytes(publicKey, incomingBytes);
 
     broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt }, undefined, { ownCard: true });
     // Read as the owner: POST /api/profile/update answers the signer, who always sees their own contact details.

@@ -127,6 +127,7 @@ import { mayInviteHere } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
 import { isMemberKeySpelling } from './member-key.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -282,10 +283,12 @@ export function knockerRefusal(pubkey: string): 'already_member' | 'account_clos
  */
 export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
     const pubkey = input.pubkey.toLowerCase();
+    const incomingBytes = incomingPhotoBytes(input.avatar);
+    if (incomingBytes > 0) assertMayStorePhotoBytes(pubkey, incomingBytes, now);
     forgetOldJoinAddresses(now);
     const ipHash = knockAddressHash(input.address);
     try {
-        return db.transaction((): KnockOutcome => {
+        const res = db.transaction((): KnockOutcome => {
             const refusal = knockerRefusal(pubkey);
             if (refusal) return { ok: false, reason: refusal };
             const standing = standingOf(latestKnock(pubkey), now);
@@ -317,6 +320,8 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             if (input.avatar) keepNewestPhotos(now);
             return { ok: true, id, reopened: false };
         })();
+        if (res.ok && incomingBytes > 0) recordStoredPhotoBytes(pubkey, incomingBytes, now);
+        return res;
     } catch (e: any) {
         // Another knock from this key landed between the check and the write.
         if (String(e?.code ?? '').startsWith('SQLITE_CONSTRAINT') && /join_requests\.pubkey/.test(String(e?.message))) {

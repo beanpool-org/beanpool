@@ -15,6 +15,7 @@ import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from '../engine/photo-upload-budget.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2868,6 +2869,24 @@ function namesNoProject(id: string): boolean {
     return !!row && row.is_treasury !== 1;
 }
 
+/**
+ * A project's photos as an edit sends them, with this node's own avatar URL read as the photo it stands for, never stored
+ * as itself (#1475's rule for a member's photo). The crowdfund list sends each project's photo as that URL (#1486), and
+ * an older phone's edit screen (before #792) sends back the photos it read from the list. Sent back alone, the photos are
+ * unchanged: every one kept as stored, the ones the list leaves out included. Beside new ones, the URL is the
+ * enterprise's photo, the one it opens.
+ */
+function ownAvatarUrlsAsStored(enterpriseId: string, storedJson: string | undefined, sent: string[]): string[] {
+    if (!Array.isArray(sent) || !sent.some((p) => isSelfAvatarUrl(p))) return sent;
+    if (sent.every((p) => isSelfAvatarUrl(p))) {
+        let stored: unknown = [];
+        try { stored = JSON.parse(storedJson || '[]'); } catch { /* none */ }
+        return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+    }
+    const own = (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(enterpriseId) as { photo: string } | undefined)?.photo;
+    return sent.flatMap((p) => (isSelfAvatarUrl(p) ? (own ? [own] : []) : [p]));
+}
+
 export function createCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -2888,6 +2907,11 @@ export function createCrowdfundProject(
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
     // without its metadata (G9a-3). Anything that is not an image comes back exactly as given.
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos;
+    photos = ownAvatarUrlsAsStored(id, undefined, photos || []);
+    const incomingBytes = incomingPhotosBytes((photos || []).filter(p => !isSelfAvatarUrl(p)));
+    if (incomingBytes > 0 && creator_pubkey) {
+        assertMayStorePhotoBytes(creator_pubkey, incomingBytes);
+    }
     // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. An
     // editor that read the enterprise back from the node holds THIS node's own avatar URL
     // there, not the photo; storing it would point the avatar at itself. Same rule as
@@ -2922,24 +2946,10 @@ export function createCrowdfundProject(
             VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
         `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
-}
 
-/**
- * A project's photos as an edit sends them, with this node's own avatar URL read as the photo it stands for, never stored
- * as itself (#1475's rule for a member's photo). The crowdfund list sends each project's photo as that URL (#1486), and
- * an older phone's edit screen (before #792) sends back the photos it read from the list. Sent back alone, the photos are
- * unchanged: every one kept as stored, the ones the list leaves out included. Beside new ones, the URL is the
- * enterprise's photo, the one it opens.
- */
-function ownAvatarUrlsAsStored(enterpriseId: string, storedJson: string | undefined, sent: string[]): string[] {
-    if (!Array.isArray(sent) || !sent.some((p) => isSelfAvatarUrl(p))) return sent;
-    if (sent.every((p) => isSelfAvatarUrl(p))) {
-        let stored: unknown = [];
-        try { stored = JSON.parse(storedJson || '[]'); } catch { /* none */ }
-        return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+    if (incomingBytes > 0 && creator_pubkey) {
+        recordStoredPhotoBytes(creator_pubkey, incomingBytes);
     }
-    const own = (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(enterpriseId) as { photo: string } | undefined)?.photo;
-    return sent.flatMap((p) => (isSelfAvatarUrl(p) ? (own ? [own] : []) : [p]));
 }
 
 export function updateCrowdfundProject(
@@ -2968,12 +2978,16 @@ export function updateCrowdfundProject(
 
     const now = new Date().toISOString();
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos; // as in createCrowdfundProject (G9a-3)
+    photos = ownAvatarUrlsAsStored(id, project.photos, photos || []);
+    const incomingBytes = incomingPhotosBytes((photos || []).filter(p => !isSelfAvatarUrl(p)));
+    if (incomingBytes > 0 && creator_pubkey) {
+        assertMayStorePhotoBytes(creator_pubkey, incomingBytes);
+    }
     // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
     // loaded the enterprise from the node, means "unchanged": read as no photo, which leaves the
     // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
-    photos = ownAvatarUrlsAsStored(id, project.photos, photos);
     // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
     const rowName = projectRowName(db, title, id);
 
@@ -3005,6 +3019,10 @@ export function updateCrowdfundProject(
         }
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
+
+    if (incomingBytes > 0 && creator_pubkey) {
+        recordStoredPhotoBytes(creator_pubkey, incomingBytes);
+    }
 }
 
 /** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */

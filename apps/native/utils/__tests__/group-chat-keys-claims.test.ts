@@ -133,16 +133,20 @@ describe('the former keys a phone accepts from the members list', () => {
     it('NB5 (confirmation 1): junk chains a node serves don\'t grow the phone\'s memory, in the keyring or the display', async () => {
         // The reviewer's measurement: 60 reads of 20 rows, each row a 9-entry chain padded to 64 KB (1,200 entries and
         // 80 M characters kept at 5df68ba0), then the same with 8-entry chains whose entries carry junk fields and dates.
+        // No statement here can verify, so a key need only be 64 hex characters, and the signature is the right length but
+        // not base64: each walkable chain is still walked and cached, refused before any curve math (11,460 real keys and
+        // 1,200 curve verifies took 2.5 s on a Mac and over 30 s on a loaded CI runner; the caches hold the same without them).
         const ring = ringFor(person());
         const display = new Map<string, boolean>();
+        const hexKey = () => randomBytes(32).toString('hex');
         const pad = (n: number) => 'J'.repeat(n);
-        const entry = () => ({ pubkey: person().pub, at: AT, sig: `${'A'.repeat(86)}==`, pad: pad(7 * 1024) });
+        const entry = () => ({ pubkey: hexKey(), at: AT, sig: '-'.repeat(88), pad: pad(7 * 1024) });
         let maxKey = 0;
         let walksSeen = 0;
         for (let i = 0; i < 60; i++) {
-            const signer = person().pub; // every row's chain names it, so the display walks every row
+            const signer = hexKey(); // every row's chain names it, so the display walks every row
             served.rows = Array.from({ length: 20 }, (_, j) => ({
-                memberPubkey: person().pub, status: 'active', callsign: 'J',
+                memberPubkey: hexKey(), status: 'active', callsign: 'J',
                 formerKeys: (j % 2 ? Array.from({ length: 9 }, entry) : Array.from({ length: 8 }, (_, k) => (k === 7 ? { ...entry(), at: pad(64 * 1024) } : entry())))
                     .map((f, k) => (k === 0 ? { ...f, pubkey: signer } : f)),
             }));
@@ -153,8 +157,10 @@ describe('the former keys a phone accepts from the members list', () => {
             maxKey = Math.max(maxKey, ...[...ring.chainWalks.keys(), ...display.keys()].map((k: string) => k.length));
         }
         const held = (m: Map<string, unknown>) => [...m.keys()].reduce((n, k) => n + k.length, 0);
-        expect(walksSeen).toBe(60 * 10); // the 8-entry rows were walked by the display (the 9-entry ones can't verify)
+        expect(walksSeen).toBe(60 * 10); // the 8-entry rows were walked by the display (the 9-entry ones are too long to walk)
+        expect(counts.verify).toBe(60 * 10); // and by the keyring, once each
         expect(display.size).toBe(60 * 10);
+        expect(ring.chainWalks.size).toBe(60 * 10); // neither cache keeps an over-long chain
         expect(ring.chainWalks.size).toBeLessThanOrEqual(4096);
         expect(display.size).toBeLessThanOrEqual(4096);
         expect(maxKey).toBeLessThan(2 * 64 + 7 * (64 + 40 + 88 + 12) + 8); // two keys and at most 7 walkable entries' fields

@@ -13,7 +13,8 @@
  *      once, not again before the QR; a public http:// address typed next still gets its own. With --direct given, Enter
  *      warns only where that address is refused, as --no-name does.
  *   5. --no-name with no address at all, off a terminal: the warning before the QR.
- *   6. A name that is not live yet: the way out is to run the claim again once it is, not to ask for another name.
+ *   6. A name that is not live yet: the way out is to run the claim again once it is, not to ask for another name. The
+ *      node's pending record holds the label and no hostname, and the warning names <label>.beanpool.org.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-address-warning.ts
  */
@@ -148,7 +149,7 @@ async function main(): Promise<void> {
         'the warning before the QR, which carries no address');
 
     console.log('\n6. A name that is not live yet');
-    const pending = await claim(['--direct', `${PUBLIC}:80`], null, nodeDir({ name: 'mullum', status: 'pending', hostname: 'mullum.beanpool.org' }));
+    const pending = await claim(['--direct', `${PUBLIC}:80`], null, nodeDir({ name: 'mullum', mode: 'tunnel', status: 'pending' }));
     const pw = pending.at(l => l.startsWith('WARNING:'));
     const tail = pending.lines.slice(pw, pw + BLOCK).join('\n');
     check(pending.code === 0 && pw >= 0 && pw < pending.qr, 'warned before the QR');

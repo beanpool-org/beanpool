@@ -233,8 +233,10 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
 
     let address: string | null = own;
     if (!address && held && view.address?.status === 'live' && view.address.hostname) address = `https://${view.address.hostname}`;
-    // A name that is not live yet (awaiting approval, or still asked for by the node): a later QR can carry it.
-    let coming: string | null = !address && held ? held : null;
+    // A name that is not live yet (awaiting approval, or still asked for by the node): a later QR can carry it. A pending
+    // record holds the label and no hostname, so it is named as it was asked for: <label>.beanpool.org.
+    const pa = view.address;
+    let coming: string | null = !address && held ? (pa?.hostname || (pa?.name ? `${pa.name}.beanpool.org` : held)) : null;
     // Once per address: none at all (the phone then asks, and refuses a public http:// one), or one the phone refuses. An
     // address it takes (http://192.168.…, https) is never warned about, however the command got to it.
     const warnedFor = new Set<string>();

@@ -56,7 +56,8 @@ import { getDb } from '../db';
 import { seedToKeypair } from '../crypto';
 import { refusalHere } from '../members-only-listings';
 import { marketEmptyState } from '../market-empty-state';
-import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { forceResyncNotice, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { t } from '@beanpool/core';
 import { loadIdentity } from '../identity';
 
 const NOTE_KEY = `beanpool_members_only_${ANCHOR}`;
@@ -188,6 +189,56 @@ describe("a closed account's refusal", () => {
     });
 });
 
+// Settings → Force Resync clears the copy and runs a sync of its own, then says what came of it (forceResyncNotice). Before,
+// both refusals answered "Posts fetch failed with status: 403", and the notice promised the community "downloads again with
+// the next sync", which the node refuses just the same.
+describe('what Force Resync says after a refusal', () => {
+    const PROMISE = 'downloads again';
+
+    it("a private preview's: the node's own sentence, never a download promised", async () => {
+        node.posts = { status: 403, body: PREVIEW };
+        const result = await sync();
+        expect(result.errorMessage).toBe('private_preview');
+        const notice = forceResyncNotice(result);
+        expect(notice.title).toBe('Local copy cleared');
+        expect(notice.message).toBe(PREVIEW.error);
+    });
+
+    it("a closed account's (straight, or the probe's word behind a preview): the closed sentence", async () => {
+        node.posts = { status: 403, body: CLOSED };
+        const closed = forceResyncNotice(await sync());
+        expect(closed.message).toContain(t('Your account here was closed.'));
+        expect(closed.message).not.toContain(PROMISE);
+
+        node.posts = { status: 403, body: PREVIEW };
+        node.probe = { status: 403, body: CLOSED };
+        const behindPreview = forceResyncNotice(await sync());
+        expect(behindPreview.message).toBe(closed.message);
+    });
+
+    it("a preview's refusal that leaves the standing unclear (the probe says member, or no answer): nothing more", async () => {
+        node.posts = { status: 403, body: PREVIEW };
+        for (const probe of [{ status: 200, body: { isMember: true } }, 'network'] as const) {
+            node.probe = probe;
+            const result = await sync();
+            expect(result.errorMessage).toBe('private_preview');
+            expect(result.refusal).toBeUndefined();
+            expect(forceResyncNotice(result)).toEqual({ title: 'Local copy cleared', message: '' });
+        }
+    });
+
+    it('any other failed read keeps its message and the promise, as before', async () => {
+        node.posts = { status: 403, body: { error: 'This key was replaced.', code: 'key_invalidated' } };
+        const other = await sync();
+        expect(other.errorMessage).toBe('Posts fetch failed with status: 403');
+        expect(other.refusal).toBeUndefined();
+        expect(forceResyncNotice(other).message).toContain(PROMISE);
+
+        node.posts = { status: 500, body: {} };
+        expect(forceResyncNotice(await sync()).message).toContain(PROMISE);
+    });
+});
+
 describe('everything else, as before', () => {
     it('no answer at all notes nothing: "Having trouble connecting"', async () => {
         node.posts = 'network';
@@ -195,6 +246,7 @@ describe('everything else, as before', () => {
         expect(result.success).toBe(false);
         expect(store.has(NOTE_KEY)).toBe(false);
         expect(await marketShows()).toEqual({ kind: 'trouble_connecting' });
+        expect(forceResyncNotice(result).message).toContain('downloads again');
     });
 
     it('another 403 code clears a note, as any other failed read did, and notes nothing', async () => {

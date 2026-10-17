@@ -22,8 +22,10 @@
  *      this one's;
  *  11. /trust hands out the self-signed CA to a request that named a host with no CA certificate here (beanpool.local, a
  *      LAN address), on both listeners, whenever they started; a host with one is redirected (plain) or 404 (HTTPS), also
- *      with CF_RECORD_NAME set but empty, as docker-compose.yml passes it.
- * Plus: docker-compose.yml passes ACME_DIRECTORY_URL through.
+ *      with CF_RECORD_NAME set but empty, as docker-compose.yml passes it;
+ *  12. docker-compose.yml passes ACME_DIRECTORY_URL through;
+ *  13. a certificate that expires (TLS clock injected) is not served to the next connection with no SNI, on a standby
+ *      too, whose ticks look at nothing: the next valid certificate is, else the self-signed pair.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
  */
@@ -599,11 +601,42 @@ try {
         process.env.ACME_DIRECTORY_URL = was;
         return got === 'https://acme-v02.api.letsencrypt.org/directory';
     })());
+
+    console.log('\n13. An expired certificate is never served to a connection with no SNI, not even once, and on a standby too');
+    configure(['beans.example.org', '203.0.113.5']);
+    const t13 = await schedule.runAcmeTick();
+    const ipFirst = await served(null, '203.0.113.5');
+    check('precondition: the IP certificate (from its folder) is what a connection with no SNI gets', t13.outcomes['203.0.113.5'] === 'fresh'
+        && ipFirst.san === 'IP Address:203.0.113.5', JSON.stringify({ t13, san: ipFirst.san }));
+    const ipUntil = tlsMod.servedCertificate('203.0.113.5')!.notAfter;
+    const nameUntil = tlsMod.servedCertificate('beans.example.org')!.notAfter;
+    setNodeRole('backup');
+    try {
+        tlsMod._setTlsClockForTests(() => ipUntil + 1000);
+        const t13b = await schedule.runAcmeTick();
+        check('precondition: a standby\'s tick stops before it looks at any certificate', t13b.skipped === 'standby', JSON.stringify(t13b));
+        const afterIp = await served(null, 'beans.example.org');
+        check('the IP certificate has expired: the very next connection with no SNI gets the name\'s, the next valid one',
+            afterIp.san === 'DNS:beans.example.org', afterIp.san);
+        check('…and the listener and /trust agree: 203.0.113.5 has no CA certificate here now', !tlsMod.servesCaCertificateFor('203.0.113.5')
+            && tlsMod.servesCaCertificateFor('beans.example.org'));
+        tlsMod._setTlsClockForTests(() => nameUntil + 1000);
+        const afterAll = await served(null);
+        check('every CA certificate has expired: the next connection with no SNI gets the self-signed pair', afterAll.serial === self.serial, afterAll.san);
+        check('…and so does SNI beans.example.org', (await served('beans.example.org')).serial === self.serial);
+    } finally {
+        tlsMod._setTlsClockForTests(null);
+        setNodeRole('primary');
+    }
+    const t13c = await schedule.runAcmeTick();
+    check('the clock back, the main server\'s next tick: the IP certificate is served with no SNI again', t13c.outcomes['203.0.113.5'] === 'fresh'
+        && (await served(null, '203.0.113.5')).san === 'IP Address:203.0.113.5', JSON.stringify(t13c));
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);
 } finally {
     schedule._setScheduleHooksForTests({ now: null });
+    tlsMod._setTlsClockForTests(null);
     challenge._setChallengeOriginForTests(null);
     fakeServer.close();
     stranger.close();

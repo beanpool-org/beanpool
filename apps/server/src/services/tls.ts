@@ -56,9 +56,14 @@ const served = new Map<string, Served>();
 let preferredOrder: string[] = [];
 /** The HTTPS listeners, told when the certificate for a connection with no SNI changes. */
 const listeners = new Set<tls.Server>();
-let defaultServed: CertPair | null = null;
+/** The pair a connection with no SNI gets now, and until when (a CA certificate's notAfter; the self-signed pair: no end). */
+let defaultServed: DefaultPair | null = null;
 /** The fleet's certificate has been looked at by a tick since this start (tlsFellBackToSelfSigned). */
 let fleetChecked = false;
+/** The time every certificate here is checked against. */
+let clock = () => Date.now();
+/** Tests only: check certificates against this clock (null puts it back). */
+export function _setTlsClockForTests(now: (() => number) | null): void { clock = now ?? (() => Date.now()); }
 
 // --- Exports ---
 
@@ -78,7 +83,7 @@ function hostKey(name: string): string { return name.toLowerCase().replace(/\.+$
  * certificate for, so a browser there needs no self-signed CA. /trust on both listeners asks this per request: on a node
  * that is public and used on its LAN, beanpool.local and a LAN address still get the CA.
  */
-export function servesCaCertificateFor(host: string, now = Date.now()): boolean {
+export function servesCaCertificateFor(host: string, now = clock()): boolean {
     const s = served.get(hostKey(host));
     return !!s && s.notAfter > now;
 }
@@ -114,7 +119,7 @@ export function servedHosts(): string[] {
  * Serve `pair` for `host` from the next connection on, or stop serving one (null). A pair that does not load, has
  * expired by `now` or does not name `host` is refused and the old one stays: the problem in words, else null.
  */
-export function serveCertificate(host: string, pair: CertPair | null, now = Date.now()): string | null {
+export function serveCertificate(host: string, pair: CertPair | null, now = clock()): string | null {
     if (!pair) {
         if (served.delete(host)) refreshDefault();
         return null;
@@ -141,13 +146,15 @@ export function setPreferredOrder(hosts: string[]): void {
     refreshDefault();
 }
 
+interface DefaultPair extends CertPair { until: number }
+
 /** What a connection with no SNI gets: an IPv4 address's certificate, an IPv6 one's, the first name's, the self-signed pair. */
-function defaultPair(now = Date.now()): CertPair {
+function defaultPair(now = clock()): DefaultPair {
     const rank = (s: Served) => (!s.ip ? 2 : s.host.startsWith('[') ? 1 : 0);
     const place = (s: Served) => { const i = preferredOrder.indexOf(s.host); return i === -1 ? Number.MAX_SAFE_INTEGER : i; };
     const best = [...served.values()].filter((s) => s.notAfter > now)
         .sort((a, b) => rank(a) - rank(b) || place(a) - place(b) || a.host.localeCompare(b.host))[0];
-    return best ? { cert: best.cert, key: best.key } : { cert: serverCertPem, key: serverKeyPem };
+    return best ? { cert: best.cert, key: best.key, until: best.notAfter } : { cert: serverCertPem, key: serverKeyPem, until: Infinity };
 }
 
 function refreshDefault(): void {
@@ -187,7 +194,7 @@ export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICa
         SNICallback: (servername, cb) => {
             const name = hostKey(servername);
             const s = served.get(name);
-            if (s && s.notAfter > Date.now()) return cb(null, s.context);
+            if (s && s.notAfter > clock()) return cb(null, s.context);
             // An IP address sent as SNI (RFC 6066 forbids it; some clients do) is a connection with no name. Any other
             // name gets the self-signed pair (beanpool.local), as on a LAN node.
             cb(null, net.isIP(name) ? undefined : selfSignedContext());
@@ -198,6 +205,12 @@ export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICa
 /** An HTTPS listener made with httpsCertOptions(), to be told when the pair for a connection with no SNI changes. */
 export function attachTlsListener(server: tls.Server): void {
     listeners.add(server);
+    // A default certificate that has expired since it was chosen is swapped before the next connection gets it: this runs
+    // ahead of Node's own 'connection' listener, which wraps the socket in TLS with the listener's context. Nothing else
+    // has to come first (a standby's ticks never reach setPreferredOrder), so an expired certificate is never served.
+    server.prependListener('connection', () => {
+        if (defaultServed && defaultServed.until <= clock()) refreshDefault();
+    });
     server.once('close', () => listeners.delete(server));
 }
 
@@ -213,7 +226,7 @@ export async function initTls(): Promise<void> {
     served.clear();
     fleetChecked = false;
     adoptLegacyFleetCertificate();
-    const now = Date.now();
+    const now = clock();
     for (const host of storedHosts(DATA_DIR)) {
         const pair = readPair(DATA_DIR, host);
         if (!pair) continue;

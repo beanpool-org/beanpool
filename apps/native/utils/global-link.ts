@@ -2,7 +2,9 @@
  * The global community's smart link (DESIGN-global-entry-fable.md §A row 5, slice P4): `https://beanpool.org/global`, which
  * the website hands out (apps/website/global.html: on Android its intent link names this app, else Google Play with
  * `referrer=global%3D1`), and `beanpool://global`. app/+native-intent.ts routes it with globalLinkRoute: to the first
- * screen's door when the phone has no account, to the global community's door for an account (app/join-global.tsx).
+ * screen's door when the phone has no account; for an account, as the phone's one rule for the global community has it
+ * (utils/global-entry.ts): the global community's door (app/join-global.tsx), the BeanPool sheet for a member, nothing for
+ * an account it closed.
  *
  * A link only OPENS a screen. It never joins, signs or sends anything: the door it opens asks the global community, unsigned,
  * whether it is open (as the first screen already does at every start), and holds its signed work until the member's first
@@ -16,6 +18,7 @@
  * Kept free of the screens' imports and of the phone's storage, so the router can tell the link without loading either.
  */
 import { linkCarriesInvite } from './welcome-invite';
+import type { GlobalStanding } from './global-entry';
 
 /** The website's host for the link: beanpool.org itself, as app.json's intent filter and the site's association file claim it. */
 const SITE_HOST = 'beanpool.org';
@@ -70,6 +73,10 @@ export interface PhoneAtLink {
     account: boolean;
     /** A join wizard was left half done (utils/onboarding-state.ts): it resumes, and the link starts nothing new. */
     wizardPending: boolean;
+    /** What the global community last answered about the key, kept under a day (global-entry.ts readGlobalStanding). Unread: `unknown`. */
+    standing?: GlobalStanding;
+    /** The global community closed the key's account (global-join-existing.ts accountClosedAtGlobal). Unread: no. */
+    closedHere?: boolean;
 }
 
 /**
@@ -87,11 +94,20 @@ export const FROM_LINK = 'link';
  *   the member back into the wizard; a warm link leaves them where they are.
  * - No account: the first screen, which opens its door (app/welcome.tsx, `doorFromLink` decides). `at` is new each time,
  *   so a second tap of the same link is a second arrival.
- * - An account: the global community's door for it, with its work held until the member taps.
+ * - An account, as the one rule (global-entry.ts globalEntryState) reads what the phone kept, as every other way to the door
+ *   does (the BeanPool sheet's row, Settings → Advanced, People's guest banner, the not-recognised screen):
+ *   - its account there closed (`closedAccount`): nothing to offer. The app opens as from its icon (cold) or stays (warm).
+ *   - a member (`member`): no door. The BeanPool sheet, where the global community's row is the member's row and its tap
+ *     switches to it. The link itself switches nothing: a link only opens a screen, and never interrupts what the member is
+ *     doing.
+ *   - otherwise (a stranger, or no answer under a day old): the global community's door for it, with its work held until
+ *     the member taps. The door asks whether it is open, and its own check decides (a member it didn't know of lands in it).
  */
 export function globalLinkRoute(phone: PhoneAtLink, initial: boolean, nowMs: number): string | null {
     if (phone.wizardPending) return initial ? '/' : null;
     if (!phone.account) return `/welcome?door=${DOOR_PARAM_GLOBAL}&at=${nowMs}`;
+    if (phone.closedHere) return initial ? '/' : null;
+    if (phone.standing === 'member') return '/beanpool';
     return `/join-global?from=${FROM_LINK}`;
 }
 

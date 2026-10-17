@@ -1,15 +1,16 @@
 /**
  * The global community's smart link through the app's router (app/+native-intent.ts, utils/global-link.ts;
  * DESIGN-global-entry-fable.md §A row 5, slice P4). `https://beanpool.org/global` (the website's link, apps/website/global.html)
- * and `beanpool://global` open the first screen's door on a phone with no account, the global community's door for an
- * account, and nothing new while a join wizard is half done. A link that carries an invite is the invite's. Every route
- * lands on a screen that exists, on a cold start and warm.
+ * and `beanpool://global` open the first screen's door on a phone with no account; for an account, what the phone's one rule
+ * for the global community offers it (utils/global-entry.ts): the global community's door, the BeanPool sheet for a member,
+ * nothing for an account it closed (PR #2122 review); and nothing new while a join wizard is half done. A link that carries
+ * an invite is the invite's. Every route lands on a screen that exists, on a cold start and warm.
  *
  * Before P4 the router handed both links on unchanged: Expo Router looked for app/global.tsx, which doesn't exist, and
  * showed Unmatched Route (the `every global link opens a screen that exists` cases fail on main).
  *
- * The link only opens a screen: the router reads the phone (a key kept? a wizard half done?) and sends nothing, and the
- * routes it builds carry nothing but which door and when.
+ * The link only opens a screen: the router reads the phone (a key kept? a wizard half done? what global last answered about
+ * the key?) and sends nothing, and the routes it builds carry nothing but which door and when.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -18,22 +19,45 @@ import * as path from 'node:path';
 vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter: { emit: vi.fn() } }));
 vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
 
-/** The phone as the router reads it: the key kept on it, and the join wizard's record (utils/onboarding-state.ts). */
+/**
+ * The phone as the router reads it: the key kept on it, the join wizard's record (utils/onboarding-state.ts), the keys global
+ * closed (global-join-existing.ts accountClosedAtGlobal), and the phone's store, where global-entry.ts keeps what global
+ * last answered about each key (read by the real readGlobalStanding).
+ */
 const phone = vi.hoisted(() => ({
     identity: null as null | { publicKey: string; callsign: string },
     pending: null as null | Record<string, unknown>,
+    closed: [] as string[],
+    store: new Map<string, string>(),
     reads: 0,
+    globalReads: 0,
 }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => { phone.reads++; return phone.identity; }) }));
 vi.mock('../onboarding-state', () => ({ getPendingOnboarding: vi.fn(async () => { phone.reads++; return phone.pending; }) }));
+vi.mock('../global-join-existing', () => ({
+    accountClosedAtGlobal: vi.fn(async (key: string | null | undefined) => { phone.globalReads++; return !!key && phone.closed.includes(key); }),
+}));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => { phone.globalReads++; return phone.store.get(k) ?? null; }),
+        setItem: vi.fn(async () => { throw new Error('the router must write nothing'); }),
+        removeItem: vi.fn(async () => { throw new Error('the router must write nothing'); }),
+    },
+}));
 
 import { redirectSystemPath, routeGlobalLink } from '../../app/+native-intent';
 import { extractInviteToken } from '../invite-parser';
 import { linkCarriesInvite } from '../welcome-invite';
 import { doorFromLink, doorLinkKey, globalLinkRoute, isGlobalLink, isGlobalPath, type WelcomeMode } from '../global-link';
+import { GLOBAL_STANDING_STORE_KEY, GLOBAL_STANDING_TTL_MS, globalEntryState, type GlobalStanding } from '../global-entry';
 
 const ACCOUNT = { publicKey: 'ab'.repeat(16), callsign: 'Damo' };
 const WIZARD = { step: 'create', inviteCode: 'INV-ABCD-EFGH', callsign: 'Damo' };
+
+/** Global's last answer about the account's key, kept on the phone `ageMs` ago, as global-entry.ts askGlobalStanding keeps it. */
+function kept(standing: 'member' | 'stranger', ageMs = 0): void {
+    phone.store.set(GLOBAL_STANDING_STORE_KEY, JSON.stringify({ [ACCOUNT.publicKey]: { standing, at: Date.now() - ageMs } }));
+}
 
 const appDir = path.resolve(__dirname, '../../app');
 /** The route file Expo Router matches for an href (as pair-link.test.ts reads it), or null: Unmatched Route. */
@@ -79,7 +103,10 @@ let fetchSpy: ReturnType<typeof vi.fn>;
 beforeEach(() => {
     phone.identity = null;
     phone.pending = null;
+    phone.closed = [];
+    phone.store.clear();
     phone.reads = 0;
+    phone.globalReads = 0;
     fetchSpy = vi.fn(async () => { throw new Error('the router must send nothing'); });
     vi.stubGlobal('fetch', fetchSpy);
 });
@@ -89,7 +116,7 @@ async function route(link: string, initial: boolean): Promise<string | null> {
     return await redirectSystemPath({ path: link, initial });
 }
 
-describe('the global link through the router: cold and warm × account or none × a join wizard half done', () => {
+describe('the global link through the router: cold and warm × account or none × what global answered × a join wizard half done', () => {
     it.each(GLOBAL_LINKS)('%s, no account: the first screen, asked to open its door, new each arrival', async (link) => {
         for (const initial of [true, false]) {
             const to = await route(link, initial);
@@ -120,6 +147,43 @@ describe('the global link through the router: cold and warm × account or none �
         expect(await route(link, false)).toBeNull();
     });
 
+    it.each(GLOBAL_LINKS)('%s, an account global closed: nothing to offer, not even over a member answer (cold: as from the icon; warm: stays)', async (link) => {
+        phone.identity = ACCOUNT;
+        phone.closed = [ACCOUNT.publicKey];
+        expect(await route(link, true)).toBe('/');
+        expect(screenFor('/')).toBe('index.tsx');
+        expect(await route(link, false)).toBeNull();
+        kept('member');
+        expect(await route(link, true)).toBe('/');
+        expect(await route(link, false)).toBeNull();
+    });
+
+    it.each(GLOBAL_LINKS)('%s, a member there (global said so under a day ago): no door, the BeanPool sheet, whose row switches to it', async (link) => {
+        phone.identity = ACCOUNT;
+        kept('member');
+        for (const initial of [true, false]) {
+            const to = await route(link, initial);
+            expect(screenFor(to!), `${link} → ${to}`).toBe('beanpool.tsx');
+            expect(paramsOf(to!)).toEqual({});
+        }
+    });
+
+    it('a stranger there, or a member answer over a day old: the door, held for a tap (the door\'s own check decides)', async () => {
+        phone.identity = ACCOUNT;
+        kept('stranger');
+        expect(await route('https://beanpool.org/global', false)).toBe('/join-global?from=link');
+        kept('member', GLOBAL_STANDING_TTL_MS + 1);
+        expect(await route('https://beanpool.org/global', true)).toBe('/join-global?from=link');
+        expect(await route('beanpool://global', false)).toBe('/join-global?from=link');
+    });
+
+    it('the closed mark and kept answer are another key\'s: the door for this one', async () => {
+        phone.identity = ACCOUNT;
+        phone.closed = ['cd'.repeat(16)];
+        phone.store.set(GLOBAL_STANDING_STORE_KEY, JSON.stringify({ ['cd'.repeat(16)]: { standing: 'member', at: Date.now() } }));
+        expect(await route('https://beanpool.org/global', false)).toBe('/join-global?from=link');
+    });
+
     it('a second tap of the same link is a second arrival (the first screen opens its door once per arrival)', async () => {
         const first = await routeGlobalLink(false, async () => ({ account: false, wizardPending: false }), () => 1000);
         const second = await routeGlobalLink(false, async () => ({ account: false, wizardPending: false }), () => 2000);
@@ -137,10 +201,32 @@ describe('the global link through the router: cold and warm × account or none �
         phone.identity = ACCOUNT;
         const to = await route('https://beanpool.org/global', false);
         expect(phone.reads).toBe(2);
+        // What global last answered about the key, from the phone's store: the kept answer and the closed mark.
+        expect(phone.globalReads).toBe(2);
         expect(fetchSpy).not.toHaveBeenCalled();
         expect(to).not.toContain(ACCOUNT.publicKey);
         expect(to).not.toContain('Damo');
         expect(to).not.toMatch(/https?:/);
+    });
+});
+
+describe('the link follows the phone\'s one rule for the global community (utils/global-entry.ts globalEntryState)', () => {
+    it('for every answer global could have left: the rule\'s member gets the sheet, closedAccount nothing, any other state the door', () => {
+        for (const standing of ['member', 'stranger', 'unknown'] as GlobalStanding[]) {
+            for (const closedHere of [false, true]) {
+                for (const initial of [true, false]) {
+                    const to = globalLinkRoute({ account: true, wizardPending: false, standing, closedHere }, initial, 1);
+                    // The router asks no door: the door screen asks it as it opens, and says so itself when it can't be used.
+                    const rule = globalEntryState({ account: true, standing, door: 'open', closedHere, saved: false });
+                    const expected = rule === 'member' ? '/beanpool'
+                        : rule === 'closedAccount' ? (initial ? '/' : null)
+                        : '/join-global?from=link';
+                    expect(to, `${standing} closed=${closedHere} initial=${initial} (${rule})`).toBe(expected);
+                }
+            }
+        }
+        // Nothing read: as `unknown`, not closed. The door.
+        expect(globalLinkRoute({ account: true, wizardPending: false }, false, 1)).toBe('/join-global?from=link');
     });
 });
 

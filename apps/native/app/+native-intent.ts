@@ -8,19 +8,28 @@ import { pairRouteFromSystemPath } from '../utils/pair-link';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 
 /**
- * What the global community's link needs to know about the phone: whether it keeps a key, and whether a join wizard was
- * left half done. Read from the phone only, when such a link arrives; the modules load then, not with the router.
+ * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
+ * half done, and what the global community last answered about the key (its standing kept under a day, and whether it
+ * closed the account), as the one rule reads them (utils/global-entry.ts). Read from the phone only, when such a link
+ * arrives; the modules load then, not with the router.
  */
 async function phoneAtLink(): Promise<PhoneAtLink> {
-    const [{ loadIdentity }, { getPendingOnboarding }] = await Promise.all([
+    const [{ loadIdentity }, { getPendingOnboarding }, { readGlobalStanding }, { accountClosedAtGlobal }] = await Promise.all([
         import('../utils/identity'),
         import('../utils/onboarding-state'),
+        import('../utils/global-entry'),
+        import('../utils/global-join-existing'),
     ]);
     const [identity, pending] = await Promise.all([
         loadIdentity().catch(() => null),
         getPendingOnboarding().catch(() => null),
     ]);
-    return { account: !!identity, wizardPending: !!pending };
+    const publicKey = identity?.publicKey ?? null;
+    const [standing, closedHere] = await Promise.all([
+        readGlobalStanding(publicKey).catch(() => 'unknown' as const),
+        accountClosedAtGlobal(publicKey).catch(() => false),
+    ]);
+    return { account: !!identity, wizardPending: !!pending, standing, closedHere };
 }
 
 /**
@@ -75,7 +84,8 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     if (pairRoute) return pairRoute;
 
     // The global community's smart link, `https://beanpool.org/global` or `beanpool://global` (utils/global-link.ts): the
-    // first screen's door with no account, the global community's door for one, nothing new while a join wizard is half
+    // first screen's door with no account; for one, what the phone's one rule for the global community offers it (the
+    // door, the BeanPool sheet for a member, nothing for an account it closed); nothing new while a join wizard is half
     // done. It only opens a screen: the door asks before anything is signed or sent. One that carries an invite is the
     // invite's: the root layout and the first screen read the invite from the link as from any other, and the app opens
     // as from its icon (cold) or stays where it is (warm), never on a route that doesn't exist.

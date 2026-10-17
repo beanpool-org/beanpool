@@ -19,7 +19,7 @@ vi.mock('expo-web-browser', () => ({
 import { SAMPLE_COMMUNITY } from '@beanpool/core';
 import { redirectSystemPath } from '../../app/+native-intent';
 import { deepLinkNodeOrigin, extractInviteToken, extractNodeOrigin, normaliseInviteCode } from '../invite-parser';
-import { claimCodeFromScan, claimRouteFromSystemPath, isClaimCode, parseClaimLink } from '../claim-link';
+import { claimCodeFromScan, claimLinkFromScan, claimRouteFromSystemPath, isClaimCode, parseClaimLink } from '../claim-link';
 import { isUnreadablePairingQr, parsePairingQr } from '../pair-device-target';
 import { postIdFromLink } from '../event-extras';
 
@@ -61,6 +61,7 @@ describe('an example invite code is no invitation on the phone', () => {
             expect(parseClaimLink(raw), raw).toBeNull();
             expect(claimRouteFromSystemPath(raw), raw).toBeNull();
             expect(claimCodeFromScan(raw, 'https://a.example'), raw).toBeNull();
+            expect(claimLinkFromScan(raw), raw).toBeNull();
             expect(isClaimCode(raw), raw).toBe(false);
             expect(postIdFromLink(raw), raw).toBeNull();
         }

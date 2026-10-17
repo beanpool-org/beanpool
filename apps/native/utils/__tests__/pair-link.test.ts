@@ -19,7 +19,14 @@ vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined
 
 import { isPairLink, pairLinkFromRoute, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
 import { afterJoinRedirect, parsePairingQr, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
-import { redirectSystemPath } from '../../app/+native-intent';
+import { redirectSystemPath as routeSystemPath } from '../../app/+native-intent';
+
+/** Every link here is routed at once: only the global community's link is answered later (utils/global-link.ts). */
+function redirectSystemPath(event: { path: string; initial: boolean }): string | null {
+    const to = routeSystemPath(event);
+    if (to instanceof Promise) throw new Error(`routed later, not at once: ${event.path}`);
+    return to;
+}
 
 const SESSION = 'a1'.repeat(16);
 const PUB = 'b2'.repeat(32);

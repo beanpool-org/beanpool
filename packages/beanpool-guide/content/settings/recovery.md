@@ -17,7 +17,7 @@ Your account's key is not in your phone's backups. A new phone needs your 12 wor
 ## With your 12 words
 
 - Type the 12 words in order, or tap **Paste**.
-- Type your community's name or address.
+- Under **Which community?**, tap **Global community**, or one of the communities this phone has had. For any other, tap **another address** and type your community's name or address.
 - Tap **Recover Identity**. Your name and photo come back from your community.
 
 ## With a sign-in account

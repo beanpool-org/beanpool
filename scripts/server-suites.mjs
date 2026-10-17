@@ -424,6 +424,7 @@ export const SUITES = [
     'test-member-blocks',
     'test-member-blocks-standby',
     'test-blocks-on-messaging',
+    'test-messaging-idor',
     'test-withheld-lines',
     'test-blocks-on-beans',
     'test-polls',
@@ -565,8 +566,8 @@ export const VARIANTS = [
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a
     // node whose operator set ENFORCE_READ_AUTH=false.
     { name: 'test-keeper-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
-    // On an open node anyone may read anyone's DM list or DM: only the routes' own choice of reader keeps a DM's former keys
-    // to its people (#1871 review NB1).
+    // On an open node a DM list and a DM by id are still their people's alone (#1909, #2119): someone else's list or DM is
+    // refused, unsigned included, and only the DM's people are served its former keys (#1871 review NB1).
     { name: 'test-dm-former-keys-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's own balance answer carries tierCredit (the apps' trust figure) with read auth opted out too (#1644 r4183873149).
     { name: 'test-balance-tier-credit-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
@@ -574,9 +575,9 @@ export const VARIANTS = [
     // with no photo, not the read gate's 401 (#2079 review NB4). The suite reads READ_AUTH, as it clears ENFORCE_READ_AUTH.
     { name: 'test-photo-pixel-cap-attachment-read', tag: 'readauth-off', label: 'read auth opted out', env: { READ_AUTH: 'off' } },
 
-    // Messaging IDOR (A2-2/A2-3/A2-15): one member cannot read another member's conversations. Refuses to run without
-    // ENFORCE_READ_AUTH rather than passing vacuously, which is why it sat unregistered.
-    { name: 'test-messaging-idor', label: 'read auth ON', env: { ENFORCE_READ_AUTH: 'true' } },
+    // Messaging IDOR (A2-2/A2-3/A2-15) with read auth opted out: another member, a key that is no member and an unsigned
+    // caller still cannot read a member's conversations (#2119). The plain run covers read auth ON.
+    { name: 'test-messaging-idor', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Member-read IDOR (A2-16 family): one member cannot read another member's invites or notification preferences.
     // The plain run makes both 403 assertions; this covers the operator opt-out, where the invites one still holds, the

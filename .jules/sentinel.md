@@ -215,3 +215,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 **Vulnerability:** `POST /api/local/admin/posts/bulk-delete` accepted an unbounded `postIds` array, allowing arbitrary size payloads to block the Node.js event loop in synchronous deletion loops and DB operations.
 **Learning:** Bulk operation endpoints that accept array inputs must enforce strict batch limits to avoid Denial of Service (DoS) and event-loop blocking. Capping the route alone breaks callers that send everything in one request, so the callers must batch in the same change.
 **Prevention:** Export and enforce `MAX_BULK_DELETE_POSTS = 200` in the route handler, rejecting requests with >200 items with HTTP 400. The manager (`PeopleSafetySection.tsx`) and `static/settings.js` send stale posts in sequential batches of at most 200.
+
+## 2026-10-17 - [Sentinel] Enforce Participant Authorization on Private Conversations
+**Vulnerability:** `GET /api/messages/:conversationId` in `apps/server/src/routes/messaging.ts` gated the non-participant authorization check behind `ENFORCE_READ_AUTH`. When `ENFORCE_READ_AUTH` was disabled or unconfigured, any caller could fetch private conversation metadata and messages by conversation ID.
+**Learning:** Private resources like direct message conversations must enforce participant authorization (`conv.participants.includes(actor)`) unconditionally, regardless of server-level public read settings (`ENFORCE_READ_AUTH`).
+**Prevention:** Check `!conv.participants.includes(ctx.state.actor)` directly without checking `ENFORCE_READ_AUTH` so non-participants are always denied access (403).

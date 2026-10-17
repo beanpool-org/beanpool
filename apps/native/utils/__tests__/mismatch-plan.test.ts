@@ -10,7 +10,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('../community-switch', () => ({ communitySwitched: vi.fn() }));
 
-import { mismatchPlan, type MismatchInput } from '../mismatch-plan';
+import { inviteFromText, mismatchPlan, type MismatchInput } from '../mismatch-plan';
 import { askBeforeSwitch, type ReconnectDeps } from '../reconnect';
 import type { NodeProfile, NodeFeatures } from '../node-profile';
 
@@ -126,5 +126,22 @@ describe('askBeforeSwitch: ask first, move only for an answer that lets the key 
         await expect(askBeforeSwitch('https://evil.example@good.example', KEY, d)).rejects.toThrow();
         expect(probe).not.toHaveBeenCalled();
         expect(d.switched).toEqual([]);
+    });
+});
+
+describe('inviteFromText: the invite field on the invite and preview pages', () => {
+    it('a bare code is for the community the page is about; a link names its own community', () => {
+        expect(inviteFromText('inv-abcd-efgh', 'https://riverside.example')).toEqual({ targetUrl: 'https://riverside.example', code: 'INV-ABCD-EFGH' });
+        expect(inviteFromText('Join my BeanPool community: https://other.example/join?invite=INV-WXYZ-1234', 'https://riverside.example'))
+            .toEqual({ targetUrl: 'https://other.example', code: 'INV-WXYZ-1234' });
+    });
+
+    it('nothing to use: empty, or a code with no community to take it', () => {
+        expect(inviteFromText('   ', 'https://riverside.example')).toBeNull();
+        expect(inviteFromText('INV-ABCD-EFGH', null)).toBeNull();
+    });
+
+    it('a link whose address is not plain host[:port] is refused, never sent to the page\'s community instead', () => {
+        expect(() => inviteFromText('https://evil.example@good.example/join?invite=INV-ABCD-EFGH', 'https://riverside.example')).toThrow();
     });
 });

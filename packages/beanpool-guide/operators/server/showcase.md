@@ -59,7 +59,7 @@ The web app and the phone app both link it from their Start a community screens.
 
 ## Where the Global community link leads
 
-On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow.
+On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow. Under the address the row tells them so: **The global community is one community among many. Your own community runs on its own server and never needs it.**
 
 - To name another global community, set GLOBAL_COMMUNITY_URL in the server's .env to its address, such as GLOBAL_COMMUNITY_URL=https://global.example.org, and run docker compose up -d (a restart keeps the old setting). It must start https:// and have no user name or password in it.
 - To show no link at all, set GLOBAL_COMMUNITY_URL=off and run docker compose up -d. A value that isn't such an address shows no link either, never ours in its place.

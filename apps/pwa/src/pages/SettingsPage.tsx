@@ -1970,11 +1970,16 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                 })}
                 {globalCommunity && (
                     <a href={globalCommunity.href} target="_blank" rel="noopener noreferrer" className={rowClass} data-testid="settings-global-community"
-                        aria-label={t('Global community, {address}, opens in a new tab', { address: globalCommunity.host })}>
+                        aria-label={t('Global community, {address}, opens in a new tab', { address: globalCommunity.host })}
+                        aria-describedby="settings-global-community-about">
                         <span className="text-xl" aria-hidden="true">🌍</span>
                         <span className="flex-1 min-w-0">
                             <span className="block">{t('Global community')}</span>
                             <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{globalCommunity.host}</span>
+                            {/* What it is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1). */}
+                            <span id="settings-global-community-about" className="block mt-0.5 text-xs font-normal text-nature-500 dark:text-nature-300">
+                                {t('The global community is one community among many. Your own community runs on its own server and never needs it.')}
+                            </span>
                         </span>
                         <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                     </a>

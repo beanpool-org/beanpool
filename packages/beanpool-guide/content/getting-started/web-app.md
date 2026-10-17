@@ -98,7 +98,7 @@ If you joined the global community with 12 words, they are your only way back. A
 - **Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.
 - **Chats:** the web chat has **Report** and **Block** buttons at the top.
 - **Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See "Your area".
-- **Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address. It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row.
+- **Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address and **The global community is one community among many. Your own community runs on its own server and never needs it.** It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row.
 
 ## What the web app does not have
 

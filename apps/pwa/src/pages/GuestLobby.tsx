@@ -173,6 +173,13 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 className="mt-1 min-h-[44px] px-2 bg-transparent border-0 text-sm font-semibold text-nature-600 dark:text-nature-300 underline cursor-pointer">
                 Already have BeanPool?
             </button>
+            {/* What the global community is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1): on a global
+                community only, under its ways in, so no button moves. */}
+            {info.profile === 'global' && (
+                <p data-testid="lobby-one-among-many" className="m-0 mt-2 text-sm text-nature-700 dark:text-nature-200 leading-snug">
+                    {t('The global community is one community among many. Your own community runs on its own server and never needs it.')}
+                </p>
+            )}
         </section>
     );
 

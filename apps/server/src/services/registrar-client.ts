@@ -149,8 +149,9 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
 /**
  * How long this node waits for the registrar. A claim, heal or rotate makes the name at Cloudflare (a tunnel, its ingress,
  * its record, its token: about seven calls in a row, each as slow as Cloudflare is that day), so it waits MAKE_BUDGET_MS;
- * 5 s for that lost claims on a slow day (temp, 17 Oct: scratch/global-node/DESIGN-registrar-trust-fable.md §5). Every
- * other call (status, holder, release, update) only reads or writes the registrar's own table: CALL_BUDGET_MS.
+ * 5 s for that lost claims on a slow day (temp, 17 Oct: scratch/global-node/DESIGN-registrar-trust-fable.md §5). A release
+ * deletes the name's record and tunnel there, so it waits as long (review of #2125). Every other call (status, holder,
+ * update) only reads or writes the registrar's own table: CALL_BUDGET_MS.
  */
 export const MAKE_BUDGET_MS = 25_000;
 export const CALL_BUDGET_MS = 5_000;
@@ -238,7 +239,7 @@ export const addressStatus = (name?: string | null) =>
  * Release `name` (Take offline). Named whenever a name is stored: with no name the registrar releases the key's first name,
  * which with two names held can be the other one, leaving this one live with nothing running it.
  */
-export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {});
+export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {}, MAKE_BUDGET_MS);
 /**
  * Bring this server's own held name back (a pause its heal lifts): never a claim, so it can't take back a release or
  * claim a name. The registrar routes it again only once this server proves its key: on a fresh tunnel only this signed

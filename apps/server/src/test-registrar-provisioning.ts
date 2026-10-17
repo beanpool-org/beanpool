@@ -4,7 +4,8 @@
  * so on a slow day it timed out, the registrar left the row pending, and the node then read "pending" as "awaiting
  * approval": it stored it, ended the install's request and never asked again, while nobody was going to approve it.
  *
- *  1. A claim or heal waits 25 s (one that takes 8 s succeeds); everything else still gives up at 5 s.
+ *  1. A claim or heal waits 25 s (one that takes 8 s succeeds), and so does a release (Cloudflare work too: review of
+ *     #2125); status and holder still give up at 5 s.
  *  2. A status answer pending + reason 'provisioning' is "not yet": the same tick asks again with a heal of the name
  *     (never a claim), stores the live answer and runs its tunnel, and only then ends `beanpool claim`'s request — with
  *     or without one, however the name was claimed. A heal that fails leaves it pending; the next tick asks again.
@@ -31,7 +32,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { initStateEngine, getNodeConfig, updateNodeConfig } from './state-engine.js';
 import { startP2P } from './p2p.js';
-import { claimAddress, healAddress, addressStatus, askNameHolder, MAKE_BUDGET_MS, CALL_BUDGET_MS } from './services/registrar-client.js';
+import { claimAddress, healAddress, addressStatus, askNameHolder, releaseAddress, MAKE_BUDGET_MS, CALL_BUDGET_MS } from './services/registrar-client.js';
 import { noteUnansweredClaim, setTunnelConnectorForTests, resetTunnelConnectorForTests, tunnelConnectorForTests, syncTunnel } from './services/tunnel-connector.js';
 import { reconcile, tick, tickDue, QUIET_TICK_MS, TICK_MS } from './services/public-address-agent.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
@@ -68,6 +69,7 @@ const reg = {
     claim: (b: any): Answer => live(b.name, `T-claim-${b.name}`),
     heal: (b: any): Answer => live(b.name, `T-heal-${b.name}`),
     holder: (b: any): Answer => ({ name: b?.name, held: 'free' }),
+    release: (b: any): Answer => ({ status: 'released', name: b?.name }),
 };
 const callsTo = (p: string) => reg.calls.filter((c) => c.path === `/api/registrar/${p}`);
 
@@ -87,6 +89,7 @@ async function startRegistrar(): Promise<http.Server> {
             if (p === 'claim') return answer(reg.claim(body));
             if (p === 'heal') return answer(reg.heal(body));
             if (p === 'holder') return answer(reg.holder(body));
+            if (p === 'offline' || p === 'release') return answer(reg.release(body));
             send(404, { error: 'not found' });
         });
     });
@@ -108,6 +111,7 @@ const reset = async () => {
     reg.claim = (b) => live(b.name, `T-claim-${b.name}`);
     reg.heal = (b) => live(b.name, `T-heal-${b.name}`);
     reg.holder = (b) => ({ name: b?.name, held: 'free' });
+    reg.release = (b) => ({ status: 'released', name: b?.name });
 };
 
 async function main(): Promise<void> {
@@ -119,7 +123,7 @@ async function main(): Promise<void> {
     const runsOn = (token: string) => until(() => tunnelConnectorForTests().runningToken === token);
 
     try {
-        await section('1. a claim or heal waits 25 s; the rest still 5 s', async () => {
+        await section('1. a claim, heal or release waits 25 s; the rest still 5 s', async () => {
             assert(MAKE_BUDGET_MS === 25_000 && CALL_BUDGET_MS === 5_000, `budgets 25 s and 5 s (${MAKE_BUDGET_MS}, ${CALL_BUDGET_MS})`);
             reg.claim = (b) => later(8_000, live(b.name, 'T-slow'));
             const t0 = Date.now();
@@ -131,6 +135,10 @@ async function main(): Promise<void> {
             let healed: any;
             try { healed = await healAddress('slowpoke', 'http://127.0.0.1:8080'); } catch (e: any) { healed = { error: e.message }; }
             assert(healed?.status === 'live', `a heal answered after 6 s succeeds (${JSON.stringify(healed)})`);
+            reg.release = (b) => later(6_000, { status: 'released', name: b?.name });
+            let released: any;
+            try { released = await releaseAddress('slowpoke'); } catch (e: any) { released = { error: e.message }; }
+            assert(released?.status === 'released' && released.name === 'slowpoke', `a release answered after 6 s succeeds (${JSON.stringify(released)})`);
             reg.status = () => later(6_000, live('slowpoke'));
             let st: any;
             const s0 = Date.now();

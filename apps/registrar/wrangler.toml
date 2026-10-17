@@ -49,6 +49,14 @@ WATCH_TARGETS = '''[
   {"name": "castlemaine", "url": "https://castlemaine.beanpool.org"},
   {"name": "test", "url": "https://test.beanpool.org"}
 ]'''
+# Who may use the control room (/admin and /api/local/admin/registrar/*, src/access.js): Cloudflare Access sits in
+# front of those paths (app "BeanPool control room (registrar admin)", its own MFA: email code + authenticator), and the
+# Worker believes only Access's signed token — this team's, for this app's AUD tag, naming an email listed here. With
+# these set, ADMIN_SECRET opens nothing. A self-hoster without Access leaves all three unset and keeps ADMIN_SECRET
+# (README "Admin sign-in"); set but incomplete, nobody gets in.
+ACCESS_TEAM_DOMAIN = "tradeconnector.cloudflareaccess.com"
+ACCESS_AUD = "9625a519de3357b3ceb3339024af0f9898f71a958b553c3aed071ca3978d60cc"
+ADMIN_EMAILS = "martin@cytec.com.au"    # comma-separated
 # The vault's ticket PUBLIC key(s), exactly as the apps are built with them (EXPO_PUBLIC_BEANPOOL_VAULT_TICKET_KEYS):
 # 64 hex each, newest first, comma-separated, two at most. The vault's signed report is believed only under one of
 # these. Unset, its report is "not checked" — never "fine" — and /admin and the daily line say so.
@@ -81,7 +89,8 @@ zone_name = "beanpool.org"
 #   CF_API_TOKEN     scoped token: Account·Cloudflare Tunnel·Edit + Zone·DNS·Edit
 #   CF_ACCOUNT_ID    151a28c4fd1e6ee09768f4226be76b4d
 #   CF_ZONE_ID       060a99ae34e53b26dcf3be6578722b31
-#   ADMIN_SECRET     shared secret for the admin endpoints (approve/pause/resume/block/release/events)
+#   ADMIN_SECRET     shared secret for the admin endpoints — only while ACCESS_* above are unset (a registrar with no
+#                    Cloudflare Access in front); with them set it opens nothing
 #   NTFY_URL         the control room's ntfy topic, as a full URL (https://ntfy.sh/<topic>): the topic name IS the
 #                    secret. Unset = no alerts are sent, and /admin says so (src/alerts.js).
 #   NTFY_TOKEN       optional ntfy access token, sent as `Authorization: Bearer` (limits then follow the account,

@@ -18,6 +18,7 @@ import * as db from './db.js';
 import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
+import { accessMode, accessIdentity } from './access.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
@@ -1163,16 +1164,16 @@ async function handleUpdate(request, env, bodyText) {
 //   'withdrawn'  a gated claim nobody approved, withdrawn by its key: free at once.
 // 'admin' is what every admin release wrote before D-C, so those rows stay free, and a Worker rolled back past D-C
 // reads 'admin-held' and 'admin-held-all' as an owner's release: held for its key. The row is written first
-// (stopRouting); false, with nothing done, if it changed since `a` was read.
-async function releaseRow(env, a, by, now) {
+// (stopRouting); false, with nothing done, if it changed since `a` was read. `actor`: who the admin is (actorOf).
+async function releaseRow(env, a, by, now, actor = ADMIN) {
     const to = { status: 'released', released_at: now, pause_reason: by, paused_at: null, attest_fails: 0 };
     if (!(await stopRouting(env, a, to))) return false;
     const days = `${Math.round(releaseCooloffS(env) / 86400)} days`;
     const held = `held ${days} for`;
     await logEvent(env, a.name, 'released', ({
-        admin: `released by the admin (was ${a.status}): free now`,
-        'admin-held': `released by the admin (was ${a.status}): ${held} key ${key16(a.node_pubkey)}, then free`,
-        'admin-held-all': `released by the admin (was ${a.status}): held ${days} from every key, its own ${key16(a.node_pubkey)} included, then free`,
+        admin: `released by ${actor} (was ${a.status}): free now`,
+        'admin-held': `released by ${actor} (was ${a.status}): ${held} key ${key16(a.node_pubkey)}, then free`,
+        'admin-held-all': `released by ${actor} (was ${a.status}): held ${days} from every key, its own ${key16(a.node_pubkey)} included, then free`,
         withdrawn: `withdrawn by its key ${key16(a.node_pubkey)} before the admin approved it: free now`,
     })[by] ?? `released by its owner ${key16(a.node_pubkey)} (was ${a.status}): ${held} that key, then free`);
     return true;
@@ -1229,10 +1230,31 @@ export function timingSafeEqualStrings(a, b) {
     return result === 0;
 }
 
-// --- Admin (shared secret) ---
+// --- Admin ---
 // Every action is logged in name_events. None of them frees a name except `release`.
 const checkAdmin = (request, env) =>
     !!env.ADMIN_SECRET && timingSafeEqualStrings(request.headers.get('x-admin-secret'), env.ADMIN_SECRET);
+
+// Who is the admin on this request: Cloudflare Access when any ACCESS_* var is set (src/access.js) — the email its signed
+// token names, and ADMIN_SECRET opens nothing (one way in, not two); with none set (a self-hoster with no Access in
+// front, README "Admin sign-in"), the ADMIN_SECRET header, as before. { email } (null by the secret), or null: refused.
+async function adminIdentity(request, env) {
+    if (!accessMode(env)) return checkAdmin(request, env) ? { email: null } : null;
+    const who = await accessIdentity(request, env);
+    if (who.email) return { email: who.email };
+    console.warn('[ADMIN_ACCESS] refused:', who.error);
+    return null;
+}
+// Who did it, in the events and alerts: the email Access signed in, or "the admin" (the secret names nobody).
+const ADMIN = 'the admin';
+const actorOf = (who) => who?.email || ADMIN;
+// A refusal says how to sign in when it is Access (the page shows that, not a secret box); the secret's says nothing.
+const unauthorized = (env) => json({ error: 'unauthorized', ...(accessMode(env) ? { sign_in: 'cloudflare-access' } : {}) }, 401);
+// Access signs the admin in with a cookie, which a browser also sends with a form another site posts here. So, under
+// Access, an admin POST must carry a header no other site can make a browser send (x-bp-admin: 1, as the page sends),
+// and an Origin, when it has one, of this site. (The secret is such a header already.)
+const crossSite = (request, url) => request.headers.get('x-bp-admin') !== '1'
+    || (request.headers.has('origin') && request.headers.get('origin') !== url.origin);
 
 // The admin's action whose write missed (the row changed while it was at Cloudflare): undone, and nothing done.
 async function adminMissed(env, name, ids) {
@@ -1252,7 +1274,7 @@ async function adminMissed(env, name, ids) {
 // row as it now is (onFreshRow) rather than delete the tunnel that heal is live on. The same write takes a tunnel
 // about to be deleted off the row, so a heal reading it meanwhile can't go live on it; one Cloudflare won't delete
 // goes back on the row.
-async function adminResume(env, a, was, now) {
+async function adminResume(env, a, was, now, actor) {
     const drop = !!a.tunnel_id && !(a.status === 'paused' && a.pause_reason === 'admin');
     const first = { ...decision(a), ...(drop ? { tunnel_id: null } : {}) };
     if (!(await db.updateIfUnchanged(env, a.name, a, first, { withIds: true }))) return null;
@@ -1278,13 +1300,13 @@ async function adminResume(env, a, was, now) {
     const g = await routeIfOnlyOwner(env, res, ids, now);
     if (g.missed) return adminMissed(env, a.name, ids);
     if (g.live) {
-        await logEvent(env, a.name, 'resumed', `resumed by the admin (was ${was})${g.attest ? ': edge re-attest ok' : ': on a fresh tunnel'}`);
+        await logEvent(env, a.name, 'resumed', `resumed by ${actor} (was ${was})${g.attest ? ': edge re-attest ok' : ': on a fresh tunnel'}`);
         return json({ status: 'live', name: a.name, changed: ids.changed, ...(g.attest ? { attest: g.attest } : {}) });
     }
     const reason = g.verdict === 'impostor' ? 'impostor' : 'unverified';
     const held = { status: 'paused', pause_reason: reason, paused_at: a.status === 'paused' ? a.paused_at : now, dns_record_id: g.dns_record_id };
     if (!(await db.updateIfUnchanged(env, a.name, res, held, { withIds: true }))) return adminMissed(env, a.name, ids);
-    await logEvent(env, a.name, 'resume-refused', `resumed by the admin (was ${was}), but not routed: edge re-attest ${g.verdict} (${g.why}); paused/${reason} for ${key16(a.node_pubkey)}, whose heal re-attests`);
+    await logEvent(env, a.name, 'resume-refused', `resumed by ${actor} (was ${was}), but not routed: edge re-attest ${g.verdict} (${g.why}); paused/${reason} for ${key16(a.node_pubkey)}, whose heal re-attests`);
     return json({ status: 'paused', name: a.name, reason, attest: g.verdict, why: g.why });
 }
 
@@ -1301,13 +1323,15 @@ async function adminGoLive(env, a, event, detail, extra = {}) {
 // Pause, block and release write the row first, and only while it is as read: if it changed in between, the action
 // is decided again on the row as it now is (onFreshRow). `opts.freeNow`: release frees the name at once.
 // What the admin did reaches the admin's phone too, as the Worker answered it (A5; a resume whose re-attest failed says so).
+// `opts.who`: the admin (adminIdentity), named in the events and the alert.
 async function handleAdmin(env, name, action, opts = {}) {
     const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
-    if (res.status === 200) await tell(env, async () => alerts.adminDid(env, name, action, await res.clone().json()));
+    if (res.status === 200) await tell(env, async () => alerts.adminDid(env, name, action, await res.clone().json(), opts.who?.email));
     return res;
 }
 
-async function adminAction(env, a, action, now, { freeNow = false } = {}) {
+async function adminAction(env, a, action, now, { freeNow = false, who = null } = {}) {
+    const actor = actorOf(who);
     const name = a.name;
     const was = `${a.status}${a.pause_reason ? `/${a.pause_reason}` : ''}`;
     switch (action) {
@@ -1319,21 +1343,21 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
                 let found;
                 try { found = await outsidePending(env, a); }
                 catch (e) { return provisionFailed(e, { admin: true }); }
-                if (found) return refuseOutside(env, name, a.node_pubkey, found, 'approve by the admin');
+                if (found) return refuseOutside(env, name, a.node_pubkey, found, `approve by ${actor}`);
             }
-            return adminGoLive(env, a, 'approved', 'approved by the admin', { decided_at: now, decided_by: 'admin' });
+            return adminGoLive(env, a, 'approved', `approved by ${actor}`, { decided_at: now, decided_by: 'admin' });
         case 'pause': {
             // Routing off, name and tunnel kept; its owner can neither heal nor release it — only `resume` (or `release`,
             // which then holds the name from every key, its own included).
             if (a.status !== 'live' && a.status !== 'paused') return json({ error: `cannot pause a ${a.status} name` }, 400);
             const to = { status: 'paused', pause_reason: 'admin', paused_at: a.status === 'paused' ? a.paused_at : now };
             if (!(await stopRouting(env, a, to, { keepTunnel: true, byHostname: true }))) return null;
-            await logEvent(env, name, 'paused', `paused by the admin (was ${was})`);
+            await logEvent(env, name, 'paused', `paused by ${actor} (was ${was})`);
             return json({ status: 'paused', name, reason: 'admin' });
         }
         case 'resume':
             if (a.status !== 'paused' && a.status !== 'blocked') return json({ error: `cannot resume a ${a.status} name` }, 400);
-            return adminResume(env, a, was, now);
+            return adminResume(env, a, was, now, actor);
         case 'block':
         case 'revoke': {
             // The kill switch. Routing and tunnel go; the name is held, never free — an impostor must not inherit a
@@ -1342,11 +1366,11 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
             // still there, and stands against a resume in flight.
             if (a.status === 'blocked') {
                 if (!(await stopRouting(env, a, null, { byHostname: true }))) return null;
-                await logEvent(env, name, 'blocked', 'blocked again by the admin: any routing left removed');
+                await logEvent(env, name, 'blocked', `blocked again by ${actor}: any routing left removed`);
                 return json({ status: 'blocked', name });
             }
             if (!(await stopRouting(env, a, { status: 'blocked', pause_reason: 'admin', paused_at: now }, { byHostname: true }))) return null;
-            await logEvent(env, name, 'blocked', `blocked by the admin (was ${a.status}); key ${key16(a.node_pubkey)}`);
+            await logEvent(env, name, 'blocked', `blocked by ${actor} (was ${a.status}); key ${key16(a.node_pubkey)}`);
             return json({ status: 'blocked', name });
         }
         case 'release': {
@@ -1360,11 +1384,11 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
             const held = (by, at) => ({ ...(by === 'admin-held-all' ? { reason: by } : {}), held_until: at + releaseCooloffS(env) });
             if (a.status === 'released' && !atOnce) return json({ status: 'released', name, ...held(a.pause_reason, a.released_at || 0) });
             const by = atOnce ? 'admin' : (stoppedByAdmin(a) ? 'admin-held-all' : 'admin-held');
-            if (!(await releaseRow(env, a, by, now))) return null;
+            if (!(await releaseRow(env, a, by, now, actor))) return null;
             return json({ status: 'released', name, ...(atOnce ? {} : held(by, now)) });
         }
         case 'forget':
-            return forgetRow(env, a, now);
+            return forgetRow(env, a, now, actor);
     }
     return json({ error: 'unknown action' }, 400);
 }
@@ -1380,7 +1404,7 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
 // ends that take-back on purpose. Whatever the row still records at Cloudflare — a delete Cloudflare refused at the
 // release — goes first, row first as every take-down's does (stopRouting): what Cloudflare refuses again stays on the
 // row and is owed (teardown), the tunnel too, so the sweep retries it and a later claim of the name deletes it as its own.
-async function forgetRow(env, a, now) {
+async function forgetRow(env, a, now, actor = ADMIN) {
     const name = a.name;
     // Removed already (a double click, another tab): nothing done, and it says so — no event, no alert, not counted.
     if (a.status === 'abandoned') return json({ status: 'abandoned', name, already: true });
@@ -1398,7 +1422,7 @@ async function forgetRow(env, a, now) {
     if (after?.status === 'abandoned') await owe(env, '[FORGET_LEFT]', name, 'tunnel', after.tunnel_id);
     const left = after?.status === 'abandoned' ? [after.tunnel_id && 'tunnel', after.dns_record_id && 'DNS record'].filter(Boolean) : [];
     const freeSince = freedAtOnce(a) ? (a.released_at || 0) : (a.released_at || 0) + releaseCooloffS(env);
-    await logEvent(env, name, 'removed', `removed from the list by the admin (was released/${a.pause_reason || '—'}, free since `
+    await logEvent(env, name, 'removed', `removed from the list by ${actor} (was released/${a.pause_reason || '—'}, free since `
         + `${new Date(freeSince * 1000).toISOString()}): abandoned, free to anyone as it was`
         + (had.length ? `; its leftover ${had.join(' and ')} ${left.length ? `deleted, but Cloudflare refused the ${left.join(' and ')}: owed, the sweep retries` : 'deleted at Cloudflare'}` : ''));
     return json({ status: 'abandoned', name });
@@ -1408,23 +1432,44 @@ async function forgetRow(env, a, now) {
 // most FORGET_MAX a request (the page sends them in batches). Answers which were removed, which were refused and why,
 // and (`already`, only when there are any) which were removed before; the admin's phone hears of the removed once. FORGET_MAX keeps one request inside D1's smallest per-invocation budget
 // (50 queries on Workers Free): a forget is about 6 queries, its one alert about 10.
+// "Free all and remove" ({ "free_now": true }; Marty, 2026-10-18: every July test name gone, most of them released by
+// their own key, which forget refuses while that key can take them back): each released name is first freed as its
+// own "Free now" frees it — adminAction's release, free now, so its old key's take-back ends, with its 'released'
+// event — then removed as above; one alert for the request, as for the removed. Any other row is refused untouched,
+// as forget refuses it. Free and forget together are about 20 queries a name: FREE_FORGET_MAX of them a request.
 const FORGET_MAX = 5;
-async function handleForgetMany(env, bodyText) {
+const FREE_FORGET_MAX = 2;
+async function handleForgetMany(env, bodyText, who = null) {
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const freeNow = b?.free_now === true;
+    const max = freeNow ? FREE_FORGET_MAX : FORGET_MAX;
     const names = Array.isArray(b?.names) ? [...new Set(b.names.map((n) => String(n).toLowerCase()))] : null;
-    if (!names || !names.length || names.length > FORGET_MAX || !names.every((n) => NAME_RE.test(n)))
-        return json({ error: `names must be 1 to ${FORGET_MAX} names` }, 400);
+    if (!names || !names.length || names.length > max || !names.every((n) => NAME_RE.test(n)))
+        return json({ error: `names must be 1 to ${max} names` }, 400);
+    const actor = actorOf(who);
     const removed = [];
     const refused = [];
     const already = [];
+    const freed = [];
     for (const name of names) {
-        const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? forgetRow(env, a, nowS()) : json({ error: 'unknown name' }, 404)));
+        const res = await onFreshRow(() => db.getAllocation(env, name), async (a) => {
+            if (!a) return json({ error: 'unknown name' }, 404);
+            if (freeNow && a.status === 'released' && !freedAtOnce(a)) {
+                const out = await adminAction(env, a, 'release', nowS(), { freeNow: true, who });
+                if (!out) return null;   // changed meanwhile: decided again on the row as it now is
+                if (out.status !== 200) return out;
+                if (!freed.includes(name)) freed.push(name);
+                a = await db.getAllocation(env, name);
+                if (!a) return json({ error: 'unknown name' }, 404);
+            }
+            return forgetRow(env, a, nowS(), actor);
+        });
         const out = await res.json();
         if (res.status !== 200) refused.push({ name, ...out });
         else (out.already ? already : removed).push(name);
     }
-    if (removed.length) await tell(env, () => alerts.adminRemoved(env, removed));
-    return json({ removed, refused, ...(already.length ? { already } : {}) });
+    if (removed.length) await tell(env, () => alerts.adminRemoved(env, removed, { who: who?.email, freed: freed.filter((n) => removed.includes(n)).length }));
+    return json({ removed, refused, ...(already.length ? { already } : {}), ...(freeNow ? { freed } : {}) });
 }
 
 // --- Switchboard (Invite resolution / trampoline) ---
@@ -1819,64 +1864,66 @@ export default {
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
                 return await handleRelease(request, env, bodyText);
 
-            // Each row says whether it holds its name now (holdsName) and, for a release still held, until when; a release
-            // says too whether its old key can still take it back (isOwnRow, past the hold too). What the admin's list
-            // offers ("Free now" while either is so, "Remove from the list" once neither is) is the Worker's rule (forgetRow).
-            if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                const now = nowS();
-                return json({ allocations: (await db.listActive(env)).map((a) => {
-                    const holds = holdsName(env, a, now);
-                    if (a.status !== 'released') return { ...a, holds };
-                    return { ...a, holds, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
-                }) });
-            }
-            // Remove from the list, in bulk: { "names": [...] } (handleForgetMany). One name's is /:name/forget below.
-            if (method === 'POST' && p === '/api/local/admin/registrar/forget') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return await handleForgetMany(env, bodyText);
-            }
-            if (method === 'GET' && p === '/api/local/admin/registrar/events') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                const name = (url.searchParams.get('name') || '').toLowerCase();
-                const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
-                return json({ events: await db.listEvents(env, NAME_RE.test(name) ? name : null, limit) });
-            }
-            // The control room's alerts (src/alerts.js): their state, the category toggles, and a test message.
-            if (p === '/api/local/admin/registrar/alerts' && method === 'GET') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return json(await alertPanel(env));
-            }
-            if (p === '/api/local/admin/registrar/alerts/settings' && method === 'POST') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                let b; try { b = JSON.parse((bodyText) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-                if (!(await alerts.setCategoryMode(env, b?.category, b?.mode)))
-                    return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
-                return json(await alertPanel(env));
-            }
-            // The outside checks of our servers (src/watch.js): each one's newest look, for /admin's "Our servers".
-            if (p === '/api/local/admin/registrar/servers' && method === 'GET') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return json(await serversStatus(env));
-            }
-            if (p === '/api/local/admin/registrar/alerts/test' && method === 'POST') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return json(await alerts.sendTest(env));
-            }
-            const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke|forget)$/);
-            if (m && method === 'POST') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                // Release takes { "free_now": true }; nothing else (no body, any other value) is the default hold.
-                let freeNow = false;
-                if (m[2] === 'release') {
-                    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-                    freeNow = b?.free_now === true;
+            // The control room's API. Every route here answers only its admin (adminIdentity): Cloudflare Access's signed
+            // token, or — with no ACCESS_* var set — the ADMIN_SECRET header. Unknown paths too: a 401 before a 404.
+            if (p.startsWith('/api/local/admin/registrar/')) {
+                const who = await adminIdentity(request, env);
+                if (!who) return unauthorized(env);
+                if (method === 'POST' && accessMode(env) && crossSite(request, url)) return json({ error: 'cross-site request refused' }, 403);
+                // Who is signed in, for the page's "Signed in as …": the email Access signed in, or null by the secret.
+                if (method === 'GET' && p === '/api/local/admin/registrar/whoami')
+                    return json({ email: who.email, via: who.email ? 'cloudflare-access' : 'admin-secret' });
+                // Each row says whether it holds its name now (holdsName) and, for a release still held, until when; a release
+                // says too whether its old key can still take it back (isOwnRow, past the hold too). What the admin's list
+                // offers ("Free now" while either is so, "Remove from the list" once neither is) is the Worker's rule (forgetRow).
+                if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
+                    const now = nowS();
+                    return json({ allocations: (await db.listActive(env)).map((a) => {
+                        const holds = holdsName(env, a, now);
+                        if (a.status !== 'released') return { ...a, holds };
+                        return { ...a, holds, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
+                    }) });
                 }
-                return await handleAdmin(env, m[1], m[2], { freeNow });
+                // Remove from the list, in bulk: { "names": [...] } (handleForgetMany), and "Free all and remove" with
+                // "free_now": true. One name's is /:name/forget below.
+                if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await handleForgetMany(env, bodyText, who);
+                if (method === 'GET' && p === '/api/local/admin/registrar/events') {
+                    const name = (url.searchParams.get('name') || '').toLowerCase();
+                    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
+                    return json({ events: await db.listEvents(env, NAME_RE.test(name) ? name : null, limit) });
+                }
+                // The control room's alerts (src/alerts.js): their state, the category toggles, and a test message.
+                if (p === '/api/local/admin/registrar/alerts' && method === 'GET') return json(await alertPanel(env));
+                if (p === '/api/local/admin/registrar/alerts/settings' && method === 'POST') {
+                    let b; try { b = JSON.parse((bodyText) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                    if (!(await alerts.setCategoryMode(env, b?.category, b?.mode)))
+                        return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
+                    return json(await alertPanel(env));
+                }
+                // The outside checks of our servers (src/watch.js): each one's newest look, for /admin's "Our servers".
+                if (p === '/api/local/admin/registrar/servers' && method === 'GET') return json(await serversStatus(env));
+                if (p === '/api/local/admin/registrar/alerts/test' && method === 'POST') return json(await alerts.sendTest(env));
+                const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke|forget)$/);
+                if (m && method === 'POST') {
+                    // Release takes { "free_now": true }; nothing else (no body, any other value) is the default hold.
+                    let freeNow = false;
+                    if (m[2] === 'release') {
+                        let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                        freeNow = b?.free_now === true;
+                    }
+                    return await handleAdmin(env, m[1], m[2], { freeNow, who });
+                }
+                return json({ error: 'not found' }, 404);
             }
 
-            // Never inside another site's frame (SEC-REG-06, verified 2026-10-16): the admin types the secret here.
+            // Never inside another site's frame (SEC-REG-06, verified 2026-10-16): the admin acts here. Under Access, not
+            // even the page without a signed-in admin (Marty, 2026-10-17: nobody sees it without 2FA) — Access in front
+            // never lets such a request through; one that comes another way (workers.dev) gets nothing.
             if (method === 'GET' && (p === '/admin' || p === '/admin/' || p === '/admin.html')) {
+                if (accessMode(env) && !(await adminIdentity(request, env)))
+                    return new Response('Sign in through Cloudflare Access to open the control room.\n', { status: 401, headers: {
+                        'content-type': 'text/plain; charset=utf-8', 'x-content-type-options': 'nosniff', 'cache-control': 'no-store',
+                    } });
                 return new Response(ADMIN_HTML, { headers: {
                     'content-type': 'text/html; charset=utf-8', 'x-frame-options': 'DENY', 'content-security-policy': "frame-ancestors 'none'",
                     'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',

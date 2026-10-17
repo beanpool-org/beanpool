@@ -141,3 +141,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-10 - Replace catch e any in NodeRolesPanel
 **Learning:** `NodeRolesPanel.tsx` used `catch (e: any)` in async role fetching, granting, and revoking handlers, bypassing strict type checking for error objects.
 **Action:** Replace `catch (e: any)` with `catch (e: unknown)` and safe type guards checking `e instanceof Error` or object message properties.
+
+## 2026-12-11 - Add loading indicator for DoorSettingPanel
+**Learning:** `DoorSettingPanel.tsx` rendered `null` while fetching node configuration (`saved === null`), leaving the panel blank before data arrived.
+**Action:** Render an explicit loading indicator with an animated spinner when fetching configuration (`loading === true`).

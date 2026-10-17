@@ -58,6 +58,7 @@ type Status = { kind: 'saved' | 'error'; text: string };
 export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Door | null>(null);
     const [choice, setChoice] = useState<CommunityDoor | null>(null);
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     // null = not known (not loaded, or the node would not say): never warn on a guess.
     const [nobodyCanAct, setNobodyCanAct] = useState<boolean | null>(null);
@@ -71,6 +72,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
 
     useEffect(() => {
         let mounted = true;
+        setLoading(true);
         setSaved(null);
         setChoice(null);
         setStatus(null);
@@ -82,16 +84,31 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
             } catch { /* the warning is a courtesy; no answer, no warning */ }
         })();
         (async () => {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
-            if (!res || !res.ok) return;
-            const cfg = await res.json().catch(() => ({}));
-            const door = readDoor((cfg as { door?: unknown }).door);
-            if (!mounted || !door) return;
-            setSaved(door);
-            setChoice(door === 'open' ? null : door);
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
+                if (!mounted) return;
+                if (res && res.ok) {
+                    const cfg = await res.json().catch(() => ({}));
+                    const door = readDoor((cfg as { door?: unknown }).door);
+                    if (door) {
+                        setSaved(door);
+                        setChoice(door === 'open' ? null : door);
+                    }
+                }
+            } finally {
+                if (mounted) setLoading(false);
+            }
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center gap-2 text-xs text-nature-400 p-4 rounded-2xl bg-nature-900/60 border border-nature-800">
+                <span className="animate-spin text-bp-ink-terra">⏳</span> Loading door configuration…
+            </div>
+        );
+    }
 
     if (!saved) return null;
 

@@ -58,7 +58,9 @@ export default function ClaimCommunityScreen() {
         codeBox: { borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, paddingHorizontal: 12, paddingTop: 8 },
         codePrefix: { fontSize: 16, color: colors.text.secondary, fontFamily: 'monospace' },
         codeInput: { minHeight: 48, fontSize: 16, color: colors.text.heading, fontFamily: 'monospace', paddingVertical: 8, paddingHorizontal: 0 },
-        hint: { fontSize: 13, color: colors.text.secondary, marginTop: 6, lineHeight: 18 },
+        // Straight on the doodle pattern: body ink at 14, not the labels' grey at 13, which the pattern's strokes ran
+        // through in light at 320dp and 1.3× (emulator, 18 Oct).
+        hint: { fontSize: 14, color: colors.text.body, marginTop: 6, lineHeight: 20 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, color: colors.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
         primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 16 },

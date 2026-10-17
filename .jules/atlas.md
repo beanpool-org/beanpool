@@ -225,3 +225,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `isModeratorSession`, `sectionTargetFor`, and `endKeySession` helper functions in `apps/manager/src/lib/key-session.ts` were untested directly.
 **Learning:** Testing `sectionTargetFor` verified that moderator sessions are strictly routed to the moderation section (`{ tab: 'people', subTab: 'moderation' }`) regardless of requested section, while `endKeySession` confirmed CSRF header inclusion and network exception handling.
 **Action:** Continue identifying untested helper functions and edge cases across `apps/manager/src/lib/`.
+
+## 2026-10-16 - [manager tests] InPageConfirm component unit tests
+**Gap:** `InPageConfirm` component hook (`useInPageConfirm`) and portal dialog in `apps/manager/src/components/common/InPageConfirm.tsx` lacked a direct unit test suite.
+**Learning:** Testing `InPageConfirm` required rendering a test harness component that consumes `useInPageConfirm` and asserts portal alertdialog creation in `document.body`, confirm/cancel promise resolutions, fallback cancel button labels, backdrop dismissal, and overwriting pending promises when `ask` is invoked multiple times consecutively.
+**Action:** Continue identifying remaining untested common UI components or hooks in `apps/manager/src/components/common/`.

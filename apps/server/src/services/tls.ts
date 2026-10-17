@@ -6,7 +6,8 @@
  * orders and renews them once both listeners are up: http-01 on the server's own port 80, dns-01 through Cloudflare only
  * for our fleet's CF_RECORD_NAME (design scratch/global-node/DESIGN-https-anywhere-fable.md §1, §2). They are served by
  * SNI; a connection with no SNI (an IP address, an old client) gets the IP's certificate, else the first name's, else the
- * self-signed pair. A renewed certificate is served from the next connection on; no restart.
+ * self-signed pair, and a name with no certificate here gets the self-signed pair. A renewed certificate is served from
+ * the next connection on; no restart.
  *
  * LAN nodes (no public identifier):
  *   → Generate self-signed Root CA + server cert for beanpool.local
@@ -20,6 +21,7 @@ import fs from 'node:fs';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import tls from 'node:tls';
 import selfsigned from 'selfsigned';
 import { audienceOf } from '@beanpool/core';
@@ -148,6 +150,20 @@ function refreshDefault(): void {
     }
 }
 
+let selfSigned: { cert: string; context: tls.SecureContext } | null = null;
+/** The self-signed pair as a context, for a name this server holds no CA certificate for. */
+function selfSignedContext(): tls.SecureContext | undefined {
+    if (!serverCertPem) return undefined;
+    if (selfSigned?.cert !== serverCertPem) {
+        try {
+            selfSigned = { cert: serverCertPem, context: tls.createSecureContext({ cert: serverCertPem, key: serverKeyPem }) };
+        } catch {
+            return undefined;
+        }
+    }
+    return selfSigned.context;
+}
+
 /** The certificate options for https.createServer: the pair for a connection with no SNI, and the SNI choice. */
 export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICallback'> {
     const pair = defaultPair();
@@ -156,8 +172,12 @@ export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICa
         cert: pair.cert,
         key: pair.key,
         SNICallback: (servername, cb) => {
-            const s = served.get(servername.toLowerCase().replace(/\.+$/, ''));
-            cb(null, s && s.notAfter > Date.now() ? s.context : undefined);
+            const name = servername.toLowerCase().replace(/\.+$/, '');
+            const s = served.get(name);
+            if (s && s.notAfter > Date.now()) return cb(null, s.context);
+            // An IP address sent as SNI (RFC 6066 forbids it; some clients do) is a connection with no name. Any other
+            // name gets the self-signed pair (beanpool.local), as on a LAN node.
+            cb(null, net.isIP(name) ? undefined : selfSignedContext());
         },
     };
 }

@@ -6,7 +6,7 @@
  *
  *   1. a name identifier yields a certificate served for that name via SNI;
  *   2. an IP identifier's order carries `type: 'ip'` and `profile: 'shortlived'`, its CSR an IP SAN, and its certificate
- *      is served to a client that sends no SNI;
+ *      is served to a client that sends no SNI; a name with no certificate here gets the self-signed pair;
  *   3. renewal happens only when less than a third of the life is left (clock injected); the old certificate serves
  *      until the new one is on disk;
  *   4. a failed order keeps the old certificate and schedules a retry (1 h, 4 h, then daily; never past a third of what
@@ -304,6 +304,16 @@ try {
     const s2 = await served(null, '203.0.113.5');
     check('a client with no SNI gets the IP\'s certificate, trusted for 203.0.113.5', s2.authorized && s2.identityOk && s2.san === 'IP Address:203.0.113.5', JSON.stringify(s2));
     check('SNI beans.example.org still gets the name\'s', (await served('beans.example.org')).serial === s1.serial);
+    const unserved = await served('other.example.org');
+    check('SNI for a name with no certificate here gets the self-signed pair, not another identifier\'s', unserved.serial === self.serial,
+        JSON.stringify(unserved));
+    const local = await served('beanpool.local');
+    check('…so SNI beanpool.local gets the self-signed pair, which names it', local.serial === self.serial && local.identityOk, JSON.stringify(local));
+    // Node's client refuses an IP as servername; other clients send one. The callback's answer: none, i.e. the context a
+    // connection with no SNI gets (the IP's certificate, above), for an IPv4 or IPv6 address alike.
+    const sniAnswer = (name: string) => new Promise<tls.SecureContext | undefined>((r) => tlsMod.httpsCertOptions().SNICallback!(name, (_e, ctx) => r(ctx)));
+    check('an IP address sent as SNI is treated as no SNI (no context of its own)',
+        (await sniAnswer('198.51.100.9')) === undefined && (await sniAnswer('2001:db8::7')) === undefined && (await sniAnswer('other.example.org')) !== undefined);
     const st2 = store.readState(dataDir, '203.0.113.5');
     check('state.json: a ~160-hour life', Math.abs(st2.lifetimeMs - IP_LIFETIME_MS) < 1000, JSON.stringify(st2));
 

@@ -57,9 +57,50 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
         .admin-table td {
-            padding: 1rem;
+            padding: 0.75rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             color: var(--text-secondary);
+            vertical-align: top;
+        }
+        /* A table never runs past its card. Its columns are shares of the card (.w-*, each table's adding up to 100%,
+           never a width in px), a long word (a contact, a long name) breaks rather than pushes, the action buttons
+           wrap onto more lines, and below 1000px — where the card is narrower than its widest — a row is stacked. */
+        .admin-table.stack { table-layout: fixed; }
+        .admin-table th, .admin-table td { overflow-wrap: anywhere; }
+        .admin-table th.act { text-align: right; }
+        .w-name { width: 25%; } .w-comm { width: 22%; } .w-key { width: 12%; } .w-state { width: 17%; } .w-act { width: 24%; }
+        .w-when { width: 20%; } .w-ev-name { width: 15%; } .w-event { width: 15%; } .w-detail { width: 50%; }
+        .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; align-items: center; }
+        .acts > * { white-space: nowrap; }
+        .acts label { font-size: 0.75rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem; }
+        .pair { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+        .mono { font-family: monospace; }
+        .muted { color: var(--text-muted); }
+        .domain { font-weight: 700; font-family: monospace; }
+        .sub { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }
+        .page { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem; }
+        .page-header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+        .row-wrap { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+        .row-wrap .admin-input { flex: 1 1 12rem; min-width: 0; }
+        .card-head { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .released-head { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-top: 1.5rem; font-size: 0.8rem; color: var(--text-muted); }
+        details.released { margin-top: 0.75rem; }
+        details.released > summary { cursor: pointer; color: #94a3b8; font-family: var(--font-header); font-weight: 600; padding: 0.4rem 0; }
+        @media (max-width: 1000px) {
+            .admin-table.stack thead { display: none; }
+            .admin-table.stack, .admin-table.stack tbody, .admin-table.stack tr, .admin-table.stack td { display: block; width: 100%; }
+            .admin-table.stack tr { border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 0.6rem 0; }
+            .admin-table.stack td { border: none; padding: 0.2rem 0; }
+            .admin-table.stack td[data-label]::before {
+                content: attr(data-label); display: inline-block; min-width: 5.5rem; color: var(--text-muted); font-family: var(--font-header);
+                text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;
+            }
+            .admin-table.stack td[data-label] .sub { margin-left: 5.5rem; }
+            .admin-table.stack .acts { justify-content: flex-start; padding-top: 0.35rem; }
+        }
+        @media (max-width: 480px) {
+            .page { padding: 1rem 0.75rem; }
+            .admin-card { padding: 1rem; border-radius: 16px; }
         }
         .btn {
             display: inline-flex; align-items: center; justify-content: center;
@@ -101,8 +142,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <div style="max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem;">
-        <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
+    <div class="page">
+        <header class="page-header">
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <img src="https://beanpool.org/bean.png" alt="BeanPool Logo" style="width: 48px; height: 48px; object-fit: contain;">
                 <div>
@@ -118,8 +159,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <h2 style="font-size: 1rem; font-family: var(--font-header); margin-bottom: 0.75rem; color: var(--accent);">🔑 Super Admin Credentials</h2>
-            <div style="display: flex; gap: 0.75rem; align-items: center;">
-                <input type="password" id="adminSecretInput" class="admin-input" placeholder="Enter ADMIN_SECRET key..." style="flex: 1;">
+            <div class="row-wrap">
+                <input type="password" id="adminSecretInput" class="admin-input" placeholder="Enter ADMIN_SECRET key...">
                 <button id="saveSecretBtn" class="btn btn-approve" style="white-space: nowrap;">Save & Connect</button>
                 <button id="logoutSecretBtn" class="btn btn-logout" style="white-space: nowrap; display: none;">Logout</button>
             </div>
@@ -127,7 +168,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
 
         <div class="admin-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div class="card-head">
                 <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #fbbf24;">⏳ Pending Name Claims (Awaiting Your Approval)</h2>
                 <button id="refreshBtn" class="btn" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">🔄 Refresh</button>
             </div>
@@ -135,8 +176,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
 
         <div class="admin-card">
-            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names (live, paused, blocked, released)</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included.</p>
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names held now (live, paused, blocked)</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included. Released names are under "Released" below; one nobody holds any more can be removed from the list (it stays free to anyone).</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
         </div>
 
@@ -224,11 +265,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     ? 'RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name is held 30 days from EVERY key, this one included: its node cannot take it back. Then it is free to anyone, this key too. To keep this key off it, leave it blocked; to free it now for someone new, tick "free now".'
                     : 'RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name is held 30 days for its key, which can take it back; then it is free. To free it now for someone new, tick "free now".';
             },
+            forget: function(n) { return 'Remove ' + n + '.beanpool.org from the list?\\n\\nNobody holds it: it stays free to anyone, as it is now. Anything Cloudflare still has for it is deleted. Its history stays under Name events.'; },
         };
 
         document.addEventListener('click', function(e) {
             const target = e.target.closest('[data-action]');
             if (target) adminAction(target.getAttribute('data-name'), target.getAttribute('data-action'), target);
+            if (e.target.closest('[data-forget-all]')) forgetAllReleased();
         });
 
         async function loadRegistrarData() {
@@ -275,26 +318,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 return;
             }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
+            let html = namesHead('Requested');
 
             pending.forEach(function(claim) {
-                const domain = esc(claim.name) + '.beanpool.org';
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
-                const pubkeyShort = claim.node_pubkey ? esc(claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8)) : '—';
-                const modeClass = claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
-                const comm = claim.community_name ? esc(claim.community_name) : '—';
-                const contactInfo = claim.contact ? ' (' + esc(claim.contact) + ')' : '';
-
                 html += '<tr id="row-' + esc(claim.name) + '">' +
-                    '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
-                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
-                    '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
-                    '<td><span class="badge-mode ' + modeClass + '">' + esc(claim.mode || 'tunnel') + '</span></td>' +
-                    '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
-                    '<td style="text-align: right;">' +
+                    nameCell(claim, '#fbbf24') + communityCell(claim) + keyCell(claim) +
+                    '<td data-label="Requested" class="mono" style="font-size: 0.75rem;">' + date + '</td>' +
+                    '<td><div class="acts">' +
                         '<button data-name="' + esc(claim.name) + '" data-action="approve" class="btn-approve">Approve</button>' +
-                        '<button data-name="' + esc(claim.name) + '" data-action="release" data-free-now="1" class="btn-revoke" style="margin-left: 0.4rem;" title="Rejects the claim; the name is free again">Reject</button>' +
-                    '</td>' +
+                        '<button data-name="' + esc(claim.name) + '" data-action="release" data-free-now="1" class="btn-revoke" title="Rejects the claim; the name is free again">Reject</button>' +
+                    '</div></td>' +
                 '</tr>';
             });
 
@@ -302,63 +336,132 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             container.innerHTML = html;
         }
 
+        // The head and cells every names table shares (pending, held, released): state names its fourth column. The
+        // domain may break before ".beanpool.org"; a key is shown short, in full on hover.
+        function namesHead(state) {
+            return '<table class="admin-table stack"><thead><tr><th class="w-name">Name</th><th class="w-comm">Community / Operator</th>' +
+                '<th class="w-key">Key</th><th class="w-state">' + state + '</th><th class="w-act act">Action</th></tr></thead><tbody>';
+        }
+        function nameCell(a, colour) {
+            const modeClass = a.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
+            return '<td><span class="domain" style="color: ' + colour + ';">' + esc(a.name) + '<wbr>.beanpool.org</span>' +
+                ' <span class="badge-mode ' + modeClass + '">' + esc(a.mode || 'tunnel') + '</span></td>';
+        }
+        function communityCell(a) {
+            return '<td data-label="Community"><span style="font-weight: 600; color: #fff;">' + (a.community_name ? esc(a.community_name) : '—') + '</span>' +
+                (a.contact ? '<span class="sub">' + esc(a.contact) + '</span>' : '') + '</td>';
+        }
+        function keyCell(a) {
+            const k = a.node_pubkey ? esc(a.node_pubkey.slice(0, 8) + '…') : '—';
+            return '<td data-label="Key" class="mono" style="font-size: 0.75rem;" title="' + esc(a.node_pubkey || '') + '">' + k + '</td>';
+        }
+        const when = function(s) { return s ? new Date(s * 1000).toLocaleString() : 'never'; };
+
+        const LOOK = {
+            live: ['🟢', '#10b981'], paused: ['⏸️', '#fbbf24'], blocked: ['⛔', '#f87171'], released: ['↩️', '#94a3b8'],
+        };
+        // Every held state can be released (its "free now" box frees it at once); the Worker refuses what doesn't apply.
+        const ACTIONS = {
+            live: [['pause', 'Pause'], ['block', 'Block']],
+            paused: [['resume', 'Resume'], ['block', 'Block'], ['release', 'Release']],
+            blocked: [['resume', 'Resume'], ['release', 'Release']],
+        };
+        // The released names nobody holds, as last drawn: what "Remove all released" removes.
+        let removable = [];
+
         function renderActive(active) {
             const container = document.getElementById('activeTableContainer');
-            if (active.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No active allocations currently live.</p>';
-                return;
+            const before = container.querySelector ? container.querySelector('details.released') : null;
+            const wasOpen = !!(before && before.open);
+            const held = active.filter(function(a) { return a.status !== 'released'; });
+            const released = active.filter(function(a) { return a.status === 'released'; });
+            // A release the Worker says still holds (holds, held_until) keeps "Free now"; one nobody holds can be removed.
+            // A row that doesn't say is treated as held: nothing is offered for removal that the Worker didn't call free.
+            removable = released.filter(function(a) { return a.holds === false; }).map(function(a) { return a.name; });
+
+            let html = held.length ? namesTable(held) : '<p style="color: var(--text-muted); font-size: 0.85rem;">No names held now.</p>';
+            if (released.length) {
+                const stay = released.length - removable.length;
+                html += '<div class="released-head">' +
+                    (removable.length ? '<button data-forget-all="1" class="btn-revoke">Remove all released (' + removable.length + ')</button>' : '') +
+                    '<span>' + (removable.length ? 'Removes the released names nobody holds: each stays free to anyone.' : '') +
+                        (stay ? ' ' + stay + ' still held ' + (stay === 1 ? 'stays until its hold ends' : 'stay until their hold ends') + ' (or "Free now").' : '') + '</span></div>';
+                html += '<details class="released"' + (wasOpen ? ' open' : '') + '><summary>Released (' + released.length + ')</summary>' + releasedTable(released) + '</details>';
             }
+            container.innerHTML = html;
+        }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
-
-            const LOOK = {
-                live: ['🟢', '#10b981'], paused: ['⏸️', '#fbbf24'], blocked: ['⛔', '#f87171'], released: ['↩️', '#94a3b8'],
-            };
-            const ACTIONS = {
-                live: [['pause', 'Pause'], ['block', 'Block']],
-                paused: [['resume', 'Resume'], ['block', 'Block']],
-                blocked: [['resume', 'Resume'], ['release', 'Release']],
-                released: [['release', 'Free now', true]],   // a held release: this button frees it at once
-            };
-
-            active.forEach(function(alloc) {
-                const domain = esc(alloc.name) + '.beanpool.org';
-                const pubkeyShort = alloc.node_pubkey ? esc(alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8)) : '—';
-                const modeClass = alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
-                const comm = alloc.community_name ? esc(alloc.community_name) : '—';
-                const contactInfo = alloc.contact ? ' (' + esc(alloc.contact) + ')' : '';
+        function namesTable(rows) {
+            let html = namesHead('Status');
+            rows.forEach(function(alloc) {
                 const look = LOOK[alloc.status] || ['•', '#cbd5e1'];
                 const why = alloc.pause_reason ? ' · ' + esc(alloc.pause_reason) : '';
-                const since = alloc.paused_at || alloc.released_at;
-                const sinceText = since ? '<br><span style="color: var(--text-muted); font-size: 0.7rem;">since ' + new Date(since * 1000).toLocaleString() + '</span>' : '';
-                // An admin release with "free now" (or a withdrawn claim nobody approved) is already free; the owner's
-                // release and the admin's default one are held 30 days for its key — "Free now" skips that.
-                const acts = (alloc.status === 'released' && (alloc.pause_reason === 'admin' || alloc.pause_reason === 'withdrawn')) ? [] : (ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']]);
+                const since = alloc.paused_at;
+                const acts = ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']];
                 // Released after you blocked or paused it, the name is held from its own key too (the Worker's rule).
                 const fromAll = alloc.status === 'blocked' || (alloc.status === 'paused' && alloc.pause_reason === 'admin');
-
                 html += '<tr id="row-' + esc(alloc.name) + '">' +
-                    '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +
-                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
-                    '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
-                    '<td><span class="badge-mode ' + modeClass + '">' + esc(alloc.mode || 'tunnel') + '</span></td>' +
-                    '<td><span style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem; font-family: monospace;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' + sinceText + '</td>' +
-                    '<td style="text-align: right; white-space: nowrap;">' +
-                        acts.map(function(a) {
-                            // Release holds the name 30 days (for its key, or from every key) unless its "free now" box is ticked.
-                            const box = (a[0] === 'release' && !a[2])
-                                ? '<label style="margin-left: 0.6rem; font-size: 0.75rem; color: var(--text-muted);" title="Free the name at once, to any key, instead of holding it 30 days">' +
-                                    '<input type="checkbox" data-free-now-for="' + esc(alloc.name) + '"> free now</label>'
-                                : '';
-                            const flags = (a[2] ? ' data-free-now="1"' : '') + (a[0] === 'release' && fromAll ? ' data-held-from-all="1"' : '');
-                            return box + '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '"' + flags + ' class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn btn-revoke') + '" style="margin-left: 0.4rem;">' + a[1] + '</button>';
-                        }).join('') +
-                    '</td>' +
+                    nameCell(alloc, look[1]) + communityCell(alloc) + keyCell(alloc) +
+                    '<td data-label="Status"><span class="mono" style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' +
+                        (since ? '<span class="sub">since ' + when(since) + '</span>' : '') + '</td>' +
+                    '<td><div class="acts">' + acts.map(function(a) {
+                        const button = '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '"' + (a[0] === 'release' && fromAll ? ' data-held-from-all="1"' : '') +
+                            ' class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn-revoke') + '">' + a[1] + '</button>';
+                        if (a[0] !== 'release') return button;
+                        // Release holds the name 30 days (for its key, or from every key) unless its "free now" box is ticked.
+                        return '<span class="pair"><label title="Free the name at once, to any key, instead of holding it 30 days">' +
+                            '<input type="checkbox" data-free-now-for="' + esc(alloc.name) + '"> free now</label>' + button + '</span>';
+                    }).join('') + '</div></td>' +
                 '</tr>';
             });
+            return html + '</tbody></table>';
+        }
 
-            html += '</tbody></table>';
-            container.innerHTML = html;
+        function releasedTable(rows) {
+            let html = namesHead('Released');
+            rows.forEach(function(alloc) {
+                const free = alloc.holds === false;
+                const hold = free ? 'free to anyone'
+                    : alloc.held_until ? (alloc.pause_reason === 'admin-held-all' ? 'held from every key until ' : 'held for its key until ') + when(alloc.held_until)
+                    : 'held';
+                // A held release: "Free now" frees it at once. One nobody holds: "Remove from the list".
+                const act = free
+                    ? '<button data-name="' + esc(alloc.name) + '" data-action="forget" class="btn-revoke" title="Nobody holds it: it leaves this list and stays free to anyone">Remove from the list</button>'
+                    : '<button data-name="' + esc(alloc.name) + '" data-action="release" data-free-now="1" class="btn-revoke">Free now</button>';
+                html += '<tr id="row-' + esc(alloc.name) + '">' +
+                    nameCell(alloc, LOOK.released[1]) + communityCell(alloc) + keyCell(alloc) +
+                    '<td data-label="Released"><span class="mono" style="font-size: 0.75rem;">' + LOOK.released[0] + ' ' + esc(alloc.pause_reason || 'released') + '</span>' +
+                        '<span class="sub">' + (alloc.released_at ? when(alloc.released_at) + ' · ' : '') + hold + '</span></td>' +
+                    '<td><div class="acts">' + act + '</div></td>' +
+                '</tr>';
+            });
+            return html + '</tbody></table>';
+        }
+
+        // Remove all released: the names nobody holds, as last drawn, in batches the Worker takes (50 a request).
+        async function forgetAllReleased() {
+            const names = removable.slice();
+            if (!names.length) return;
+            if (!confirm('Remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + ' nobody holds from the list?\\n\\nEach stays free to anyone, as it is now. Anything Cloudflare still has for one is deleted. Their history stays under Name events.')) return;
+            const secret = secretInput.value.trim();
+            const removed = [];
+            const refused = [];
+            try {
+                for (let i = 0; i < names.length; i += 50) {
+                    const res = await fetch('/api/local/admin/registrar/forget', {
+                        method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' },
+                        body: JSON.stringify({ names: names.slice(i, i + 50) }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) { refused.push({ name: names.slice(i, i + 50).join(', '), error: data.error || String(res.status) }); continue; }
+                    removed.push.apply(removed, data.removed || []);
+                    refused.push.apply(refused, data.refused || []);
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+            alert('Removed ' + removed.length + ' from the list.' + (refused.length ? '\\n\\nNot removed:\\n' + refused.map(function(r) { return r.name + ': ' + (r.error || r.status); }).join('\\n') : ''));
+            loadRegistrarData();
         }
 
         async function adminAction(name, action, target) {
@@ -377,7 +480,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 }
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + action, init);
                 const data = await res.json();
-                if (res.ok) {
+                if (res.ok && action === 'forget') {
+                    loadRegistrarData();
+                } else if (res.ok) {
                     alert(name + '.beanpool.org is now ' + data.status + (data.reason ? ' (' + data.reason + (data.why ? ': ' + data.why : '') + ')' : '') +
                         (data.held_until ? (data.reason === 'admin-held-all' ? ', held from every key, its own included, until ' : ', held for its key until ') + new Date(data.held_until * 1000).toLocaleString() : '') + '.');
                     loadRegistrarData();
@@ -396,15 +501,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load events.</p>'; return; }
                 const events = (await res.json()).events || [];
                 if (events.length === 0) { container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No events yet.</p>'; return; }
-                let html = '<table class="admin-table"><thead><tr><th>When</th><th>Name</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
+                let html = '<table class="admin-table stack"><thead><tr><th class="w-when">When</th><th class="w-ev-name">Name</th><th class="w-event">Event</th><th class="w-detail">Detail</th></tr></thead><tbody>';
                 events.forEach(function(ev) {
                     // incident-review rows are the ones waiting for a human decision.
                     const colour = ev.event === 'incident-review' ? '#fbbf24' : 'var(--text-secondary)';
                     html += '<tr>' +
-                        '<td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + new Date(ev.at * 1000).toLocaleString() + '</td>' +
-                        '<td style="font-family: monospace;">' + esc(ev.name) + '</td>' +
-                        '<td style="color: ' + colour + '; font-weight: 600;">' + esc(ev.event) + '</td>' +
-                        '<td style="font-size: 0.8rem;">' + esc(ev.detail) + '</td>' +
+                        '<td class="mono" style="font-size: 0.75rem;">' + new Date(ev.at * 1000).toLocaleString() + '</td>' +
+                        '<td data-label="Name" class="mono">' + esc(ev.name) + '</td>' +
+                        '<td data-label="Event" style="color: ' + colour + '; font-weight: 600;">' + esc(ev.event) + '</td>' +
+                        '<td data-label="Detail" style="font-size: 0.8rem;">' + esc(ev.detail) + '</td>' +
                     '</tr>';
                 });
                 container.innerHTML = html + '</tbody></table>';
@@ -421,6 +526,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             if (!/^[a-z0-9-]{3,32}$/.test(name)) return;
             const row = document.getElementById('row-' + name);
             if (!row || typeof row.scrollIntoView !== 'function') return;
+            // A released name's row is in the collapsed "Released" section: opened first.
+            const section = typeof row.closest === 'function' ? row.closest('details') : null;
+            if (section) section.open = true;
             row.className = 'lit';
             row.scrollIntoView({ block: 'center' });
         }
@@ -431,7 +539,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             uptake: 'Uptake', admin: 'Your own actions',
         };
         const MODE_WORDS = { on: 'on', digest: 'digest', off: 'off' };
-        const when = function(s) { return s ? new Date(s * 1000).toLocaleString() : 'never'; };
 
         function renderAlerts(st) {
             const container = document.getElementById('alertsContainer');

@@ -77,12 +77,22 @@ export const routingPaused = (env, name, reason, count) => ({
 // A5: what the admin did, as the Worker answered it (a resume whose re-attest failed says so: the name stays paused).
 const DID = { approve: 'approved', pause: 'paused', resume: 'resumed', block: 'blocked', revoke: 'blocked', release: 'released' };
 export function adminDid(env, name, action, out) {
+    if (action === 'forget') return adminRemoved(env, [name]);
     const verb = DID[action] || action;
     const h = host(env, name);
     const body = action === 'resume' && out.status !== 'live'
         ? `You resumed ${h}, but it stays paused: edge re-attest ${out.attest || 'not passed'}. Its node's heal re-attests.`
         : `You ${verb} ${h}${action === 'release' ? (out.held_until ? ` (held until ${when(out.held_until)})` : ' (free now)') : ''}.`;
     return { category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name, title: `You ${verb} ${name}`, body };
+}
+// Released names nobody held, removed from the admin's list (index.js forgetRow): one message for one name or many.
+export function adminRemoved(env, names) {
+    const one = names.length === 1;
+    return {
+        category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: one ? names[0] : null,
+        title: one ? `You removed ${names[0]} from the list` : `You removed ${plural(names.length, 'released name')} from the list`,
+        body: `You removed ${one ? host(env, names[0]) : plural(names.length, 'released name')} from the list: free to anyone, as ${one ? 'it was' : 'they were'}.`,
+    };
 }
 // A6: a heal refused (told once per pause: its node heals every 5 minutes while it lasts), a name repaired.
 export const healRefused = (env, name, verdict, pausedAt) => ({

@@ -4,11 +4,12 @@
  * restored from a copy without words has no `mnemonic`: it is never told to rely on, save or view its 12 words, and
  * each place that promised them (the sign-in line, the banner, View Recovery Phrase, signing out) says what is true.
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
 import { NO_WORDS_HERE, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, waysBackWithoutWords } from '../components/SignInRecoveryLine';
+import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -20,6 +21,8 @@ vi.mock('../lib/api', async () => {
         getNodeStats: vi.fn(async () => null),
         getCommunityHealth: vi.fn(async () => ({})),
         getSignInRecovery: vi.fn(async () => null),
+        // The node's info (lib/features.ts useCommunityInfo): unread, as a node that can't be asked, unless a test says.
+        getCommunityInfo: vi.fn(async () => { throw new Error('not asked'); }),
     };
 });
 
@@ -35,9 +38,12 @@ function renderSettings(who: any = identity) {
 
 beforeEach(() => {
     localStorage.clear();
+    resetCommunityInfoOnce();
 });
 afterEach(() => {
     vi.mocked(api.getSignInRecovery).mockReset();
+    vi.mocked(api.getCommunityInfo).mockReset();
+    vi.mocked(api.getCommunityInfo).mockImplementation(async () => { throw new Error('not asked'); });
 });
 
 describe('Settings: sign-in recovery', () => {
@@ -191,5 +197,81 @@ describe('Settings: sign-in recovery', () => {
             expect(confirm.textContent).toBe(`Are you sure you want to remove your account from this device? ${NO_WORDS_HERE} If you have them written down, they bring your account back. If you don't, signing in with Google does.`);
             expect(confirm).not.toHaveTextContent(/Ensure you have written down/);
         });
+    });
+});
+
+/*
+ * The same account on a phone (DESIGN-global-entry-fable.md §D, slice W1): the sign-in card says how, and the sign-in's
+ * line only where a sign-in brings the account back. And on a local community, the global community its node names
+ * (§B.3), as a row of the BEANPOOL group. jsdom serves the page at localhost.
+ */
+describe('Settings: on your phone later, and the global community (W1)', () => {
+    const OURS = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+        addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org', globalCommunityUrl: 'https://global.beanpool.org' };
+    const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, addresses: ['localhost'] };
+    const lines = () => Array.from(screen.getByTestId('signin-recovery-phone-later').querySelectorAll('p')).map((p) => p.textContent);
+
+    it('at global.beanpool.org, connected: Global community and your 12 words, and Recover with Social; no Global community row', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(OURS);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings();
+        const card = await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/choose Global community/));
+        expect(lines()).toEqual([
+            'To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type your 12 words.',
+            'If you joined with Google, Recover with Social works too.',
+        ]);
+        expect(card).toContainElement(screen.getByTestId('signin-recovery-phone-later'));
+        expect(screen.queryByTestId('settings-global-community')).toBeNull();
+    });
+
+    it('not connected: the words line alone, never Recover with Social', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(OURS);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/choose Global community/));
+        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type your 12 words.']);
+        expect(document.body.textContent).not.toMatch(/Recover with Social/);
+    });
+
+    it('a browser without its 12 words is never told to type them: the sign-in line alone', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(OURS);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings(noWordsIdentity);
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
+        expect(lines()).toEqual(['If you joined with Google, Recover with Social works too.']);
+    });
+
+    it('a local community: its own address in the line, and the Global community row its node names, opening in a new tab', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ ...LOCAL, globalCommunityUrl: 'https://global.example.org' });
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        const row = await screen.findByTestId('settings-global-community');
+        expect(row).toHaveTextContent('Global community');
+        expect(row).toHaveTextContent('global.example.org');
+        expect(row.getAttribute('href')).toBe('https://global.example.org/');
+        expect(row.getAttribute('target')).toBe('_blank');
+        expect(row.getAttribute('rel')).toBe('noopener noreferrer');
+        expect(row).toHaveAccessibleName('Global community, global.example.org, opens in a new tab');
+        expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, localhost."]);
+    });
+
+    it('a node that names no global community, or one that cannot be asked: no row, never a guess at ours', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(LOCAL);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(api.getCommunityInfo).toHaveBeenCalled());
+        expect(screen.queryByTestId('settings-global-community')).toBeNull();
+        cleanup();
+        resetCommunityInfoOnce();
+
+        vi.mocked(api.getCommunityInfo).mockRejectedValue(new Error('offline'));
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        expect(screen.queryByTestId('settings-global-community')).toBeNull();
+        expect(document.querySelector('a[href*="global.beanpool.org"]')).toBeNull();
     });
 });

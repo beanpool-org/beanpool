@@ -196,6 +196,52 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
     });
 });
 
+/*
+ * Safety Backup says how to put this same account on a phone later (DESIGN-global-entry-fable.md §D, slice W1):
+ * restore it there, never "I'm new". The sign-in's line only where the join enrolled it (`recovery.enrolled`).
+ */
+describe('the words screen says how to put the same account on a phone (W1)', () => {
+    /** Through the door with Google on a node that answers `info`, the node answering `recovery` as given, to the 12 words. */
+    async function toTheWordsAt(info: unknown, recovery: unknown) {
+        await savePendingJoin({ identity, provider: 'google', nonce: 'n1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
+        const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
+        window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
+        stubNode(info, { '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' }, provider: 'google', recovery }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Your Safety Backup/);
+        return screen.getByTestId('backup-phone-later');
+    }
+    const OURS = { ...GLOBAL_OPEN, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' };
+    const ENROLLED = { enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] };
+
+    it('at global.beanpool.org, the sign-in enrolled: Already a member, Global community, these words; and Recover with Social', async () => {
+        const lines = await toTheWordsAt(OURS, ENROLLED);
+        expect(Array.from(lines.querySelectorAll('p')).map((p) => p.textContent)).toEqual([
+            'To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type these 12 words.',
+            'If you joined with Google, Recover with Social works too.',
+        ]);
+        // The buttons a member taps, in bold, as the phone names them.
+        expect(within(lines).getAllByText(/.+/, { selector: 'strong' }).map((b) => b.textContent))
+            .toEqual(['Already a member', 'Global community', 'Recover with Social']);
+        expect(lines).not.toHaveTextContent(/I'm new/);
+    });
+
+    it('the sign-in not enrolled: the words line alone, never Recover with Social', async () => {
+        const lines = await toTheWordsAt(OURS, { enrolled: false, error: 'The recovery keeper could not be stored.' });
+        expect(lines.textContent).toBe('To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type these 12 words.');
+        expect(lines).not.toHaveTextContent(/Recover with Social/);
+    });
+
+    it("a self-hoster's global community: its own address, never Global community, which would restore into ours", async () => {
+        const lines = await toTheWordsAt({ ...GLOBAL_OPEN, addresses: ['global.example.org'] }, null);
+        // jsdom serves the page at localhost: the address the phone is told to type is the one this page is at.
+        expect(lines.textContent).toBe("To use BeanPool on your phone later: install the app, tap Already a member and type these 12 words and this community's address, localhost.");
+        expect(lines).not.toHaveTextContent(/Global community/);
+    });
+});
+
 describe('a 12-words member who adds a sign-in from Safety Backup (review 4161723815)', () => {
     afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 

@@ -533,6 +533,82 @@ describe('a visitor with no key on the global node', () => {
 });
 
 /*
+ * On a phone's browser at the community the BeanPool app's link opens, the Join card offers the app first and the
+ * browser second (DESIGN-global-entry-fable.md §B.3, decision 3; slice W1). A computer, and any other community, as
+ * before. The page's own host is jsdom's localhost, so which community this is comes from the names the node publishes.
+ */
+describe("the lobby's Join card on a phone's browser (W1)", () => {
+    const OURS = { ...GLOBAL, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' };
+
+    /** A browser that answers the phone query (lib/global-entry.ts PHONE_BROWSER_QUERY) yes; every other query no. */
+    function stubPhone() {
+        window.matchMedia = ((query: string) => ({
+            matches: query === '(pointer: coarse) and (max-width: 767px)', media: query, onchange: null,
+            addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+    }
+
+    /**
+     * The card's ways in, in the order they are drawn (each link's and button's words), once the browser's key check
+     * has answered: the browser join enabled, or the sentence that says this browser can't hold a key.
+     */
+    async function cardWays(until: 'enabled' | 'too-old' = 'enabled') {
+        render(<App />);
+        await screen.findByTestId('guest-lobby');
+        if (until === 'enabled') await waitFor(() => expect(screen.getByTestId('lobby-join')).toBeEnabled());
+        else await screen.findByTestId('lobby-too-old');
+        const card = screen.getByTestId('lobby-join-card');
+        return { card, ways: Array.from(card.querySelectorAll('a, button')).map(el => el.textContent) };
+    }
+
+    it('at global.beanpool.org: Open in the BeanPool app, then or join here in your browser, then Already have BeanPool?', async () => {
+        stubPhone();
+        stubNode(OURS);
+        const { card, ways } = await cardWays();
+        expect(ways).toEqual(['Open in the BeanPool app', 'or join here in your browser', 'Already have BeanPool?']);
+        // The smart link (slice Web1's page, P4's claim): the app if installed, else the store. A plain link, no script.
+        expect(within(card).getByTestId('lobby-open-app').getAttribute('href')).toBe('https://beanpool.org/global');
+        // The header keeps Join (§B.3).
+        expect(screen.getAllByTestId('header-join')[0]).toHaveTextContent(/^Join$/);
+    });
+
+    it('the browser join is still one tap: it opens screen 1, which asks for the account they have before a new one', async () => {
+        stubPhone();
+        stubNode(OURS);
+        const { card } = await cardWays();
+        fireEvent.click(within(card).getByTestId('lobby-join'));
+        const overlay = await screen.findByTestId('lobby-join-overlay');
+        await within(overlay).findByTestId('join-screen-guard');
+        expect(within(overlay).getByTestId('join-guard-one-account')).toHaveTextContent(
+            "Already on BeanPool, on any phone or computer? Don't start a new account here: bring yours, so you have one account everywhere.");
+    });
+
+    it('on a computer: Join, then Already have BeanPool?, as before; no app link', async () => {
+        stubNode(OURS);
+        const { card, ways } = await cardWays();
+        expect(ways).toEqual(['Join', 'Already have BeanPool?']);
+        expect(within(card).queryByTestId('lobby-open-app')).toBeNull();
+    });
+
+    it("on a phone at a self-hoster's global community: its own browser join, never a link into ours", async () => {
+        stubPhone();
+        stubNode({ ...GLOBAL, addresses: ['global.example.org'], primaryAddress: 'global.example.org' });
+        const { card, ways } = await cardWays();
+        expect(ways).toEqual(['Join', 'Already have BeanPool?']);
+        expect(card.querySelector('a[href*="beanpool.org"]')).toBeNull();
+    });
+
+    it('on a phone whose browser is too old to hold a key: the app is still offered, and the browser join says why it cannot', async () => {
+        vi.spyOn(globalThis.crypto.subtle, 'generateKey').mockRejectedValue(new Error('Ed25519 not supported'));
+        stubPhone();
+        stubNode(OURS);
+        const { card, ways } = await cardWays('too-old');
+        expect(ways).toEqual(['Open in the BeanPool app', 'Already have BeanPool?']);
+        expect(within(card).getByTestId('lobby-too-old')).toHaveTextContent('This browser is too old to hold a BeanPool account.');
+    });
+});
+
+/*
  * A listing shared by link, read in the lobby, is where the visitor lands once they have joined (4112421730). The
  * address loses `?post=` as the page loads, and a join by sign-in leaves the page and comes back, so the lobby keeps
  * the post's id in this tab (sessionStorage) and App opens it once, in the member's Market, when the identity is set.

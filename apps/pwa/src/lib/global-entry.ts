@@ -76,17 +76,22 @@ export function lobbyJoinWays({ phone, appsGlobal, doorOpen }: { phone: boolean;
  * How to put this account on a phone (design §D), where the 12 words are on screen (`backup`, Safety Backup) or not
  * (`settings`). At the community the app offers by name: choose **Global community**, as the phone's restore lists it.
  * At any other: that community's address, typed with the words, as the phone's restore asks for it. `host` null: no
- * address to give, so no line. `signIns`: the sign-ins that bring this account back, as a member reads them
- * ("Google"); null or empty, no sign-in line. Each line marks the buttons' names in **bold** (components/BoldWords).
+ * address to give, so no words line. `hasWords` false (a browser restored from a copy without them): no words line
+ * either, as nothing in Settings tells such a browser to rely on words it hasn't got (components/SignInRecoveryLine).
+ * `signIns`: the sign-ins that bring this account back, as a member reads them ("Google"); null or empty, no sign-in
+ * line. Each line marks the buttons' names in **bold** (components/BoldWords).
  */
-export function phoneLaterLines({ where, appsGlobal, host, signIns }: {
+export function phoneLaterLines({ where, appsGlobal, host, hasWords = true, signIns }: {
     where: 'backup' | 'settings';
     appsGlobal: boolean;
     host: string | null;
+    hasWords?: boolean;
     signIns: string | null;
 }): string[] {
     const lines: string[] = [];
-    if (appsGlobal) {
+    if (!hasWords) {
+        // No words line.
+    } else if (appsGlobal) {
         lines.push(where === 'backup'
             ? t('To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type these 12 words.')
             : t('To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type your 12 words.'));

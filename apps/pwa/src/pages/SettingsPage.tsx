@@ -210,17 +210,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity.publicKey]);
     const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
+    // Whether this browser holds the 12 words. One restored from a sign-in copy without them (web-restore.ts) does not:
+    // nothing here tells it to save, view or rely on words it hasn't got, and each place says what brings it back.
+    const hasWords = hasMnemonic(identity);
     // The same account on a phone (DESIGN-global-entry-fable.md §D), in the sign-in card; and on a local community, the
     // global community its node names (§B.3). Nothing of either before the node's info arrives, or when it names none.
     const communityInfo = useCommunityInfo();
     const pageHost = webAppHost();
     const phoneLater = phoneLaterLines({
-        where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: pageHost, signIns: signInRecoveryNames,
+        where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: pageHost, hasWords, signIns: signInRecoveryNames,
     });
     const globalCommunity = globalCommunityLink(communityInfo, pageHost);
-    // Whether this browser holds the 12 words. One restored from a sign-in copy without them (web-restore.ts) does not:
-    // nothing here tells it to save, view or rely on words it hasn't got, and each place says what brings it back.
-    const hasWords = hasMnemonic(identity);
 
     // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);

@@ -79,6 +79,12 @@ async function keyFor(team, kid) {
     const fresh = () => Date.now() - c.at < CERTS_TTL_MS;
     if (fresh() && c.keys.has(kid)) return c.keys.get(kid);
     if (fresh()) {
+        // A fetch already under way (most likely for this same new kid, from the request just before): its keys decide,
+        // not the guard below, which it has just set (PR #2111 review: a rotation refused the requests behind its first).
+        if (c.pending) {
+            try { await c.pending; } catch { /* logged by the request that started it */ }
+            if (fresh() && c.keys.has(kid)) return c.keys.get(kid);
+        }
         // A kid we don't know: Cloudflare may have rotated. Fetched again once, then not for KID_REFRESH_MS — a stream
         // of made-up kids must not become a stream of fetches.
         if (Date.now() - c.kidAt < KID_REFRESH_MS) return null;

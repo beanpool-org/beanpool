@@ -3,7 +3,7 @@
 // gone; 43 of the 45 released rows on the live D1 were released by their own key, which forget refuses).
 // A locally made RSA key pair stands in for the team's Access keys: the Worker's fetch of
 // https://<team>/cdn-cgi/access/certs is answered here, and counted. Each world has its own team, so its own key cache.
-// On origin/main (40b66e85) 17 of these 18 fail — no /whoami (404), the JWT ignored and ADMIN_SECRET still accepted
+// On origin/main (40b66e85) 18 of these 19 fail — no /whoami (404), the JWT ignored and ADMIN_SECRET still accepted
 // under Access, /admin served to anyone, events saying "the admin"; the bulk forget ignores free_now and refuses a
 // release its old key can take back. The one that passes there is the guard that node routes need nothing (measured).
 import { test } from 'node:test';
@@ -214,6 +214,28 @@ test('an unknown kid fetches the team\'s keys once more, then 401 — and not ag
         assert.equal((await call(r, req(`${ADMIN_API}/whoami`, { token: await r.mint({}, { k: next }) }))).status, 200);
         assert.equal(r.certs.calls, 2);
     } finally { r.restore(); }
+});
+
+test('requests that arrive while the rotation\'s fetch is under way wait for it: every token under the new key is let in, one fetch for them all', async () => {
+    // PR #2111 review: the first request's unknown kid started the fetch, and the ones right behind it (two tabs, a
+    // double click) were refused by the 30-second guard without waiting for it — 1 of 4 let in, 2 fetches (measured).
+    const w = await accessWorld();
+    try {
+        assert.equal((await call(w, req(`${ADMIN_API}/whoami`, { token: await w.mint() }))).status, 200);
+        const next = await rsaKey();
+        w.certs.keys.unshift(next);
+        w.certs.answer = async () => {
+            await new Promise((ok) => setTimeout(ok, 50));
+            return Response.json({ keys: w.certs.keys.map(certOf) });
+        };
+        // Four under the new key, and last a made-up kid: it waits for the same fetch, is refused, and fetches nothing.
+        const token = await w.mint({}, { k: next });
+        const stranger = await w.mint({}, { k: await rsaKey() });
+        const all = await Promise.all([token, token, token, token, stranger].map((t) => call(w, req(`${ADMIN_API}/whoami`, { token: t }))));
+        assert.deepEqual(all.map((r) => r.status), [200, 200, 200, 200, 401]);
+        assert.deepEqual(all.slice(0, 4).map((r) => r.body.email), [EMAIL, EMAIL, EMAIL, EMAIL]);
+        assert.equal(w.certs.calls, 2, 'the first fetch, then one for the new key');
+    } finally { w.restore(); }
 });
 
 test('the team\'s keys unreachable or unusable: fail closed (401), never the secret; good again once they answer', async () => {

@@ -523,6 +523,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const names = releasedNames.slice();
             if (!names.length) return;
             if (!confirm('Free and remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + '? Their old servers can no longer take them back.')) return;
+            // One id for this click: the Worker tells your phone of it once, not of every batch.
+            const run = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
             const removed = [];
             const refused = [];
             const already = [];
@@ -531,7 +533,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     const batch = names.slice(i, i + FREE_FORGET_BATCH);
                     const res = await fetch('/api/local/admin/registrar/forget', {
                         method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }),
-                        body: JSON.stringify({ names: batch, free_now: true }),
+                        body: JSON.stringify({ names: batch, free_now: true, run: run, total: names.length }),
                     });
                     const data = await res.json();
                     if (!res.ok) { refused.push({ name: batch.join(', '), error: data.error || String(res.status) }); continue; }

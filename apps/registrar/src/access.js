@@ -18,6 +18,7 @@ const CERTS_TTL_MS = 60 * 60 * 1000;        // the team's keys are fetched again
 const KID_REFRESH_MS = 30 * 1000;           // a key id the cache doesn't know fetches them again, at most this often
 const CERTS_TIMEOUT_MS = 5000;
 const TOKEN_MAX = 16 * 1024;
+const MODULUS_MIN_BYTES = 256;              // RSA 2048 at least (Cloudflare's are 2048): a short key is no key
 
 const isSet = (env, k) => typeof env[k] === 'string' && env[k].trim() !== '';
 export const accessMode = (env) => ACCESS_VARS.some((k) => isSet(env, k));
@@ -36,6 +37,12 @@ export function accessConfig(env) {
     return { team, aud: env.ACCESS_AUD.trim(), emails };
 }
 
+const B64URL = /^[A-Za-z0-9_-]*$/;
+function b64urlBytes(s) {
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
+    return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+}
+
 // --- The team's signing keys ---
 // Per isolate, per team: kid → CryptoKey, when they were fetched, and when an unknown kid last made us fetch them. A
 // fetch that fails, or answers no RS256 key, keeps what the cache had for the rest of its hour and lets nothing new
@@ -51,6 +58,7 @@ async function fetchKeys(team) {
         if (k?.kty !== 'RSA' || typeof k.kid !== 'string' || typeof k.n !== 'string' || typeof k.e !== 'string') continue;
         if (k.alg !== undefined && k.alg !== 'RS256') continue;
         try {
+            if (!B64URL.test(k.n) || !B64URL.test(k.e) || b64urlBytes(k.n).length < MODULUS_MIN_BYTES) continue;
             keys.set(k.kid, await crypto.subtle.importKey('jwk', { kty: 'RSA', n: k.n, e: k.e, alg: 'RS256', ext: true },
                 { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']));
         } catch { /* one bad key never spoils the others */ }
@@ -81,11 +89,6 @@ async function keyFor(team, kid) {
 }
 
 // --- The token ---
-const B64URL = /^[A-Za-z0-9_-]*$/;
-function b64urlBytes(s) {
-    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
-    return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
-}
 const b64urlJson = (s) => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
 const isTime = (v) => typeof v === 'number' && Number.isFinite(v);
 

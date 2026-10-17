@@ -102,6 +102,18 @@ export function adminRemoved(env, names, { who = null, freed = 0 } = {}) {
         body: `${you} ${did} ${one ? host(env, names[0]) : plural(names.length, 'released name')} from the list: ${tail}`,
     };
 }
+// "Free all and remove" from /admin (index.js handleForgetMany): one message for the click, however many requests its
+// names take — told by its first request that removed any, once per `run` (the page's id for the click). `total`: how
+// many names the page asked for; what each one did is in its name events.
+export function adminFreedAll(env, { who = null, run, total = null }) {
+    const you = who || 'You';
+    const n = total ? plural(total, 'released name') : 'released names';
+    return {
+        category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null, once: `free-all:${run}`,
+        title: `${you} freed and removed ${n}`,
+        body: `${you} chose Free all and remove for ${n}: each freed now (its old server can no longer take it back), then removed from the list, free to anyone. What each one did is under Name events.`,
+    };
+}
 // A6: a heal refused (told once per pause: its node heals every 5 minutes while it lasts), a name repaired.
 export const healRefused = (env, name, verdict, pausedAt) => ({
     category: 'names', priority: PRIORITY.low, tag: TAG.warning, name, title: `Heal refused: ${name}`, once: `heal-refused:${name}:${pausedAt ?? ''}`,

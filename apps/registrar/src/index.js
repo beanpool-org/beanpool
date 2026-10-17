@@ -1435,10 +1435,14 @@ async function forgetRow(env, a, now, actor = ADMIN) {
 // "Free all and remove" ({ "free_now": true }; Marty, 2026-10-18: every July test name gone, most of them released by
 // their own key, which forget refuses while that key can take them back): each released name is first freed as its
 // own "Free now" frees it — adminAction's release, free now, so its old key's take-back ends, with its 'released'
-// event — then removed as above; one alert for the request, as for the removed. Any other row is refused untouched,
-// as forget refuses it. Free and forget together are about 20 queries a name: FREE_FORGET_MAX of them a request.
+// event — then removed as above. Any other row is refused untouched, as forget refuses it. Free and forget together are
+// 11 to 14 queries a name, and the alert about 10 (measured): 2 names a request stay under 35 even when Cloudflare
+// refuses every delete (3 reach 48). The page sends its click's names in such batches with one `run` id and their
+// `total`: the admin's phone hears of the click once (alerts.adminFreedAll), not of every batch — 45 names are 23
+// requests, past the hourly cap of 20. A request with no run is told as Remove all released's is.
 const FORGET_MAX = 5;
 const FREE_FORGET_MAX = 2;
+const RUN_RE = /^[A-Za-z0-9-]{8,64}$/;
 async function handleForgetMany(env, bodyText, who = null) {
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
     const freeNow = b?.free_now === true;
@@ -1446,6 +1450,8 @@ async function handleForgetMany(env, bodyText, who = null) {
     const names = Array.isArray(b?.names) ? [...new Set(b.names.map((n) => String(n).toLowerCase()))] : null;
     if (!names || !names.length || names.length > max || !names.every((n) => NAME_RE.test(n)))
         return json({ error: `names must be 1 to ${max} names` }, 400);
+    const run = freeNow && typeof b.run === 'string' && RUN_RE.test(b.run) ? b.run : null;
+    const total = Number.isInteger(b.total) && b.total > 0 && b.total <= 100000 ? b.total : null;
     const actor = actorOf(who);
     const removed = [];
     const refused = [];
@@ -1468,7 +1474,9 @@ async function handleForgetMany(env, bodyText, who = null) {
         if (res.status !== 200) refused.push({ name, ...out });
         else (out.already ? already : removed).push(name);
     }
-    if (removed.length) await tell(env, () => alerts.adminRemoved(env, removed, { who: who?.email, freed: freed.filter((n) => removed.includes(n)).length }));
+    if (removed.length) await tell(env, () => (run
+        ? alerts.adminFreedAll(env, { who: who?.email, run, total })
+        : alerts.adminRemoved(env, removed, { who: who?.email, freed: freed.filter((n) => removed.includes(n)).length })));
     return json({ removed, refused, ...(already.length ? { already } : {}), ...(freeNow ? { freed } : {}) });
 }
 

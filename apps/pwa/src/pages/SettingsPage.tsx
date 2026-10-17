@@ -1942,7 +1942,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🫘</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Help & how it works</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
@@ -1952,7 +1952,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">💬</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Suggest a change</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
@@ -1962,7 +1962,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">beanpool.org</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">The BeanPool project website</span>
+                                <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">The BeanPool project website</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                         </a>
@@ -1975,9 +1975,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <span className="text-xl" aria-hidden="true">🌍</span>
                         <span className="flex-1 min-w-0">
                             <span className="block">{t('Global community')}</span>
-                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{globalCommunity.host}</span>
+                            <span className="block text-xs font-normal text-nature-600 dark:text-nature-300 break-words">{globalCommunity.host}</span>
                             {/* What it is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1). */}
-                            <span id="settings-global-community-about" className="block mt-0.5 text-xs font-normal text-nature-500 dark:text-nature-300">
+                            <span id="settings-global-community-about" className="block mt-0.5 text-xs font-normal text-nature-600 dark:text-nature-300">
                                 {t('The global community is one community among many. Your own community runs on its own server and never needs it.')}
                             </span>
                         </span>

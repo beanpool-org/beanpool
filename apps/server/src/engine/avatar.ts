@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, memberPhotoNotMovedYet } from '../db/db.js';
-import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl } from '@beanpool/core';
+import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl, isBundledAvatar } from '@beanpool/core';
 import { isStorableImageValue, stripImageMetadata, tooManyPixels } from '../storage/image-metadata.js';
 
 
@@ -144,6 +144,61 @@ const BASE64_TEXT = /^[A-Za-z0-9+/=_\-\s]+$/;
  */
 export function isSelfPostPhotoUrl(value: string): boolean {
     return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/posts\/[^/?#\s]+\/photos\/\d+(?:\?\S*)?$/i.test(value.trim());
+}
+
+/**
+ * Is this string one of this node's own photo paths/keys, sent back by an app?
+ *
+ * Must be a RELATIVE path on this node starting with `/api/`:
+ *   - `/api/avatar/<id>...` (member, enterprise or treasury avatar)
+ *   - `/api/groups/<id>/picture...` (a group's picture)
+ *   - `/api/marketplace/posts/<id>/photos/<n>...` (a post photo / pricing thumbnail)
+ *
+ * Never an absolute URL: an outside host (e.g. https://... or http://...) or a scheme
+ * like `javascript:` or a protocol-relative `//host` must never be stored, because viewers
+ * would fetch from that server (a tracking pixel) and load unvouched bytes (#2082).
+ */
+export function isSelfPhotoPath(value: string): boolean {
+    const trimmed = value.trim();
+    return /^\/api\/(?:avatar\/[^/?#\s]+|groups\/[^/?#\s]+\/picture|marketplace\/posts\/[^/?#\s]+\/photos\/\d+)(?:[?#]\S*)?$/i.test(trimmed);
+}
+
+/**
+ * Route-level check for any photo value a route stores (Issue #2082).
+ *
+ * Every route that stores a photo value accepts only:
+ *   - a `data:` image (then the existing format and pixel checks)
+ *   - a `bundled://` name
+ *   - one of this node's own photo paths/keys (relative `/api/...`)
+ *   - legacy bare base64 image bytes (then the existing format and pixel checks)
+ *
+ * Anything else (including https://, http://, //host, javascript:) is refused with
+ * the format refusal.
+ */
+export function routePhotoValueRefusal(value: unknown): PhotoRefusal | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string') return FORMAT;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (isBundledAvatar(trimmed)) return null;
+    if (isSelfPhotoPath(trimmed)) return null;
+    if (/^data:/i.test(trimmed)) {
+        return avatarValueRefusal(trimmed);
+    }
+    if (BASE64_TEXT.test(trimmed)) {
+        const bytes = Buffer.from(trimmed, 'base64');
+        return sniffRasterImageType(bytes) === null ? FORMAT : pixelRefusal(bytes);
+    }
+    return FORMAT;
+}
+
+/** The route-level photo rule over several values: the first refusal, or null when every one may be stored. */
+export function routePhotosRefusal(values: unknown[]): PhotoRefusal | null {
+    for (const value of values) {
+        const refusal = routePhotoValueRefusal(value);
+        if (refusal) return refusal;
+    }
+    return null;
 }
 
 export const MAX_AVATAR_BYTES = MAX_PICTURE_BYTES; // 2 MB (@beanpool/core: a group's picture is held to it too)

@@ -29,7 +29,7 @@ import {
 import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { photosRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { photosRefusal, routePhotosRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
@@ -373,9 +373,9 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             return;
         }
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
-        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
-        // bare base64 included: the project's JSON hands each one out as stored.
-        const photoRefusal = photosRefusal(photos);
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule
+        // (#2082: own only): the project's JSON hands each one out as stored.
+        const photoRefusal = routePhotosRefusal(photos);
         if (photoRefusal) {
             ctx.status = 400;
             ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };
@@ -448,9 +448,9 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             return;
         }
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
-        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
-        // bare base64 included: the project's JSON hands each one out as stored.
-        const photoRefusal = photosRefusal(photos);
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule
+        // (#2082: own only): the project's JSON hands each one out as stored.
+        const photoRefusal = routePhotosRefusal(photos);
         if (photoRefusal) {
             ctx.status = 400;
             ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };

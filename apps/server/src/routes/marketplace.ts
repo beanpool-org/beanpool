@@ -38,7 +38,8 @@ import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '
 import { postOutOfSight } from '../engine/post-sight.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
-import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST } from '../engine/posts.js';
+import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
+import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
@@ -695,6 +696,14 @@ router.post('/api/marketplace/posts', async (ctx) => {
         ctx.body = { error: 'Post as an enterprise through its own route: POST /api/treasury/:treasury/{offer,need,event}' };
         return;
     }
+    if (Array.isArray(photos)) {
+        const photoRefusal = routePhotosRefusal(photos);
+        if (photoRefusal) {
+            ctx.status = 400;
+            ctx.body = { error: photoRefusalText(photoRefusal, POST_PHOTO_FORMAT_ERROR) };
+            return;
+        }
+    }
     try {
         // G3, global profile: a muted member can't post (403), and a new account has its daily limits (429).
         assertNotMuted(actor);
@@ -824,7 +833,13 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         const actor = ctx.state?.actor as string;
         assertNotMuted(actor);
         if (Array.isArray(updates.photos)) {
-            const own = new RegExp(`/api/marketplace/posts/${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/photos/\\d+(\\?.*)?$`);
+            const photoRefusal = routePhotosRefusal(updates.photos);
+            if (photoRefusal) {
+                ctx.status = 400;
+                ctx.body = { error: photoRefusalText(photoRefusal, POST_PHOTO_FORMAT_ERROR) };
+                return;
+            }
+            const own = new RegExp(`^/api/marketplace/posts/${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/photos/\\d+(\\?.*)?$`);
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }

@@ -37,7 +37,7 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { photoValueRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { photoValueRefusal, routePhotoValueRefusal, routePhotosRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
@@ -581,11 +581,27 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'name must be at least 2 characters' };
             return;
         }
+        if (avatar !== undefined && avatar !== null && avatar !== '') {
+            const refusal = routePhotoValueRefusal(avatar);
+            if (refusal) {
+                ctx.status = 400;
+                ctx.body = { error: photoRefusalText(refusal, AVATAR_FORMAT_ERROR) };
+                return;
+            }
+        }
+        if (Array.isArray(photos)) {
+            const refusal = routePhotosRefusal(photos);
+            if (refusal) {
+                ctx.status = 400;
+                ctx.body = { error: photoRefusalText(refusal, AVATAR_FORMAT_ERROR) };
+                return;
+            }
+        }
         let photoUrl = avatar;
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
         // G9a-3: the projects row below stores it too, not only createTreasury, and the crowdfund listing hands it out
-        // as stored, so it is held to the photo rule (bare base64 included) as crowdfund photos are.
-        const photoRefusal = photoValueRefusal(photoUrl);
+        // as stored, so it is held to the photo rule (#2082: own only).
+        const photoRefusal = routePhotoValueRefusal(photoUrl);
         if (photoRefusal) {
             ctx.status = 400;
             ctx.body = { error: photoRefusalText(photoRefusal, AVATAR_FORMAT_ERROR) };
@@ -682,8 +698,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
-        // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above.
-        const avatarRefusal = photoValueRefusal(String(avatar));
+        // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above (#2082: own only).
+        const avatarRefusal = routePhotoValueRefusal(String(avatar));
         if (avatarRefusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) }; return; }
         try {
             ctx.body = {
@@ -776,6 +792,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (Array.isArray(b.photos)) {
+            const refusal = routePhotosRefusal(b.photos);
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+        }
         try {
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
@@ -789,6 +809,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (Array.isArray(b.photos)) {
+            const refusal = routePhotosRefusal(b.photos);
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+        }
         try {
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
@@ -804,6 +828,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (Array.isArray(b.photos)) {
+            const refusal = routePhotosRefusal(b.photos);
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+        }
         try {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
@@ -831,6 +859,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (Array.isArray(b.photos)) {
+            const refusal = routePhotosRefusal(b.photos);
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+        }
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);

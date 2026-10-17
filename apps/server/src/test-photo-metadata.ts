@@ -938,7 +938,7 @@ async function partTwo(): Promise<void> {
     const kept = ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
     await served('the pricing-guide thumbnail after the refusals', decodeDataUrl(kept?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
     const link = await saveThumbnail('https://example.org/lemons.jpg');
-    assert(link.status === 200, `a link as the thumbnail still passes (${link.status})`);
+    assert(link.status === 400, `an outside link as the thumbnail is refused under #2082 (${link.status})`);
 
     console.log('\n── 2i. A member\'s photo as other members read it: POST /api/profile/update → groups, profile, chats ──');
     // A member's photo (member_photos) is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
@@ -1010,12 +1010,13 @@ async function partTwo(): Promise<void> {
     for (const [route, value] of await readsOfTheMember()) await served(`after the refusals, ${route}`, await avatarBytes(value), CAMERA_JPEG_STRIPPED);
 
     // What the apps send besides a new photo passes as it always has: this node's own avatar address (an editor that
-    // loaded the profile sends it back, and it means "unchanged") and a bundled:// name.
-    for (const address of [`/api/avatar/${member.pub}?size=thumb&v=1`, `${BASE}/api/avatar/${member.pub}`]) {
-        const upd = await signed('POST', '/api/profile/update', { avatar: address }, member);
-        assert(upd.status === 200, `this node's avatar address ${address.startsWith('/') ? '(relative)' : '(absolute)'} is accepted (${upd.status} ${upd.json?.error ?? ''})`);
-        await served(`after sending back the ${address.startsWith('/') ? 'relative' : 'absolute'} address, the stored photo`, await avatarBytes(storedAvatar()), CAMERA_JPEG_STRIPPED);
-    }
+    // loaded the profile sends it back, and it means "unchanged") and a bundled:// name. An absolute address is refused (#2082).
+    const relUpd = await signed('POST', '/api/profile/update', { avatar: `/api/avatar/${member.pub}?size=thumb&v=1` }, member);
+    assert(relUpd.status === 200, `this node's avatar address (relative) is accepted (${relUpd.status} ${relUpd.json?.error ?? ''})`);
+    await served('after sending back the relative address, the stored photo', await avatarBytes(storedAvatar()), CAMERA_JPEG_STRIPPED);
+
+    const absUpd = await signed('POST', '/api/profile/update', { avatar: `${BASE}/api/avatar/${member.pub}` }, member);
+    assert(absUpd.status === 400 && absUpd.json?.error === 'avatar_invalid', `this node's avatar address as an absolute URL is refused under #2082 (${absUpd.status} ${absUpd.json?.error ?? ''})`);
     const bundled = await signed('POST', '/api/profile/update', { avatar: 'bundled://sprout' }, member);
     assert(bundled.status === 200 && storedAvatar() === 'bundled://sprout', `a bundled:// avatar is accepted and stored as sent (${bundled.status} ${bundled.json?.error ?? ''})`);
 
@@ -1101,10 +1102,10 @@ async function partTwo(): Promise<void> {
         assert(after?.priceBeans === priceBeans + 1 && after?.isPinned === true, `the new price and pin are saved (${after?.priceBeans}, ${after?.isPinned})`);
         assert(after?.thumbnailUrl === listingsLink, `the photo link is kept (${after?.thumbnailUrl})`);
     }
-    for (const link of [`${photoLink}?v=1`, `${BASE}${photoLink}`]) {
-        const res = await saveThumbnail(link);
-        assert(res.status === 200, `this node's photo link ${link.startsWith('/') ? 'with its ?v=' : 'as an absolute address'} is saved as a thumbnail (${res.status})`);
-    }
+    const relThumb = await saveThumbnail(`${photoLink}?v=1`);
+    assert(relThumb.status === 200, `this node's photo link with its ?v= is saved as a thumbnail (${relThumb.status})`);
+    const absThumb = await saveThumbnail(`${BASE}${photoLink}`);
+    assert(absThumb.status === 400, `this node's photo link as an absolute address is refused under #2082 (${absThumb.status})`);
     const refusedThumb = await saveThumbnail(dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG));
     assert(refusedThumb.status === 400, `a JPEG no walk can read is refused as a thumbnail (${refusedThumb.status})`);
 }

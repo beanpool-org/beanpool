@@ -394,6 +394,7 @@ export const SUITES = [
     'test-photo-thumbnails',
     'test-photo-key-collision',
     'test-photo-pixel-cap-attachment-read',
+    'test-photo-values-own-only',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',
     'test-directory-hold-back',

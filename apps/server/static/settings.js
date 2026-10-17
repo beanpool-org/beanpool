@@ -1072,6 +1072,7 @@
         const DIRECTORY_HELD_BACK_LINES = {
             unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community Name, then Save.',
             unlisted: "Not on the public map: this server's .env sets DIRECTORY_UNLISTED, as our test and review nodes do. Remove that line and restart the node to be listed.",
+            probation: "Not on the public map yet: your beanpool.org address is new, and the address service checks a new address for a while before it is listed. Nothing to do: it is listed by itself once that is done.",
         };
         function showDirectoryHeldBack(reason) {
             const el = document.getElementById('directory-held-back');

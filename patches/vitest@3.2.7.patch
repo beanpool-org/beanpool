@@ -1,0 +1,22 @@
+diff --git a/dist/chunks/rpc.-pEldfrD.js b/dist/chunks/rpc.-pEldfrD.js
+index a48eb0174a4fbc508a36c46ff78b0f9bf7ba6295..1fd1f1ca709f6bc3973c97e120b980a8c0bb8e33 100644
+--- a/dist/chunks/rpc.-pEldfrD.js
++++ b/dist/chunks/rpc.-pEldfrD.js
+@@ -45,13 +45,10 @@ function createRuntimeRpc(options) {
+ 			"onCollected",
+ 			"onCancel"
+ 		],
+-		onTimeoutError(functionName, args) {
+-			let message = `[vitest-worker]: Timeout calling "${functionName}"`;
+-			if (functionName === "fetch" || functionName === "transform" || functionName === "resolveId") message += ` with "${JSON.stringify(args)}"`;
+-			// JSON.stringify cannot serialize Error instances
+-			if (functionName === "onUnhandledError") message += ` with "${args[0]?.message || args[0]}"`;
+-			throw new Error(message);
+-		},
++		// BeanPool: backport of vitest-dev/vitest#8297 (in vitest 4, never in 3.x). A worker that keeps its event loop busy
++		// for 60 s — tests chained on microtasks, no I/O — let birpc's timer fire before the ack already waiting in the pipe
++		// was read: "Timeout calling onTaskUpdate" after every test passed. Test and hook timeouts still bound every test.
++		timeout: -1,
+ 		...options
+ 	}));
+ 	return {

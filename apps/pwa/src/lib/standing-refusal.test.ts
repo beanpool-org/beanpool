@@ -5,14 +5,13 @@
  * - Each standing refusal code (`private_preview`, `account_closed`) → its state (not a member / guest, with sentence)
  * - A network error → offline
  * - A 403 with another code → unchanged behaviour (offline)
- * - A test that FAILS on origin/main (origin/main treated private_preview and account_closed as offline connectivity errors)
+ * - Both codes reach guest from an online state, never offline (before W2 the web app read them as a connection failure)
  */
 import { describe, expect, it } from 'vitest';
 import { t } from '@beanpool/core';
 import {
     standingFromRefusal,
     statusReducer,
-    syncStatusReducer,
     PRIVATE_PREVIEW,
     ACCOUNT_CLOSED,
     DEFAULT_PRIVATE_PREVIEW_MESSAGE,
@@ -62,6 +61,15 @@ describe('standingFromRefusal', () => {
             sentence: DEFAULT_PRIVATE_PREVIEW_MESSAGE,
             message: DEFAULT_PRIVATE_PREVIEW_MESSAGE,
         });
+    });
+
+    it("reads private_preview's sentence from `error` first (the node sends `error`), then a message", () => {
+        const both = { status: 403, code: PRIVATE_PREVIEW, error: 'From error.', message: 'From message.' };
+        expect(standingFromRefusal(both)?.sentence).toBe('From error.');
+        const inBody = { status: 403, body: { code: PRIVATE_PREVIEW, error: 'Body error.', message: 'Body message.' }, message: 'Outer.' };
+        expect(standingFromRefusal(inBody)?.sentence).toBe('Body error.');
+        // A blank `error` is no sentence: the message, then the default.
+        expect(standingFromRefusal({ status: 403, code: PRIVATE_PREVIEW, error: ' ', message: 'From message.' })?.sentence).toBe('From message.');
     });
 
     it('reads 403 account_closed through t() sentence', () => {
@@ -182,27 +190,12 @@ describe('statusReducer', () => {
         });
     });
 
-    it('works with string SyncMode states directly', () => {
-        // Standing refusal codes produce 'guest', never 'offline'
-        expect(statusReducer('online', { type: 'probe_error', error: { status: 403, code: PRIVATE_PREVIEW } })).toBe('guest');
-        expect(statusReducer('online', { type: 'probe_error', error: { status: 403, code: ACCOUNT_CLOSED } })).toBe('guest');
-        expect(syncStatusReducer('online', { status: 403, code: PRIVATE_PREVIEW })).toBe('guest');
-
-        // Network error produces 'offline'
-        expect(statusReducer('online', { type: 'probe_error', error: new TypeError('Failed to fetch') })).toBe('offline');
-
-        // 403 with other code produces 'offline' (unchanged behaviour)
-        expect(statusReducer('online', { type: 'probe_error', error: { status: 403, code: 'not_your_key' } })).toBe('offline');
-    });
-
     /**
-     * TEST THAT FAILS ON origin/main:
-     * On origin/main (commit 3bc19acd), the web app did not have standingFromRefusal or statusReducer.
-     * When checkMembership or any probe caught an HTTP 403 private_preview or account_closed error,
-     * it fell through to `setIsHttpOnline(false)` and `statusMode = 'offline'`.
-     * This test pins that private_preview and account_closed MUST resolve to guest standing, NEVER offline.
+     * Before W2 the web app had no standingFromRefusal or statusReducer: a probe refused 403 private_preview or
+     * account_closed fell through to `setIsHttpOnline(false)` and the chip said Offline. Both must read as guest standing.
      */
-    it('FAILS ON ORIGIN/MAIN: private_preview and account_closed 403s must NOT result in offline state', () => {
+    it('private_preview and account_closed 403s take an online state to guest, never offline', () => {
+        const online: SyncStatusState = { isHttpOnline: true, isMember: true, mode: 'online', sentence: null };
         const previewRefusal = Object.assign(new Error('This community is in a private preview.'), {
             status: 403,
             code: 'private_preview',
@@ -222,12 +215,7 @@ describe('statusReducer', () => {
         expect(standingClosed?.isMember).toBe(false);
 
         // Status reducer routes both to guest mode, NOT offline
-        const stateFromPreview = statusReducer('online', { type: 'probe_error', error: previewRefusal });
-        expect(stateFromPreview).not.toBe('offline');
-        expect(stateFromPreview).toBe('guest');
-
-        const stateFromClosed = statusReducer('online', { type: 'probe_error', error: closedRefusal });
-        expect(stateFromClosed).not.toBe('offline');
-        expect(stateFromClosed).toBe('guest');
+        expect(statusReducer(online, { type: 'probe_error', error: previewRefusal }).mode).toBe('guest');
+        expect(statusReducer(online, { type: 'probe_error', error: closedRefusal }).mode).toBe('guest');
     });
 });

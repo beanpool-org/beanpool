@@ -12,7 +12,7 @@ import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
 import { withJitter } from '../lib/jitter';
 import { SyncChip } from './SyncChip';
-import { statusReducer, INITIAL_SYNC_STATUS_STATE, type SyncStatusState } from '../lib/standing-refusal';
+import { statusReducer, INITIAL_SYNC_STATUS_STATE } from '../lib/standing-refusal';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -38,7 +38,7 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
         merkleRoot: null,
         accountCount: 0,
     });
-    const [statusState, dispatchStatus] = useReducer<SyncStatusState, any>(statusReducer, INITIAL_SYNC_STATUS_STATE);
+    const [statusState, dispatchStatus] = useReducer(statusReducer, INITIAL_SYNC_STATUS_STATE);
     const [noteOpen, setNoteOpen] = useState(true);
     const noteId = useId();
 

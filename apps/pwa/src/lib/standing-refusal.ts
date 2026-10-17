@@ -55,7 +55,8 @@ export function standingFromRefusal(e: unknown): StandingRefusal | null {
     if (code !== PRIVATE_PREVIEW && code !== ACCOUNT_CLOSED) return null;
 
     if (code === PRIVATE_PREVIEW) {
-        const text = err.body?.error ?? err.body?.message ?? err.message ?? err.error;
+        // The node sends its sentence as `error` (lib/api's request makes that the thrown Error's message).
+        const text = [err.body?.error, err.error, err.body?.message, err.message].find((s) => typeof s === 'string' && s.trim());
         const sentence = typeof text === 'string' && text.trim() ? text.trim() : DEFAULT_PRIVATE_PREVIEW_MESSAGE;
         return {
             code: PRIVATE_PREVIEW,
@@ -94,8 +95,6 @@ export const INITIAL_SYNC_STATUS_STATE: SyncStatusState = {
 export type SyncStatusAction =
     | { type: 'probe_success'; isMember: boolean }
     | { type: 'probe_error'; error: unknown }
-    | { type: 'error'; error: unknown }
-    | { type: 'refusal'; error: unknown }
     | { type: 'ws_change'; connected: boolean };
 
 /**
@@ -104,84 +103,30 @@ export type SyncStatusAction =
  * - A network error → offline
  * - A 403 with another code → unchanged behaviour (offline)
  */
-export function statusReducer(state: SyncStatusState, action: SyncStatusAction | unknown): SyncStatusState;
-export function statusReducer(state: SyncMode, action: SyncStatusAction | unknown): SyncMode;
-export function statusReducer(state: SyncStatusState | SyncMode, action: SyncStatusAction | unknown): SyncStatusState | SyncMode;
-export function statusReducer(
-    state: SyncStatusState | SyncMode = INITIAL_SYNC_STATUS_STATE,
-    action: SyncStatusAction | unknown,
-): SyncStatusState | SyncMode {
-    const isStringState = typeof state === 'string';
-    const currentState: SyncStatusState = isStringState
-        ? {
-            isHttpOnline: state === 'offline' ? false : true,
-            isMember: state === 'online' ? true : state === 'guest' ? false : null,
-            mode: state,
-            sentence: null,
-        }
-        : state;
-
-    let act: SyncStatusAction;
-    if (action && typeof action === 'object' && 'type' in action) {
-        act = action as SyncStatusAction;
-    } else {
-        act = { type: 'probe_error', error: action };
-    }
-
-    let nextState: SyncStatusState;
-    switch (act.type) {
-        case 'probe_success': {
-            const isMember = act.isMember;
-            nextState = {
+export function statusReducer(state: SyncStatusState, action: SyncStatusAction): SyncStatusState {
+    switch (action.type) {
+        case 'probe_success':
+            return {
                 isHttpOnline: true,
-                isMember,
-                mode: isMember ? 'online' : 'guest',
+                isMember: action.isMember,
+                mode: action.isMember ? 'online' : 'guest',
                 sentence: null,
             };
-            break;
-        }
-        case 'probe_error':
-        case 'error':
-        case 'refusal': {
-            const standing = standingFromRefusal(act.error);
-            if (standing) {
-                nextState = {
-                    isHttpOnline: true,
-                    isMember: false,
-                    mode: 'guest',
-                    sentence: standing.sentence,
-                };
-            } else {
-                nextState = {
-                    isHttpOnline: false,
-                    isMember: currentState.isMember,
-                    mode: 'offline',
-                    sentence: null,
-                };
-            }
-            break;
+        case 'probe_error': {
+            const standing = standingFromRefusal(action.error);
+            return standing
+                ? { isHttpOnline: true, isMember: false, mode: 'guest', sentence: standing.sentence }
+                : { isHttpOnline: false, isMember: state.isMember, mode: 'offline', sentence: null };
         }
         case 'ws_change': {
-            const connected = act.connected;
-            const effectiveIsMember = currentState.isMember;
-            const mode: SyncMode = connected
-                ? (effectiveIsMember === false ? 'guest' : 'online')
-                : (currentState.isHttpOnline && effectiveIsMember === true)
+            const mode: SyncMode = action.connected
+                ? (state.isMember === false ? 'guest' : 'online')
+                : (state.isHttpOnline && state.isMember === true)
                 ? 'online'
-                : (currentState.isHttpOnline && effectiveIsMember === false)
+                : (state.isHttpOnline && state.isMember === false)
                 ? 'guest'
                 : 'offline';
-            nextState = {
-                ...currentState,
-                mode,
-            };
-            break;
+            return { ...state, mode };
         }
-        default:
-            nextState = currentState;
     }
-
-    return isStringState ? nextState.mode : nextState;
 }
-
-export const syncStatusReducer = statusReducer;

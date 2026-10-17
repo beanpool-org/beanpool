@@ -1,27 +1,31 @@
 /**
- * TLS — Dual-Mode Certificate Management
+ * TLS — the certificates this server serves
  *
- * Public nodes (CF_RECORD_NAME set):
- *   → Auto-obtain Let's Encrypt certs via DNS-01 + Cloudflare API
- *   → Auto-renew when within 30 days of expiry
- *   → PWA "just works" in any browser, no warnings
+ * Every public identifier this server accepts members' signatures for (engine/own-addresses.ts tlsIdentifiers) gets a
+ * certificate of its own from an ACME CA: Let's Encrypt unless ACME_DIRECTORY_URL names another. services/acme/schedule.ts
+ * orders and renews them once both listeners are up: http-01 on the server's own port 80, dns-01 through Cloudflare only
+ * for our fleet's CF_RECORD_NAME (design scratch/global-node/DESIGN-https-anywhere-fable.md §1, §2). They are served by
+ * SNI; a connection with no SNI (an IP address, an old client) gets the IP's certificate, else the first name's, else the
+ * self-signed pair, and a name with no certificate here gets the self-signed pair. A renewed certificate is served from
+ * the next connection on; no restart.
  *
- * LAN nodes (no CF_RECORD_NAME):
+ * LAN nodes (no public identifier):
  *   → Generate self-signed Root CA + server cert for beanpool.local
  *   → Users install CA via Trust Bootstrap page
+ * The same pair is what is served when no CA certificate is valid, so an expired one is never served.
  *
- * Offline fallback:
- *   → If LE cert expires and can't renew, fall back to self-signed
- *   → Trust Bootstrap page re-activates automatically
+ * The boot never waits on the network: initTls() loads what is on disk and makes the self-signed pair when there is none.
  */
 
 import fs from 'node:fs';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import tls from 'node:tls';
-import * as acme from 'acme-client';
 import selfsigned from 'selfsigned';
+import { audienceOf } from '@beanpool/core';
+import { certCovers, certTimes, readPair, storedHosts, writePair, type CertPair } from './acme/store.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TLS_DIR = path.join(DATA_DIR, 'tls');
@@ -29,303 +33,202 @@ const CA_CERT_PATH = path.join(TLS_DIR, 'ca.pem');
 const CA_KEY_PATH = path.join(TLS_DIR, 'ca-key.pem');
 const SERVER_CERT_PATH = path.join(TLS_DIR, 'server.pem');
 const SERVER_KEY_PATH = path.join(TLS_DIR, 'server-key.pem');
+/** Where the fleet's Let's Encrypt pair lived before each identifier had a folder (adopted once, then removed). */
 const LE_CERT_PATH = path.join(TLS_DIR, 'le-cert.pem');
 const LE_KEY_PATH = path.join(TLS_DIR, 'le-key.pem');
-const LE_ACCOUNT_PATH = path.join(TLS_DIR, 'acme-account.json');
-
-// Cloudflare config — if CF_RECORD_NAME exists, we're a public node
-const CF_API_TOKEN = process.env.CF_API_TOKEN ?? '';
-const CF_ZONE_ID = process.env.CF_ZONE_ID ?? '';
-const CF_RECORD_NAME = process.env.CF_RECORD_NAME ?? '';
 
 let caCertPem: string = '';
 let serverCertPem: string = '';
 let serverKeyPem: string = '';
-let usingLetsEncrypt = false;
+
+/** A CA certificate being served, by the host a client names in SNI (an IPv6 one in brackets). */
+interface Served {
+    host: string;
+    ip: boolean;
+    cert: string;
+    key: string;
+    notBefore: number;
+    notAfter: number;
+    context: tls.SecureContext;
+}
+const served = new Map<string, Served>();
+/** The identifiers in configured order (schedule.ts), for which name a connection with no SNI gets. */
+let preferredOrder: string[] = [];
+/** The HTTPS listeners, told when the certificate for a connection with no SNI changes. */
+const listeners = new Set<tls.Server>();
+let defaultServed: CertPair | null = null;
+/** The fleet's certificate has been looked at by a tick since this start (tlsFellBackToSelfSigned). */
+let fleetChecked = false;
 
 // --- Exports ---
 
+export function tlsDataDir(): string { return DATA_DIR; }
 export function getCaCertPem(): string { return caCertPem; }
+/** The self-signed pair: what is served when no CA certificate is. */
 export function getServerCertPem(): string { return serverCertPem; }
 export function getServerKeyPem(): string { return serverKeyPem; }
-export function isUsingLetsEncrypt(): boolean { return usingLetsEncrypt; }
-/** A public node (it asks Let's Encrypt) that is serving its self-signed certificate: what services/alerts.ts tells the owners. */
-export function tlsFellBackToSelfSigned(): boolean { return !!(CF_RECORD_NAME && CF_API_TOKEN && CF_ZONE_ID) && !usingLetsEncrypt && !!serverCertPem; }
+/** Whether this server serves a certificate a CA issued, for any of its identifiers. */
+export function isUsingLetsEncrypt(): boolean { return served.size > 0; }
+
+/** CF_RECORD_NAME as signatures carry it, when our fleet's dns-01 path is set up (all three CF variables); else null. */
+export function fleetIdentifier(): string | null {
+    const name = (process.env.CF_RECORD_NAME ?? '').trim();
+    if (!name || !process.env.CF_API_TOKEN || !process.env.CF_ZONE_ID) return null;
+    return audienceOf(name);
+}
+
+/** A public node (it asks Let's Encrypt through Cloudflare) that is serving its self-signed certificate after a renewal
+ *  check: what services/alerts.ts tells the owners. */
+export function tlsFellBackToSelfSigned(): boolean {
+    const fleet = fleetIdentifier();
+    return !!fleet && fleetChecked && !served.has(fleet) && !!serverCertPem;
+}
+
+/** schedule.ts: a tick has looked at the fleet's certificate. */
+export function noteFleetChecked(): void { fleetChecked = true; }
+
+/** The CA certificate served for `host`, or null. */
+export function servedCertificate(host: string): { cert: string; notBefore: number; notAfter: number } | null {
+    const s = served.get(host);
+    return s ? { cert: s.cert, notBefore: s.notBefore, notAfter: s.notAfter } : null;
+}
+
+export function servedHosts(): string[] {
+    return [...served.keys()];
+}
 
 /**
- * Initialize TLS certificates. Tries Let's Encrypt for public nodes,
- * falls back to self-signed for LAN or on failure.
+ * Serve `pair` for `host` from the next connection on, or stop serving one (null). A pair that does not load, has
+ * expired by `now` or does not name `host` is refused and the old one stays: the problem in words, else null.
+ */
+export function serveCertificate(host: string, pair: CertPair | null, now = Date.now()): string | null {
+    if (!pair) {
+        if (served.delete(host)) refreshDefault();
+        return null;
+    }
+    const times = certTimes(pair.cert);
+    if (!times) return 'the certificate does not parse';
+    if (times.notAfter <= now) return 'the certificate has expired';
+    if (!certCovers(pair.cert, host)) return `the certificate does not name ${host}`;
+    let context: tls.SecureContext;
+    try {
+        context = tls.createSecureContext({ cert: pair.cert, key: pair.key });
+    } catch (err) {
+        return (err as Error).message || String(err);
+    }
+    const ip = host.startsWith('[') || /^[\d.]+$/.test(host);
+    served.set(host, { host, ip, cert: pair.cert, key: pair.key, ...times, context });
+    refreshDefault();
+    return null;
+}
+
+/** schedule.ts: the identifiers in configured order. */
+export function setPreferredOrder(hosts: string[]): void {
+    preferredOrder = [...hosts];
+    refreshDefault();
+}
+
+/** What a connection with no SNI gets: an IPv4 address's certificate, an IPv6 one's, the first name's, the self-signed pair. */
+function defaultPair(now = Date.now()): CertPair {
+    const rank = (s: Served) => (!s.ip ? 2 : s.host.startsWith('[') ? 1 : 0);
+    const place = (s: Served) => { const i = preferredOrder.indexOf(s.host); return i === -1 ? Number.MAX_SAFE_INTEGER : i; };
+    const best = [...served.values()].filter((s) => s.notAfter > now)
+        .sort((a, b) => rank(a) - rank(b) || place(a) - place(b) || a.host.localeCompare(b.host))[0];
+    return best ? { cert: best.cert, key: best.key } : { cert: serverCertPem, key: serverKeyPem };
+}
+
+function refreshDefault(): void {
+    const next = defaultPair();
+    if (defaultServed && defaultServed.cert === next.cert && defaultServed.key === next.key) return;
+    defaultServed = next;
+    for (const server of listeners) {
+        try {
+            server.setSecureContext({ cert: next.cert, key: next.key });
+        } catch (err) {
+            console.error('❌ TLS: could not change the certificate for connections with no name:', (err as Error).message);
+        }
+    }
+}
+
+let selfSigned: { cert: string; context: tls.SecureContext } | null = null;
+/** The self-signed pair as a context, for a name this server holds no CA certificate for. */
+function selfSignedContext(): tls.SecureContext | undefined {
+    if (!serverCertPem) return undefined;
+    if (selfSigned?.cert !== serverCertPem) {
+        try {
+            selfSigned = { cert: serverCertPem, context: tls.createSecureContext({ cert: serverCertPem, key: serverKeyPem }) };
+        } catch {
+            return undefined;
+        }
+    }
+    return selfSigned.context;
+}
+
+/** The certificate options for https.createServer: the pair for a connection with no SNI, and the SNI choice. */
+export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICallback'> {
+    const pair = defaultPair();
+    defaultServed = pair;
+    return {
+        cert: pair.cert,
+        key: pair.key,
+        SNICallback: (servername, cb) => {
+            const name = servername.toLowerCase().replace(/\.+$/, '');
+            const s = served.get(name);
+            if (s && s.notAfter > Date.now()) return cb(null, s.context);
+            // An IP address sent as SNI (RFC 6066 forbids it; some clients do) is a connection with no name. Any other
+            // name gets the self-signed pair (beanpool.local), as on a LAN node.
+            cb(null, net.isIP(name) ? undefined : selfSignedContext());
+        },
+    };
+}
+
+/** An HTTPS listener made with httpsCertOptions(), to be told when the pair for a connection with no SNI changes. */
+export function attachTlsListener(server: tls.Server): void {
+    listeners.add(server);
+    server.once('close', () => listeners.delete(server));
+}
+
+/**
+ * Initialize TLS certificates from disk only: the self-signed pair (made when there is none), and every ACME pair under
+ * data/tls/acme/ that loads, names its identifier and has not expired. Never orders anything: the first orders run after
+ * both listeners are up (services/acme/schedule.ts).
  */
 export async function initTls(): Promise<void> {
     fs.mkdirSync(TLS_DIR, { recursive: true });
-
-    const isPublicNode = CF_RECORD_NAME && CF_API_TOKEN && CF_ZONE_ID;
-
-    if (isPublicNode) {
-        const success = await tryLetsEncrypt();
-        if (success) {
-            usingLetsEncrypt = true;
-            console.log(`🔒 TLS: Let's Encrypt (${CF_RECORD_NAME})`);
-            return;
-        }
-        console.log('⚠️  Let\'s Encrypt failed — falling back to self-signed');
-    }
-
     generateSelfSigned();
-    usingLetsEncrypt = false;
-    console.log('🔒 TLS: Self-signed (beanpool.local)');
+
+    served.clear();
+    fleetChecked = false;
+    adoptLegacyFleetCertificate();
+    const now = Date.now();
+    for (const host of storedHosts(DATA_DIR)) {
+        const pair = readPair(DATA_DIR, host);
+        if (!pair) continue;
+        const problem = serveCertificate(host, pair, now);
+        if (problem) console.log(`⚠️  TLS: the certificate on disk for ${host} is not served (${problem}); it is ordered again`);
+    }
+    defaultServed = null;
+    refreshDefault();
+
+    if (served.size) console.log(`🔒 TLS: certificates for ${[...served.keys()].join(', ')}; self-signed (beanpool.local) for any other name`);
+    else console.log('🔒 TLS: Self-signed (beanpool.local)');
 }
 
-/**
- * Schedule automatic renewal check every 2 hours.
- * Short interval ensures LE certs are picked up quickly after rate limits clear.
- */
-export function startRenewalScheduler(): void {
-    if (!CF_RECORD_NAME || !CF_API_TOKEN || !CF_ZONE_ID) return;
-
-    const TWO_HOURS = 2 * 60 * 60 * 1000;
-
-    setInterval(async () => {
-        try {
-            console.log('🔄 Checking certificate renewal...');
-            const success = await tryLetsEncrypt();
-            if (success && !usingLetsEncrypt) {
-                console.log('🔒 Upgraded from self-signed to Let\'s Encrypt');
-                usingLetsEncrypt = true;
-            } else if (!success && usingLetsEncrypt) {
-                // LE cert expired and can't renew — fall back
-                if (isCertExpired(LE_CERT_PATH)) {
-                    console.log('⚠️  LE cert expired, can\'t renew — falling back to self-signed');
-                    generateSelfSigned();
-                    usingLetsEncrypt = false;
-                }
-            }
-        } catch (err) {
-            console.error('❌ Error during TLS certificate renewal check:', (err as Error).message);
-        }
-    }, TWO_HOURS);
-
-    console.log('🔄 Certificate renewal scheduler started (2h interval)');
-}
-
-// --- Let's Encrypt ---
-
-async function tryLetsEncrypt(): Promise<boolean> {
+/** The fleet's pair from before each identifier had a folder, moved into data/tls/acme/<CF_RECORD_NAME>/ once. */
+function adoptLegacyFleetCertificate(): void {
+    const fleet = fleetIdentifier();
+    if (!fleet) return;
     try {
-        // If valid LE cert exists and not expiring soon, just load it
-        if (fs.existsSync(LE_CERT_PATH) && fs.existsSync(LE_KEY_PATH)) {
-            if (!isCertExpiringSoon(LE_CERT_PATH, 30)) {
-                serverCertPem = fs.readFileSync(LE_CERT_PATH, 'utf-8');
-                serverKeyPem = fs.readFileSync(LE_KEY_PATH, 'utf-8');
-                return true;
-            }
-            console.log('🔄 LE cert expiring soon, renewing...');
-        }
-
-        // Request new cert from Let's Encrypt
-        return await requestLetsEncryptCert();
+        if (readPair(DATA_DIR, fleet)) return;
+        const cert = readOrError(LE_CERT_PATH);
+        const key = readOrError(LE_KEY_PATH);
+        if (cert instanceof Error || key instanceof Error) return;
+        if (serverPairProblem(cert, key) || !certCovers(cert, fleet)) return;
+        writePair(DATA_DIR, fleet, { cert, key });
+        for (const f of [LE_CERT_PATH, LE_KEY_PATH]) fs.rmSync(f, { force: true });
+        console.log(`🔐 TLS: the Let's Encrypt certificate for ${fleet} moved to data/tls/acme/`);
     } catch (err) {
-        console.error('❌ Let\'s Encrypt error:', (err as Error).message);
-        return false;
-    }
-}
-
-async function requestLetsEncryptCert(): Promise<boolean> {
-    console.log(`🔐 Requesting Let's Encrypt cert for ${CF_RECORD_NAME}...`);
-
-    // Wrap the entire ACME flow in a 90-second timeout.
-    // acme-client internally waits on HTTP retry-after headers which
-    // can't be cancelled via Promise.race, so we use a hard timer.
-    const ACME_TIMEOUT_MS = 90 * 1000; // 90 seconds
-
-    let timedOut = false;
-    const timer = setTimeout(() => {
-        timedOut = true;
-        console.log('⚠️  ACME cert request timed out after 90s — will fall back to self-signed');
-    }, ACME_TIMEOUT_MS);
-
-    const certPromise = (async () => {
-        // Create or load ACME account key
-        let accountKey: string;
-        if (fs.existsSync(LE_ACCOUNT_PATH)) {
-            const saved = JSON.parse(fs.readFileSync(LE_ACCOUNT_PATH, 'utf-8'));
-            accountKey = saved.key;
-            console.log('   Loaded existing ACME account key');
-        } else {
-            console.log('   Generating new ACME account key...');
-            const { privateKey } = crypto.generateKeyPairSync('rsa', {
-                modulusLength: 2048,
-                publicKeyEncoding: { type: 'spki', format: 'pem' },
-                privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-            });
-            accountKey = privateKey;
-            writeFileAtomic(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }), { mode: 0o600 });
-            console.log('   ACME account key generated');
-        }
-
-        // Generate server key using Node.js native crypto
-        console.log('   Generating server key...');
-        const { privateKey: serverKeyPemStr } = crypto.generateKeyPairSync('rsa', {
-            modulusLength: 2048,
-            publicKeyEncoding: { type: 'spki', format: 'pem' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-        });
-        console.log('   Server key generated');
-
-        // Generate CSR using the ACME library but with our pre-generated key
-        console.log('   Generating CSR...');
-        const [, csr] = await acme.crypto.createCsr({
-            commonName: CF_RECORD_NAME,
-        }, serverKeyPemStr);
-        console.log('   CSR generated');
-
-        // Create ACME client
-        console.log('   Creating ACME client (production)...');
-        const client = new acme.Client({
-            directoryUrl: acme.directory.letsencrypt.production,
-            accountKey,
-        });
-
-        // Step 1: Create account
-        console.log('   Step 1: Creating ACME account...');
-        await client.createAccount({
-            termsOfServiceAgreed: true,
-        });
-        console.log('   Step 1: Account created/verified');
-
-        // Step 2: Create order
-        console.log('   Step 2: Creating order...');
-        const order = await client.createOrder({
-            identifiers: [{ type: 'dns', value: CF_RECORD_NAME }],
-        });
-        console.log('   Step 2: Order created');
-
-        // Step 3: Get authorizations
-        console.log('   Step 3: Getting authorizations...');
-        const authorizations = await client.getAuthorizations(order);
-        console.log(`   Step 3: Got ${authorizations.length} authorization(s)`);
-
-        // Step 4: Complete challenges
-        const createdRecords: string[] = [];
-        for (const authz of authorizations) {
-            const challenge = authz.challenges.find((c: { type: string }) => c.type === 'dns-01');
-            if (!challenge) throw new Error('No dns-01 challenge found');
-
-            const keyAuthorization = await client.getChallengeKeyAuthorization(challenge);
-            const recordName = `_acme-challenge.${CF_RECORD_NAME}`;
-
-            console.log(`   Step 4: Creating DNS TXT record: ${recordName}`);
-            const recordId = await cfCreateTxtRecord(recordName, keyAuthorization);
-            createdRecords.push(recordId);
-            console.log(`   Step 4: DNS record created (ID: ${recordId})`);
-
-            console.log('   Step 4: Waiting 30s for DNS propagation...');
-            await sleep(30000);
-            console.log('   Step 4: Propagation wait done. Completing challenge...');
-
-            await client.completeChallenge(challenge);
-            console.log('   Step 4: Challenge completed, waiting for validation...');
-
-            await client.waitForValidStatus(challenge);
-            console.log('   Step 4: Challenge validated!');
-        }
-
-        // Step 5: Finalize order
-        console.log('   Step 5: Finalizing order...');
-        const finalized = await client.finalizeOrder(order, csr);
-        console.log('   Step 5: Order finalized');
-
-        // Step 6: Get certificate
-        console.log('   Step 6: Getting certificate...');
-        const cert = await client.getCertificate(finalized);
-        console.log('   Step 6: Certificate obtained!');
-
-        // Cleanup DNS records
-        console.log(`   Cleaning up ${createdRecords.length} DNS record(s)...`);
-        for (const recordId of createdRecords) {
-            await cfDeleteTxtRecord(recordId);
-        }
-
-        if (!cert) {
-            throw new Error('Failed to obtain certificate');
-        }
-
-        // Save cert + key
-        serverCertPem = cert;
-        serverKeyPem = serverKeyPemStr;
-        writeFileAtomic(LE_CERT_PATH, serverCertPem);
-        writeFileAtomic(LE_KEY_PATH, serverKeyPem, { mode: 0o600 });
-
-        console.log(`✅ Let's Encrypt cert obtained for ${CF_RECORD_NAME}`);
-        return true;
-    })();
-
-    let checkInterval: ReturnType<typeof setInterval> | null = null;
-    try {
-        // Race the cert request against the timeout
-        return await Promise.race([
-            certPromise,
-            new Promise<false>((resolve) => {
-                checkInterval = setInterval(() => {
-                    if (timedOut) {
-                        resolve(false);
-                    }
-                }, 500);
-            }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-        if (checkInterval) clearInterval(checkInterval);
-    }
-}
-
-// --- Cloudflare DNS API ---
-
-async function cfCreateTxtRecord(name: string, value: string): Promise<string> {
-    try {
-        const res = await fetch(
-            `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records`,
-            {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${CF_API_TOKEN}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    type: 'TXT',
-                    name,
-                    content: value,
-                    ttl: 120,
-                }),
-            }
-        );
-
-        if (!res.ok) {
-            throw new Error(`HTTP error ${res.status}`);
-        }
-
-        const data = await res.json() as { success: boolean; result: { id: string }; errors: unknown[] };
-        if (!data?.success || !data?.result?.id) {
-            throw new Error(`Cloudflare DNS create failed: ${JSON.stringify(data?.errors || data)}`);
-        }
-
-        return data.result.id;
-    } catch (e: any) {
-        throw new Error(`Failed to create TXT record: ${e.message}`);
-    }
-}
-
-async function cfDeleteTxtRecord(recordId: string): Promise<void> {
-    try {
-        await fetch(
-            `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${recordId}`,
-            {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${CF_API_TOKEN}` },
-            }
-        );
-    } catch {
-        // Non-critical — cleanup failure is OK
+        console.error(`❌ TLS: could not move the Let's Encrypt certificate for ${fleet}:`, (err as Error).message);
     }
 }
 
@@ -479,34 +382,3 @@ function makeServerPair(): { serverCert: string; serverKey: string } {
     return { serverCert: serverResult.cert, serverKey: serverResult.private };
 }
 
-// --- Cert Helpers ---
-
-function isCertExpiringSoon(certPath: string, daysThreshold: number): boolean {
-    try {
-        const pem = fs.readFileSync(certPath, 'utf-8');
-        return isCertExpired(certPath) || getDaysUntilExpiry(pem) < daysThreshold;
-    } catch {
-        return true;
-    }
-}
-
-function isCertExpired(certPath: string): boolean {
-    try {
-        const pem = fs.readFileSync(certPath, 'utf-8');
-        return getDaysUntilExpiry(pem) <= 0;
-    } catch {
-        return true;
-    }
-}
-
-function getDaysUntilExpiry(pem: string): number {
-    // Parse the Not After date from the PEM certificate
-    const cert = new crypto.X509Certificate(pem);
-    const notAfter = new Date(cert.validTo);
-    const now = new Date();
-    return Math.floor((notAfter.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}

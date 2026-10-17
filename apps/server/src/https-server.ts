@@ -23,7 +23,7 @@ import crypto from 'node:crypto';
 import Koa from 'koa';
 import Router from '@koa/router';
 import serve from 'koa-static';
-import { getCaCertPem, getServerCertPem, getServerKeyPem, isUsingLetsEncrypt } from './services/tls.js';
+import { attachTlsListener, getCaCertPem, httpsCertOptions, isUsingLetsEncrypt } from './services/tls.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
@@ -1963,14 +1963,15 @@ export async function startHttpsServer(port: number): Promise<number> {
     });
 
     const serverOptions: https.ServerOptions = {
-        cert: getServerCertPem(),
-        key: getServerKeyPem(),
+        // Each identifier's own certificate by SNI, else the IP's, a name's or the self-signed pair (services/tls.ts).
+        ...httpsCertOptions(),
         // DoS review F3: the header and request timeouts (server-limits.ts).
         ...serverTimeoutOptions(),
     };
 
     return new Promise<number>((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
+        attachTlsListener(server);
         applyServerLimits(server);
 
         // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler). A frame over

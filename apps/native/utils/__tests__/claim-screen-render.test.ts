@@ -98,7 +98,7 @@ vi.mock('../node-claim', async (importOriginal) => {
 
 import ClaimCommunityScreen from '../../app/claim-community';
 import { CLAIM_CODE_PLACEHOLDER } from '../claim-link';
-import { claimCodeDigits, claimCodeFromDigits } from '../node-claim';
+import { claimCodeDigits, claimCodeFromDigits, readClaimStatus } from '../node-claim';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
 const ORIGIN = 'https://beans.example.org';
@@ -266,6 +266,30 @@ describe('with no server yet, Scan the code reads the server\'s claim QR', () =>
         expect(host.textContent).toContain("The QR code named an address BeanPool won't use. Type the server's address instead.");
         expect(q(host, 'input[aria-label="Server address"]')).not.toBeNull();
         expect(q(host, '[data-testid="claim-scan-note"]')?.textContent).toBe("The code is filled in. Now type the server's address.");
+    });
+
+    it('a QR with an address and no code leaves the box empty, not holding the code an earlier scan put there', async () => {
+        const host = await render();
+        await scan(host, `beanpool://claim?id=${CODE_ID}&code=${CODE}`);
+        expect(server.asked).toEqual([]);
+        // The Settings page's QR: another server's address and the code's id, no code.
+        await scan(host, `beanpool://claim?node=${encodeURIComponent('https://other.example.org')}&id=${CODE_ID}`);
+        expect(server.asked).toEqual(['https://other.example.org']);
+        expect(host.textContent).toContain('https://other.example.org');
+        expect(codeField(host)!.value).toBe('');
+        expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('after Another address, a scanned address-only QR does not carry the first server\'s code over', async () => {
+        vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'busy', retryAfter: null });
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        const host = await render();
+        expect(host.textContent).toContain('The server is busy.');
+        await act(async () => { button(host, 'Another address')!.click(); });
+        await scan(host, `beanpool://claim?node=${encodeURIComponent('https://other.example.org')}&id=${CODE_ID}`);
+        expect(host.textContent).toContain('https://other.example.org');
+        expect(codeField(host)!.value).toBe('');
+        expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBe('true');
     });
 
     it('anything else keeps the camera looking', async () => {

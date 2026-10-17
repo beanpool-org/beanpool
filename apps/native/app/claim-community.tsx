@@ -158,8 +158,10 @@ export default function ClaimCommunityScreen() {
             if (!scanned) return;
             scanLock.current = true;
             setScanning(false);
+            // The box always holds this scan's code, or nothing: an address-only QR (the settings page's) never inherits
+            // the code an earlier scan or link put there, which the stale check cannot see once `link` has no code.
             setLink({ code: scanned.code ?? '', id: scanned.codeId ?? '' });
-            if (scanned.code) setDigits(claimCodeDigits(scanned.code));
+            setDigits(scanned.code ? claimCodeDigits(scanned.code) : '');
             if (scanned.node) {
                 setAddressError(null);
                 setScanNote(null);

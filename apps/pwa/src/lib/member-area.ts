@@ -12,6 +12,7 @@ import { roundToArea } from '@beanpool/core';
 import { request, signedFetchWithKey, type CommunityInfo } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { bounded } from './bounded';
+import { standingFromRefusal } from './standing-refusal';
 
 export interface MemberArea { lat: number; lng: number; updatedAt?: string | null }
 export type AreaWriteResult = { ok: true; area: MemberArea | null } | { ok: false; error: string };
@@ -53,6 +54,8 @@ export async function writeArea(
         const data = await bounded((signal) => send(body, signal), options.timeoutMs ?? AREA_REQUEST_TIMEOUT_MS, options.signal);
         return { ok: true, area: readArea(data?.area) };
     } catch (e) {
+        const standing = standingFromRefusal(e);
+        if (standing) return { ok: false, error: standing.sentence };
         if ((e as { stopped?: boolean })?.stopped || (e instanceof Error && e.name === 'AbortError')) return { ok: false, error: NO_REACH };
         const msg = e instanceof Error && e.message ? e.message : '';
         return { ok: false, error: msg || NO_REACH };
@@ -77,7 +80,8 @@ export async function readMyArea(): Promise<MemberArea | null | undefined> {
     try {
         const me = await bounded((signal) => request<{ area?: unknown }>('GET', '/api/community/me', undefined, signal), AREA_REQUEST_TIMEOUT_MS);
         return readArea(me?.area);
-    } catch {
+    } catch (e) {
+        if (standingFromRefusal(e)) return null;
         return undefined;
     }
 }

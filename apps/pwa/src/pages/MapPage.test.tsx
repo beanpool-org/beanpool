@@ -1567,6 +1567,34 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(view!.queryByTestId('map-area-failed')).toBeNull());
     });
 
+    it('when the area check meets private_preview, the note shows the node sentence, never "Couldn\'t check your area"', async () => {
+        const previewRefusal = Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        });
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(previewRefusal);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-area-failed');
+        expect(note).toHaveTextContent('This community is in a private preview. Ask its owner for an invite.');
+        expect(note).not.toHaveTextContent("Couldn't check your area");
+        expect(within(note).queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
+    it('when the area check meets account_closed, the note shows closed sentence, never "Couldn\'t check your area"', async () => {
+        const closedRefusal = Object.assign(new Error('Closed'), {
+            status: 403,
+            code: 'account_closed',
+        });
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(closedRefusal);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-area-failed');
+        expect(note).toHaveTextContent('Your account in this community was closed.');
+        expect(note).not.toHaveTextContent("Couldn't check your area");
+        expect(within(note).queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
     it('a failed read of the area says nothing when the Market\'s distance setting picks the place anyway', async () => {
         const geo = await import('../lib/geo');
         vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });

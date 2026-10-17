@@ -6,12 +6,13 @@
  * leaving Wi-Fi range.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer } from 'react';
 import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
 import { withJitter } from '../lib/jitter';
 import { SyncChip } from './SyncChip';
+import { statusReducer, INITIAL_SYNC_STATUS_STATE, type SyncStatusState } from '../lib/standing-refusal';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -37,11 +38,13 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
         merkleRoot: null,
         accountCount: 0,
     });
-    const [isHttpOnline, setIsHttpOnline] = useState<boolean | null>(null);
-    const [isMember, setIsMember] = useState<boolean | null>(null);
+    const [statusState, dispatchStatus] = useReducer<SyncStatusState, any>(statusReducer, INITIAL_SYNC_STATUS_STATE);
 
     useEffect(() => {
-        const unsub = onSyncChange(setSync);
+        const unsub = onSyncChange((s) => {
+            setSync(s);
+            dispatchStatus({ type: 'ws_change', connected: s.connected });
+        });
         return unsub;
     }, []);
 
@@ -67,10 +70,11 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
                 const result = await checkMembership(identity.publicKey);
                 if (cancelled) return;
 
-                setIsHttpOnline(true);
-                setIsMember(result.isMember);
-            } catch {
-                if (!cancelled) setIsHttpOnline(false);
+                dispatchStatus({ type: 'probe_success', isMember: result.isMember });
+            } catch (e) {
+                if (!cancelled) {
+                    dispatchStatus({ type: 'probe_error', error: e });
+                }
             }
         };
 
@@ -148,16 +152,29 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
     // Resolve display state
     // If the WebSocket is OPEN, derive statusMode directly from socket state.
     // Fall back to HTTP probe state only when the socket is closed.
-    const effectiveIsMember = propIsMember !== undefined ? propIsMember : isMember;
+    // When probe encountered a standing refusal (private_preview or account_closed),
+    // standing is definitely "not a member" (guest), regardless of stale member props.
+    const effectiveIsMember = statusState.sentence != null
+        ? false
+        : (propIsMember !== undefined ? propIsMember : statusState.isMember);
 
     const statusMode = sync.connected
         ? (effectiveIsMember === false ? 'guest' : 'online')
-        : (isHttpOnline && effectiveIsMember === true)
+        : (statusState.isHttpOnline && effectiveIsMember === true)
         ? 'online'
-        : (isHttpOnline && effectiveIsMember === false)
+        : (statusState.isHttpOnline && effectiveIsMember === false)
         ? 'guest'
         : 'offline';
 
     const ago = sync.lastSyncTime && statusMode !== 'guest' ? formatTimeAgo(sync.lastSyncTime) : null;
-    return <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} dotOnly={dotOnly} />;
+    return (
+        <SyncChip
+            mode={statusMode}
+            ago={ago}
+            pulsing={sync.connected}
+            stacked={stacked}
+            dotOnly={dotOnly}
+            title={statusState.sentence ?? undefined}
+        />
+    );
 }

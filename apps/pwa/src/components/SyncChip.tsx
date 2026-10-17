@@ -35,10 +35,25 @@ const STATUS_CONFIG = {
     },
 } as const;
 
-export function SyncChip({ mode, ago, pulsing, stacked = false, dotOnly = false }: { mode: SyncMode; ago: string | null; pulsing: boolean; stacked?: boolean; dotOnly?: boolean }) {
+export function SyncChip({
+    mode,
+    ago,
+    pulsing,
+    stacked = false,
+    dotOnly = false,
+    title,
+}: {
+    mode: SyncMode;
+    ago: string | null;
+    pulsing: boolean;
+    stacked?: boolean;
+    dotOnly?: boolean;
+    title?: string | null;
+}) {
     const config = STATUS_CONFIG[mode];
     const twoLines = stacked && !!ago;
     const name = `${config.label}${ago ? `, last synced ${ago}` : ''}`;
+    const effectiveTitle = title ?? (dotOnly ? name : undefined);
     const word = (
         <span style={{ color: config.color, whiteSpace: 'nowrap' }}>
             {config.label}
@@ -54,7 +69,7 @@ export function SyncChip({ mode, ago, pulsing, stacked = false, dotOnly = false 
             role="status"
             aria-live="polite"
             aria-label={`Network status: ${name}`}
-            title={dotOnly ? name : undefined}
+            title={effectiveTitle}
             data-testid="sync-chip"
             data-dot-only={dotOnly}
             style={{

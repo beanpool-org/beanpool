@@ -37,7 +37,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
@@ -174,6 +174,32 @@ describe('one request, the cached answer first (§5)', () => {
         expect(await screen.findByTestId('home-offline')).toHaveTextContent(HOME_OFFLINE);
         expect(screen.getByTestId('home-live')).toHaveTextContent(HOME_OFFLINE);
         expect(screen.getByTestId('home-card-market')).toBeInTheDocument();
+    });
+
+    it('refusal with private_preview: drops copy, shows node sentence, never offline (W2)', async () => {
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        const previewRefusal = Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        });
+        vi.mocked(api.getHome).mockRejectedValue(previewRefusal);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent('This community is in a private preview. Ask its owner for an invite.');
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        expect(screen.queryByTestId('home-card-market')).toBeNull();
+    });
+
+    it('refusal with account_closed: drops copy, shows closed sentence, never offline (W2)', async () => {
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        const closedRefusal = Object.assign(new Error('Closed'), {
+            status: 403,
+            code: 'account_closed',
+        });
+        vi.mocked(api.getHome).mockRejectedValue(closedRefusal);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(t('Your account in this community was closed.'));
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        expect(screen.queryByTestId('home-card-market')).toBeNull();
     });
 
     it('offline with no copy: a sentence and Try again, never a blank page; a node older than Home says that', async () => {

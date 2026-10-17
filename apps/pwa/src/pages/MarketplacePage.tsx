@@ -59,6 +59,7 @@ import {
 } from '../lib/api';
 import { iRated, reviewTargetOf } from '../lib/trade-review';
 import { type BeanPoolIdentity } from '../lib/identity';
+import { standingFromRefusal } from '../lib/standing-refusal';
 
 import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
 import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@beanpool/core';
@@ -290,6 +291,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // The member's area could not be read (the node busy or down): the line says so, with Try again, rather than
     // pointing at the picker as if they had no area.
     const [areaFailed, setAreaFailed] = useState(false);
+    const [areaStanding, setAreaStanding] = useState<string | null>(null);
     const [areaTry, setAreaTry] = useState(0);
     useEffect(() => {
         let cancelled = false;
@@ -305,9 +307,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setNearbyListings(nearby);
                 if (nearby && identity?.publicKey && !isVisitor) {
                     let failed = false;
-                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    let standingMsg: string | null = null;
+                    const me = await getCommunityMe().catch((e) => {
+                        const standing = standingFromRefusal(e);
+                        if (standing) {
+                            standingMsg = standing.sentence;
+                        } else {
+                            failed = true;
+                        }
+                        return null;
+                    });
                     if (!cancelled) {
                         setAreaFailed(failed);
+                        setAreaStanding(standingMsg);
                         setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
                     }
                 }
@@ -2883,6 +2895,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : near ? (
                             // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
                             <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of the place you picked.`}</span>
+                        ) : areaStanding ? (
+                            <span>{areaStanding}</span>
                         ) : areaFailed && !everywhere ? (
                             <>
                                 <span>Couldn't check your area just now, so this is the newest from everywhere.</span>

@@ -76,6 +76,9 @@ import { returnToApp } from '../utils/sso-signin';
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { readConsentTerms, joinAsksConsent, type ConsentTerms } from '../utils/known-consent';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { doorFromLink, doorLinkKey } from '../utils/global-link';
+import { takeInstallReferrer } from '../utils/install-referrer';
+import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -165,9 +168,11 @@ export default function WelcomeScreen() {
     // a member recovering on the same phone can tap theirs rather than retype its address.
     const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
     useEffect(() => {
-        if (mode !== 'ssoRecover') return;
+        if (mode !== 'ssoRecover' && mode !== 'recover') return;
         getSavedNodes().then(setSavedNodes).catch(() => {});
     }, [mode]);
+    /** The 12-words restore's address field, which "another address" hands the keyboard (components/RestoreCommunityChips.tsx). */
+    const recoveryAddressRef = useRef<TextInput>(null);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
     // A known community's consent text, shown before joining (community modes slice 6), and the member's tick. Never
     // required: unticked, the join goes on and the admins simply never see this member's balance.
@@ -345,6 +350,11 @@ export default function WelcomeScreen() {
     const [wordsDoor, setWordsDoor] = useState(false);
     const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
+    /**
+     * The door was opened by the global community's link or the install referrer's `global=1` (utils/global-link.ts), not
+     * by a tap here: its 12-words work, signed and sent to the global community, waits for the member's first tap at it.
+     */
+    const [doorHeld, setDoorHeld] = useState(false);
     /** Join tapped before the work was done: "Setting up your account…" while it finishes (the member can still leave). */
     const [workWaiting, setWorkWaiting] = useState(false);
     const [joinDoor, setJoinDoor] = useState<'words' | null>(null);
@@ -686,43 +696,58 @@ export default function WelcomeScreen() {
             // An invite came with this screen and has been applied already: the install referrer's never replaces it.
             if (seen.length > 0) return;
 
-            // Priority 3 (Android, once ever): Play Install Referrer. An invite
-            // link tapped WITHOUT the app installed detours via the Play Store;
-            // the web trampoline packs invite+server into the store link's
-            // `referrer` param, which Google hands us here on first launch — so
-            // the invite survives the install with no clipboard or retyping.
-            if (Platform.OS === 'android') {
-                const alreadyChecked = await AsyncStorage.getItem('beanpool_install_referrer_checked');
-                if (!alreadyChecked) {
-                    try {
-                        const Application = await import('expo-application');
-                        const referrer = await Application.getInstallReferrerAsync();
-                        await AsyncStorage.setItem('beanpool_install_referrer_checked', 'true');
-                        const inviteMatch = referrer?.match(/(?:^|&)invite=([^&]+)/);
-                        if (inviteMatch && mounted) {
-                            setInviteCode(decodeURIComponent(inviteMatch[1]));
-                            const serverMatch = referrer.match(/(?:^|&)server=([^&]+)/);
-                            const server = serverMatch ? decodeURIComponent(serverMatch[1]) : '';
-                            // Same trust rule as deep links: never accept a
-                            // cleartext-public node origin from an outside source.
-                            if (server && !shouldBlockCleartextNodeUrl(server)) {
-                                setCreateAnchorUrl(server);
-                            }
-                            setMode('create');
-                        }
-                    } catch {
-                        // No Play Services (emulator, de-Googled device) — the
-                        // clipboard offer below is the fallback. Left unchecked
-                        // so a transient failure can retry on the next visit.
-                    }
-                }
+            // Priority 3 (Android, once ever): Play Install Referrer (utils/install-referrer.ts). A link tapped WITHOUT
+            // the app installed detours via the Play Store, which hands us what it was for here on first launch: an
+            // invite (and its server), so the invite survives the install with no clipboard or retyping, or `global=1`
+            // from beanpool.org/global, which opens the global community's door. An invite in it wins. No Play
+            // Services (emulator, de-Googled device): the clipboard offer below is the fallback, tried again next visit.
+            const referred = await takeInstallReferrer({
+                os: Platform.OS,
+                storage: AsyncStorage,
+                getReferrer: async () => (await import('expo-application')).getInstallReferrerAsync(),
+            });
+            if (!mounted || !referred) return;
+            if (referred.kind === 'invite') {
+                setInviteCode(referred.invite);
+                if (referred.server) setCreateAnchorUrl(referred.server);
+                setMode('create');
+                return;
             }
+            await openDoorFromLink();
         };
 
         checkAutoIntercept();
 
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
+
+    // --- The global community's link (utils/global-link.ts): `/welcome?door=global&at=…` from app/+native-intent.ts, once
+    // per arrival, and the install referrer's `global=1` above. Read through refs: the answer about a half-done wizard
+    // comes back after the screen may have moved on, and what it is doing then is what counts. ---
+    const screenMountedRef = useRef(true);
+    useEffect(() => () => { screenMountedRef.current = false; }, []);
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const inviteCodeRef = useRef(inviteCode);
+    inviteCodeRef.current = inviteCode;
+    const appliedDoorLinks = useRef(new Set<string>());
+
+    /** The door, held for the member's first tap, unless the screen is doing something a link mustn't interrupt. */
+    async function openDoorFromLink() {
+        const pending = await getPendingOnboarding().catch(() => null);
+        if (!screenMountedRef.current) return;
+        if (doorFromLink({ mode: modeRef.current, inviteInHand: !!inviteCodeRef.current.trim(), wizardPending: !!pending }) !== 'open') return;
+        openGlobalDoor('link');
+    }
+
+    useEffect(() => {
+        const key = doorLinkKey(params?.door, params?.at);
+        if (!key || appliedDoorLinks.current.has(key)) return;
+        appliedDoorLinks.current.add(key);
+        // Consumed, as the mode param is: the params come back whenever another screen closes over this one.
+        router.setParams({ door: '' });
+        void openDoorFromLink();
+    }, [params?.door, params?.at]);
 
     // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
     useEffect(() => {
@@ -809,17 +834,18 @@ export default function WelcomeScreen() {
     }, [mode, globalPhase]);
 
     // The 12-words door's work starts as the door opens, with the key the join will be signed by, and runs while the
-    // member reads the door and types their name: at ordinary levels it is done before they tap Join (design §3.4).
+    // member reads the door and types their name: at ordinary levels it is done before they tap Join (design §3.4). A door
+    // a link opened makes its key (in memory only) and waits for the member's first tap to start it.
     useEffect(() => {
         if (mode !== 'globalJoin' || globalPhase !== 'choose') return;
         let cancelled = false;
         joinKeyForThisPhone(globalKey).then((key) => {
             if (cancelled) return;
             if (key.identity.publicKey !== globalKey?.identity.publicKey) setGlobalKey(key);
-            doorWork.start(GLOBAL_NODE_URL, key.identity, 'words');
+            if (!doorHeld) doorWork.start(GLOBAL_NODE_URL, key.identity, 'words');
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [mode, globalPhase]);
+    }, [mode, globalPhase, doorHeld]);
 
     // The community's consent text, read (public, no key) from the node the invite or the typed address names, as the
     // member fills the step in. An older node, a plain community or no answer: nothing is shown.
@@ -1397,8 +1423,13 @@ export default function WelcomeScreen() {
 
     // --- THE GLOBAL COMMUNITY'S DOOR (utils/global-join.ts; design §2.3) ---
 
-    /** "Explore BeanPool worldwide": to the door, which first asks the node whether it is open. */
-    function openGlobalDoor() {
+    /**
+     * "Explore BeanPool worldwide": to the door, which first asks the node whether it is open. Opened by a `link` (or the
+     * install referrer), not a tap here: its signed work waits for the member's first tap at the door. Anything else, a
+     * press event included, is a tap.
+     */
+    function openGlobalDoor(how?: unknown) {
+        setDoorHeld(how === 'link');
         setError(null);
         setGlobalMessage(null);
         setDoorSignIn(null);
@@ -1442,6 +1473,9 @@ export default function WelcomeScreen() {
 
     /** "Create an account with 12 secret words": on to the name, while the work goes on. */
     function chooseWordsAtDoor() {
+        // The first tap at a door a link opened: the work starts now (at Join otherwise, if the key wasn't made yet).
+        if (doorHeld && globalKey) doorWork.start(GLOBAL_NODE_URL, globalKey.identity, 'words');
+        setDoorHeld(false);
         setError(null);
         setDoorSignIn(null);
         setDoorWay('words');
@@ -1450,6 +1484,7 @@ export default function WelcomeScreen() {
 
     /** Step one at the door: sign in, with the key the join will be signed by. */
     async function handleGlobalSignIn(provider: SsoProvider) {
+        setDoorHeld(false);
         setLoading(true);
         setError(null);
         try {
@@ -2995,12 +3030,23 @@ export default function WelcomeScreen() {
                     behavior="padding"
                     style={{ flex: 1 }}
                 >
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                    {/* "handled": with the keyboard up from the words, one tap on a community chip chooses it. */}
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Recover Identity</Text>
                         <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
 
+                        {/* Which community, as taps (decision 5): the global community, this phone's own, or another address. */}
+                        <RestoreCommunityChips
+                            saved={savedNodes}
+                            value={recoveryAnchorUrl}
+                            onChoose={(text) => { setRecoveryAnchorUrl(text); setError(null); }}
+                            onAnother={(text) => { setRecoveryAnchorUrl(text); setError(null); recoveryAddressRef.current?.focus(); }}
+                            disabled={loading}
+                        />
+
                         <TextInput
+                            ref={recoveryAddressRef}
                             accessibilityLabel="Community name or node address"
                             accessibilityHint="Enter your community name, like mullum, or its full address"
                             style={styles.input}

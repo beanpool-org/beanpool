@@ -230,7 +230,8 @@ export default function BeanPoolSheet() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                {/* The global community's link opens this sheet for a member (utils/global-link.ts), on a cold start too. */}
+                <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
                 <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">BeanPool</Text>

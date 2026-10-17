@@ -15,7 +15,7 @@ The global community at global.beanpool.org is open to anyone, and you can join 
 
 Before you join, the page shows **Home**, the **Market**, the **Map** and the **Ledger** (an example from a local community) as a visitor sees them: the public cards, listings, photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
 
-On a phone's browser, that card offers **Open in the BeanPool app** first. It opens the BeanPool app at the global community's way in, or your phone's app store if the app isn't installed yet, so your account is in the app from the start. Under it, **or join here in your browser** joins right here, as below. On a computer the card shows **Join**.
+On a phone's browser, that card offers **Open in the BeanPool app** first. It opens the BeanPool app at the global community's way in, or your phone's app store if the app isn't installed yet, so your account is in the app from the start. If the app already has an account, it opens **Join the global community** with that one, or the **BeanPool** sheet if that account is already a member there. See "Joining BeanPool". Under it, **or join here in your browser** joins right here, as below. On a computer the card shows **Join**.
 
 While the global community has only a few listings, its **Market** also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened. They go once there are enough real listings.
 
@@ -111,7 +111,7 @@ If you joined in a browser, bring the same account to the phone app. Don't join 
 
 - Install the BeanPool app and open it.
 - Tap **Already a Member? Restore Account**, then **Recover with 12 Words**.
-- Choose **Global community** and type your 12 words. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.
+- Type your 12 words, then under **Which community?** tap **Global community**. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.
 - If you joined with a sign-in, **Recover with Social** works too, with that same sign-in. See "Getting your account back".
 
 Screen 1 of joining in a browser says the same the other way round: if you are already on BeanPool, on any phone or computer, bring that account instead of starting a new one.

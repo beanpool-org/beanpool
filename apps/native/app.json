@@ -155,6 +155,21 @@
         },
         {
           "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "beanpool.org",
+              "pathPrefix": "/global"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
           "data": [
             {
               "scheme": "https",

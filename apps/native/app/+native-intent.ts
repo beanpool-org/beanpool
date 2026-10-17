@@ -5,13 +5,55 @@ import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
+import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
+
+/**
+ * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
+ * half done, and what the global community last answered about the key (its standing kept under a day, and whether it
+ * closed the account), as the one rule reads them (utils/global-entry.ts). Read from the phone only, when such a link
+ * arrives; the modules load then, not with the router.
+ */
+async function phoneAtLink(): Promise<PhoneAtLink> {
+    const [{ loadIdentity }, { getPendingOnboarding }, { readGlobalStanding }, { accountClosedAtGlobal }] = await Promise.all([
+        import('../utils/identity'),
+        import('../utils/onboarding-state'),
+        import('../utils/global-entry'),
+        import('../utils/global-join-existing'),
+    ]);
+    const [identity, pending] = await Promise.all([
+        loadIdentity().catch(() => null),
+        getPendingOnboarding().catch(() => null),
+    ]);
+    const publicKey = identity?.publicKey ?? null;
+    const [standing, closedHere] = await Promise.all([
+        readGlobalStanding(publicKey).catch(() => 'unknown' as const),
+        accountClosedAtGlobal(publicKey).catch(() => false),
+    ]);
+    return { account: !!identity, wizardPending: !!pending, standing, closedHere };
+}
+
+/**
+ * The global community's link (utils/global-link.ts): the door for the phone as it is. Tests pass their own phone. A phone
+ * that can't be read opens as from the icon (cold) or stays where it is (warm): never a guess at which door.
+ */
+export async function routeGlobalLink(
+    initial: boolean, readPhone: () => Promise<PhoneAtLink> = phoneAtLink, nowMs: () => number = Date.now,
+): Promise<string | null> {
+    let phone: PhoneAtLink;
+    try {
+        phone = await readPhone();
+    } catch {
+        return initial ? '/' : null;
+    }
+    return globalLinkRoute(phone, initial, nowMs());
+}
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
  * Hands OAuth callbacks (e.g. Google, Facebook) to the waiting sign-in without navigating,
  * and prevents unmatched route errors.
  */
-export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | null {
+export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | null | Promise<string | null> {
     // A no-op link whose only job is to bring the app to the front, backgrounding an Android
     // Custom Tab that nothing else can close (`WebBrowser.dismissBrowser` is iOS-only).
     //
@@ -40,6 +82,17 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it.
     const pairRoute = pairRouteFromSystemPath(path);
     if (pairRoute) return pairRoute;
+
+    // The global community's smart link, `https://beanpool.org/global` or `beanpool://global` (utils/global-link.ts): the
+    // first screen's door with no account; for one, what the phone's one rule for the global community offers it (the
+    // door, the BeanPool sheet for a member, nothing for an account it closed); nothing new while a join wizard is half
+    // done. It only opens a screen: the door asks before anything is signed or sent. One that carries an invite is the
+    // invite's: the root layout and the first screen read the invite from the link as from any other, and the app opens
+    // as from its icon (cold) or stays where it is (warm), never on a route that doesn't exist.
+    if (isGlobalPath(path)) {
+        if (!isGlobalLink(path)) return initial ? '/' : null;
+        return routeGlobalLink(initial);
+    }
 
     const isAuthCallback =
         path.includes('auth/facebook') ||

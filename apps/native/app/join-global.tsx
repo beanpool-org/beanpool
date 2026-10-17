@@ -25,6 +25,7 @@ import { HOME_REDIRECT } from '../utils/join-another-community';
 import { afterJoinRedirect } from '../utils/pair-device-target';
 import { signInCopiesAt } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
+import { FROM_LINK } from '../utils/global-link';
 
 export { ErrorBoundary };
 
@@ -36,7 +37,7 @@ export { ErrorBoundary };
  * refusal leaves everything as it was.
  */
 export default function JoinGlobalScreen() {
-    const { then: thenParam } = useLocalSearchParams<{ then?: string }>();
+    const { then: thenParam, from: fromParam } = useLocalSearchParams<{ then?: string; from?: string }>();
     const { colors } = useTheme();
     const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
@@ -87,6 +88,11 @@ export default function JoinGlobalScreen() {
     const [wordsDoor, setWordsDoor] = useState(false);
     const [way, setWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
+    /**
+     * A link opened this door (utils/global-link.ts, `from=link`): the 12-words work, which is signed by the key on this phone
+     * and sent to the global community, waits for the member's first tap here. A link only opens a screen.
+     */
+    const [heldForTap, setHeldForTap] = useState(fromParam === FROM_LINK);
     /** Join tapped before the work was done: it finishes under "Setting up your account…", and Back still works. */
     const [workWaiting, setWorkWaiting] = useState(false);
     /** Stops the name step's check when the member leaves it. */
@@ -136,7 +142,8 @@ export default function JoinGlobalScreen() {
         return () => { cancelled = true; };
     }, [phase]);
 
-    // The 12-words door's work starts as the door opens, signed by the key on this phone, so it is done by Join.
+    // The 12-words door's work starts as the door opens, signed by the key on this phone, so it is done by Join. Opened by a
+    // link, the key is read (from the phone only) and the work waits for the member's first tap.
     const startWork = doorWork.start;
     useEffect(() => {
         if (phase !== 'choose') return;
@@ -144,10 +151,10 @@ export default function JoinGlobalScreen() {
         accountKeyForDoor().then(account => {
             if (cancelled || !account) return;
             setKey(account);
-            startWork(GLOBAL_NODE_URL, account.identity, 'words');
+            if (!heldForTap) startWork(GLOBAL_NODE_URL, account.identity, 'words');
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [phase, startWork]);
+    }, [phase, startWork, heldForTap]);
 
     function leave() {
         if (joinSendingRef.current) return;
@@ -173,6 +180,9 @@ export default function JoinGlobalScreen() {
 
     /** "Create an account with 12 secret words": the name next, while the work goes on. No sign-in, so no copy, and no lock. */
     function chooseWords() {
+        // The first tap at a door a link opened: the work starts now (at Join otherwise, if the key wasn't read yet).
+        if (heldForTap && key) startWork(GLOBAL_NODE_URL, key.identity, 'words');
+        setHeldForTap(false);
         setError(null);
         setSignin(null);
         setWay('words');
@@ -182,6 +192,7 @@ export default function JoinGlobalScreen() {
 
     /** Step one: the phone's lock, then the sign-in, both for the key the phone holds. */
     async function handleSignIn(provider: SsoProvider) {
+        setHeldForTap(false);
         setLoading(true);
         setError(null);
         try {

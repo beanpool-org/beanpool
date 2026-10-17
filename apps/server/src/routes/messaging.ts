@@ -559,16 +559,12 @@ router.get('/api/messages/:conversationId', async (ctx) => {
             };
             return;
         }
-        // Someone else's: answered as a real DM answers someone who isn't in it (#1403 re-review): refused under read
-        // auth, and with it off served as any DM is, with none of its lines (the sender's own are theirs alone).
+        // Someone else's: answered as a real DM answers someone who isn't in it (#1403 re-review): refused
+        // for non-participants.
         const other = withheldConversationById(conversationId);
         if (other) {
-            if (ENFORCE_READ_AUTH) {
-                ctx.status = 403;
-                ctx.body = { error: 'You are not a participant in this conversation' };
-                return;
-            }
-            ctx.body = { conversation: withheldConversationView(other), messages: [] };
+            ctx.status = 403;
+            ctx.body = { error: 'You are not a participant in this conversation' };
             return;
         }
         ctx.status = 404;
@@ -595,11 +591,9 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
-    // Under read-auth the signer is a verified member (ctx.state.actor); require
-    // it to be in this conversation. Without this, any member could read any
-    // thread by id (system messages are plaintext, and
-    // participants/reactions/post-linkage/read-cursors leak for every thread).
-    else if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
+    // Require the signer (ctx.state.actor) to be in this conversation. Without
+    // this, any caller could read any private thread by id.
+    else if (conv.type !== 'enterprise_thread' && (!ctx.state.actor || !conv.participants.includes(ctx.state.actor))) {
         ctx.status = 403;
         // Going to an event whose host hasn't let them in yet (no seat until they do): the event chat route's words and code.
         ctx.body = conv.type === 'event_thread' && eventWaitingFor(conversationId, ctx.state.actor as string | undefined)

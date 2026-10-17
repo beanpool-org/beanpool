@@ -21,7 +21,8 @@
  *      once; a state that records no directory is left alone; a wait after a failure under another directory is not
  *      this one's;
  *  11. /trust hands out the self-signed CA to a request that named a host with no CA certificate here (beanpool.local, a
- *      LAN address), on both listeners, whenever they started; a host with one is redirected (plain) or 404 (HTTPS).
+ *      LAN address), on both listeners, whenever they started; a host with one is redirected (plain) or 404 (HTTPS), also
+ *      with CF_RECORD_NAME set but empty, as docker-compose.yml passes it.
  * Plus: docker-compose.yml passes ACME_DIRECTORY_URL through.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
@@ -568,6 +569,14 @@ try {
         toName.status === 302 && toName.location === 'https://beans.example.org/', `${toName.status} ${toName.location}`);
     const upper = await trust(httpPort, 'BEANS.Example.org.');
     check('…the same host in capitals and with a final dot: redirected, not the CA', upper.status === 302, `${upper.status} ${upper.type}`);
+    // docker-compose.yml passes CF_RECORD_NAME=${CF_RECORD_NAME:-}: set, and empty, on every node outside the fleet.
+    for (const [words, value] of [['empty, as docker-compose.yml passes it', ''], ['only spaces', '  ']] as const) {
+        process.env.CF_RECORD_NAME = value;
+        let r: Awaited<ReturnType<typeof trust>>;
+        try { r = await trust(httpPort, 'beans.example.org'); } finally { delete process.env.CF_RECORD_NAME; }
+        check(`…with CF_RECORD_NAME set but ${words}: a 302 to https://beans.example.org/, not a 500`,
+            r.status === 302 && r.location === 'https://beans.example.org/', `${r.status} ${r.location}`);
+    }
     const httpsLocal = await trust(httpsPort, 'beanpool.local', true);
     check('HTTPS listener, Host beanpool.local: the CA', handsOutCa(httpsLocal), `${httpsLocal.status} ${httpsLocal.type}`);
     const httpsName = await trust(httpsPort, 'beans.example.org', true);
@@ -582,6 +591,7 @@ try {
     console.log('\n12. docker-compose.yml passes ACME_DIRECTORY_URL through');
     const compose = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../docker-compose.yml'), 'utf8');
     check('docker-compose.yml passes ACME_DIRECTORY_URL from the node\'s .env, empty by default', /^\s*- ACME_DIRECTORY_URL=\$\{ACME_DIRECTORY_URL:-\}\s*$/m.test(compose));
+    check('…and CF_RECORD_NAME empty by default, as section 11 runs /trust with it', /^\s*- CF_RECORD_NAME=\$\{CF_RECORD_NAME:-\}\s*$/m.test(compose));
     check('an empty ACME_DIRECTORY_URL is Let\'s Encrypt production', (() => {
         const was = process.env.ACME_DIRECTORY_URL;
         process.env.ACME_DIRECTORY_URL = '';

@@ -81,7 +81,8 @@ export async function startHttpServer(port: number): Promise<number> {
             return;
         }
 
-        const publicDomain = process.env.CF_RECORD_NAME;
+        // Set but empty (docker-compose.yml passes CF_RECORD_NAME=${CF_RECORD_NAME:-}) is unset: a LAN or self-hosted node.
+        const publicDomain = (process.env.CF_RECORD_NAME ?? '').trim();
 
         if (publicDomain) {
             // Non-tunnel browser requests — 301 redirect to HTTPS as before
@@ -191,7 +192,7 @@ export async function startHttpServer(port: number): Promise<number> {
     // browser trusts there; beanpool.local and a LAN address get the CA, also on a node that is public as well.
     router.get('/trust', async (ctx) => {
         if (servesCaCertificateFor(ctx.hostname)) {
-            const hostname = process.env.CF_RECORD_NAME ?? ctx.hostname;
+            const hostname = (process.env.CF_RECORD_NAME ?? '').trim() || ctx.hostname;
             ctx.redirect(`https://${hostname}/`);
             return;
         }

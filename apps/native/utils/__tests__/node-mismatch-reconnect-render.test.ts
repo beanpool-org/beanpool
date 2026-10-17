@@ -51,11 +51,15 @@ vi.mock('react-native', () => {
     };
 });
 const nav = vi.hoisted(() => ({ replaced: [] as unknown[], pushed: [] as unknown[] }));
-vi.mock('expo-router', () => ({
-    useRouter: () => ({ replace: (to: unknown) => nav.replaced.push(to), push: (to: unknown) => nav.pushed.push(to), back() {} }),
-    router: { replace: (to: unknown) => nav.replaced.push(to), push: (to: unknown) => nav.pushed.push(to), back() {} },
-    ErrorBoundary: () => null,
-}));
+vi.mock('expo-router', async () => {
+    const { useEffect } = await import('react');
+    return {
+        useRouter: () => ({ replace: (to: unknown) => nav.replaced.push(to), push: (to: unknown) => nav.pushed.push(to), back() {} }),
+        router: { replace: (to: unknown) => nav.replaced.push(to), push: (to: unknown) => nav.pushed.push(to), back() {} },
+        useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
+        ErrorBoundary: () => null,
+    };
+});
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ getStringAsync: async () => '', hasStringAsync: async () => false }));
 vi.mock('react-native-keyboard-controller', () => ({
@@ -83,11 +87,11 @@ vi.mock('../../app/IdentityContext', () => ({
     useIdentity: () => ({ identity: { publicKey: KEY, privateKey: 'not-used', callsign: 'Damo' }, setIdentity() {} }),
 }));
 // The phone's recognition: the real one asks the community in use; here it reads where the phone is anchored now.
-const recognition = vi.hoisted(() => ({ asked: 0 }));
+const recognition = vi.hoisted(() => ({ asked: 0, now: 'stranger' as 'stranger' | 'closed', nodeUrl: 'https://riverside.example' }));
 vi.mock('../../app/NodeStatusContext', () => ({
     useNodeStatus: () => ({
-        recognition: 'stranger',
-        nodeUrl: 'https://riverside.example',
+        recognition: recognition.now,
+        nodeUrl: recognition.nodeUrl,
         recheck: async () => {
             recognition.asked++;
             const anchor = store.map.get('beanpool_anchor_url');
@@ -110,6 +114,16 @@ vi.mock('../delete-here', () => ({
     otherCommunitiesKeeping: async () => [], stillKeptLine: () => '',
 }));
 vi.mock('../no-words-copy', () => ({ noWordsBeforeWipe: () => '' }));
+vi.mock('../global-join-existing', () => ({
+    isGlobalCommunity: (url: string | null | undefined) => !!url && url.trim().replace(/\/+$/, '').toLowerCase() === 'https://global.beanpool.org',
+    accountClosedAtGlobal: async () => false,
+    rememberAccountClosed: async () => {},
+}));
+const joins = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock('../join-another-community', () => ({
+    joinAnotherCommunity: async (opts: unknown) => { joins.calls.push(opts); throw new Error('not in this test'); },
+    joinedNudge: () => ({ title: '', body: '', later: '' }), PROTECT_REDIRECT: '/', HOME_REDIRECT: '/',
+}));
 vi.mock('../../components/NoWordsNotice', () => ({ NoWordsNotice: () => null }));
 vi.mock('../../components/WordsOnScreen', () => ({ NoScreenCapture: ({ children }: { children?: unknown }) => children, NoScreenLockNote: () => null }));
 
@@ -150,6 +164,8 @@ beforeEach(() => {
     nav.replaced.length = 0;
     nav.pushed.length = 0;
     recognition.asked = 0;
+    recognition.now = 'stranger';
+    recognition.nodeUrl = LOCAL;
     dbCalls.closed = 0;
     dbCalls.opened = 0;
     // Damo's phone: a member of Riverside, the one community in its list, in use.
@@ -224,5 +240,76 @@ describe("Damo's case: Reconnect to the global community, which says this key is
         expect(nav.pushed).toContain('/join-global');
         // Still nothing moved.
         expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+    });
+});
+
+/** A fetch where the global community answers as given, and Riverside's info is `riverside` (null: no answer). */
+function network(opts: { global: 'stranger' | 'unreachable'; riverside?: Record<string, unknown> | null }) {
+    return vi.fn(async (input: unknown) => {
+        const u = String(input);
+        asked.push(u);
+        if (u.startsWith(GLOBAL) && opts.global === 'unreachable') throw new TypeError(`Network request failed: ${u}`);
+        if (u === `${LOCAL}/api/community/info` && opts.riverside) {
+            return new Response(JSON.stringify(opts.riverside), { status: 200 });
+        }
+        return (globalSaysStranger() as any)(input);
+    }) as typeof fetch;
+}
+const render = async () => { await act(async () => { root.render(createElement(NodeMismatchScreen) as any); }); await settle(); };
+const globalRow = () => buttons().find(b => (b.getAttribute('aria-label') ?? '').startsWith('Global community, '));
+
+describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
+    it('open: the phone is on the global community as a stranger → Join with this account first; no global row; the address folded', async () => {
+        recognition.nodeUrl = GLOBAL;
+        store.map.set('beanpool_anchor_url', GLOBAL);
+        await render();
+        expect(text()).toContain("You're not a member here yet");
+        expect(text()).toContain('The global community lets anyone join. Your account is fine: join with it, or go back to one of your communities.');
+        const all = buttons().map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
+        expect(all.indexOf('Join with this account')).toBeGreaterThanOrEqual(0);
+        expect(all.indexOf('Join with this account')).toBeLessThan(all.findIndex(l => /Delete this account/.test(l)));
+        expect(globalRow()).toBeUndefined();
+        expect(host.querySelector('input')).toBeNull();
+        expect(text()).toContain('Not this community? Enter another address');
+    });
+
+    it('invite: a local community → the address field, an invite, and the global row by its state (door open: Join)', async () => {
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain("This community doesn't recognise you");
+        expect(text()).toContain("This usually means the address is wrong, or you haven't joined it yet.");
+        expect(button('Reconnect')).toBeTruthy();
+        expect(button('Paste an invite')).toBeTruthy();
+        expect(globalRow()?.getAttribute('aria-label')).toBe('Global community, Join with this account: 12 words or a sign-in');
+        await act(async () => { globalRow()!.click(); });
+        expect(nav.pushed).toContain('/join-global');
+    });
+
+    it('invite, offline: the global row stays, saying it can\'t be reached (never hidden); everything else as before', async () => {
+        globalThis.fetch = network({ global: 'unreachable' });
+        await render();
+        expect(globalRow()?.getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+        expect(button('Reconnect')).toBeTruthy();
+        expect(button('Paste an invite')).toBeTruthy();
+    });
+
+    it("preview: the community's own sentence, and the invite field for an owner's or admin's invite", async () => {
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { privatePreview: true } } });
+        await render();
+        expect(text()).toContain('This community is in a private preview. Ask its owner for an invite.');
+        expect(text()).toContain('Got an invite from its owner or an admin?');
+        expect(button('Join with this invite')).toBeTruthy();
+    });
+
+    it("closed: the community closed this key's account → told so by name, with the global row; no address field", async () => {
+        recognition.now = 'closed';
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain('Your account in Riverside was closed');
+        expect(text()).toContain('You deleted it, or the community removed it. Your other communities are not affected.');
+        expect(text()).not.toMatch(/trouble connecting|check your connection/i);
+        expect(host.querySelector('input')).toBeNull();
+        expect(globalRow()).toBeTruthy();
+        expect(buttons().some(b => /Delete this account from this phone/.test(b.textContent ?? ''))).toBe(true);
     });
 });

@@ -13,6 +13,7 @@
  */
 
 import type { NodeProfile } from './node-profile';
+import { extractNodeOrigin, normaliseInviteCode } from './invite-parser';
 
 export type MismatchPage = 'open' | 'invite' | 'preview' | 'closed';
 
@@ -50,4 +51,20 @@ export function mismatchPlan(input: MismatchInput): MismatchPlan {
     if (p.features.privatePreview === true) return { page: 'preview', fromCopy };
     if (p.profile === 'global' && p.features.openJoin === true && input.doorScreenTakes) return { page: 'open', fromCopy };
     return { page: 'invite', fromCopy };
+}
+
+/**
+ * The invite field on the invite and preview pages (§C.1: "Paste an invite", "Got an invite from its owner or an admin?"):
+ * what was typed or pasted, read as People's "Join another community" reads it (invite-parser.ts). An invite link names its
+ * community; a bare code is for the community the page is about. Null when there is nothing to use. Throws node-url.ts
+ * UnsafeNodeAddressError for a link whose address isn't plain host[:port]: refused, never quietly sent elsewhere.
+ */
+export function inviteFromText(raw: string, pageUrl: string | null): { targetUrl: string; code: string } | null {
+    const text = raw.trim();
+    if (!text) return null;
+    const origin = extractNodeOrigin(text);
+    const code = normaliseInviteCode(text);
+    const targetUrl = origin ?? pageUrl;
+    if (!code || !targetUrl) return null;
+    return { targetUrl, code };
 }

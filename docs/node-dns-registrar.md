@@ -107,7 +107,7 @@ reachable → offer both, default Tunnel.
 │  D1: name_allocations · name_policy (auto/gated/blocked)                          │
 │  • GET/POST signed node endpoints   • admin approve/revoke   • CF client (fetch)  │
 └──────────────────────────────────────────────────────────────────────────────────┘
-        ▲ signed HTTPS (node key, Ed25519)                ▲ admin secret (you)
+        ▲ signed HTTPS (node key, Ed25519)                ▲ Cloudflare Access, 2FA (you; since 2026-10-18)
         │                                                 │
 ┌───────┴───────── community node (Docker) ─────────┐   ┌─┴──────────────┐
 │  manager "Public Address" tab  (apps/manager)      │   │ approval page  │

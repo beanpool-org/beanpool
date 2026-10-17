@@ -10,20 +10,29 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
   this Worker was deployed from (`null` if its deploy didn't say) and the signing protocols it accepts
-- **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every name in any state but `abandoned`, each
+- **Admin (Cloudflare Access — "Admin sign-in" below):** `GET /api/local/admin/registrar/whoami` (`{email, via}`:
+  who is signed in) · `GET /api/local/admin/registrar/pending` (every name in any state but `abandoned`, each
   with `holds` — does it keep its name from other keys now — and, for a release, `takes_back` — can its old key still
   take it back as its own — and, while it is still held, `held_until`) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release | forget` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below) · `POST /api/local/admin/registrar/forget {"names": [...]}` (forget in bulk, at most
   5 a request — inside D1's per-invocation query budget on Workers Free; /admin sends them in batches — answers
-  `{removed, refused}`, and `already` for names removed before: neither counted nor told). `forget` is /admin's
+  `{removed, refused}`, and `already` for names removed before: neither counted nor told; with `"free_now": true`
+  it is /admin's "Free all and remove", below). `forget` is /admin's
   "Remove from the list" (a repeat answers `already: true`, and changes nothing): a `released` row nobody
   holds any more and no key can take back as its own (freed at once, or `admin-held-all` past its hold) becomes
   `abandoned`, leaves the list and stays free to anyone, as it was: who may claim it does not change. Any other row is
   refused with a 409: live, pending, paused, blocked, a release still inside its hold, and an `owner` or `admin-held`
   release past its hold, which its key still takes back as its own (without approval on a gated name, outside the
-  new-name budget) — "free now" ends that first, on purpose.
+  new-name budget) — "free now" ends that first, on purpose. **Free all and remove** (`POST …/forget {"names": [...],
+  "free_now": true}`, at most 2 a request: about 34 D1 queries even when Cloudflare refuses every delete) does both for
+  every name /admin lists as released: each is freed as its own "Free now" frees it (a `released` event; its old key's
+  take-back ends), then removed (a `removed` event); any other row is refused untouched, and a repeat removes nothing.
+  The page sends one click's names with one `run` id and their `total`, and the phone hears of the click once
+  (`once: free-all:<run>`), not of every batch — 45 names are 23 requests, past the hourly cap of 20. It says what
+  was chosen ("chose Free all and remove for 45 released names"), never that all of them went: the later batches have
+  not run when it is sent, and one may be refused; what each name did is in its events.
   A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is
   logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
@@ -66,6 +75,41 @@ hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
 minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
+
+## Admin sign-in
+
+`/admin`, `/admin.html` and `/api/local/admin/registrar/*` sit behind **Cloudflare Access** (Marty, 2026-10-17: nobody
+sees the page without 2FA): the app "BeanPool control room (registrar admin)" on team
+`tradeconnector.cloudflareaccess.com`, its policy one email, with its own MFA (an email code and an authenticator).
+Access signs every request it lets through (`Cf-Access-Jwt-Assertion`, an RS256 JWT), and the Worker believes nothing
+else (`src/access.js`): the signature against the team's keys (`https://<team>/cdn-cgi/access/certs`, cached an hour,
+fetched again once for a key id it doesn't know and then not for 30 s — requests that arrive during that fetch wait
+for it — fail closed when they can't be fetched; a key
+shorter than RSA 2048 is skipped), `aud` holding `ACCESS_AUD`, `iss` = `https://<ACCESS_TEAM_DOMAIN>`, `exp`
+(required), `nbf` and `iat` with 60 s of skew, and the `email` claim in `ADMIN_EMAILS` (a comma list, any case). Not
+Access's plain email header, not a cookie, and not the route: workers.dev, or a path Access doesn't cover, reaches the
+Worker with no token and gets a 401 (`{"error": "unauthorized", "sign_in": "cloudflare-access"}`), the page included.
+Node-facing `/api/registrar/*` routes and `/i/*` never need one.
+
+- **Config**, `wrangler.toml` `[vars]` (none of it secret): `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (the Access app's AUD
+  tag), `ADMIN_EMAILS`. With any of them set, `ADMIN_SECRET` opens nothing — one way in, not two; set but
+  incomplete, nothing does (it never falls back to the secret).
+- **The page** asks `/whoami` and shows "Signed in as <email>"; it has no secret box, and drops the secret an older
+  page kept in `sessionStorage`. Sign out is Access's own `/cdn-cgi/access/logout`.
+- **Cross-site requests:** Access's sign-in is a cookie, which a browser also sends with a form another site posts. So,
+  under Access, an admin POST needs `x-bp-admin: 1` (the page sends it; no other site can make a browser send it) and,
+  when it carries one, this site's `Origin`; anything else is a 403.
+- **Who did it:** events and alerts name the admin by the token's email ("paused by martin@…", "martin@… paused x")
+  where they said "the admin" and "You".
+- **A self-hoster without Access** leaves all three vars unset: the `ADMIN_SECRET` header (`x-admin-secret`) works as
+  before, and the page shows its secret box (kept in the tab's memory only, never stored). The committed
+  `wrangler.toml` sets all three for our registrar: delete those three lines before you deploy from a clone, or
+  `ADMIN_SECRET` opens nothing and `/admin` only says to sign in through Access. Put Access, or another sign-in, in
+  front before the page is reachable from the internet if you can: the secret is one factor.
+- **Local dev** (`npm run dev`): the tracked `.dev.vars` sets the three empty (it overrides `[vars]` under
+  `wrangler dev`, and an empty value counts as unset), so the local control room signs in with its `ADMIN_SECRET`.
+
+Tests: `test/admin-access-2026-10-18.test.js` (a local RSA key pair stands in for the team's certs).
 
 ## Alerts to the admin's phone (the control room)
 
@@ -473,7 +517,8 @@ npx wrangler d1 migrations apply beanpool-registrar --remote
 npx wrangler secret put CF_API_TOKEN             # scoped: Account·Tunnel·Edit + Zone·DNS·Edit
 npx wrangler secret put CF_ACCOUNT_ID            # 151a28c4fd1e6ee09768f4226be76b4d
 npx wrangler secret put CF_ZONE_ID               # 060a99ae34e53b26dcf3be6578722b31
-npx wrangler secret put ADMIN_SECRET
+npx wrangler secret put ADMIN_SECRET             # only with no Cloudflare Access in front: then delete wrangler.toml's
+                                                 # ACCESS_TEAM_DOMAIN, ACCESS_AUD and ADMIN_EMAILS (Admin sign-in)
 npx wrangler secret put NTFY_URL                 # optional: the control room's ntfy topic URL (alerts above)
 npx wrangler secret put NTFY_TOKEN               # optional: an ntfy access token for it
 

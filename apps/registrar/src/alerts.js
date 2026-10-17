@@ -75,23 +75,45 @@ export const routingPaused = (env, name, reason, count) => ({
         : `something other than its node answered in ${count} sweeps in a row`}. Name kept for its owner, whose heal resumes it.`,
 });
 // A5: what the admin did, as the Worker answered it (a resume whose re-attest failed says so: the name stays paused).
+// `who`: the admin's email when Cloudflare Access signed them in (index.js adminIdentity) — said in place of "You".
 const DID = { approve: 'approved', pause: 'paused', resume: 'resumed', block: 'blocked', revoke: 'blocked', release: 'released' };
-export function adminDid(env, name, action, out) {
-    if (action === 'forget') return out.already ? null : adminRemoved(env, [name]);   // removed before: nothing to tell
+export function adminDid(env, name, action, out, who = null) {
+    if (action === 'forget') return out.already ? null : adminRemoved(env, [name], { who });   // removed before: nothing to tell
+    const you = who || 'You';
     const verb = DID[action] || action;
     const h = host(env, name);
     const body = action === 'resume' && out.status !== 'live'
-        ? `You resumed ${h}, but it stays paused: edge re-attest ${out.attest || 'not passed'}. Its node's heal re-attests.`
-        : `You ${verb} ${h}${action === 'release' ? (out.held_until ? ` (held until ${when(out.held_until)})` : ' (free now)') : ''}.`;
-    return { category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name, title: `You ${verb} ${name}`, body };
+        ? `${you} resumed ${h}, but it stays paused: edge re-attest ${out.attest || 'not passed'}. Its node's heal re-attests.`
+        : `${you} ${verb} ${h}${action === 'release' ? (out.held_until ? ` (held until ${when(out.held_until)})` : ' (free now)') : ''}.`;
+    return { category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name, title: `${you} ${verb} ${name}`, body };
 }
 // Released names nobody held, removed from the admin's list (index.js forgetRow): one message for one name or many.
-export function adminRemoved(env, names) {
+// `freed`: how many of them "Free all and remove" freed first, ending their old key's take-back.
+export function adminRemoved(env, names, { who = null, freed = 0 } = {}) {
     const one = names.length === 1;
+    const you = who || 'You';
+    const did = freed ? 'freed and removed' : 'removed';
+    const tail = !freed ? `free to anyone, as ${one ? 'it was' : 'they were'}.`
+        : `free to anyone; ${one ? 'its old server' : 'their old servers'} can no longer take ${one ? 'it' : 'them'} back`
+            + `${!one && freed < names.length ? ` (${freed} freed now, the rest free already)` : ''}.`;
     return {
         category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: one ? names[0] : null,
-        title: one ? `You removed ${names[0]} from the list` : `You removed ${plural(names.length, 'released name')} from the list`,
-        body: `You removed ${one ? host(env, names[0]) : plural(names.length, 'released name')} from the list: free to anyone, as ${one ? 'it was' : 'they were'}.`,
+        title: one ? `${you} ${did} ${names[0]} from the list` : `${you} ${did} ${plural(names.length, 'released name')} from the list`,
+        body: `${you} ${did} ${one ? host(env, names[0]) : plural(names.length, 'released name')} from the list: ${tail}`,
+    };
+}
+// "Free all and remove" from /admin (index.js handleForgetMany): one message for the click, however many requests its
+// names take — told by its first request that removed any, once per `run` (the page's id for the click). `total`: how
+// many names the page asked for. It says what the admin chose, never that all of them went: the click's later requests
+// haven't run when it is sent, and one may be refused (a name live again, the sign-in run out, the tab closed — PR #2111
+// review). What each one did is in its name events.
+export function adminFreedAll(env, { who = null, run, total = null }) {
+    const you = who || 'You';
+    const n = total ? plural(total, 'released name') : 'released names';
+    return {
+        category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null, once: `free-all:${run}`,
+        title: `${you} chose Free all and remove for ${n}`,
+        body: `${you} chose Free all and remove for ${n}: each freed now (its old server can no longer take it back), then removed from the list, free to anyone. What each one did is under Name events.`,
     };
 }
 // A6: a heal refused (told once per pause: its node heals every 5 minutes while it lasts), a name repaired.

@@ -34,7 +34,7 @@ This inventory enumerates every secret the BeanPool system uses across all layer
 | **`CF_API_TOKEN` (Node / Repo)** | Repo root `.env`. Not on our servers: since 2026-09-28 `deploy.sh` sends it to none and removes it from each server's `.env` | Cloudflare API token with Zone DNS edit permissions. A server uses it only for its own Let's Encrypt certificate; no tunnel of ours checks that certificate, so our servers run on a self-signed one. | Echoed in 2026-09-15 transcript |
 | **`CF_API_TOKEN` (Registrar)** | Cloudflare Worker secret (`wrangler secret put`) | Scoped Cloudflare API token with `Account·Cloudflare Tunnel·Edit` and `Zone·DNS·Edit` permissions. | Cloudflare Worker runtime |
 | **`CF_TUNNEL_TOKEN`** | Repo root `.env`. Since 2026-09-28 `deploy.sh` no longer writes it to servers, and removes the copy earlier deploys left in `<node>/data/tunnel-token` (matched by sha256, so a server's own registrar token stays) | Fleet connector token for the compose `cloudflared` sidecar. Its tunnel no longer exists, and `deploy.sh` no longer starts the sidecar. | Echoed in 2026-09-15 transcript |
-| **`ADMIN_SECRET` (Registrar)** | Cloudflare Worker secret<br>`apps/registrar/src/admin-html.js` | Shared secret for registrar Worker administrative endpoints (`/api/local/admin/registrar/*`). | Cloudflare Worker runtime |
+| **`ADMIN_SECRET` (Registrar)** | Cloudflare Worker secret<br>`apps/registrar/src/admin-html.js` | Shared secret for registrar Worker administrative endpoints (`/api/local/admin/registrar/*`) — only while `ACCESS_*` are unset in `wrangler.toml`. Since 2026-10-18 they are set: Cloudflare Access signs the admin in and this secret opens nothing (apps/registrar/README.md "Admin sign-in"). | Cloudflare Worker runtime |
 | **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | **No longer used by CI.** `.github/workflows/deploy-website.yml` was removed on 2026-09-19 (#962); beanpool.org deploys through Cloudflare Pages' own Git connection. The secret was already empty. Delete it rather than rotate it. | GitHub Repo Secrets |
 | **`CLOUDFLARE_API_KEY`** | GitHub Actions Secret<br>Repo root `.env` | Global Cloudflare API Key (fallback credentials for legacy wrangler operations). | GitHub Repo Secrets |
 | **`CLOUDFLARE_EMAIL`** | GitHub Actions Secret<br>Repo root `.env` | Cloudflare account email associated with `CLOUDFLARE_API_KEY`. | GitHub Repo Secrets |
@@ -191,14 +191,22 @@ flowchart TD
     ```bash
     cd apps/registrar
     npx wrangler secret put CF_API_TOKEN     # Paste Token B from Step 2.1
-    npx wrangler secret put ADMIN_SECRET     # Generate with openssl rand -hex 24
+    npx wrangler secret put ADMIN_SECRET     # ONLY on a registrar without Access (ACCESS_* unset in wrangler.toml); openssl rand -hex 24
     npx wrangler secret put CF_ACCOUNT_ID    # 151a28c4fd1e6ee09768f4226be76b4d
     npx wrangler secret put CF_ZONE_ID       # 060a99ae34e53b26dcf3be6578722b31
     npx wrangler deploy
     ```
+    Our registrar has signed the admin in with Cloudflare Access since 2026-10-18 (`ACCESS_*` set in `wrangler.toml`):
+    `ADMIN_SECRET` opens nothing there, so skip that line — rotating it changes nothing. It applies only to a registrar
+    run without Access (apps/registrar/README.md "Admin sign-in").
 *   **How to verify:**
+    Open https://beanpool.org/admin and sign in through Access (email code + authenticator): the page says
+    *Signed in as &lt;email&gt;* and the names list loads. From that signed-in browser,
+    `https://beanpool.org/api/local/admin/registrar/whoami` answers `{"email": "<email>", "via": "cloudflare-access"}`.
+    A curl with `x-admin-secret` gets a sign-in page or a 401 here even when the rotation worked. On a registrar
+    without Access:
     ```bash
-    curl -s -H "x-admin-secret: <new_admin_secret>" https://beanpool.org/api/local/admin/registrar/pending | head -c 100
+    curl -s -H "x-admin-secret: <new_admin_secret>" https://<registrar>/api/local/admin/registrar/pending | head -c 100
     ```
 
 ---
@@ -257,7 +265,7 @@ Run these commands after completing the rotation sweep:
 | **Admin Authentication** | `curl -sk -H "x-admin-password: $NEW_PW" https://test.beanpool.org/api/local/admin/diagnostics` | HTTP 200 with node diagnostics payload (HTTP 401 with bad password) |
 | **Backup Pull Convergence** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 30 beanpool-test-mirror-beanpool-node-1"` | `[Backup] ⬇️ Pulled snapshot` (no 401 Unauthorized) |
 | **Cloudflare Tunnel Status** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 20 beanpool-test-cloudflared-1"` | `Registered tunnel connection` / 0 errors |
-| **Registrar Attestation** | `curl -sk -H "x-admin-secret: $NEW_ADMIN_SECRET" https://beanpool.org/api/local/admin/registrar/pending` | HTTP 200 list of pending leases |
+| **Registrar Admin** | Open `https://beanpool.org/admin`, sign in through Cloudflare Access (not a curl: `x-admin-secret` opens nothing under Access, and Access answers a request with no sign-in first) | *Signed in as &lt;email&gt;* and the names list loads; `…/api/local/admin/registrar/whoami` from that browser answers `"via": "cloudflare-access"` |
 | **CI Secrets Guard** | `bash scripts/test-all.sh` | Secrets guard check passes with 0 leaks |
 
 ---

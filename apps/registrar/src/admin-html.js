@@ -153,19 +153,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 </div>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <button id="headerLogoutBtn" class="btn btn-logout" style="display: none; padding: 0.5rem 1rem; border-radius: 9999px;">🔒 Logout</button>
+                <button id="headerLogoutBtn" class="btn btn-logout" style="display: none; padding: 0.5rem 1rem; border-radius: 9999px;">🔒 Sign out</button>
                 <a href="/" class="btn" style="padding: 0.5rem 1rem; border-radius: 9999px; text-decoration: none; color: var(--text-secondary); background: rgba(255,255,255,0.05);">← Back to site</a>
             </div>
         </header>
 
         <div class="admin-card">
-            <h2 style="font-size: 1rem; font-family: var(--font-header); margin-bottom: 0.75rem; color: var(--accent);">🔑 Super Admin Credentials</h2>
-            <div class="row-wrap">
-                <input type="password" id="adminSecretInput" class="admin-input" placeholder="Enter ADMIN_SECRET key...">
-                <button id="saveSecretBtn" class="btn btn-approve" style="white-space: nowrap;">Save & Connect</button>
-                <button id="logoutSecretBtn" class="btn btn-logout" style="white-space: nowrap; display: none;">Logout</button>
+            <h2 style="font-size: 1rem; font-family: var(--font-header); margin-bottom: 0.75rem; color: var(--accent);">🔐 Signed in</h2>
+            <p id="signInStatus" style="font-size: 0.85rem; color: var(--text-secondary);">Checking who is signed in...</p>
+            <!-- Only for a registrar with no Cloudflare Access in front (no ACCESS_* vars): its ADMIN_SECRET, kept in this tab's memory, never stored. -->
+            <div id="secretRow" class="row-wrap" style="display: none; margin-top: 0.75rem;">
+                <input type="password" id="adminSecretInput" class="admin-input" placeholder="ADMIN_SECRET" autocomplete="off">
+                <button id="saveSecretBtn" class="btn btn-approve" style="white-space: nowrap;">Connect</button>
             </div>
-            <p id="secretStatus" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;"></p>
         </div>
 
         <div class="admin-card">
@@ -203,48 +203,80 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <script>
         const secretInput = document.getElementById('adminSecretInput');
         const saveBtn = document.getElementById('saveSecretBtn');
-        const logoutBtn = document.getElementById('logoutSecretBtn');
+        const secretRow = document.getElementById('secretRow');
         const headerLogoutBtn = document.getElementById('headerLogoutBtn');
-        const statusText = document.getElementById('secretStatus');
+        const statusText = document.getElementById('signInStatus');
         const refreshBtn = document.getElementById('refreshBtn');
 
-        function updateAuthUI() {
-            const savedSecret = sessionStorage.getItem('bp_registrar_admin_secret');
-            if (savedSecret) {
-                secretInput.value = savedSecret;
-                statusText.textContent = 'Key connected.';
+        // Who is signed in (GET /whoami): Cloudflare Access, which signed the admin in with an email code and an
+        // authenticator before this page was served — or, on a registrar with no Access in front, the ADMIN_SECRET typed
+        // below, kept in this variable only (never stored: a reload asks again). The secret an older page kept in this
+        // tab's storage is dropped.
+        let signedIn = null;   // 'cloudflare-access' | 'admin-secret' | null
+        let secret = '';
+        try { sessionStorage.removeItem('bp_registrar_admin_secret'); } catch (e) { /* storage blocked: nothing kept */ }
+        // Every request says it comes from this page (x-bp-admin: a header no other site can make a browser send).
+        function authHeaders(extra) {
+            const h = { 'x-bp-admin': '1' };
+            if (secret) h['x-admin-secret'] = secret;
+            for (const k in (extra || {})) h[k] = extra[k];
+            return h;
+        }
+
+        function notSignedIn(why) {
+            ['pendingTableContainer', 'activeTableContainer', 'alertsContainer', 'serversContainer'].forEach(function(id) {
+                document.getElementById(id).innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">' + esc(why) + '</p>';
+            });
+        }
+
+        async function checkSignIn() {
+            let res = null;
+            let data = {};
+            try {
+                res = await fetch('/api/local/admin/registrar/whoami', { headers: authHeaders() });
+                data = (await res.json()) || {};
+            } catch (err) {
+                statusText.textContent = 'Could not reach the registrar: ' + err.message;
+                statusText.style.color = '#ef4444';
+                return;
+            }
+            if (res.ok && (data.via === 'cloudflare-access' || data.via === 'admin-secret')) {
+                signedIn = data.via;
+                statusText.textContent = data.via === 'cloudflare-access'
+                    ? 'Signed in as ' + data.email + ' (Cloudflare Access: email code and authenticator).'
+                    : 'Connected with the ADMIN_SECRET (this registrar has no Cloudflare Access in front).';
                 statusText.style.color = '#10b981';
-                logoutBtn.style.display = 'inline-flex';
+                secretRow.style.display = 'none';
                 headerLogoutBtn.style.display = 'inline-flex';
+                loadRegistrarData();
+                return;
+            }
+            signedIn = null;
+            headerLogoutBtn.style.display = 'none';
+            statusText.style.color = '#ef4444';
+            if (data.sign_in === 'cloudflare-access') {
+                secretRow.style.display = 'none';
+                statusText.textContent = 'Not signed in. Reload the page to sign in through Cloudflare Access.';
             } else {
-                secretInput.value = '';
-                statusText.textContent = 'Disconnected / Logged out.';
-                statusText.style.color = 'var(--text-muted)';
-                logoutBtn.style.display = 'none';
-                headerLogoutBtn.style.display = 'none';
+                secretRow.style.display = 'flex';
+                statusText.textContent = secret ? 'That is not the ADMIN_SECRET.' : 'This registrar has no Cloudflare Access in front: enter its ADMIN_SECRET.';
             }
         }
 
         saveBtn.addEventListener('click', function() {
-            const val = secretInput.value.trim();
-            if (val) {
-                sessionStorage.setItem('bp_registrar_admin_secret', val);
-                updateAuthUI();
-                loadRegistrarData();
-            }
+            secret = secretInput.value.trim();
+            secretInput.value = '';
+            if (secret) checkSignIn();
         });
 
-        function performLogout() {
-            sessionStorage.removeItem('bp_registrar_admin_secret');
-            updateAuthUI();
-            document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
-            document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
-            document.getElementById('alertsContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
-            document.getElementById('serversContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
-        }
-
-        logoutBtn.addEventListener('click', performLogout);
-        headerLogoutBtn.addEventListener('click', performLogout);
+        // Access: its own sign-out, which ends the session for this site. The secret: forgotten, and the tables cleared.
+        headerLogoutBtn.addEventListener('click', function() {
+            if (signedIn === 'cloudflare-access') { location.href = '/cdn-cgi/access/logout'; return; }
+            secret = '';
+            signedIn = null;
+            notSignedIn('Signed out.');
+            checkSignIn();
+        });
         refreshBtn.addEventListener('click', function() { loadRegistrarData(); });
 
         // Node-supplied text (community name, contact, event details) goes into innerHTML: escape all of it.
@@ -275,24 +307,22 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const target = e.target.closest('[data-action]');
             if (target) adminAction(target.getAttribute('data-name'), target.getAttribute('data-action'), target);
             if (e.target.closest('[data-forget-all]')) forgetAllReleased();
+            if (e.target.closest('[data-free-all]')) freeAllAndRemove();
         });
 
         async function loadRegistrarData() {
-            const secret = secretInput.value.trim();
-            if (!secret) {
-                document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Please enter your ADMIN_SECRET above to view claims.</p>';
-                document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Please enter your ADMIN_SECRET above.</p>';
+            if (!signedIn) {
+                notSignedIn('Not signed in.');
                 return;
             }
 
             try {
-                const res = await fetch('/api/local/admin/registrar/pending', {
-                    headers: { 'x-admin-secret': secret }
-                });
+                const res = await fetch('/api/local/admin/registrar/pending', { headers: authHeaders() });
 
                 if (res.status === 401) {
-                    statusText.textContent = 'Invalid ADMIN_SECRET key.';
-                    statusText.style.color = '#ef4444';
+                    signedIn = null;
+                    notSignedIn('Not signed in.');
+                    checkSignIn();
                     return;
                 }
 
@@ -305,12 +335,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 renderPending(pending);
                 renderActive(active);
                 showFragment();
-                loadEvents(secret);
-                loadAlerts(secret);
-                loadServers(secret);
+                loadEvents();
+                loadAlerts();
+                loadServers();
             } catch (err) {
                 console.error(err);
-                document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
+                // Under Access, an expired sign-in answers with a redirect to its sign-in page, which a fetch can't follow.
+                document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.' +
+                    (signedIn === 'cloudflare-access' ? ' If your sign-in has expired, reload the page.' : '') + '</p>';
             }
         }
 
@@ -369,8 +401,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             paused: [['resume', 'Resume'], ['block', 'Block'], ['release', 'Release']],
             blocked: [['resume', 'Resume'], ['release', 'Release']],
         };
-        // The released names nobody holds, as last drawn: what "Remove all released" removes.
+        // The released names nobody holds, as last drawn: what "Remove all released" removes. Every released name, as
+        // last drawn: what "Free all and remove" frees and removes; of those, how many are still inside their hold, and how
+        // many of those are held from the key the admin had blocked or paused ('admin-held-all'), which that key can claim
+        // again once freed. Its confirm says both.
         let removable = [];
+        let releasedNames = [];
+        let releasedHeld = 0;
+        let releasedHeldFromAll = 0;
 
         function renderActive(active) {
             const container = document.getElementById('activeTableContainer');
@@ -384,6 +422,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             // rest anyway: forgetRow.)
             const takesBack = function(a) { return a.holds === false && !!a.takes_back; };
             removable = released.filter(function(a) { return a.holds === false && !a.takes_back; }).map(function(a) { return a.name; });
+            releasedNames = released.map(function(a) { return a.name; });
+            const stillHeld = released.filter(function(a) { return a.holds !== false; });
+            releasedHeld = stillHeld.length;
+            releasedHeldFromAll = stillHeld.filter(function(a) { return a.pause_reason === 'admin-held-all'; }).length;
             const back = released.filter(takesBack).length;
 
             let html = held.length ? namesTable(held) : '<p style="color: var(--text-muted); font-size: 0.85rem;">No names held now.</p>';
@@ -391,6 +433,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const stay = released.length - removable.length - back;
                 html += '<div class="released-head">' +
                     (removable.length ? '<button data-forget-all="1" class="btn-revoke">Remove all released (' + removable.length + ')</button>' : '') +
+                    '<button data-free-all="1" class="btn-revoke" title="Frees every released name now, as its Free now does — its old server can no longer take it back — then removes it from the list">Free all and remove (' + released.length + ')</button>' +
                     '<span>' + (removable.length ? 'Removes the released names nobody holds: each stays free to anyone.' : '') +
                         (stay ? ' ' + stay + ' still held ' + (stay === 1 ? 'stays until its hold ends' : 'stay until their hold ends') + ' (or "Free now").' : '') +
                         (back ? ' ' + back + (back === 1 ? ' stays while the key that released it can take it back' : ' stay while the keys that released them can take them back') + ' ("Free now" ends that).' : '') + '</span></div>';
@@ -455,7 +498,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const names = removable.slice();
             if (!names.length) return;
             if (!confirm('Remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + ' nobody holds from the list?\\n\\nEach stays free to anyone, as it is now. Anything Cloudflare still has for one is deleted. Their history stays under Name events.')) return;
-            const secret = secretInput.value.trim();
             const removed = [];
             const refused = [];
             const already = [];
@@ -463,7 +505,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 for (let i = 0; i < names.length; i += FORGET_BATCH) {
                     const batch = names.slice(i, i + FORGET_BATCH);
                     const res = await fetch('/api/local/admin/registrar/forget', {
-                        method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' },
+                        method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }),
                         body: JSON.stringify({ names: batch }),
                     });
                     const data = await res.json();
@@ -480,8 +522,48 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             loadRegistrarData();
         }
 
+        // Free all and remove: every released name, as last drawn — each freed now, as its own Free now frees it (its old
+        // server can no longer take it back), then removed — in batches the Worker takes (2 a request: FREE_FORGET_MAX).
+        // The Worker refuses any name that is no longer released, untouched.
+        const FREE_FORGET_BATCH = 2;
+        async function freeAllAndRemove() {
+            const names = releasedNames.slice();
+            if (!names.length) return;
+            // A name still inside its hold is freed at once, to any key; one held from the key the admin had stopped
+            // ('admin-held-all') goes back to that key too, as its own "Free now" says ("FREE AT ONCE, to any key").
+            const held = releasedHeld;
+            const fromAll = releasedHeldFromAll;
+            const holdNote = held ? '\\n\\n' + (held === 1 ? '1 is still inside its hold: it is freed at once, to any key.' : held + ' are still inside their hold: they are freed at once, to any key.') : '';
+            const fromAllNote = fromAll ? ' ⚠️ ' + (fromAll === 1
+                ? '1 of those is held from the key you blocked or paused: that key can claim it again at once. Cancel to keep that key off it until its hold ends.'
+                : fromAll + ' of those are held from the keys you blocked or paused: those keys can claim them again at once. Cancel to keep those keys off them until their holds end.') : '';
+            if (!confirm('Free and remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + '? Their old servers can no longer take them back.' + holdNote + fromAllNote)) return;
+            // One id for this click: the Worker tells your phone of it once, not of every batch.
+            const run = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+            const removed = [];
+            const refused = [];
+            const already = [];
+            try {
+                for (let i = 0; i < names.length; i += FREE_FORGET_BATCH) {
+                    const batch = names.slice(i, i + FREE_FORGET_BATCH);
+                    const res = await fetch('/api/local/admin/registrar/forget', {
+                        method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }),
+                        body: JSON.stringify({ names: batch, free_now: true, run: run, total: names.length }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) { refused.push({ name: batch.join(', '), error: data.error || String(res.status) }); continue; }
+                    removed.push.apply(removed, data.removed || []);
+                    refused.push.apply(refused, data.refused || []);
+                    already.push.apply(already, data.already || []);
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+            alert('Freed and removed ' + removed.length + '.' + (already.length ? '\\n\\nAlready removed: ' + already.join(', ') : '') + (refused.length ? '\\n\\nNot removed:\\n' + refused.map(function(r) { return r.name + ': ' + (r.error || r.status); }).join('\\n') : ''));
+            loadRegistrarData();
+        }
+
         async function adminAction(name, action, target) {
-            const secret = secretInput.value.trim();
             // A release frees the name at once only when its button says so (Free now, Reject) or its box is ticked.
             const box = document.querySelector('input[data-free-now-for="' + name + '"]');
             const freeNow = action === 'release' && ((!!target && target.getAttribute('data-free-now') === '1') || (!!box && box.checked));
@@ -490,7 +572,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             if (!CONFIRM[action] || !confirm(CONFIRM[action](name, freeNow, fromAll, takesBack))) return;
 
             try {
-                const init = { method: 'POST', headers: { 'x-admin-secret': secret } };
+                const init = { method: 'POST', headers: authHeaders() };
                 if (action === 'release') {
                     init.headers['content-type'] = 'application/json';
                     init.body = JSON.stringify({ free_now: freeNow });
@@ -511,10 +593,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
         }
 
-        async function loadEvents(secret) {
+        async function loadEvents() {
             const container = document.getElementById('eventsTableContainer');
             try {
-                const res = await fetch('/api/local/admin/registrar/events?limit=100', { headers: { 'x-admin-secret': secret } });
+                const res = await fetch('/api/local/admin/registrar/events?limit=100', { headers: authHeaders() });
                 if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load events.</p>'; return; }
                 const events = (await res.json()).events || [];
                 if (events.length === 0) { container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No events yet.</p>'; return; }
@@ -604,10 +686,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             container.innerHTML = html;
         }
 
-        async function loadAlerts(secret) {
+        async function loadAlerts() {
             const container = document.getElementById('alertsContainer');
             try {
-                const res = await fetch('/api/local/admin/registrar/alerts', { headers: { 'x-admin-secret': secret } });
+                const res = await fetch('/api/local/admin/registrar/alerts', { headers: authHeaders() });
                 if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load alerts.</p>'; return; }
                 renderAlerts(await res.json());
             } catch (err) {
@@ -616,23 +698,21 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
 
         async function setAlertMode(category, mode) {
-            const secret = secretInput.value.trim();
             const res = await fetch('/api/local/admin/registrar/alerts/settings', {
-                method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' }, body: JSON.stringify({ category: category, mode: mode }),
+                method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ category: category, mode: mode }),
             });
             if (res.ok) renderAlerts(await res.json());
             else alert('Could not change it: ' + ((await res.json()).error || res.status));
         }
 
         async function sendTestAlert() {
-            const secret = secretInput.value.trim();
             const out = document.getElementById('alertTestResult');
             out.textContent = 'Sending...';
             try {
-                const res = await fetch('/api/local/admin/registrar/alerts/test', { method: 'POST', headers: { 'x-admin-secret': secret } });
+                const res = await fetch('/api/local/admin/registrar/alerts/test', { method: 'POST', headers: authHeaders() });
                 const data = await res.json();
                 out.textContent = data.sent ? 'Sent (' + data.status + '): check your phone.' : (data.error || 'Not sent.');
-                loadAlerts(secret);
+                loadAlerts();
             } catch (err) {
                 out.textContent = 'Network error: ' + err.message;
             }
@@ -661,10 +741,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             container.innerHTML = html;
         }
 
-        async function loadServers(secret) {
+        async function loadServers() {
             const container = document.getElementById('serversContainer');
             try {
-                const res = await fetch('/api/local/admin/registrar/servers', { headers: { 'x-admin-secret': secret } });
+                const res = await fetch('/api/local/admin/registrar/servers', { headers: authHeaders() });
                 if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load servers.</p>'; return; }
                 renderServers(await res.json());
             } catch (err) {
@@ -678,8 +758,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             if (e.target.closest('[data-alert-test]')) sendTestAlert();
         });
 
-        updateAuthUI();
-        if (sessionStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();
+        checkSignIn();
     </script>
 </body>
 </html>`;

@@ -249,3 +249,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-18 - CreateGroupModal Touch Target Sizing & Focus Ring Indicators
 **Learning:** `CreateGroupModal.tsx` close button lacked explicit 44px minimum touch target sizing (`min-w-[44px] min-h-[44px]`), and form controls (`input`, `textarea`, project/enterprise action buttons, and submit button) relied on bare `focus:outline-none` or lacked explicit `focus-visible:ring-2 focus-visible:ring-emerald-500` focus indicators during keyboard navigation.
 **Action:** Added `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center` to the close button, updated inputs and action buttons with `focus-visible:ring-2 focus-visible:ring-emerald-500` ring styling, and updated `CreateGroupModal.test.tsx` assertions.
+
+## 2026-10-19 - HeaderTitle ARIA Button Semantics & Keyboard Navigation
+**Learning:** `HeaderControls.tsx` rendered the `HeaderTitle` span with an `onClick` handler (to toggle community status) without keyboard navigation (`role="button"`, `tabIndex={0}`, `onKeyDown` Enter/Space key listener) or focus ring indicators.
+**Action:** Added conditional `role="button"`, `tabIndex={0}`, `onKeyDown` handler (triggering `onClick` on Enter/Space), and `focus-visible:ring-2 focus-visible:ring-bp-gold-fill` focus ring styling to `HeaderTitle` when `onClick` is provided, and added test coverage in `HeaderControls.test.tsx`.

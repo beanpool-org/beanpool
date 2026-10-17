@@ -18,13 +18,25 @@ export const HEADER_PILL_PX = 100;
  * words sit where they always did. `children`: what opens under the title (the community's status).
  */
 export function HeaderTitle({ title, onClick, children }: { title: string; onClick?: () => void; children?: ReactNode }) {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick();
+        }
+    };
     return (
         <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center" style={{ padding: '0 6px' }}>
             <span
                 data-testid="header-title"
-                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer truncate"
+                className={`font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center truncate ${
+                    onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill rounded-lg' : ''
+                }`}
                 style={{ margin: '-2px -6px -10px', padding: '10px 6px' }}
                 onClick={onClick}
+                role={onClick ? 'button' : undefined}
+                tabIndex={onClick ? 0 : undefined}
+                onKeyDown={onClick ? handleKeyDown : undefined}
             >
                 {title}
             </span>

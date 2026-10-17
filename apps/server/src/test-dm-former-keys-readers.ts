@@ -162,13 +162,13 @@ async function main(): Promise<void> {
             }
             routes.push(
                 { route: 'Ben\'s list', path: `/api/messages/conversations/${ben.pk}`, conv: dmAna, theirs: who === ben, refused: unsigned ? 401 : who === ben ? null : 403, ownerOnly: true },
-                { route: 'the DM by id', path: `/api/messages/${dmAna}?limit=1`, conv: dmAna, theirs: who === ben || who === ana3, refused: unsigned ? 401 : who === ben || who === ana3 ? null : 403 },
-                { route: 'Eve\'s DM by id', path: `/api/messages/${dmEve}?limit=1`, conv: dmEve, theirs: false, refused: unsigned ? 401 : who === ben ? null : 403 },
-                { route: 'Zed\'s withheld DM by id', path: `/api/messages/${dmZed}?limit=1`, conv: dmZed, theirs: who === zed, refused: unsigned ? 401 : who === zed ? null : 403 },
+                { route: 'the DM by id', path: `/api/messages/${dmAna}?limit=1`, conv: dmAna, theirs: who === ben || who === ana3, refused: unsigned ? (OPEN ? 403 : 401) : who === ben || who === ana3 ? null : 403 },
+                { route: 'Eve\'s DM by id', path: `/api/messages/${dmEve}?limit=1`, conv: dmEve, theirs: false, refused: unsigned ? (OPEN ? 403 : 401) : who === ben ? null : 403 },
+                { route: 'Zed\'s withheld DM by id', path: `/api/messages/${dmZed}?limit=1`, conv: dmZed, theirs: who === zed, refused: unsigned ? (OPEN ? 403 : 401) : who === zed ? null : 403 },
             );
             for (const r of routes) {
                 const res = await call('GET', who, r.path);
-                const want = (OPEN && !r.ownerOnly) || r.refused === null ? 200 : r.refused;
+                const want = r.refused === null ? 200 : r.refused;
                 const conv = r.route.endsWith('list') ? (res.body?.conversations as any[] | undefined)?.find((c) => c.id === r.conv) : res.body?.conversation;
                 const label = `${phase}: ${name}, ${r.route}: ${want}`;
                 if (r.theirs) {

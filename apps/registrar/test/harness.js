@@ -64,7 +64,7 @@ export function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
+    const fail = { createTunnel: false, deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
     const hooks = [];
     const paging = { max: 1000 };
     let seq = 0;
@@ -77,6 +77,7 @@ export function fakeCloudflare() {
         if (h >= 0) await hooks.splice(h, 1)[0].run();
         let m;
         if (method === 'POST' && p === '/accounts/acct/cfd_tunnel') {
+            if (fail.createTunnel) return err(500, 1000, 'internal error');
             if ([...tunnels.values()].some((t) => !t.deleted_at && t.name === body.name)) return err(409, 1013, 'tunnel name already in use');
             const t = { id: `tun-${++seq}`, name: body.name, created_at: new Date().toISOString(), deleted_at: null };
             tunnels.set(t.id, t);
@@ -179,11 +180,25 @@ export async function world({ migrations, env: extra } = {}) {
         BASE_DOMAIN: 'beanpool.org', ATTEST_FAIL_LIMIT: '2', ADMIN_SECRET: 'test-admin-secret',
         CF_ACCOUNT_ID: 'acct', CF_ZONE_ID: 'zone', CF_API_TOKEN: 'not-a-token', DB: d1, ...extra,
     };
+    // The runtime's ctx for a request its node stops waiting for (w.cutAt): what the request hands to waitUntil is kept.
+    // Once the node has gone, the invocation lives only while something it handed to waitUntil is still running (the
+    // runtime keeps that up to 30 s); otherwise its work is cancelled where it stands — here, its next Cloudflare call
+    // (and the one it was in) never answers.
+    const later = [];
+    let cut = false;
+    let kept = 0;
+    const ctx = { waitUntil(p) { kept++; later.push(Promise.resolve(p).finally(() => { kept--; })); } };
+    const cancelled = () => cut && kept === 0;
+    const never = () => new Promise(() => {});
     const original = globalThis.fetch;
     globalThis.fetch = async (input, init = {}) => {
         workerdFetchInit(init);
         const url = new URL(typeof input === 'string' ? input : input.url);
-        if (url.hostname === 'api.cloudflare.com') return cf.handle(init.method || 'GET', url, init.body ? JSON.parse(init.body) : null);
+        if (url.hostname === 'api.cloudflare.com') {
+            if (cancelled()) return never();
+            const res = await cf.handle(init.method || 'GET', url, init.body ? JSON.parse(init.body) : null);
+            return cancelled() ? never() : res;
+        }
         if (url.pathname !== '/api/attest' || !nodes[url.hostname]) throw new Error(`test network: no route to ${url}`);
         if (!cf.recordAt(url.hostname)) throw new Error(`test network: ${url.hostname} does not resolve`);
         return nodes[url.hostname](url.searchParams.get('nonce'));
@@ -201,9 +216,26 @@ export async function world({ migrations, env: extra } = {}) {
         });
     };
     const call = async (req) => { const res = await worker.fetch(req, env); return { status: res.status, body: await res.json() }; };
+    const adminRequest = (name, action, body) => new Request(`https://beanpool.org/api/local/admin/registrar/${name}/${action}`, {
+        method: 'POST', headers: { 'x-admin-secret': 'test-admin-secret' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
     const w = {
-        env, cf, nodes, sqlite, afterRead, beforeRun, atWrite, writes, runHooks,
+        env, cf, nodes, sqlite, afterRead, beforeRun, atWrite, writes, runHooks, signed, adminRequest,
         restore: () => { globalThis.fetch = original; },
+        // `req` sent with the runtime's ctx, its node giving up (gone, its answer never read) just before Cloudflare
+        // answers the first call matching `re`; then whatever the request handed to waitUntil runs to its end. Resolves
+        // with whether the cut came (false: the request answered without reaching that call).
+        cutAt: async (re, req) => {
+            let reached;
+            const atCut = new Promise((r) => { reached = r; });
+            cf.during(re, async () => { cut = true; reached(true); });
+            const answered = worker.fetch(req, env, ctx).then(() => false, () => false);
+            const came = await Promise.race([atCut, answered]);
+            for (let seen = -1; seen !== later.length;) { seen = later.length; await Promise.allSettled(later); }
+            cut = false;
+            return came;
+        },
         row: async (name) => db.getAllocation(env, name),
         events: (name) => all('SELECT event, detail FROM name_events WHERE name=? ORDER BY id', name),
         claim: async (key, body) => call(await signed('POST', '/api/registrar/claim', key, { mode: 'tunnel', ...body })),
@@ -214,10 +246,7 @@ export async function world({ migrations, env: extra } = {}) {
         holder: async (key, body) => call(await signed('POST', '/api/registrar/holder', key, body)),
         available: async (name) => call(new Request(`https://beanpool.org/api/registrar/available?name=${name}`)),
         // `body`: the action's JSON body, when it takes one (release: { free_now: true }).
-        admin: async (name, action, body) => call(new Request(`https://beanpool.org/api/local/admin/registrar/${name}/${action}`, {
-            method: 'POST', headers: { 'x-admin-secret': 'test-admin-secret' },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        })),
+        admin: async (name, action, body) => call(adminRequest(name, action, body)),
         invite: async (code) => (await worker.fetch(new Request(`https://beanpool.org/i/${code}`), env)).status,
         backdate: async (name, fields) => db.updateAllocation(env, name, fields),
     };

@@ -187,6 +187,17 @@ export const teardownRefused = (env, kind, cfId, error) =>
 export const countAwaitingApproval = async (env) => Number((await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
 ).first())?.n) || 0;
+// Claims whose provisioning never finished, for the sweep to finish (index.js finishOrphans): pending on a name that is
+// auto-approved (as policyTier decides: no policy row, or tier 'auto'), claimed before `before` (unix s), by a key the
+// admin has not stopped — none of its rows blocked, nor a release the admin holds from it ('admin-held-all') released
+// after `heldSince`. At most `limit`, in no fixed order: a few Cloudflare keeps refusing never hold back the rest.
+export const listOrphans = async (env, before, heldSince, limit) => (await env.DB.prepare(
+    `SELECT a.* FROM name_allocations a LEFT JOIN name_policy p ON p.pattern = a.name
+     WHERE a.status = 'pending' AND COALESCE(NULLIF(p.tier, ''), 'auto') = 'auto' AND a.requested_at < ?
+       AND NOT EXISTS (SELECT 1 FROM name_allocations b WHERE b.node_pubkey = a.node_pubkey
+                         AND (b.status = 'blocked' OR (b.status = 'released' AND b.pause_reason = 'admin-held-all' AND COALESCE(b.released_at, 0) > ?)))
+     ORDER BY RANDOM() LIMIT ?`
+).bind(before, heldSince, limit).all()).results || [];
 export const countLive = async (env) =>
     Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status = 'live'").first())?.n) || 0;
 // The new-name budget (index.js newNameBudget): auto-approved names that went live after `since` (unix s), whatever their

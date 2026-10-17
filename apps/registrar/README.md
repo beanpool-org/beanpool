@@ -65,11 +65,19 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
   token reaches the node through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
   requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
-  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried. A claim of an auto name whose
-  provisioning never finished (still `pending` over 2 minutes after its claim, its key not blocked by the admin) is
-  finished, at most 3 a sweep: nothing the registrar did not make may be in the way, then tunnel and record are made and
-  the row goes `live` (event `healed`: finished by the sweep; the New community alert; the token reaches the node
-  through `/status`).
+  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried, and stale request nonces
+  dropped. Then the alert conditions are updated. Last, a claim of an auto name whose provisioning never finished
+  (still `pending` over 2 minutes after its claim, its key not blocked by the admin) is finished, at most 3 a sweep and
+  only while the sweep's D1 queries allow (below): nothing the registrar did not make may be in the way, then tunnel
+  and record are made and the row goes `live` (event `healed`: finished by the sweep; the New community alert; the
+  token reaches the node through `/status`). One the budget leaves (`[ORPHAN_WAIT]` in the log) waits for the next
+  sweep, its node's claim or heal, or the admin's "Finish now". The sweep sends its alerts once, at its end.
+- **The sweep counts its D1 queries:** D1 allows 50 an invocation on Workers Free and refuses every one past them. The
+  sweep spends about 11, and 2 a live name, before its orphans; each orphan is finished only while up to 15 more and
+  the sweep's send (up to 16 with `NTFY_URL` set, none without) are left, and a send still running beside it (a
+  pause's alert) is kept 16 too. Measured: with alerts on, one orphan a sweep up to 4 live names and none from 5;
+  without, 3 up to 2, 2 up to 6, 1 up to 12. From about 18 live names with alerts on, the sweep's own send no
+  longer fits, orphans or not.
 - **The work of a claim, heal, rotate, release or approve runs under `ctx.waitUntil`:** a node that stops waiting (it
   gives each of its four 25 s) never cuts it off half way; the runtime keeps it up to 30 s past the disconnect, and the
   sweep finishes what even that missed.

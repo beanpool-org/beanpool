@@ -7,7 +7,8 @@
 //      lists it under "Setting up" (Finish now, Reject), apart from the gated claims;
 //   F2 claim, heal and approve run under waitUntil, so a node that hangs up never cuts the work off (and, from the review
 //      of #2125, rotate and release: Cloudflare work written to the row first);
-//   F3 the sweep finishes a pending auto row over 2 minutes old (at most 3 a sweep), never a gated one.
+//   F3 the sweep finishes a pending auto row over 2 minutes old (at most 3 a sweep, and only while its D1 queries allow:
+//      from the review of #2125), never a gated one.
 // Every test here but one fails on origin/main 583a6cb0: /status answers 'awaiting-approval', /pending carries no
 // awaiting_approval and the page one list, a claim cut off mid-way stays pending, and the sweep never looks at a pending
 // row. The one is F3's guard (a blocked key's orphan, and one something else routes, are left alone), which main passes
@@ -277,6 +278,101 @@ test('F3: at most 3 a sweep; the rest the next', async () => {
         assert.equal(await live(), 3, 'three finished in the first sweep');
         await attestSweep(w.env);
         assert.equal(await live(), 4, 'the fourth in the next');
+    } finally { w.restore(); }
+});
+
+// D1 runs at most 50 queries an invocation on Workers Free and refuses every one past them; the sweep spends about 11,
+// and 2 a live name, before its orphans, and one orphan about 10 more. Five live names and three orphans went over, and
+// what was refused was the alert conditions and the nonce prune after them (review of #2125). `capped(w)`: one sweep as
+// the cron runs it — its sends under waitUntil, kept to their end and counted in the same invocation — on a D1 that
+// refuses the 51st query and every one after. Answers how many it ran and what was refused.
+function capped(w) {
+    const DB = w.env.DB;
+    let n = 0;
+    const refused = [];
+    const query = async (sql, run) => {
+        if (++n > 50) {
+            refused.push(sql.replace(/\s+/g, ' ').trim().slice(0, 60));
+            throw new Error('D1_ERROR: Exceeded the maximum number of queries per invocation');
+        }
+        return run();
+    };
+    const counted = (stmt, sql) => ({
+        bind: (...a) => counted(stmt.bind(...a), sql),
+        first: (...a) => query(sql, () => stmt.first(...a)),
+        all: (...a) => query(sql, () => stmt.all(...a)),
+        run: (...a) => query(sql, () => stmt.run(...a)),
+    });
+    w.env.DB = { prepare: (sql) => counted(DB.prepare(sql), sql) };
+    return async () => {
+        n = 0;
+        const kept = [];
+        await attestSweep(Object.assign(Object.create(w.env), { waitUntil: (p) => kept.push(p) }));
+        for (let seen = -1; seen !== kept.length;) { seen = kept.length; await Promise.allSettled(kept); }
+        return { queries: n, refused: refused.splice(0) };
+    };
+}
+
+// A deletion Cloudflare has refused for two days (the teardown-owed alert condition), and a nonce long past its window.
+function owedAndStale(w) {
+    const now = Math.floor(Date.now() / 1000);
+    w.sqlite.prepare("INSERT INTO teardown (kind, cf_id, name, since) VALUES ('dns', 'dns-owed', 'gone', ?)").run(now - 2 * 86400);
+    w.cf.fail.deleteDns = true;
+    w.sqlite.prepare('INSERT INTO request_nonces (pubkey, nonce, ts) VALUES (?, ?, ?)').run('ab'.repeat(32), 'cd'.repeat(16), now - 86400);
+}
+const count = (w, sql) => w.sqlite.prepare(sql).get().n;
+
+test('F3: the sweep stays inside D1\'s 50 queries: 5 live names and 3 orphans, nothing refused, the alert conditions and the nonce prune done, the orphans finished over the next sweeps', async () => {
+    const w = await world();
+    try {
+        for (const i of [1, 2, 3, 4, 5]) await liveName(w, `live${i}`, await makeKey());
+        for (const i of [1, 2, 3]) await orphan(w, await makeKey(), `orphan${i}`, 400);
+        owedAndStale(w);
+        const sweep = capped(w);
+        const finished = async () => (await Promise.all([1, 2, 3].map((i) => w.row(`orphan${i}`)))).filter((r) => r.status === 'live').length;
+
+        const first = await sweep();
+        assert.deepEqual(first.refused, [], `nothing refused (${first.queries} queries)`);
+        assert.equal(count(w, "SELECT COUNT(*) AS n FROM alert_state WHERE key='teardown-owed'"), 1, 'the alert conditions were updated');
+        assert.equal(count(w, 'SELECT COUNT(*) AS n FROM request_nonces'), 0, 'the nonce prune ran');
+        assert.ok(await finished() >= 1, 'an orphan finished in the first sweep');
+        for (let i = 0; i < 2 && await finished() < 3; i++) {
+            const next = await sweep();
+            assert.deepEqual(next.refused, [], `nothing refused (${next.queries} queries)`);
+        }
+        assert.equal(await finished(), 3, 'the rest in the sweeps after');
+        for (const i of [1, 2, 3]) routedLive(w, `orphan${i}`, await w.row(`orphan${i}`));
+    } finally { w.restore(); }
+});
+
+test('F3: with alerts on, the sweep keeps D1 queries for its one send: nothing refused, the condition and the New community alerts sent', async () => {
+    const w = await world({ env: { NTFY_URL: 'https://ntfy.test/bp-topic' } });
+    const sent = [];
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+        const url = new URL(typeof input === 'string' ? input : input.url);
+        if (url.hostname !== 'ntfy.test') return inner(input, init);
+        sent.push({ title: new Headers(init.headers).get('title'), body: String(init.body) });
+        return new Response('{"id":"x"}', { status: 200 });
+    };
+    try {
+        for (const i of [1, 2, 3]) await orphan(w, await makeKey(), `orphan${i}`, 400);
+        owedAndStale(w);
+        sent.length = 0;
+        const sweep = capped(w);
+        const finished = async () => (await Promise.all([1, 2, 3].map((i) => w.row(`orphan${i}`)))).filter((r) => r.status === 'live').length;
+
+        const first = await sweep();
+        assert.deepEqual(first.refused, [], `nothing refused (${first.queries} queries)`);
+        assert.ok(await finished() >= 1, 'an orphan finished in the first sweep');
+        assert.ok(sent.some((m) => m.body.includes('Cloudflare still refuses 1 deletion')), `the condition sent (${JSON.stringify(sent)})`);
+        for (let i = 0; i < 4 && await finished() < 3; i++) {
+            const next = await sweep();
+            assert.deepEqual(next.refused, [], `nothing refused (${next.queries} queries)`);
+        }
+        assert.equal(await finished(), 3);
+        for (const i of [1, 2, 3])
+            assert.ok(sent.some((m) => m.body.includes(`New community: orphan${i}.beanpool.org`)), `orphan${i}'s New community alert sent (${JSON.stringify(sent.map((m) => m.title))})`);
     } finally { w.restore(); }
 });
 

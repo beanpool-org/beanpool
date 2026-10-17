@@ -1727,8 +1727,11 @@ async function applyVerdict(env, r, limits, verified) {
 }
 
 // Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
-// A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged).
-export async function attestSweep(env) {
+// A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged). Every D1 query it runs is
+// counted (d1Meter), and finishing orphans comes last, with what is left.
+export async function attestSweep(invocationEnv) {
+    const d1 = d1Meter(invocationEnv);
+    const env = d1.env;
     const limits = {
         impostor: parseInt(env.ATTEST_FAIL_LIMIT || '2', 10),   // consecutive IMPOSTOR verdicts before a pause
         swap: swapFailLimit(env),                               // consecutive sweeps of foreign answers before a pause
@@ -1755,13 +1758,46 @@ export async function attestSweep(env) {
     }
     await upkeep(env, results, BATCH);
     await alertConditions(env, s);
+    await finishOrphans(d1);
+    // One send for the sweep, last: what alertConditions told, the orphans' New community alerts, and whatever still
+    // waits from a failed send (a try every 5 minutes, with the cron). Under waitUntil: the sweep never waits for ntfy.
+    await alerts.sendWaiting(env);
     return s;
+}
+
+// D1 runs at most D1_QUERIES queries an invocation on Workers Free (1000 on Paid); past them every one fails ("Exceeded
+// the maximum number of queries per invocation"). The sweep spends about 11, and 2 a live name, before finishing
+// orphans; three orphans and four live names went over it, and what failed was the alert conditions after them (review
+// of #2125). So the sweep counts its own: `env.DB` counts every statement run (all the sweep's are prepare()d), and
+// `left()` keeps alerts.SEND_D1 for every send still running beside it (`env.waitUntil`: a pause's alert, say), which
+// may not have run its queries yet. The sweep never waits for one.
+const D1_QUERIES = 50;
+const sendD1 = (env) => (alerts.channelSet(env) ? alerts.SEND_D1 : 0);
+function d1Meter(env) {
+    let used = 0;
+    const running = new Set();
+    const counted = (stmt) => ({
+        bind: (...a) => counted(stmt.bind(...a)),
+        first: (...a) => { used++; return stmt.first(...a); },
+        all: (...a) => { used++; return stmt.all(...a); },
+        run: (...a) => { used++; return stmt.run(...a); },
+        raw: (...a) => { used++; return stmt.raw(...a); },
+    });
+    const metered = Object.assign(Object.create(env), { DB: { prepare: (sql) => counted(env.DB.prepare(sql)) } });
+    if (typeof env.waitUntil === 'function') {
+        metered.waitUntil = (p) => {
+            const t = Promise.resolve(p).catch(() => {}).finally(() => running.delete(t));
+            running.add(t);
+            env.waitUntil(t);
+        };
+    }
+    return { env: metered, left: () => D1_QUERIES - used - running.size * sendD1(env) };
 }
 
 // What the sweep sees of the registrar itself reaches the admin's phone (src/alerts.js; A4, A7): a suspended sweep
 // (urgent: the registrar distrusts itself), deletions Cloudflare has refused for over a day, the nonce table missing.
-// Each is told when it starts, every 24 h while it lasts, and when it ends; this run also sends whatever still waits
-// from a failed send (a try every 5 minutes, with the cron).
+// Each is told when it starts, every 24 h while it lasts, and when it ends, by the sweep's send after its orphans
+// (attestSweep): what is told here is in the outbox before them, so they never starve it.
 async function alertConditions(env, s) {
     try {
         const now = nowS();
@@ -1770,7 +1806,7 @@ async function alertConditions(env, s) {
             const owed = await db.owedSince(env, now - 86400);
             conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
         } catch (e) { console.error('[ALERT_CONDITION]', 'teardown-owed', e.message || e); }
-        await alerts.updateConditions(env, conditions);
+        await alerts.updateConditions(env, conditions, { send: false });
     } catch (e) { console.error('[ALERT_CONDITION]', e.message || e); }
 }
 
@@ -1784,8 +1820,8 @@ async function alertConditions(env, s) {
 //     so a live name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a
 //     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
-//   - Claims whose provisioning never finished are finished (finishOrphans).
 //   - Request nonces whose timestamp can no longer verify (twice the clock window, sign.js) are dropped.
+// Then the alert conditions, and last, with the D1 queries left, claims whose provisioning never finished (finishOrphans).
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
@@ -1798,7 +1834,6 @@ async function upkeep(env, results, batch) {
             try { await settleOwed(env, t); } catch (e) { console.error('[TEARDOWN_RETRY]', t.name, t.kind, t.cf_id, e.message || e); }
         }
     } catch (e) { console.error('[TEARDOWN_RETRY]', e.message || e); }
-    try { await finishOrphans(env); } catch (e) { console.error('[ORPHAN]', e.message || e); }
     try { await db.pruneNonces(env, nowS() - 2 * CLOCK_SKEW_S); } catch (e) { console.error('[NONCE_PRUNE]', e.message || e); }
 }
 
@@ -1807,16 +1842,28 @@ async function upkeep(env, results, batch) {
 // "awaiting approval" and waits) is finished by the sweep (F3 of scratch/global-node/DESIGN-registrar-trust-fable.md
 // §5.2), as its next claim would finish it (heal's pending branch): it takes over nothing the registrar did not make, and
 // its node gets the tunnel's token from /status, as it does a repaired tunnel's. Only ORPHAN_AFTER_S after its claim (a
-// request still making it has had its 30 s), and ORPHANS_PER_SWEEP a sweep: each is about six Cloudflare calls, inside
-// the cron's subrequest budget. One Cloudflare refuses again stays pending for the next sweep (or its node, or the admin's
-// "Finish now"); one something else routes is left for its node's claim or the admin's, which refuse it out loud.
+// request still making it has had its 30 s); at most ORPHANS_PER_SWEEP a sweep (each is about six Cloudflare calls,
+// inside the cron's subrequest budget), and each only while the sweep's D1 queries left (d1Meter) hold ORPHAN_D1 and
+// the sweep's send after it (review of #2125). It comes after the upkeep and the alert conditions, so it never starves
+// them, and its New community alerts go with that one send. One past the budget, or one Cloudflare refuses again, stays
+// pending for the next sweep (or its node, or the admin's "Finish now"); one something else routes is left for its
+// node's claim or the admin's, which refuse it out loud.
 const ORPHAN_AFTER_S = 120;
 const ORPHANS_PER_SWEEP = 3;
-async function finishOrphans(env) {
-    const now = nowS();
-    for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP)) {
-        try { await finishOrphan(env, a, now); } catch (e) { console.error('[ORPHAN]', a.name, e.message || e); }
-    }
+const ORPHAN_D1 = 15;   // the most one takes (measured: 10; 12 with a leftover tunnel; 3 more with the outbox full)
+async function finishOrphans(d1) {
+    const env = d1.env;
+    try {
+        if (d1.left() < 1 + sendD1(env)) return;   // not even the list's read
+        const now = nowS();
+        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP)) {
+            if (d1.left() < ORPHAN_D1 + sendD1(env)) {
+                console.warn('[ORPHAN_WAIT]', a.name, `pending: ${d1.left()} of D1's ${D1_QUERIES} queries left this sweep; finishing it takes up to ${ORPHAN_D1}, and the sweep's send ${sendD1(env)}`);
+                break;
+            }
+            try { await finishOrphan(env, a, now); } catch (e) { console.error('[ORPHAN]', a.name, e.message || e); }
+        }
+    } catch (e) { console.error('[ORPHAN]', e.message || e); }
 }
 
 async function finishOrphan(env, a, now) {
@@ -1836,7 +1883,8 @@ async function finishOrphan(env, a, now) {
     }
     console.warn('[ORPHAN_FINISHED]', a.name, `pending → live: ${ids.changed.join(', ') || 'nothing'} made by the sweep`);
     await logEvent(env, a.name, 'healed', `finished by the sweep (its claim's answer never reached its node): pending → live, ${ids.changed.join(', ') || 'nothing'} made`);
-    await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
+    try { await alerts.queue(env, alerts.newCommunity(env, a, await db.countLive(env))); }   // sent with the sweep's send
+    catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?

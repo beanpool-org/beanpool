@@ -221,7 +221,9 @@ export default function BeanPoolSheet() {
                     {/* Two lines at most, as the rows beside it; TalkBack reads all of it (the label), and a sentence the floor
                         cuts (the preview's) is whole on the page the row opens. */}
                     <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={2}>{globalLine}</Text>
-                    {!!globalAside && <Text style={styles.rowSub} numberOfLines={2}>{globalAside}</Text>}
+                    {/* Never cut: nothing opens it whole, and in de, fr, ru, ml and ta it takes three lines at 320 dp and 1.3×.
+                        It shows only while the global community can't be reached, so the row grows instead. */}
+                    {!!globalAside && <Text style={styles.rowSub}>{globalAside}</Text>}
                 </View>
                 {isCurrent
                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />

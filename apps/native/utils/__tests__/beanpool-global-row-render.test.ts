@@ -372,6 +372,13 @@ describe("the global community can't be reached: the community in use isn't affe
         expect(row().getAttribute('aria-label')).toBe(`Global community, Can't reach it right now. Tap to try again. ${AFFECTED}`);
     });
 
+    it('is never cut: nothing opens it whole, and in de, fr, ru, ml and ta it takes three lines at 320 dp', async () => {
+        scene.door = 'offline';
+        await open();
+        const aside = Array.from(row().querySelectorAll('span')).find((s) => s.textContent === AFFECTED)!;
+        expect(aside.getAttribute('data-lines')).toBeNull();
+    });
+
     it('the phone has it saved: the same under the saved row\'s line, read as two sentences', async () => {
         list.rows = [RIVERSIDE, SAVED];
         scene.door = 'offline';

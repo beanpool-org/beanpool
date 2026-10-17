@@ -443,7 +443,7 @@ export default function NodeMismatchScreen() {
                                 onPress={globalTap}
                                 disabled={busy || !globalTap}
                                 accessibilityRole="button"
-                                accessibilityLabel={`${t('Global community')}, ${globalLine[globalEntry]}`}
+                                accessibilityLabel={t('Global community, {state}', { state: globalLine[globalEntry] ?? '' })}
                             >
                                 <Text style={styles.globalIcon}>🌍</Text>
                                 <View style={styles.globalText}>

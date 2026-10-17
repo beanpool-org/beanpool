@@ -889,3 +889,23 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 ### 2026-10-17 — Flow: loading state in AgentSuggestionsPanel, again (#2076) — CLOSED, RE-FILE OF #1957
 - **Category:** RE-FILE (second filing)
 - **Why not to re-file:** the spinner card flashes and disappears on the many nodes with no suggestions, and the emoji spinner repeats #1497. See #1957.
+
+### 2026-10-18 — Bolt: cache prepared statements in engine escrow/social/trust queries (#2114) — CLOSED, NO BENEFIT
+- **Category:** DELIBERATE DECISION
+- **Claim:** `db.prepare` in `packages/beanpool-engine/src/{escrow,social,trust}.ts` should use the per-handle statement cache (`prepared()`), for speed.
+- **Why not to re-file:** `statements.ts` (#1470) keeps `prepared()` for a statement a read runs once PER ROW; a read's own one-shot queries stay `db.prepare` (compiling is a small part of running, and suites watch `db.prepare`). Every function #2114 converted runs once per request, so nothing is saved, and it put the escrow path on a cache for nothing (Rule 11; #1682). Bolt: name the per-row loop and measure a gain on a real route first.
+
+### 2026-10-18 — Flow: loading indicator in DoorSettingPanel, third filing (#2116) — CLOSED, RE-FILE OF #1670 / #1820
+- **Category:** CLAIM FALSE (see #1670, #1820, #1725)
+- **Claim:** `DoorSettingPanel.tsx` needs a "Loading door configuration…" state while its first read is in flight.
+- **Why not to re-file:** one read of the signed-in node; the panel renders nothing on a node older than the door setting, so a spinner flashes and vanishes. No stall shown. Flow: search this register for the component's name first, and show a stall an operator can see.
+
+### 2026-10-18 — Pixel: dynamic accessibilityLabel on the group invite landing action (#2117) — CLOSED, ALREADY COVERED (#1036)
+- **Category:** CLAIM FALSE
+- **Claim:** the primary button in `apps/native/app/group/[id].tsx` should speak "Opening group chat..." / "Joining group..." while busy.
+- **Why not to re-file:** it already has an explicit label and `accessibilityState={{ busy }}` (#1036). The proposed strings were hardcoded English outside `t()` in a five-language app. Pixel: a new spoken string goes through `t()` and needs a real gap.
+
+### 2026-10-18 — Expo: take the first of repeated search params in claim-community.tsx, again (#2118) — CLOSED, DECIDED (#1753, #2073)
+- **Category:** DELIBERATE DECISION
+- **Claim:** `useLocalSearchParams` in `claim-community.tsx` can return `string[]`, so take `[0]`.
+- **Why not to re-file:** third filing of #1753 (and #2073). A claim link that repeats a param is ambiguous and refused on purpose; `+native-intent` rewrites claim links through `parseClaimLink`/`claimRouteFor`, which emit one checked value each. Silently taking the first server address on the ownership-claim screen is wrong. Expo: re-file only with a real link that produces the array and Marty's decision.

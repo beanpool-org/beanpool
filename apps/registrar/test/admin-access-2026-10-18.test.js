@@ -3,7 +3,7 @@
 // gone; 43 of the 45 released rows on the live D1 were released by their own key, which forget refuses).
 // A locally made RSA key pair stands in for the team's Access keys: the Worker's fetch of
 // https://<team>/cdn-cgi/access/certs is answered here, and counted. Each world has its own team, so its own key cache.
-// On origin/main (40b66e85) 18 of these 19 fail — no /whoami (404), the JWT ignored and ADMIN_SECRET still accepted
+// On origin/main (40b66e85) 19 of these 20 fail — no /whoami (404), the JWT ignored and ADMIN_SECRET still accepted
 // under Access, /admin served to anyone, events saying "the admin"; the bulk forget ignores free_now and refuses a
 // release its old key can take back. The one that passes there is the guard that node routes need nothing (measured).
 import { test } from 'node:test';
@@ -486,17 +486,35 @@ test('Free all and remove tells the phone once per click (its run), not once per
     const w = await world();
     try {
         await julyRows(w);
-        const admin = () => w.sqlite.prepare("SELECT title, body, once FROM alert_outbox WHERE category='admin' AND (title LIKE '%freed%' OR title LIKE '%removed%') ORDER BY id").all().map((r) => ({ ...r }));
+        const admin = () => w.sqlite.prepare("SELECT title, body, once FROM alert_outbox WHERE category='admin' AND (title LIKE '%Free all%' OR title LIKE '%freed%' OR title LIKE '%removed%') ORDER BY id").all().map((r) => ({ ...r }));
         const run = 'run-0123456789';
         for (const batch of [['old1', 'old2'], ['recent', 'adminfree']]) assert.equal((await freeAll(w, batch, { run, total: 4 })).status, 200);
         assert.deepEqual(admin(), [{
-            title: 'You freed and removed 4 released names', once: `free-all:${run}`,
+            title: 'You chose Free all and remove for 4 released names', once: `free-all:${run}`,
             body: 'You chose Free all and remove for 4 released names: each freed now (its old server can no longer take it back), then removed from the list, free to anyone. What each one did is under Name events.',
         }]);
         // No run (a hand-made request): told as Remove all released's are, with what it freed.
         assert.equal((await freeAll(w, ['heldall'])).status, 200);
         assert.deepEqual(admin().slice(1).map((r) => [r.title, r.body]), [['You freed and removed heldall from the list',
             'You freed and removed heldall.beanpool.org from the list: free to anyone; its old server can no longer take it back.']]);
+    } finally { w.restore(); }
+});
+
+test('Free all and remove: a later batch refused (a name live again meanwhile) — the click\'s one alert says what was chosen, never that all of them went', async () => {
+    // PR #2111 review: the first batch's alert said "freed and removed 3 released names" before the rest had run.
+    const w = await world();
+    try {
+        await julyRows(w);
+        const run = 'run-refused-01';
+        assert.deepEqual((await freeAll(w, ['old1', 'old2'], { run, total: 3 })).body.removed, ['old1', 'old2']);
+        const later = await freeAll(w, ['live1'], { run, total: 3 });
+        assert.deepEqual(later.body.removed, []);
+        assert.equal(later.body.refused.length, 1);
+        assert.equal((await w.row('live1')).status, 'live');
+        const told = w.sqlite.prepare("SELECT title, body FROM alert_outbox WHERE category='admin' AND once=?").all(`free-all:${run}`);
+        assert.deepEqual(told.map((r) => r.title), ['You chose Free all and remove for 3 released names']);
+        assert.doesNotMatch(told[0].title + told[0].body, /freed and removed|removed 3/);
+        assert.match(told[0].body, /What each one did is under Name events\.$/);
     } finally { w.restore(); }
 });
 
@@ -530,7 +548,7 @@ test('Free all and remove under Access: needs the token like every admin route, 
         const r = await freeAll(w, ['old1'], { run: 'run-access-01', total: 1 }, { 'cf-access-jwt-assertion': await w.mint(), 'x-bp-admin': '1' });
         assert.deepEqual(r.body, { removed: ['old1'], refused: [], freed: ['old1'] });
         assert.deepEqual(w.events('old1').slice(-2).map((e) => e.detail.replace(/ \(was .*$/, '')), [`released by ${EMAIL}`, `removed from the list by ${EMAIL}`]);
-        assert.equal(w.sqlite.prepare("SELECT title FROM alert_outbox WHERE once='free-all:run-access-01'").get().title, `${EMAIL} freed and removed 1 released name`);
+        assert.equal(w.sqlite.prepare("SELECT title FROM alert_outbox WHERE once='free-all:run-access-01'").get().title, `${EMAIL} chose Free all and remove for 1 released name`);
     } finally { w.restore(); }
 });
 

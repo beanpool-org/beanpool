@@ -30,7 +30,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   every name /admin lists as released: each is freed as its own "Free now" frees it (a `released` event; its old key's
   take-back ends), then removed (a `removed` event); any other row is refused untouched, and a repeat removes nothing.
   The page sends one click's names with one `run` id and their `total`, and the phone hears of the click once
-  (`once: free-all:<run>`), not of every batch — 45 names are 23 requests, past the hourly cap of 20.
+  (`once: free-all:<run>`), not of every batch — 45 names are 23 requests, past the hourly cap of 20. It says what
+  was chosen ("chose Free all and remove for 45 released names"), never that all of them went: the later batches have
+  not run when it is sent, and one may be refused; what each name did is in its events.
   A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is
   logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·

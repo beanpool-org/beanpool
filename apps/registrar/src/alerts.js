@@ -104,13 +104,15 @@ export function adminRemoved(env, names, { who = null, freed = 0 } = {}) {
 }
 // "Free all and remove" from /admin (index.js handleForgetMany): one message for the click, however many requests its
 // names take — told by its first request that removed any, once per `run` (the page's id for the click). `total`: how
-// many names the page asked for; what each one did is in its name events.
+// many names the page asked for. It says what the admin chose, never that all of them went: the click's later requests
+// haven't run when it is sent, and one may be refused (a name live again, the sign-in run out, the tab closed — PR #2111
+// review). What each one did is in its name events.
 export function adminFreedAll(env, { who = null, run, total = null }) {
     const you = who || 'You';
     const n = total ? plural(total, 'released name') : 'released names';
     return {
         category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null, once: `free-all:${run}`,
-        title: `${you} freed and removed ${n}`,
+        title: `${you} chose Free all and remove for ${n}`,
         body: `${you} chose Free all and remove for ${n}: each freed now (its old server can no longer take it back), then removed from the list, free to anyone. What each one did is under Name events.`,
     };
 }

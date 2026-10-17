@@ -928,10 +928,11 @@ export function startOrphanObjectSweep(opts?: {
 
 /**
  * Bring the next pass forward to ORPHAN_SWEEP_CONTINUE_MS from now, when it was due later: the admin Clean left
- * orphans behind and the background carries on with them. A pass already running decides for itself by what it
- * left; a sweep that was never armed (a suite) is left alone.
+ * orphans behind, or the listing archive deleted photo rows (engine/posts.ts archiveStaleListings), and the background
+ * carries on with them. A pass already running decides for itself by what it left; a sweep that was never armed (a
+ * suite) is left alone.
  */
-function nudgeOrphanSweep(): void {
+export function nudgeOrphanSweep(): void {
     const armed = orphanSweepArmed;
     if (!armed || armed.running) return;
     if (armed.nextAt - Date.now() > armed.continueMs) armed.schedule(armed.continueMs);

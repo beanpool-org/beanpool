@@ -55,11 +55,11 @@ const nav = vi.hoisted(() => ({
 }));
 vi.mock('expo-router', () => ({ router: nav.router, useLocalSearchParams: () => nav.params, ErrorBoundary: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
-// The camera: allowed, and the barcode handler kept so a test can hand it what the camera read.
-const camera = vi.hoisted(() => ({ onScanned: null as null | ((r: { data: string }) => void) }));
+// The camera: allowed unless a test refuses it, and the barcode handler kept so a test can hand it what the camera read.
+const camera = vi.hoisted(() => ({ granted: true, onScanned: null as null | ((r: { data: string }) => void) }));
 vi.mock('expo-camera', () => ({
     CameraView: (props: { onBarcodeScanned: (r: { data: string }) => void }) => { camera.onScanned = props.onBarcodeScanned; return createElement('div', { 'data-testid': 'camera' }); },
-    useCameraPermissions: () => [{ granted: true }, vi.fn(async () => ({ granted: true }))],
+    useCameraPermissions: () => [{ granted: camera.granted }, vi.fn(async () => ({ granted: camera.granted }))],
 }));
 vi.mock('expo-clipboard', () => ({ getStringAsync: vi.fn(async () => '') }));
 vi.mock('expo-crypto', async () => {
@@ -96,6 +96,7 @@ vi.mock('../node-claim', async (importOriginal) => {
     };
 });
 
+import { Alert } from 'react-native';
 import ClaimCommunityScreen from '../../app/claim-community';
 import { CLAIM_CODE_PLACEHOLDER } from '../claim-link';
 import { claimCodeDigits, claimCodeFromDigits, readClaimStatus } from '../node-claim';
@@ -144,6 +145,8 @@ beforeEach(() => {
     look.theme = 'light';
     server.asked = [];
     camera.onScanned = null;
+    camera.granted = true;
+    vi.mocked(Alert.alert).mockClear();
 });
 
 describe('the empty claim code box reads as empty', () => {
@@ -312,6 +315,19 @@ describe('with no server yet, Scan the code reads the server\'s claim QR', () =>
         expect(host.textContent).toContain('https://other.example.org');
         expect(codeField(host)!.value).toBe('');
         expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it.each([
+        ['with no server yet, the address', {}, "Allow the camera for BeanPool in your phone settings, or type the server's address."],
+        ['on the code step, the code', { node: ORIGIN }, 'Allow the camera for BeanPool in your phone settings, or type the code.'],
+    ] as Array<[string, Record<string, string>, string]>)('with the camera refused, the message names what this step has a box for: %s', async (_, params, words) => {
+        camera.granted = false;
+        nav.params = params;
+        const host = await render();
+        await act(async () => { button(host, 'Scan the code')!.click(); });
+        expect(q(host, '[data-testid="camera"]')).toBeNull();
+        expect(vi.mocked(Alert.alert)).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(Alert.alert)).toHaveBeenCalledWith('Camera is off', words);
     });
 
     it('anything else keeps the camera looking', async () => {

@@ -145,7 +145,13 @@ export default function ClaimCommunityScreen() {
     const openScanner = async () => {
         if (!permission?.granted) {
             const p = await requestPermission();
-            if (!p.granted) { Alert.alert('Camera is off', 'Allow the camera for BeanPool in your phone settings, or type the code.'); return; }
+            if (!p.granted) {
+                // With no server yet the step has no code box: the address is what can be typed instead.
+                Alert.alert('Camera is off', origin
+                    ? 'Allow the camera for BeanPool in your phone settings, or type the code.'
+                    : t("Allow the camera for BeanPool in your phone settings, or type the server's address."));
+                return;
+            }
         }
         scanLock.current = false;
         setScanning(true);

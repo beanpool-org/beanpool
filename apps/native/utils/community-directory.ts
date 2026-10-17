@@ -21,7 +21,7 @@ import { communityOrigin } from './community-origin';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
-import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, knownCommunityCount } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, knownCommunityCount, placeWatchLimitLine } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
 export { communityOrigin };
@@ -220,7 +220,13 @@ export async function watchPlace(identity: BeanPoolIdentity, point: Point, base:
     try {
         const res = await signedPost(base, '/api/global/watches', { lat: point.lat, lng: point.lng }, identity);
         if (res.status === 404) return { ok: false, kind: 'unavailable', message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unavailable };
-        if (!res.ok) return { ok: false, kind: 'refused', status: res.status, message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unreadable };
+        if (!res.ok) {
+            const body = await res.json().catch(() => null) as { error?: unknown; code?: unknown; limit?: unknown } | null;
+            // Watching as many places as the node allows: said in the member's language, with the node's number.
+            const atLimit = body?.code === PLACE_WATCH_LIMIT_CODE && typeof body.limit === 'number' && Number.isInteger(body.limit) && body.limit > 0;
+            const said = typeof body?.error === 'string' && body.error.trim() ? body.error : null;
+            return { ok: false, kind: 'refused', status: res.status, message: atLimit ? placeWatchLimitLine(body!.limit as number) : said ?? DIRECTORY_MESSAGES.unreadable };
+        }
         const watch = readWatch((await res.json().catch(() => null))?.watch);
         return watch ? { ok: true, value: watch } : { ok: false, kind: 'unreachable', message: DIRECTORY_MESSAGES.unreadable };
     } catch {

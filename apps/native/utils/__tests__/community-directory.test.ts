@@ -113,9 +113,14 @@ describe('the requests', () => {
         expect(sent[0].headers['X-Public-Key']).toBe(me.publicKey);
         answer = () => ({ status: 409, body: { error: 'You can watch up to 3 places. Remove one to watch another.', code: 'watch_limit' } });
         expect(await watchPlace(me, { lat: 0.1, lng: 0.1 })).toEqual({ ok: false, kind: 'refused', status: 409, message: 'You can watch up to 3 places. Remove one to watch another.' });
+        // With the node's number, the app says it in its own words (the member's language), whatever the node wrote.
+        answer = () => ({ status: 409, body: { error: 'the node\'s own words', code: 'watch_limit', limit: 2 } });
+        expect(await watchPlace(me, { lat: 0.1, lng: 0.1 })).toEqual({ ok: false, kind: 'refused', status: 409, message: 'You can watch up to 2 places. Remove one to watch another.' });
+        answer = () => ({ status: 409, body: { error: 'the node\'s own words', code: 'watch_limit', limit: 1 } });
+        expect(await watchPlace(me, { lat: 0.1, lng: 0.1 })).toEqual({ ok: false, kind: 'refused', status: 409, message: 'You can watch up to 1 place. Remove it to watch another.' });
         answer = () => ({ status: 200, body: { success: true } });
         expect(await unwatchPlace(me, 'w 1')).toEqual({ ok: true, value: true });
-        expect(sent[2]).toMatchObject({ url: `${GLOBAL_NODE_URL}/api/global/watches/w%201`, method: 'DELETE' });
+        expect(sent[4]).toMatchObject({ url: `${GLOBAL_NODE_URL}/api/global/watches/w%201`, method: 'DELETE' });
     });
 });
 

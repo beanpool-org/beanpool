@@ -47,7 +47,10 @@ export interface GlobalEntryInput {
     standing: GlobalStanding;
     /** The door check. */
     door: GlobalDoorState;
-    /** The global community answered `account_closed` for this key (global-join-existing.ts rememberAccountClosed). */
+    /**
+     * The global community's last definite answer about this key was `account_closed` (global-join-existing.ts
+     * rememberAccountClosed; a later member or stranger answer forgets it: a vote can bring a removed member back).
+     */
     closedHere: boolean;
     /** The global community is in the phone's saved list: for the row's shape only, NEVER for the state. */
     saved: boolean;
@@ -117,10 +120,13 @@ export async function readGlobalStanding(publicKey: string | null | undefined, n
     return freshStanding((await readKept())[publicKey], nowMs);
 }
 
-async function keepStanding(publicKey: string, standing: 'member' | 'stranger', nowMs: number): Promise<void> {
+/** Keep this key's answer, or, with `null`, drop it (an `account_closed` answer: no member answer outlives it). */
+async function keepStanding(publicKey: string, standing: 'member' | 'stranger' | null, nowMs: number): Promise<void> {
     try {
         const all = await readKept();
-        all[publicKey] = { standing, at: nowMs };
+        if (standing) all[publicKey] = { standing, at: nowMs };
+        else if (publicKey in all) delete all[publicKey];
+        else return;
         await AsyncStorage.setItem(GLOBAL_STANDING_STORE_KEY, JSON.stringify(all));
     } catch {
         // Not kept: asked again next time. Nothing depends on it but the offer.
@@ -139,31 +145,35 @@ export interface AskedStanding {
 export interface AskDeps {
     probe(community: string, key: { publicKey: string; privateKey: string }, signal?: AbortSignal): Promise<Response>;
     rememberClosed(publicKey: string): Promise<void>;
+    forgetClosed(publicKey: string): Promise<void>;
     now(): number;
 }
 
 async function defaultAskDeps(): Promise<AskDeps> {
     // Loaded when used: the probe signs (crypto), and the closed list lives with the door (global-join-existing.ts).
     const { fetchMembership } = await import('./membership-probe');
-    const { rememberAccountClosed } = await import('./global-join-existing');
-    return { probe: fetchMembership, rememberClosed: rememberAccountClosed, now: Date.now };
+    const { forgetAccountClosed, rememberAccountClosed } = await import('./global-join-existing');
+    return { probe: fetchMembership, rememberClosed: rememberAccountClosed, forgetClosed: forgetAccountClosed, now: Date.now };
 }
 
 const ASK_TIMEOUT_MS = 6_000;
 
 /**
- * Ask the global community about this key (signed by it: the probe answers only its own key), and keep the answer. A
- * member or stranger answer is kept for a day; `account_closed` is remembered for good (it can't change from the phone);
- * any other failure leaves the kept answer as it was. Never throws.
+ * Ask the global community about this key (signed by it: the probe answers only its own key), and keep the answer. The
+ * last definite answer wins: a member or stranger answer is kept for a day and forgets an `account_closed` kept before
+ * (a vote can bring a removed member back: server `reinstate_member`, after which the key signs again); `account_closed`
+ * is remembered until then and drops a member or stranger answer kept before. Any other failure leaves what was kept as
+ * it was. Never throws.
  */
 export async function askGlobalStanding(
     identity: { publicKey: string; privateKey: string },
     injected?: Partial<AskDeps>,
     community: string = GLOBAL_NODE_URL,
 ): Promise<AskedStanding> {
-    const base = injected?.probe && injected?.rememberClosed ? null : await defaultAskDeps();
+    const base = injected?.probe && injected?.rememberClosed && injected?.forgetClosed ? null : await defaultAskDeps();
     const probe = injected?.probe ?? base!.probe;
     const rememberClosed = injected?.rememberClosed ?? base!.rememberClosed;
+    const forgetClosed = injected?.forgetClosed ?? base!.forgetClosed;
     const now = injected?.now ?? Date.now;
     const kept = async (): Promise<AskedStanding> => ({ standing: await readGlobalStanding(identity.publicKey, now()), closed: false, answered: false });
     const controller = new AbortController();
@@ -174,10 +184,12 @@ export async function askGlobalStanding(
         if (!answer) return await kept();
         if (answer.kind === 'closed') {
             await rememberClosed(identity.publicKey).catch(() => {});
+            await keepStanding(identity.publicKey, null, now());
             return { standing: 'unknown', closed: true, answered: true };
         }
         const standing = answer.kind === 'member' ? 'member' : 'stranger';
         await keepStanding(identity.publicKey, standing, now());
+        await forgetClosed(identity.publicKey).catch(() => {});
         return { standing, closed: false, answered: true };
     } catch {
         return await kept();

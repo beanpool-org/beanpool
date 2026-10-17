@@ -66,7 +66,10 @@ export function isGlobalCommunity(url: string | null | undefined): boolean {
 
 const CLOSED_KEYS = 'beanpool_global_account_closed';
 
-/** Remember, per node and key, that global answered `account_closed`, so the door is no longer offered to this key. */
+/**
+ * Remember, per node and key, that global answered `account_closed`, so the door is no longer offered to this key, until
+ * global answers it otherwise ({@link forgetAccountClosed}).
+ */
 export async function rememberAccountClosed(publicKey: string): Promise<void> {
     try {
         const list = await closedList();
@@ -75,7 +78,19 @@ export async function rememberAccountClosed(publicKey: string): Promise<void> {
     } catch { /* the door's own answer still says it */ }
 }
 
-/** Whether global has said `account_closed` for this key on this phone. A read that fails says no. */
+/**
+ * Forget it again: global has since answered this key as anything but closed. A vote can bring a removed member back
+ * (server `reinstate_member`), after which the key signs again (PR #2098 review).
+ */
+export async function forgetAccountClosed(publicKey: string): Promise<void> {
+    try {
+        const list = await closedList();
+        const entry = `${GLOBAL_NODE_URL}|${publicKey}`;
+        if (list.includes(entry)) await AsyncStorage.setItem(CLOSED_KEYS, JSON.stringify(list.filter((e) => e !== entry)));
+    } catch { /* asked again the next time the screen opens */ }
+}
+
+/** Whether global's last definite answer about this key on this phone was `account_closed`. A read that fails says no. */
 export async function accountClosedAtGlobal(publicKey: string | null | undefined): Promise<boolean> {
     if (!publicKey) return false;
     return (await closedList()).includes(`${GLOBAL_NODE_URL}|${publicKey}`);

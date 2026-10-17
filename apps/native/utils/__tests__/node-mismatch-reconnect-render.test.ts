@@ -115,10 +115,13 @@ vi.mock('../delete-here', () => ({
     otherCommunitiesKeeping: async () => [], stillKeptLine: () => '',
 }));
 vi.mock('../no-words-copy', () => ({ noWordsBeforeWipe: () => '' }));
+// The phone's mark that global closed this key (global-join-existing.ts), as the hook and askGlobalStanding read it.
+const closedMark = vi.hoisted(() => ({ on: false }));
 vi.mock('../global-join-existing', () => ({
     isGlobalCommunity: (url: string | null | undefined) => !!url && url.trim().replace(/\/+$/, '').toLowerCase() === 'https://global.beanpool.org',
-    accountClosedAtGlobal: async () => false,
-    rememberAccountClosed: async () => {},
+    accountClosedAtGlobal: async () => closedMark.on,
+    rememberAccountClosed: async () => { closedMark.on = true; },
+    forgetAccountClosed: async () => { closedMark.on = false; },
 }));
 const joins = vi.hoisted(() => ({ calls: [] as unknown[] }));
 vi.mock('../join-another-community', () => ({
@@ -169,6 +172,7 @@ beforeEach(() => {
     recognition.nodeUrl = LOCAL;
     dbCalls.closed = 0;
     dbCalls.opened = 0;
+    closedMark.on = false;
     // Damo's phone: a member of Riverside, the one community in its list, in use.
     store.map.set('beanpool_anchor_url', LOCAL);
     store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: LOCAL, alias: 'Riverside', lastConnected: '2026-10-01T00:00:00.000Z' }]));
@@ -296,6 +300,22 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         expect(globalRow()!.querySelector('[data-lines]')).toBeNull();
         expect(button('Reconnect')).toBeTruthy();
         expect(button('Paste an invite')).toBeTruthy();
+    });
+
+    // PR #2098 review 4302678601: a vote can bring a removed member back. The phone's old mark must not beat global's
+    // answer now, or a member reads "Your account there was closed."
+    it("the global row: a key global once closed, brought back by a vote, now answered member → the member row, and the mark forgotten", async () => {
+        closedMark.on = true;
+        const riverside = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        globalThis.fetch = vi.fn(async (input: unknown) => {
+            const u = String(input);
+            if (u === `${GLOBAL}/api/community/membership/${KEY}`) { asked.push(u); return new Response(JSON.stringify({ isMember: true }), { status: 200 }); }
+            return (riverside as any)(input);
+        }) as typeof fetch;
+        await render();
+        expect(globalRow()?.getAttribute('aria-label')).toBe('Global community, global.beanpool.org');
+        expect(text()).not.toContain('Your account there was closed.');
+        expect(closedMark.on).toBe(false);
     });
 
     it("preview: the community's own sentence, and the invite field for an owner's or admin's invite", async () => {

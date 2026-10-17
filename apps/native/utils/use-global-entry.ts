@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useGlobalDoorOpen } from './use-global-door-open';
@@ -16,6 +16,9 @@ import {
  * and, once the door is open, the key's standing (the membership probe, signed by the key). The probe goes to the global
  * community only then: a phone whose global door is shut or unreachable never tells it which screen it opened.
  *
+ * The last definite answer wins: one from the probe this time replaces what was kept, a kept `account_closed` included
+ * (a vote can bring a removed member back), and a kept answer read after it never overrides it.
+ *
  * `door` overrides the door's answer where a screen has asked it fresh (the not-recognised screen's checkGlobalDoor):
  * the session answer above only knows "open" or "not yet".
  */
@@ -28,15 +31,18 @@ export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): Global
     const [standing, setStanding] = useState<GlobalStanding>('unknown');
     const [closedHere, setClosedHere] = useState(false);
     const [asking, setAsking] = useState(false);
+    // The probe answered this key this time: what was kept is older and no longer drawn.
+    const answeredRef = useRef(false);
 
     // What the phone kept for this key, no network.
     useEffect(() => {
         let cancelled = false;
+        answeredRef.current = false;
         setStanding('unknown');
         setClosedHere(false);
         if (!publicKey) return;
-        readGlobalStanding(publicKey).then(s => { if (!cancelled) setStanding(s); }).catch(() => {});
-        accountClosedAtGlobal(publicKey).then(c => { if (!cancelled && c) setClosedHere(true); }).catch(() => {});
+        readGlobalStanding(publicKey).then(s => { if (!cancelled && !answeredRef.current) setStanding(s); }).catch(() => {});
+        accountClosedAtGlobal(publicKey).then(c => { if (!cancelled && c && !answeredRef.current) setClosedHere(true); }).catch(() => {});
         return () => { cancelled = true; };
     }, [publicKey]);
 
@@ -49,7 +55,10 @@ export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): Global
             .then(r => {
                 if (cancelled) return;
                 setStanding(r.standing);
-                if (r.closed) setClosedHere(true);
+                if (r.answered) {
+                    answeredRef.current = true;
+                    setClosedHere(r.closed);
+                }
             })
             .catch(() => {})
             .finally(() => { if (!cancelled) setAsking(false); });

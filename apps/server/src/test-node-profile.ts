@@ -154,6 +154,8 @@ async function main() {
         'invites: on for a local community, off on the lobby, whose open door is the only way in (Marty, 2026-10-01)');
     assert(local.announceJoins === true && global.announceJoins === false,
         'member_joined to every member socket: a local community, as before; on the lobby only to the joiner (test-global-server-limits)');
+    assert(local.retention === false && global.retention === true,
+        'retention: a listing unchanged for 90 days is archived on the lobby only; a local community keeps it (test-global-cost-limits)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

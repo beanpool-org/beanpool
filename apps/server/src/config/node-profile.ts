@@ -51,7 +51,7 @@
  * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
-import { prepared } from '@beanpool/engine';
+import { prepared, MAX_POST_PHOTOS } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
@@ -171,6 +171,12 @@ export interface ProfileSwitches {
      *  local community): a member is someone the community let in, and everything reads as before. It only ever takes
      *  reads away, so it has no lock. */
     openMembership: boolean;
+    /** A listing (an Offer or a Need) is archived `profileLimits().listingArchiveDays` after it last changed: taken off
+     *  the Market as its author's own removal takes it, and its photos deleted (engine/posts.ts archiveStaleListings;
+     *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18). On (the global node): photos are the cost that
+     *  grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local community): a
+     *  listing stays until its author takes it down, as before. */
+    retention: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -205,6 +211,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         membersOnDemand: false,
         showcase: false,
         openMembership: false,
+        retention: false,
     },
     global: {
         openJoin: true,
@@ -246,6 +253,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         showcase: true,
         // Anyone can join in a minute (the privacy review, 2026-10-14): no whole directory, no strangers' group rosters.
         openMembership: true,
+        // Free, with limits published (Marty, 2026-10-18): a listing nobody has touched in 90 days goes, with its photos.
+        retention: true,
     },
 };
 
@@ -461,6 +470,61 @@ export function nearbyListingsLimits(): { radiusKm: number; max: number } {
     return nearbyLimits ??= {
         radiusKm: envWhole('NEARBY_LISTINGS_RADIUS_KM', NEARBY_LISTINGS_RADIUS_KM_DEFAULT, NEARBY_LISTINGS_RADIUS_KM_MAX),
         max: envWhole('NEARBY_LISTINGS_MAX', NEARBY_LISTINGS_MAX_DEFAULT, NEARBY_LISTINGS_MAX_MAX),
+    };
+}
+
+// ── The limits that keep a global community's cost flat ────────────────────────────────────
+
+/** A listing is archived this many days after it last changed, where `retention` is on (Marty, 2026-10-18). */
+export const LISTING_ARCHIVE_DAYS_DEFAULT = 90;
+/** LISTING_ARCHIVE_DAYS's range: under a month would take listings their authors still mean; ten years is "keep them". */
+const LISTING_ARCHIVE_DAYS_MIN = 30;
+const LISTING_ARCHIVE_DAYS_MAX = 3_650;
+/** The places a member may watch for a community starting near them (G5), wherever the directory is kept. */
+export const PLACE_WATCHES_DEFAULT = 3;
+const PLACE_WATCHES_CEILING = 20;
+
+/**
+ * The numbers a member can reach on this node, published on the guide's "The global community's limits" page and the
+ * operator manual's "Limits on a global community" (DESIGN-global-mothership-fable §4.2, decision 7). Each is the
+ * profile's default unless the operator set its env; a value out of range is the default, and the log says so once.
+ */
+export interface ProfileLimits {
+    /** Days after it last changed (an edit, a pause, being put back up) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
+     *  Null where `retention` is off: a listing stays until its author takes it down. */
+    listingArchiveDays: number | null;
+    /** Photos a listing or an event may carry: 5 on every node, as the apps' five photo slots are (@beanpool/engine
+     *  MAX_POST_PHOTOS). Not an env: a lower number would meet five slots in the apps. */
+    photosPerListing: number;
+    /** The listings a phone's set holds (`nearbyListings`): NEARBY_LISTINGS_MAX, 500 (nearbyListingsLimits). Null where
+     *  the switch is off: the phone holds every listing, as before. */
+    nearbyListingsMax: number | null;
+    /** Places one member may watch: PLACE_WATCHES_MAX, 3. Only where the directory is kept (`directoryMirror`): elsewhere
+     *  there are none to watch. */
+    placeWatches: number;
+}
+
+/** A whole number from the env within [min, max]; unset is the default, and anything else is the default, said once. */
+function envLimit(name: string, fallback: number, min: number, max: number): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= min && n <= max) return n;
+    warnOnce(`⚠️  ${name}=${JSON.stringify(raw)} is not a whole number from ${min} to ${max}, so this node keeps its default, ${fallback}.`);
+    return fallback;
+}
+
+const archiveDaysSetting = (): number =>
+    envLimit('LISTING_ARCHIVE_DAYS', LISTING_ARCHIVE_DAYS_DEFAULT, LISTING_ARCHIVE_DAYS_MIN, LISTING_ARCHIVE_DAYS_MAX);
+
+/** This node's limits, as it runs now. */
+export function profileLimits(): ProfileLimits {
+    const s = getProfileSwitches();
+    return {
+        listingArchiveDays: s.retention ? archiveDaysSetting() : null,
+        photosPerListing: MAX_POST_PHOTOS,
+        nearbyListingsMax: s.nearbyListings ? nearbyListingsLimits().max : null,
+        placeWatches: envLimit('PLACE_WATCHES_MAX', PLACE_WATCHES_DEFAULT, 1, PLACE_WATCHES_CEILING),
     };
 }
 
@@ -833,6 +897,10 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
             loudly(`⚠️  Invites are off and the open door is shut, so nobody new can join this node. To let people in, turn invites `
                 + `back on with the node_config row ${NODE_PROFILE_KEY}.invites = true.`);
         }
+    }
+    if (configured.retention) {
+        console.log(`🗄️  Retention is on: a listing is archived ${archiveDaysSetting()} days after it last changed, and its photos are `
+            + 'deleted (LISTING_ARCHIVE_DAYS).');
     }
     return { profile, previous };
 }

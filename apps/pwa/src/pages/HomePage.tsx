@@ -73,7 +73,7 @@ import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
@@ -898,7 +898,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             setWatched(true);
             setWatchNote(t(WATCH_WORDS.done));
         } catch (e: any) {
-            setWatchNote(e?.message || t("That didn't go through. Try again."));
+            // Watching as many places as the node allows: in the member's language, with the node's number.
+            if (e?.code === PLACE_WATCH_LIMIT_CODE && typeof e.limit === 'number') setWatchNote(placeWatchLimitLine(e.limit));
+            else setWatchNote(e?.message || t("That didn't go through. Try again."));
         }
     }
 

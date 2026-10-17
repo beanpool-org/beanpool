@@ -12,7 +12,7 @@ import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
     getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
-    BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
+    profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
@@ -364,6 +364,7 @@ import {
     letInEvent as letInEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
+    archiveStaleListings as archiveStaleListingsEngine,
     type EscrowRefundShortfall,
     type EventTimeOut
 } from './engine/posts.js';
@@ -1267,6 +1268,24 @@ export function runMarketplaceHygiene(): void {
     } catch (e) {
         console.warn('[Push] Hygiene tidy of push notices failed:', e);
     }
+
+    // 6. Retention, where the node profile's `retention` switch is on (the global node): listings nothing has changed in
+    // LISTING_ARCHIVE_DAYS (90) are archived, with their photos (engine/posts.ts archiveStaleListings).
+    try {
+        archiveStaleListings();
+    } catch (e) {
+        console.warn('[Retention] Listing archive failed:', e);
+    }
+}
+
+/** One run of the listing archive (runMarketplaceHygiene step 6), with this node's broadcast and push. */
+export function archiveStaleListings(nowMs = Date.now()): ReturnType<typeof archiveStaleListingsEngine> {
+    const run = archiveStaleListingsEngine(broadcast, dispatchPushNotification, nowMs);
+    if (run.archived > 0 || run.photosDropped > 0) {
+        console.log(`🗄️  Archived ${run.archived} listing(s) past ${profileLimits().listingArchiveDays} days without a change, `
+            + `and deleted ${run.photosDropped} photo(s)${run.more ? '; more wait for the next hour' : ''}`);
+    }
+    return run;
 }
 
 function sweepSettledEscrowAccounts(): void {

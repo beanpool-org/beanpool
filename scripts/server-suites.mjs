@@ -126,6 +126,7 @@ export const SUITES = [
     'test-gateway-real-client',
     'test-dos-hardening',
     'test-global-server-limits',
+    'test-global-cost-limits',
     'test-profile-fanout',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',

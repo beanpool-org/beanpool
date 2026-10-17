@@ -1,7 +1,7 @@
 ---
 slug: web-app
 title: Using BeanPool in a web browser
-summary: The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, and where the web app's buttons have different names.
+summary: The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, putting the same account on your phone, and where the web app's buttons have different names.
 related: home, the-bean, your-12-words, joining, messages, reporting
 ---
 
@@ -14,6 +14,8 @@ Your community can also be used in a web browser, on a computer or a phone. This
 The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app.
 
 Before you join, the page shows **Home**, the **Market**, the **Map** and the **Ledger** (an example from a local community) as a visitor sees them: the public cards, listings, photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
+
+On a phone's browser, that card offers **Open in the BeanPool app** first. It opens the BeanPool app at the global community's way in, or your phone's app store if the app isn't installed yet, so your account is in the app from the start. Under it, **or join here in your browser** joins right here, as below. On a computer the card shows **Join**.
 
 While the global community has only a few listings, its **Market** also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened. They go once there are enough real listings.
 
@@ -94,6 +96,7 @@ If you joined the global community with 12 words, they are your only way back. A
 - **Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.
 - **Chats:** the web chat has **Report** and **Block** buttons at the top.
 - **Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See "Your area".
+- **Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address. It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row.
 
 ## What the web app does not have
 
@@ -101,6 +104,17 @@ If you joined the global community with 12 words, they are your only way back. A
 - The Pulse's **Learn** lane.
 - The phone's app lock.
 - Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Manage this community from a computer**; older apps: **Sign in on a computer**).
+
+## Putting your web account on a phone
+
+If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:
+
+- Install the BeanPool app and open it.
+- Tap **Already a Member? Restore Account**, then **Recover with 12 Words**.
+- Choose **Global community** and type your 12 words. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.
+- If you joined with a sign-in, **Recover with Social** works too, with that same sign-in. See "Getting your account back".
+
+Screen 1 of joining in a browser says the same the other way round: if you are already on BeanPool, on any phone or computer, bring that account instead of starting a new one.
 
 ## Using your phone account on a computer
 

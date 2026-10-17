@@ -196,3 +196,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-02 - Add dynamic accessibilityLabel and busy state to report price submit button
 **Learning:** Submit buttons in report modals whose text child is conditionally replaced by an `ActivityIndicator` during submission leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'`) and `accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}`.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled, busy }}` on pricing report submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2027-01-09 - Add dynamic accessibilityLabel to group invite action button
+**Learning:** Primary action buttons in group invite landing screens whose child text is replaced by an `ActivityIndicator` during joining or chat navigation leave screen readers without explicit loading state feedback unless provided with a dynamic `accessibilityLabel` reflecting the in-progress state (`busy ? (viewerStatus === 'active' ? 'Opening group chat...' : 'Joining group...') : ...`).
+**Action:** Supply dynamic `accessibilityLabel` attributes on group invite primary action buttons that render an `ActivityIndicator` when busy.

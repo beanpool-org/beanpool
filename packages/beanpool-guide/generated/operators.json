@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 134,
-  "hash": "0d4f5e255a33c64343fc7422f21c78888341d2582c0c92aede2bf8a0e838eb55",
+  "version": 135,
+  "hash": "7b19626b2b73196f702c40b032719736d1fc8913b71eccc3b541c93a5931b84c",
   "sections": [
     {
       "id": "setup",
@@ -174,6 +174,10 @@
             "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
             "It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
           ]
+        },
+        {
+          "type": "p",
+          "text": "To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself, go to **Find a community** (or **Start a community**), tap **Set up a new community server**, then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code."
         },
         {
           "type": "p",
@@ -387,7 +391,7 @@
         },
         {
           "type": "p",
-          "text": "On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone, or in BeanPool open **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup."
+          "text": "On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone's camera, or in BeanPool open **Find a community**, tap **Set up a new community server**, then **Scan the code**. Or in **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup."
         },
         {
           "type": "h2",

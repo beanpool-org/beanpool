@@ -184,7 +184,7 @@ async function addressField(): Promise<HTMLInputElement> {
 
 describe("Damo's case: Reconnect to the global community, which says this key is a stranger", () => {
     it('leaves the phone where it was: the same community in use, the same saved list, no database swapped', async () => {
-        await act(async () => { root.render(createElement(NodeMismatchScreen)); });
+        await act(async () => { root.render(createElement(NodeMismatchScreen) as any); });
         await settle();
 
         await act(async () => { type(await addressField(), 'global.beanpool.org'); });
@@ -208,7 +208,7 @@ describe("Damo's case: Reconnect to the global community, which says this key is
     });
 
     it("then offers the global community's open door for the account on this phone", async () => {
-        await act(async () => { root.render(createElement(NodeMismatchScreen)); });
+        await act(async () => { root.render(createElement(NodeMismatchScreen) as any); });
         await settle();
         await act(async () => { type(await addressField(), 'global.beanpool.org'); });
         await settle();

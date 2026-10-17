@@ -108,10 +108,8 @@ vi.mock('../join-another-community', () => ({ joinAnotherCommunity: () => never(
 vi.mock('../community-switch', () => ({ communitySwitched: () => () => {} }));
 vi.mock('../global-join-existing', () => ({
     isGlobalCommunity: (url: string | null | undefined) => !!url && url.trim().replace(/\/+$/, '').toLowerCase() === 'https://global.beanpool.org',
-    doorOfferedToAccount: () => false,
 }));
-vi.mock('../use-global-door-open', () => ({ useGlobalDoorOpen: () => false }));
-vi.mock('../use-account-closed', () => ({ useAccountClosedAtGlobal: () => false }));
+vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => 'checking' }));
 vi.mock('../node-post', () => ({
     signedGet: (_url: string, path: string) => never(`signedGet ${path}`),
     signedPost: (_url: string, path: string) => never(`signedPost ${path}`),

@@ -73,9 +73,7 @@ import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
 import { communityName } from '../../utils/community-name';
-import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
-import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
-import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
+import { useGlobalEntry } from '../../utils/use-global-entry';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
@@ -978,10 +976,9 @@ export default function SettingsScreen() {
     const [redeemInviteCode, setRedeemInviteCode] = useState('');
     const [redeemLoading, setRedeemLoading] = useState(false);
     // The global community's door for the account on this phone (utils/global-join-existing.ts), beside adding a
-    // community by hand: once the global community has said its door is open, unless the phone is a member there.
-    const [globalStanding, setGlobalStanding] = useState<GlobalStanding>('unknown');
-    const globalDoorOpen = useGlobalDoorOpen(mode === 'advanced' && !!identity);
-    const offerGlobal = doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
+    // community by hand: offered when the one rule says `join` (utils/global-entry.ts): the door is open and the global
+    // community itself has not said this key is a member. Never read from the saved list (DESIGN-global-entry §1, rule 1).
+    const offerGlobal = useGlobalEntry(mode === 'advanced' && !!identity) === 'join';
 
     React.useEffect(() => {
         if (mode === 'advanced') {
@@ -989,7 +986,6 @@ export default function SettingsScreen() {
                 setAnchorUrl(val || 'Local discovery (or offline)');
                 if (val) setNewAnchorInput(val);
             });
-            globalStandingOnPhone().then(setGlobalStanding).catch(() => {});
             
             // Load and ping all saved nodes
             getSavedNodes().then(async nodes => {

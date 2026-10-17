@@ -6,7 +6,7 @@
  * the BeanPool node.
  *
  * Rules:
- * 1. FAIL FAST — If sync takes > 20 seconds, checkpoint and abort.
+ * 1. FAIL FAST — Each request has its own time budget (requestTimeouts), started when it starts.
  * 2. DELTA ONLY — Compare hashes first, only pull changed data.
  * 3. PRUNING — Keep only current state + last ~1,000 transactions.
  */
@@ -30,7 +30,6 @@ import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
 
-const SYNC_TIMEOUT_MS = 20_000;
 /**
  * How long a sync waits to read this phone's key once more when the first read found none (performSync). At a cold
  * start, as just after an update, the key can be slow to read for a moment: a cycle that went on without it read a
@@ -452,7 +451,6 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     let endCycle = () => {};
     cycleEnd = new Promise<void>(resolve => { endCycle = resolve; });
     const startTime = Date.now();
-    const deadline = startTime + SYNC_TIMEOUT_MS;
     // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
     const liveMark = liveSeq;
 

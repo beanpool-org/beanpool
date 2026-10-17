@@ -9,7 +9,8 @@
  *   - otherwise, once `nextAttemptAt` has come, one order (order.ts), its self-check first. The old certificate serves
  *     until the new one is on disk; a failed order keeps it and sets the next try: 1 h, 4 h, then daily after failures in
  *     a row, but for an identifier with a certificate never later than a third of the time it has left (so the window an
- *     IP certificate opens ~53 h before it expires is tried in, hourly as it closes).
+ *     IP certificate opens ~53 h before it expires is tried in, hourly as it closes). Failures at another directory than
+ *     the one configured now (state.json records the last attempt's) neither delay the next try nor add to its count.
  * An order still running after ORDER_TIMEOUT_MS counts as failed, and whatever it brings back later is thrown away.
  *
  * A standby orders nothing: certificates never travel, and a standby gets its own once the address points at it and it
@@ -150,11 +151,16 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
             return 'fresh';
         }
     }
-    if (now < state.nextAttemptAt) return 'waiting';
+    // The wait and the count after failures belong to the directory they happened at: a switch (staging, port 80 shut,
+    // then production once it is open) is tried at once, from the first back-off step. None recorded counts as this one.
+    const sameAttempts = state.attemptDirectoryUrl === null || state.attemptDirectoryUrl === directoryUrl;
+    const failuresSoFar = sameAttempts ? state.failures : 0;
+    if (sameAttempts && now < state.nextAttemptAt) return 'waiting';
 
     console.log(`🔐 ACME: ${held ? 'renewing' : 'ordering'} the certificate for ${target.host} (${target.challenge}) at ${directoryUrl}`
-        + (otherDirectory ? `; the one held came from ${state.directoryUrl}` : ''));
-    const attempt: AcmeState = { ...state, lastAttemptAt: now };
+        + (otherDirectory ? `; the one held came from ${state.directoryUrl}` : '')
+        + (!sameAttempts && state.failures ? `; the failures at ${state.attemptDirectoryUrl} do not count here` : ''));
+    const attempt: AcmeState = { ...state, lastAttemptAt: now, attemptDirectoryUrl: directoryUrl };
     try {
         const pair = await withTimeout(orderFn(target, {
             directoryUrl,
@@ -172,7 +178,7 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
         console.log(`✅ ACME: certificate for ${target.host} until ${new Date(fresh.notAfter).toISOString()}`);
         return 'renewed';
     } catch (err) {
-        const failures = state.failures + 1;
+        const failures = failuresSoFar + 1;
         const why = (err as Error).message || String(err);
         const next = now + nextAttemptDelay(failures, held?.notAfter ?? null, now);
         writeState(dataDir, { ...attempt, failures, lastError: why, nextAttemptAt: next });

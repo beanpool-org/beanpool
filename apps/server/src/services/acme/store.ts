@@ -1,7 +1,7 @@
 /**
  * One folder per identifier, /data/tls/acme/<identifier>/ (design scratch/global-node/DESIGN-https-anywhere-fable.md §6):
  * `key.pem` (0600), `cert.pem` (the chain the CA sent) and `state.json` (when it expires, when to try next, what went
- * wrong last, which ACME directory it came from). An IPv6 identifier's folder has `_` for each `:`, a character no certifiable name has.
+ * wrong last, which ACME directory it came from and which the last attempt went to). An IPv6 identifier's folder has `_` for each `:`, a character no certifiable name has.
  *
  * Nothing here travels: certificates and keys stay out of sealed backups and the take-over envelope (they are re-obtained
  * in minutes, and a leaked key is a real certificate for the community's address). The boot sweep makes every key.pem
@@ -33,6 +33,9 @@ export interface AcmeState {
     /** The ACME directory the certificate on disk came from; null when not known (the fleet's adopted pair, a state
      *  written before this was recorded), which counts as the one configured now. */
     directoryUrl: string | null;
+    /** The ACME directory the last attempt went to, failed or not: `failures` and `nextAttemptAt` are its. Null when not
+     *  known (a state written before this was recorded), which counts as the one configured now. */
+    attemptDirectoryUrl: string | null;
 }
 
 export interface CertPair {
@@ -97,7 +100,10 @@ export function writePair(dataDir: string, host: string, pair: CertPair): void {
 }
 
 export function emptyState(host: string): AcmeState {
-    return { identifier: host, validUntil: 0, lifetimeMs: 0, nextAttemptAt: 0, failures: 0, lastError: null, lastAttemptAt: 0, lastSuccessAt: 0, directoryUrl: null };
+    return {
+        identifier: host, validUntil: 0, lifetimeMs: 0, nextAttemptAt: 0, failures: 0, lastError: null, lastAttemptAt: 0, lastSuccessAt: 0,
+        directoryUrl: null, attemptDirectoryUrl: null,
+    };
 }
 
 export function readState(dataDir: string, host: string): AcmeState {
@@ -108,7 +114,7 @@ export function readState(dataDir: string, host: string): AcmeState {
             if (k === 'identifier') continue;
             const v = raw?.[k];
             if (k === 'lastError') base.lastError = typeof v === 'string' ? v : null;
-            else if (k === 'directoryUrl') base.directoryUrl = typeof v === 'string' && v ? v : null;
+            else if (k === 'directoryUrl' || k === 'attemptDirectoryUrl') base[k] = typeof v === 'string' && v ? v : null;
             else if (typeof v === 'number' && Number.isFinite(v)) (base as any)[k] = v;
         }
         return base;

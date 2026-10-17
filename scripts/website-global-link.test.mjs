@@ -5,6 +5,9 @@
 //   - the Google Play link's referrer does not read global=1 once decoded (what the app gets from Google's Install
 //     Referrer on its first start), or carries an invite or a server;
 //   - the line "or open the global community in your browser" is missing, hidden, or goes anywhere but global.beanpool.org;
+//   - while global is a private preview, the page's words send a new member to the app's "Explore BeanPool worldwide"
+//     button, which the app shows only once global's door is open (apps/native/utils/global-door-offer.ts), or the
+//     OPEN-GLOBAL marker that brings the line back on the open day is gone;
 //   - the page's script, run for each kind of visitor, does not do what the design says: Android, the app by its link
 //     https://beanpool.org/global with Google Play (and the referrer) when the app can't take it; an iPhone, the App
 //     Store; a computer, global.beanpool.org; and nothing without a tap on a copy of the site anywhere else, or on the
@@ -155,6 +158,14 @@ test('with no script: both stores and the browser line, all plain links; the app
     const at = MARKUP.indexOf('id="browser"');
     assert.ok(at > MARKUP.lastIndexOf('class="hero-doors"') && at > MARKUP.indexOf('id="door-ios"'));
     assert.doesNotMatch(MARKUP.slice(MARKUP.lastIndexOf('<p', at), at), /hidden/);
+});
+
+test('during the private preview the page names no button the app shows only once global is open', () => {
+    // The welcome screen's "Explore BeanPool worldwide" is there only when global.beanpool.org answers that its door is
+    // open (apps/native/welcome.tsx, utils/global-door-offer.ts). The open-day flip (grep OPEN-GLOBAL) brings the line back.
+    const words = decode(MARKUP.replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' '));
+    assert.doesNotMatch(words, /Explore BeanPool worldwide/i);
+    assert.match(HTML, /<!-- OPEN-GLOBAL: add <p class="global-note">[^]*?Explore BeanPool worldwide[^]*?-->/);
 });
 
 test('Android: the app by its link, beanpool.org/global, else Google Play with the referrer; once, on arrival at beanpool.org', () => {

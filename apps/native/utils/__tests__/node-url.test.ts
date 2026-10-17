@@ -90,3 +90,19 @@ describe("the iPhone's own cleartext rule (FABLE-sec-native LOW-1, 2026-10-01)",
         expect(app.expo.ios.infoPlist.NSAppTransportSecurity).toEqual({ NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: true });
     });
 });
+
+describe("the phone's cleartext rule is the one `beanpool claim` warns by", () => {
+    it("node-url hands out core's own functions, so the server's warning and the phone's refusal cannot drift apart", async () => {
+        const core = await import('@beanpool/core');
+        const nodeUrl = await import('../node-url');
+        expect(nodeUrl.shouldBlockCleartextNodeUrl).toBe(core.shouldBlockCleartextNodeUrl);
+        expect(nodeUrl.isPrivateHost).toBe(core.isPrivateHost);
+    });
+
+    it('a claim link to a public server over plain http is refused; a home-network or https one is not', async () => {
+        const { parseClaimLink } = await import('../claim-link');
+        expect(parseClaimLink('beanpool://claim?node=http%3A%2F%2F203.0.113.7&id=0a1b2c3d')?.nodeRefused).toBe(true);
+        expect(parseClaimLink('beanpool://claim?node=http%3A%2F%2F192.168.1.20%3A8080&id=0a1b2c3d')?.node).toBe('http://192.168.1.20:8080');
+        expect(parseClaimLink('beanpool://claim?node=https%3A%2F%2Fbeans.example.org&id=0a1b2c3d')?.node).toBe('https://beans.example.org');
+    });
+});

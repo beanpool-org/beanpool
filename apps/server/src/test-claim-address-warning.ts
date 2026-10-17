@@ -1,0 +1,257 @@
+/**
+ * `beanpool claim` warns when the phone will refuse the address its QR carries (17 Oct 2026: an AI assistant installed a
+ * $6 server, ran `beanpool claim --no-name --direct http://<its IP>:80`, and the phone refused the QR, "The link named an
+ * address BeanPool won't use", while the terminal had said nothing).
+ *
+ * No node runs here: the command reads a data dir this suite writes (state.db with no owner, a claim code waiting), as it
+ * reads a real one, and talks through a fake terminal. A name asked for goes no further than the data dir's request file,
+ * which a stand-in for the node takes or leaves, so nothing reaches a registrar.
+ *   1. A public address over plain http: the warning, before the QR, naming the address and both ways out (a free name,
+ *      your own https domain) as equals; the QR still prints (never a refusal) and the Address line points back at it.
+ *   2. A home-network address, or an https one by a name or a home-network IP: no warning.
+ *   3. https by a public IP: the warning, saying why (the phone checks the certificate, and the server has none a phone
+ *      trusts for an IP), with both ways out; the Address line points back at it. The phone fails TLS there.
+ *   4. On a table of addresses: over http, the warning follows the phone's own rule (@beanpool/core
+ *      shouldBlockCleartextNodeUrl); over https, only a public IP is warned about.
+ *   5. Enter at the name question, on a server with no https address: the warning at once, before the next question;
+ *      once, not again before the QR; a public http:// address typed next still gets its own. With --direct given, Enter
+ *      warns only where that address is refused, as --no-name does.
+ *   6. --no-name with no address at all, off a terminal: the warning before the QR.
+ *   7. A name that is not live yet: the way out is to run the claim again once it is, not to ask for another name. The
+ *      node's pending record holds the label and no hostname, and the warning names <label>.beanpool.org.
+ *   8. --name with no answer in the wait. A node that never took the request: the request is withdrawn, so no name is
+ *      on its way, and the way out is --name again. A node that took it (still asking, or the name awaits approval):
+ *      the name is on its way. No line before the warning says the phone uses the public http:// address it refuses.
+ *
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-address-warning.ts
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
+import { CLAIM_SCRYPT, shouldBlockCleartextNodeUrl } from '@beanpool/core';
+import { phoneAddressWarning, runClaim, type ClaimIo } from './claim-command.js';
+import { ADDRESS_REQUEST_FILE, takeAddressRequestFile } from './address-request.js';
+
+let run = 0, passed = 0;
+function check(cond: unknown, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`  ✓ ${msg}`); } else console.log(`  ✗ ${msg}`);
+}
+
+const CODE = 'claim-0a1b-2c3d-4e5f-6a7b';
+const CODE_ID = '0a1b2c3d';
+let dirs = 0;
+
+/** A node's data dir with no owner and the claim code waiting, as claim-code.ts leaves it; `publicAddress` if given. */
+function nodeDir(publicAddress?: object): string {
+    const dir = path.join(process.env.BEANPOOL_DATA_DIR!, `node-${++dirs}`);
+    fs.mkdirSync(dir, { recursive: true });
+    const db = new Database(path.join(dir, 'state.db'));
+    db.exec(`CREATE TABLE members (public_key TEXT PRIMARY KEY, status TEXT);
+        CREATE TABLE node_roles (member_pubkey TEXT, role TEXT);
+        CREATE TABLE suspended_node_roles (member_pubkey TEXT, role TEXT);
+        CREATE TABLE invalidated_keys (public_key TEXT, reason TEXT, rekeyed_to TEXT);
+        CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT);`);
+    if (publicAddress) db.prepare("INSERT INTO node_config (key, value) VALUES ('node_config', ?)").run(JSON.stringify({ publicAddress }));
+    db.close();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const { N, r, p, dkLen } = CLAIM_SCRYPT;
+    const key = crypto.scryptSync(crypto.createHash('sha256').update(CODE).digest('hex'), salt, dkLen, { N, r, p }).toString('hex');
+    fs.writeFileSync(path.join(dir, 'local-config.json'), JSON.stringify({ claim: { id: CODE_ID, salt, key } }));
+    fs.writeFileSync(path.join(dir, 'claim-code.txt'), CODE + '\n');
+    return dir;
+}
+
+/** A fake terminal: everything said, in order, with each question as a `? ` line; `answers` for the questions. */
+async function claim(args: string[], answers: string[] | null = null, dir = nodeDir()) {
+    const lines: string[] = [];
+    const io: ClaimIo = {
+        out: (s) => { lines.push(...s.split('\n')); },
+        err: (s) => { lines.push(...s.split('\n')); },
+        ask: answers ? async (q) => { lines.push(`? ${q}`); return answers.shift() ?? ''; } : null,
+    };
+    const code = await runClaim(args, io, dir);
+    const at = (pred: (l: string) => boolean) => lines.findIndex(pred);
+    // The QR: the first line of terminal blocks after the code.
+    const qr = at(l => /[▀▄█]/.test(l));
+    const warnings = lines.filter(l => l.startsWith('WARNING:'));
+    return { code, lines, text: lines.join('\n'), qr, warnings, at };
+}
+
+/**
+ * A stand-in for the node's 2 s tick (services/public-address-agent.ts): takes the request file and keeps the request in
+ * local-config.json, as the node does; with `pending`, the address service's answer too (a name awaiting approval).
+ */
+function standInNode(dir: string, pending: boolean): () => void {
+    const tick = setInterval(() => {
+        const req = takeAddressRequestFile(dir);
+        if (!req) return;
+        const file = path.join(dir, 'local-config.json');
+        const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+        config.addressRequest = { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null };
+        fs.writeFileSync(file, JSON.stringify(config));
+        if (!pending) return;
+        const db = new Database(path.join(dir, 'state.db'));
+        db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('node_config', ?)")
+            .run(JSON.stringify({ publicAddress: { name: req.name, mode: 'tunnel', status: 'pending' } }));
+        db.close();
+    }, 200);
+    return () => clearInterval(tick);
+}
+
+const PUBLIC = 'http://203.0.113.7';
+/** The warning's lines, the first naming what is wrong. */
+const BLOCK = phoneAddressWarning(null).length;
+
+async function main(): Promise<void> {
+    console.log('\n1. A public address over plain http');
+    const pub = await claim(['--no-name', '--direct', `${PUBLIC}:80`]);
+    const w = pub.at(l => l.startsWith('WARNING:'));
+    check(pub.code === 0, `never a refusal: the command still finishes (${pub.code})`);
+    check(pub.qr > 0 && pub.text.includes(`The one-time claim code: ${CODE}`), 'the code and its QR still print');
+    check(pub.warnings.length === 1 && pub.warnings[0].includes(`phones will not connect to ${PUBLIC}.`), `the warning names the address: ${pub.warnings[0]}`);
+    check(w >= 0 && w < pub.qr && w < pub.at(l => l.startsWith('The one-time claim code')), 'the warning comes before the code and the QR');
+    const after = pub.lines.slice(w, w + BLOCK).join('\n');
+    check(after.includes('beanpool claim --name <name>') && after.includes('beanpool claim --address https://'),
+        'both ways out, side by side: a free name and your own https domain');
+    check(/only on a home network/.test(after), 'it says where plain http:// still works');
+    check(pub.text.includes(`Address: ${PUBLIC} (phones will not connect to it: see the warning above)`), 'the Address line under the QR points back at it');
+
+    console.log('\n2. A home-network address, or https by a name or a home-network IP: no warning');
+    const lan = await claim(['--no-name', '--direct', 'http://192.168.1.20:8080']);
+    check(lan.code === 0 && lan.warnings.length === 0 && lan.text.includes('Address: http://192.168.1.20:8080\n'), 'http://192.168.1.20:8080: none');
+    const own = await claim(['--address', 'https://beans.example.org']);
+    check(own.code === 0 && own.warnings.length === 0 && own.text.includes('Address: https://beans.example.org'), '--address https://beans.example.org: none');
+    const live = await claim([], null, nodeDir({ name: 'mullum', status: 'live', hostname: 'mullum.beanpool.org' }));
+    check(live.code === 0 && live.warnings.length === 0 && live.text.includes('Address: https://mullum.beanpool.org'), 'a live name already held: none');
+    const lanHttps = await claim(['--no-name', '--direct', 'https://192.168.1.20:8443']);
+    check(lanHttps.code === 0 && lanHttps.warnings.length === 0 && lanHttps.text.includes('Address: https://192.168.1.20:8443\n'),
+        'https://192.168.1.20:8443 (a home-network IP, over https): none');
+
+    console.log('\n3. https by a public IP');
+    const HTTPS_IP = 'https://203.0.113.7:8443';
+    const byIp = await claim(['--no-name', '--direct', HTTPS_IP]);
+    const iw = byIp.at(l => l.startsWith('WARNING:'));
+    const ipTail = byIp.lines.slice(iw, iw + BLOCK).join('\n');
+    check(byIp.code === 0 && byIp.qr > 0, `never a refusal: the code and its QR still print (${byIp.code})`);
+    check(byIp.warnings.length === 1 && byIp.warnings[0].includes(`phones will not connect to ${HTTPS_IP}.`) && iw < byIp.qr,
+        `the warning names the address, before the QR: ${byIp.warnings[0]}`);
+    check(/certificate/.test(ipTail) && /IP address/.test(ipTail) && !/plain http:\/\//.test(ipTail),
+        'it says why (no certificate a phone trusts for an IP), not that plain http is the trouble');
+    check(ipTail.includes('beanpool claim --name <name>') && ipTail.includes('beanpool claim --address https://'), 'both ways out');
+    check(byIp.text.includes(`Address: ${HTTPS_IP} (phones will not connect to it: see the warning above)`), 'the Address line points back at it');
+    const ownIp = await claim(['--address', 'https://203.0.113.7']);
+    check(ownIp.warnings.length === 1 && ownIp.warnings[0].includes('phones will not connect to https://203.0.113.7.'),
+        `--address https://203.0.113.7: the same warning (${ownIp.warnings.length})`);
+
+    console.log('\n4. Which addresses are warned about');
+    // [address, warned]. Over http, the phone's own refusal; over https, a public IP only (the phone fails TLS there).
+    const table: [string, boolean][] = [['http://203.0.113.7:8080', true], ['http://beans.example.org', true], ['http://172.32.0.1', true],
+        ['http://10.0.0.5', false], ['http://172.16.4.4:8080', false], ['http://127.0.0.1:8080', false], ['http://beanpool.local', false],
+        ['http://raspberrypi:8080', false], ['http://[fd00::1]:8080', false],
+        ['https://203.0.113.7:8443', true], ['https://203.0.113.7', true], ['https://8.8.8.8:443', true],
+        ['https://192.168.1.20:8443', false], ['https://10.0.0.5', false], ['https://127.0.0.1:8443', false],
+        ['https://beans.example.org', false], ['https://beans.example.org:8443', false], ['https://raspberrypi:8443', false]];
+    let agree = 0;
+    for (const [address, warned] of table) {
+        const r = await claim(['--no-name', '--direct', address]);
+        if ((r.warnings.length === 1) === warned) agree++;
+        else console.log(`    ${address}: warned ${r.warnings.length}, expected ${warned ? 1 : 0}`);
+    }
+    check(agree === table.length, `warned exactly where the phone won't connect (${agree}/${table.length})`);
+    const http = table.filter(([a]) => a.startsWith('http:'));
+    check(http.every(([a, warned]) => warned === shouldBlockCleartextNodeUrl(a)), 'over http, that is the phone\'s own rule');
+    check(table.filter(([, w]) => w).length === 6 && table.filter(([a, w]) => a.startsWith('https:') && !w).length === 6,
+        'the table holds both kinds, over both (6 warned, 12 not; 3 and 6 over https)');
+
+    console.log('\n5. Enter at the name question');
+    const skip = await claim([], ['', '']);
+    const nameQ = skip.at(l => l.startsWith('? Name for your community'));
+    const directQ = skip.at(l => l.startsWith("? This server's direct address"));
+    const sw = skip.at(l => l.startsWith('WARNING:'));
+    check(nameQ >= 0 && directQ > nameQ && sw > nameQ && sw < directQ, 'the warning comes at once, before the next question');
+    check(skip.warnings.length === 1 && /with no https address, phones will not reach this server/.test(skip.warnings[0]), `said once, not again before the QR: ${skip.warnings.length}`);
+    check(skip.lines.slice(sw, sw + BLOCK).join('\n').includes('beanpool claim --name <name>'), 'it offers the name it just skipped, and your own domain');
+    const typed = await claim([], ['', `${PUBLIC}:80`]);
+    check(typed.warnings.length === 2 && typed.warnings[1].includes(`phones will not connect to ${PUBLIC}.`)
+        && typed.at(l => l === typed.warnings[1]) < typed.qr, 'a public http:// address typed next gets its own, before the QR');
+    const lanTyped = await claim([], ['', 'http://192.168.1.20:8080']);
+    check(lanTyped.warnings.length === 1, 'a home-network address typed next: only the one said at Enter');
+    // --direct already on the command line: Enter decides nothing about the address, so the outcome is --no-name's.
+    const lanDirect = await claim(['--direct', 'http://192.168.1.20:8080'], ['']);
+    check(lanDirect.code === 0 && lanDirect.warnings.length === 0 && lanDirect.text.includes('Address: http://192.168.1.20:8080\n'),
+        `--direct http://192.168.1.20:8080, Enter: none (${lanDirect.warnings.length})`);
+    const httpsDirectEnter = await claim(['--direct', 'https://203.0.113.7:8443'], ['']);
+    check(httpsDirectEnter.warnings.length === 1 && httpsDirectEnter.warnings[0].includes('phones will not connect to https://203.0.113.7:8443.'),
+        `--direct https://203.0.113.7:8443, Enter: the one warning, naming the address (${httpsDirectEnter.warnings.length})`);
+    const pubDirect = await claim(['--direct', `${PUBLIC}:80`], ['']);
+    const pdw = pubDirect.at(l => l.startsWith('WARNING:'));
+    check(pubDirect.warnings.length === 1 && pubDirect.warnings[0].includes(`phones will not connect to ${PUBLIC}.`)
+        && pdw > pubDirect.at(l => l.startsWith('? Name for your community')) && pdw < pubDirect.qr,
+        `--direct ${PUBLIC}:80, Enter: the one warning, naming the address (${pubDirect.warnings.length})`);
+    // Enter at "Another name" (after a name that can't be one) is the same skip.
+    const lanAgain = await claim(['--direct', 'http://192.168.1.20:8080'], ['x', '']);
+    check(lanAgain.at(l => l.startsWith('? Another name')) >= 0 && lanAgain.warnings.length === 0,
+        `--direct http://192.168.1.20:8080, Enter at "Another name": none (${lanAgain.warnings.length})`);
+    const noneAgain = await claim([], ['x', '', '']);
+    check(noneAgain.warnings.length === 1 && noneAgain.at(l => l.startsWith('WARNING:')) < noneAgain.at(l => l.startsWith("? This server's direct address")),
+        `no --direct, Enter at "Another name": the warning at once (${noneAgain.warnings.length})`);
+
+    console.log('\n6. --no-name with no address, off a terminal');
+    const none = await claim(['--no-name']);
+    check(none.code === 0 && none.warnings.length === 1 && none.at(l => l.startsWith('WARNING:')) < none.qr && /phone will ask/.test(none.text),
+        'the warning before the QR, which carries no address');
+
+    console.log('\n7. A name that is not live yet');
+    const pending = await claim(['--direct', `${PUBLIC}:80`], null, nodeDir({ name: 'mullum', mode: 'tunnel', status: 'pending' }));
+    const pw = pending.at(l => l.startsWith('WARNING:'));
+    const tail = pending.lines.slice(pw, pw + BLOCK).join('\n');
+    check(pending.code === 0 && pw >= 0 && pw < pending.qr, 'warned before the QR');
+    check(tail.includes('once mullum.beanpool.org is live, run beanpool claim again') && !tail.includes('--name <name>') && tail.includes('--address https://'),
+        'the way out is to wait for the name (or your own domain), not to ask for another');
+
+    console.log('\n8. --name with no answer in the wait');
+    process.env.NODE_ENV = 'test';
+    process.env.BEANPOOL_CLAIM_NAME_WAIT_MS = '2500';
+    /** A line that tells the owner the phone takes this server's direct address, which it refuses when that is public http. */
+    const SAYS_DIRECT = /phone (?:uses|will use) this server's direct address/;
+    const nobodyDir = nodeDir();
+    const nobody = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, nobodyDir);
+    const nw = nobody.at(l => l.startsWith('WARNING:'));
+    const nobodyTail = nobody.lines.slice(nw, nw + BLOCK).join('\n');
+    check(nobody.code === 0 && /No answer within/.test(nobody.text) && !fs.existsSync(path.join(nobodyDir, ADDRESS_REQUEST_FILE)),
+        `no node took it: the request is withdrawn (${nobody.code})`);
+    check(nobody.text.includes('riverbend.beanpool.org was not asked for') && nobody.text.includes('beanpool claim --name riverbend')
+        && !/keeps asking/.test(nobody.text), 'it says the name was not asked for, and how to ask again');
+    check(nw >= 0 && nw < nobody.qr && nobodyTail.includes('beanpool claim --name <name>') && !nobodyTail.includes('once riverbend.beanpool.org is live'),
+        'the warning offers --name, not a wait for a name nothing is asking for');
+    const askingDir = nodeDir();
+    const stopAsking = standInNode(askingDir, false);
+    const asking = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, askingDir).finally(stopAsking);
+    const aw = asking.at(l => l.startsWith('WARNING:'));
+    check(asking.code === 0 && asking.text.includes('The node keeps asking for riverbend.beanpool.org.') && !/not asked for/.test(asking.text),
+        `the node took it and keeps asking (${asking.code})`);
+    check(aw >= 0 && aw < asking.qr && asking.lines.slice(aw, aw + BLOCK).join('\n').includes('once riverbend.beanpool.org is live, run beanpool claim again'),
+        'the warning waits for the name on its way');
+    const gatedDir = nodeDir();
+    const stopGated = standInNode(gatedDir, true);
+    const gated = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, gatedDir).finally(stopGated);
+    const gw = gated.at(l => l.startsWith('WARNING:'));
+    check(gated.code === 0 && gated.text.includes('riverbend.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved.'),
+        `a name awaiting approval: the message (${gated.code})`);
+    check(gw >= 0 && gw < gated.qr && gated.lines.slice(gw, gw + BLOCK).join('\n').includes('once riverbend.beanpool.org is live'), 'and the warning waits for it');
+    check(![nobody, asking, gated].some(r => r.lines.some(l => SAYS_DIRECT.test(l))),
+        'no line says the phone uses the direct address the warning says it refuses');
+
+    console.log('\n9. The words');
+    const lines = [...phoneAddressWarning(PUBLIC), ...phoneAddressWarning(null), ...phoneAddressWarning(PUBLIC, 'x.beanpool.org'),
+        ...phoneAddressWarning('https://203.0.113.7:8443')];
+    check(lines.every(l => l.length <= 120), 'every line fits a wide terminal (≤ 120 characters)');
+    check(lines.every(l => !/beanpool\.org (?:is )?(?:required|needed)/i.test(l)), 'nothing says a beanpool.org name is required');
+
+    console.log(`\n${passed}/${run} passed`);
+    process.exit(passed === run ? 0 : 1);
+}
+
+main().catch(e => { console.error(e); process.exit(1); });

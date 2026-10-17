@@ -6,7 +6,7 @@
  * leaving Wi-Fi range.
  */
 
-import { useState, useEffect, useReducer } from 'react';
+import { useState, useEffect, useId, useReducer } from 'react';
 import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
@@ -39,6 +39,8 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
         accountCount: 0,
     });
     const [statusState, dispatchStatus] = useReducer<SyncStatusState, any>(statusReducer, INITIAL_SYNC_STATUS_STATE);
+    const [noteOpen, setNoteOpen] = useState(true);
+    const noteId = useId();
 
     useEffect(() => {
         const unsub = onSyncChange((s) => {
@@ -167,14 +169,50 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
         : 'offline';
 
     const ago = sync.lastSyncTime && statusMode !== 'guest' ? formatTimeAgo(sync.lastSyncTime) : null;
+    const note = statusState.sentence || null;
+    const chip = <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} dotOnly={dotOnly} note={note} />;
+    if (!note) return chip;
+
+    // The node's sentence (a private preview, a closed account) shows by the chip, not only as its title: a touch screen
+    // has no hover. It opens with the sentence, out of the header's flow (below the mobile header's chip, above the
+    // sidebar's, at the foot of the page); a tap on the chip or on the sentence folds it away, the chip brings it back.
     return (
-        <SyncChip
-            mode={statusMode}
-            ago={ago}
-            pulsing={sync.connected}
-            stacked={stacked}
-            dotOnly={dotOnly}
-            title={statusState.sentence ?? undefined}
-        />
+        <div style={{ position: 'relative' }}>
+            <button
+                type="button"
+                onClick={() => setNoteOpen((open) => !open)}
+                aria-expanded={noteOpen}
+                aria-controls={noteId}
+                style={{ display: 'block', padding: 0, border: 'none', background: 'none', font: 'inherit', color: 'inherit', textAlign: 'inherit', cursor: 'pointer' }}
+            >
+                {chip}
+            </button>
+            {noteOpen && (
+                <p
+                    id={noteId}
+                    data-testid="sync-note"
+                    onClick={() => setNoteOpen(false)}
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        ...(stacked ? { top: 'calc(100% + 4px)' } : { bottom: 'calc(100% + 4px)' }),
+                        zIndex: 20,
+                        width: 'max-content',
+                        maxWidth: 'min(16rem, calc(100vw - 1.5rem))',
+                        margin: 0,
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '0.75rem',
+                        background: 'var(--sync-guest-bg, #fffbeb)',
+                        border: '1px solid var(--sync-guest, #d97706)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.35,
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                    }}
+                >
+                    {note}
+                </p>
+            )}
+        </div>
     );
 }

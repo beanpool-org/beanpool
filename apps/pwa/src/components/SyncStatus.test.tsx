@@ -7,7 +7,7 @@
  * - "Offline" is shown only when there is a connectivity error / no answer or a 403 with other codes.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SyncStatus } from './SyncStatus';
 import * as api from '../lib/api';
 import * as identityLib from '../lib/identity';
@@ -51,8 +51,34 @@ describe('SyncStatus', () => {
         });
         expect(screen.queryByText('Offline')).toBeNull();
 
+        // Seen on a touch screen (no hover): the sentence is on the page by the chip, and in the chip's name.
+        const sentence = 'This community is in a private preview. Ask its owner for an invite.';
+        expect(screen.getByTestId('sync-note')).toHaveTextContent(sentence);
         const chip = screen.getByTestId('sync-chip');
-        expect(chip.getAttribute('title')).toBe('This community is in a private preview. Ask its owner for an invite.');
+        expect(chip.getAttribute('aria-label')).toBe(`Network status: Guest. ${sentence}`);
+        expect(chip.getAttribute('title')).toBe(sentence);
+    });
+
+    it('a tap on the chip folds the sentence away and brings it back; its name keeps it either way', async () => {
+        vi.spyOn(api, 'checkMembership').mockRejectedValue(Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        }));
+
+        render(<SyncStatus stacked />);
+
+        const note = await screen.findByTestId('sync-note');
+        const toggle = screen.getByRole('button', { expanded: true });
+        expect(toggle.getAttribute('aria-controls')).toBe(note.id);
+
+        fireEvent.click(toggle);
+        expect(screen.queryByTestId('sync-note')).toBeNull();
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toContain('Ask its owner for an invite.');
+
+        fireEvent.click(toggle);
+        fireEvent.click(screen.getByTestId('sync-note'));
+        expect(screen.queryByTestId('sync-note')).toBeNull();
     });
 
     it('treats 403 account_closed probe rejection as Guest with closed account sentence, never Offline', async () => {
@@ -69,8 +95,9 @@ describe('SyncStatus', () => {
         });
         expect(screen.queryByText('Offline')).toBeNull();
 
-        const chip = screen.getByTestId('sync-chip');
-        expect(chip.getAttribute('title')).toBe(t('Your account in this community was closed.'));
+        const sentence = t('Your account in this community was closed.');
+        expect(screen.getByTestId('sync-note')).toHaveTextContent(sentence);
+        expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toBe(`Network status: Guest. ${sentence}`);
     });
 
     it('shows Offline on network failure (connectivity failure, no answer)', async () => {
@@ -82,6 +109,10 @@ describe('SyncStatus', () => {
             expect(screen.getByText('Offline')).toBeInTheDocument();
         });
         expect(screen.queryByText('Guest')).toBeNull();
+        // No sentence, no note and nothing to tap: the chip as it always was.
+        expect(screen.queryByTestId('sync-note')).toBeNull();
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toBe('Network status: Offline');
     });
 
     it('shows Offline on 403 with other codes (e.g. not_your_key)', async () => {

@@ -21,6 +21,13 @@ describe('SyncChip', () => {
         expect(words.textContent).toBe('Offline59m ago');
     });
 
+    it.each([false, true])('with a note (dot alone: %s), the note is in its name and is its title', (dotOnly) => {
+        const note = 'This community is in a private preview. Ask its owner for an invite.';
+        render(<SyncChip mode="guest" ago={null} pulsing={false} stacked dotOnly={dotOnly} note={note} />);
+        const chip = screen.getByRole('status', { name: `Network status: Guest. ${note}` });
+        expect(chip.getAttribute('title')).toBe(note);
+    });
+
     it.each([
         ['online', null, 'Online'],
         ['online', '5s ago', 'Online, last synced 5s ago'],

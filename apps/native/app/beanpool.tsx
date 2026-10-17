@@ -16,6 +16,7 @@ import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
 import { GLOBAL_NODE_URL } from '../utils/global-node-url';
+import { globalEntryLine } from '../utils/global-entry-line';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE, t } from '@beanpool/core';
@@ -131,14 +132,8 @@ export default function BeanPoolSheet() {
     const globalSaved = communities.rows.find(r => isGlobalCommunity(r.url)) ?? null;
     const globalUrl = globalSaved?.url ?? GLOBAL_NODE_URL;
     const globalHost = globalUrl.replace(/^https?:\/\//, '');
-    const globalLine = globalEntry === 'member' ? globalHost
-        : globalEntry === 'join' ? (globalDoor.wordsDoor ? t('Join with this account: 12 words or a sign-in') : t('Join with this account: a sign-in'))
-        : globalEntry === 'checking' ? t('Checking…')
-        : globalEntry === 'unreachable' ? (globalSaved ? t("Can't reach it right now") : t("Can't reach it right now. Tap to try again."))
-        : globalEntry === 'closed' ? t('Not taking new members right now.')
-        : globalEntry === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
-        : globalEntry === 'closedAccount' ? t('Your account there was closed.')
-        : t('Explore BeanPool worldwide');
+    const globalLine = globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved })
+        ?? t('Explore BeanPool worldwide');
     // A member's row switches to it, and where the door is open the row is Join (what its line says), saved or not. A
     // saved row otherwise keeps what any saved row does (switch to it); an unsaved one opens the door screen's own page for
     // a door that can't be used (it asks again, with Try again), asks again itself when nothing answered, and otherwise
@@ -177,8 +172,8 @@ export default function BeanPoolSheet() {
         </Pressable>
     );
 
-    // The global community's row: the saved row's shape when the phone has one, else its own (earth, chevron). Title one
-    // line, its second line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3).
+    // The global community's row: the saved row's shape when the phone has one, else its own (earth, chevron). Its second
+    // line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3).
     const GlobalRow = ({ saved, first }: { saved: CommunityRow | null; first: boolean }) => {
         const isCurrent = !!saved && saved.url === communities.active;
         return (

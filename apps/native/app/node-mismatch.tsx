@@ -28,6 +28,7 @@ import { GLOBAL_NODE_URL, checkGlobalDoor, fetchNodeProfile, getCachedNodeProfil
 import { isGlobalCommunity } from '../utils/global-join-existing';
 import { doorStateFromCheck, type GlobalDoorState } from '../utils/global-entry';
 import { useGlobalEntry } from '../utils/use-global-entry';
+import { globalEntryLine } from '../utils/global-entry-line';
 import { communityName } from '../utils/community-name';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { NoWordsNotice } from '../components/NoWordsNotice';
@@ -313,17 +314,8 @@ export default function NodeMismatchScreen() {
         : t("Your account is fine, but the community you're connected to doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.");
     const emoji = plan.page === 'open' ? '🌍' : plan.page === 'closed' ? '🔒' : '🧭';
 
-    // The global community's row (§B.3's words), on the invite, preview and closed pages.
-    const globalLine: Record<string, string | null> = {
-        join: globalDoor.wordsDoor ? t('Join with this account: 12 words or a sign-in') : t('Join with this account: a sign-in'),
-        checking: t('Checking…'),
-        unreachable: t("Can't reach it right now. Tap to try again."),
-        closed: t('Not taking new members right now.'),
-        preview: t('This community is in a private preview. Ask its owner for an invite.'),
-        closedAccount: t('Your account there was closed.'),
-        member: GLOBAL_NODE_URL.replace(/^https?:\/\//, ''),
-        noAccount: null,
-    };
+    // The global community's row (§B.3's words, the BeanPool sheet's too), on the invite, preview and closed pages.
+    const globalLine = globalEntryLine(globalEntry, { host: GLOBAL_NODE_URL.replace(/^https?:\/\//, ''), wordsDoor: globalDoor.wordsDoor });
     const globalTap = globalEntry === 'join' ? () => router.push('/join-global')
         : globalEntry === 'unreachable' ? askGlobalDoor
         : globalEntry === 'member' ? () => switchToNode(GLOBAL_NODE_URL)
@@ -437,20 +429,20 @@ export default function NodeMismatchScreen() {
                             </View>
                         )}
 
-                        {offerGlobalRow && globalLine[globalEntry] ? (
+                        {offerGlobalRow && globalLine ? (
                             <Pressable
                                 style={styles.globalRow}
                                 onPress={globalTap}
                                 disabled={busy || !globalTap}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Global community, {state}', { state: globalLine[globalEntry] ?? '' })}
+                                accessibilityLabel={t('Global community, {state}', { state: globalLine })}
                             >
                                 <Text style={styles.globalIcon}>🌍</Text>
                                 <View style={styles.globalText}>
                                     <Text style={styles.globalTitle}>{t('Global community')}</Text>
                                     {/* Never clipped: at 320 dp and 1.3× this card leaves the line about 15 characters, so
                                         "Join with this account: 12 words or a sign-in" takes four (PR #2098 review). */}
-                                    <Text style={styles.globalSub}>{globalLine[globalEntry]}</Text>
+                                    <Text style={styles.globalSub}>{globalLine}</Text>
                                 </View>
                                 {globalTap ? <Text style={styles.globalChevron}>›</Text> : null}
                             </Pressable>

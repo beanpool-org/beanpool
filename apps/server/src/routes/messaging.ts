@@ -72,7 +72,7 @@ const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation no
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset } = deps;
 
 // ===================== MESSAGING API (PUBLIC) =====================
 
@@ -591,8 +591,9 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
-    // Require the signer (ctx.state.actor) to be in this conversation. Without
-    // this, any caller could read any private thread by id.
+    // Require the signer (ctx.state.actor) to be in this conversation, whatever
+    // ENFORCE_READ_AUTH says (#2119): with read auth opted out, anyone, unsigned
+    // too, read any DM by id before.
     else if (conv.type !== 'enterprise_thread' && (!ctx.state.actor || !conv.participants.includes(ctx.state.actor))) {
         ctx.status = 403;
         // Going to an event whose host hasn't let them in yet (no seat until they do): the event chat route's words and code.

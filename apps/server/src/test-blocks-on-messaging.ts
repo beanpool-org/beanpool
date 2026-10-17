@@ -244,7 +244,7 @@ async function main(): Promise<void> {
         // Read auth off (#1403 re-review): an unsigned read of a withheld conversation answers as a real DM's does (403 for non-participants).
         const unsignedWithheld = await call('GET', null, `/api/messages/${boConv}`);
         const unsignedReal = await call('GET', null, `/api/messages/${deeConv}`);
-        assert(unsignedWithheld.status === 403 && unsignedReal.status === 403 && keysOf(unsignedWithheld.body) === keysOf(unsignedReal.body),
+        assert(unsignedWithheld.status === 403 && unsignedReal.status === 403 && JSON.stringify(unsignedWithheld.body) === JSON.stringify(unsignedReal.body),
             `with read auth off, an unsigned read of the withheld conversation answers as a real one (${unsignedWithheld.status} vs ${unsignedReal.status})`);
         const unsignedNone = await call('GET', null, `/api/messages/${crypto.randomUUID()}`);
         assert(unsignedNone.status === 404, 'and an id nobody has is still a 404');

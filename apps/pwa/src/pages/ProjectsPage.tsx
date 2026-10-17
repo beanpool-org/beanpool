@@ -334,8 +334,19 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         return list;
     }, [treasuries, filter]);
 
+    // In preview the two tabs hold very different lengths (the sample's cards on Groups only): a switch starts the new tab
+    // at its top, or Decide would open far above the screen. A local node keeps its place as before.
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const previewTabs = enterprisesMode === 'preview';
+    useEffect(() => {
+        const el = scrollContainerRef.current;
+        if (!previewTabs || !el) return;
+        if (typeof el.scrollTo === 'function') el.scrollTo({ top: 0 });
+        else el.scrollTop = 0;
+    }, [activeSection, previewTabs]);
+
     return (
-        <div className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
+        <div ref={scrollContainerRef} className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
             {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
                 on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list.
                 No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
@@ -384,8 +395,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     )}
                 </div>
 
-                {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
-                {enterprisesMode === 'preview' && (
+                {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real.
+                    Drawn only on the Groups tab (where the enterprise list lives on a local node), so Decide opens at its own content. */}
+                {enterprisesMode === 'preview' && activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
                         <CommonsPreview enterprises={true} onOpenEnterprise={onOpenTreasury} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>

@@ -13,7 +13,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
+import { BeanPoolMerkleTree, LIVE_POST_TYPES, t, type LivePostChange } from '@beanpool/core';
 import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
@@ -21,6 +21,7 @@ import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteAfterPreview, noteRefusal, refusalOf, type Refusal } from '../utils/members-only-listings';
+import { refusalLines } from '../utils/market-empty-state';
 import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFresh, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
 import { readerFeaturesHeld, readerFeaturesKey, readsOwnWith } from '../utils/reads-own';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
@@ -142,6 +143,11 @@ export interface SyncResult {
     durationMs: number;
     aborted: boolean;
     errorMessage?: string;
+    /**
+     * A private preview's or a closed account's refusal of the listings, as this sync noted it for the Market (errorMessage
+     * is then its code). Absent when a preview's refusal left this key's standing unclear (noteForPreview).
+     */
+    refusal?: Exclude<Refusal, { code: 'members_only' }>;
 }
 
 /**
@@ -393,17 +399,26 @@ export async function performSyncWhenFree(
 
 /**
  * What Force Resync tells the member once its own sync has answered (performSyncWhenFree): "Success" only when the copy
- * it cleared was read again; otherwise that it was cleared and will fill with the next sync, and why not yet.
+ * it cleared was read again; otherwise that it was cleared and will fill with the next sync, and why not yet. A refusal
+ * about this key's standing (members only, a private preview, a closed account) refuses the next sync too: the notice
+ * says the node's sentence instead, or nothing more when a preview's refusal left the standing unclear.
  */
-export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMessage'>): { title: string; message: string } {
-    if (result.success) return { title: 'Success', message: 'Local database rebuilt, ratings restored, and re-synced from the node.' };
+export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMessage' | 'refusal'>): { title: string; message: string } {
+    if (result.success) return { title: t('Success'), message: t('Local database rebuilt, ratings restored, and re-synced from the node.') };
     if (result.errorMessage === 'members_only') {
-        return { title: 'Local copy cleared', message: 'This community shows its listings to members only, so none were downloaded.' };
+        return { title: t('Local copy cleared'), message: t('This community shows its listings to members only, so none were downloaded.') };
     }
-    const why = result.errorMessage === ALREADY_SYNCING
-        ? 'A sync that was already running has not finished yet.'
-        : 'The download did not finish.';
-    return { title: 'Local copy cleared', message: `${why} Your community downloads again with the next sync, which the app runs on its own.` };
+    if (result.refusal) {
+        const lines = refusalLines(result.refusal);
+        return { title: t('Local copy cleared'), message: [lines.title, lines.body].filter(Boolean).join('\n\n') };
+    }
+    if (result.errorMessage === 'private_preview' || result.errorMessage === 'account_closed') {
+        return { title: t('Local copy cleared'), message: '' };
+    }
+    const message = result.errorMessage === ALREADY_SYNCING
+        ? t('A sync that was already running has not finished yet. Your community downloads again with the next sync, which the app runs on its own.')
+        : t('The download did not finish. Your community downloads again with the next sync, which the app runs on its own.');
+    return { title: t('Local copy cleared'), message };
 }
 
 /**
@@ -850,7 +865,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
-                result.errorMessage = membersOnly ? 'members_only' : `Posts fetch failed with status: ${postsRes.status}`;
+                // A preview's or a closed account's refusal is said by its code, with the note the Market shows, so Force
+                // Resync says it too and never promises a download with the next sync (forceResyncNotice).
+                result.errorMessage = membersOnly ? 'members_only' : refusal ? refusal.code : `Posts fetch failed with status: ${postsRes.status}`;
+                if (note && note.code !== 'members_only') result.refusal = note;
                 return result;
             }
             await noteRefusal(anchorUrl, null);

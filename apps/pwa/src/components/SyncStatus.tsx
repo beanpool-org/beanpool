@@ -6,13 +6,14 @@
  * leaving Wi-Fi range.
  */
 
-import { useState, useEffect, useId, useReducer } from 'react';
+import { useState, useEffect, useId, useLayoutEffect, useReducer, useRef } from 'react';
 import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
 import { withJitter } from '../lib/jitter';
 import { SyncChip } from './SyncChip';
 import { statusReducer, INITIAL_SYNC_STATUS_STATE } from '../lib/standing-refusal';
+import { shiftIntoViewport } from '../lib/keep-in-viewport';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -170,6 +171,33 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
 
     const ago = sync.lastSyncTime && statusMode !== 'guest' ? formatTimeAgo(sync.lastSyncTime) : null;
     const note = statusState.sentence || null;
+
+    // The sentence hangs from the chip's left edge; wherever the chip sits (a chip near the right edge at 320 px would put
+    // it off the screen), it moves left to stay on the screen, measured before it is painted and again on a resize.
+    const anchorRef = useRef<HTMLDivElement>(null);
+    const noteRef = useRef<HTMLParagraphElement>(null);
+    const [noteShift, setNoteShift] = useState(0);
+    useLayoutEffect(() => {
+        if (!note || !noteOpen) return;
+        const place = () => {
+            const anchor = anchorRef.current;
+            const box = noteRef.current;
+            if (!anchor || !box) return;
+            const root = document.documentElement;
+            const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
+            setNoteShift(shiftIntoViewport({
+                anchorLeft: anchor.getBoundingClientRect().left,
+                width: box.getBoundingClientRect().width,
+                viewportWidth: root.clientWidth || window.innerWidth,
+                // Half the room the sentence's maxWidth leaves (100vw - 1.5rem), so the widest sentence fits.
+                gutter: 0.75 * rem,
+            }));
+        };
+        place();
+        window.addEventListener('resize', place);
+        return () => window.removeEventListener('resize', place);
+    }, [note, noteOpen, stacked, dotOnly]);
+
     const chip = <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} dotOnly={dotOnly} note={note} />;
     if (!note) return chip;
 
@@ -177,7 +205,7 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
     // has no hover. It opens with the sentence, out of the header's flow (below the mobile header's chip, above the
     // sidebar's, at the foot of the page); a tap on the chip or on the sentence folds it away, the chip brings it back.
     return (
-        <div style={{ position: 'relative' }}>
+        <div ref={anchorRef} style={{ position: 'relative' }}>
             <button
                 type="button"
                 onClick={() => setNoteOpen((open) => !open)}
@@ -189,15 +217,18 @@ export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncSta
             </button>
             {noteOpen && (
                 <p
+                    ref={noteRef}
                     id={noteId}
                     data-testid="sync-note"
                     onClick={() => setNoteOpen(false)}
                     style={{
                         position: 'absolute',
-                        left: 0,
+                        left: noteShift,
                         ...(stacked ? { top: 'calc(100% + 4px)' } : { bottom: 'calc(100% + 4px)' }),
                         zIndex: 20,
                         width: 'max-content',
+                        // The padding and border inside the cap (as Tailwind's preflight has it), so the gutters add up.
+                        boxSizing: 'border-box',
                         maxWidth: 'min(16rem, calc(100vw - 1.5rem))',
                         margin: 0,
                         padding: '0.4rem 0.6rem',

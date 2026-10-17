@@ -82,7 +82,7 @@ The web app keeps your key in the browser for each community's web address, and 
 
 When the community the phone is set to does not have you as a member, the app asks that community what kind it is and shows one of these:
 
-- **You're not a member here yet**, on a community anyone can join, such as the global community. Your account is fine: tap **Join with this account** to join it with the key and 12 words you already have, or switch to one of your communities. To try a different community, tap **Not this community? Enter another address**.
+- **You're not a member here yet**, on the global community, which anyone can join. Your account is fine: tap **Join with this account** to join it with the key and 12 words you already have, or switch to one of your communities. To try a different community, tap **Not this community? Enter another address**.
 - **This community doesn't recognise you**, on a community that joins people by invite. Usually the address is wrong, or you haven't joined it yet. Switch to one of your communities, enter another address and tap **Reconnect**, or tap **Paste an invite** and **Join with this invite** if you have one. The global community is offered too, with a line saying whether you can join it now.
 - On a community in a private preview, its own sentence, **This community is in a private preview. Ask its owner for an invite.**, with a place for an invite from its owner or an admin.
 - **Your account in** (the community's name) **was closed**, when you deleted it there or the community removed it. Your other communities are not affected: switch to one of them or, where the app offers it, join the global community. If the community removed you, it still keeps your profile: tap **Delete my account at** (its name) to erase it. That opens **Settings** at **Permanently Delete Account**, the steps above. Settings is the one place the app still opens for this community; any other screen brings you back to this page.
@@ -93,7 +93,7 @@ If another community on this phone still has you, or can't be reached, the app l
 
 ### If your community removed you
 
-When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account: in the phone app, tap **Delete my account at** (the community's name) on the page that says your account there was closed, or open **Settings** and tap **Account Deletion & Sign Out**, then **Permanently Delete Account**, as above. Then:
+When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account. In the phone app, the page that says your account there was closed has **Delete my account at** (the community's name), which opens **Permanently Delete Account** in **Settings**: the steps above. Then:
 
 - Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.
 - Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.

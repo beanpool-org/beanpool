@@ -5,6 +5,7 @@
  * frighten a member who is covered or reassure one who is not.
  */
 import { signInNames } from '../lib/join-recovery';
+import { BoldWords } from './BoldWords';
 
 /**
  * Under a connected sign-in: who can open the copy it keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a,
@@ -44,9 +45,14 @@ interface Props {
     enrolled: string[] | null | undefined;
     /** Whether this browser holds the 12 words (`hasMnemonic`). */
     hasWords: boolean;
+    /**
+     * How to put this same account on a phone (lib/global-entry.ts phoneLaterLines, DESIGN-global-entry-fable.md §D),
+     * under the rest. None: nothing more is drawn.
+     */
+    phoneLater?: string[];
 }
 
-export function SignInRecoveryLine({ enrolled, hasWords }: Props) {
+export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [] }: Props) {
     if (!enrolled) return null;
     const names = signInNames(enrolled);
     return (
@@ -72,6 +78,11 @@ export function SignInRecoveryLine({ enrolled, hasWords }: Props) {
                     // e2e/signin-recovery-check.mjs; 600 is 4.9:1, and dark's 400 on nature-900 is 4.6:1).
                     <div data-testid="signin-recovery-openers" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
                         {hasWords ? `${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}` : SIGN_IN_COPY_OPENERS}
+                    </div>
+                )}
+                {phoneLater.length > 0 && (
+                    <div data-testid="signin-recovery-phone-later" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
+                        {phoneLater.map((line) => <p key={line} className="m-0 mt-1 first:mt-0"><BoldWords text={line} /></p>)}
                     </div>
                 )}
             </div>

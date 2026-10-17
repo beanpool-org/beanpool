@@ -1,14 +1,17 @@
 /**
  * The global node's web lobby (G9b, design G9a §7) in headless Chromium: a visitor with no key, at 320x568 px with
  * 1.3x text and at 1280 px wide, light and dark (and the list alone at 640 px, the first width with a two-column grid).
+ * The 320 px view is a phone's browser (touch, `isMobile`) at global.beanpool.org, so its Join card offers the app first
+ * (DESIGN-global-entry-fable.md §B.3, slice W1); the 1280 px view is a computer's, whose card is as before.
  * Builds the web app as it ships, serves it under the app document's Content-Security-Policy (as web-join-check.mjs
  * does), answers /api as the global node answers a guest (G9a's guestPost: no author key, name, face or tier, the place
  * at the centre of its 0.1° cell, no typed event place, no poll voters), and takes:
  *   1. the lobby's list: the header with Join, the Join card, the cards, and the one line about joining
  *   2. a listing's detail sheet, from a point the visitor shared, at its top and at its one action, Join
  *   3. the map's pin card: the title and "near here"
- *   4. screen 1 of the join, opened over the lobby by Join
+ *   4. screen 1 of the join, opened over the lobby by Join, and its line under the choices: bring the account you have
  *   5. a listing opened from a shared link (`/?post=`), which the lobby keeps in this tab for after the join
+ *   0. the Join card on the visitor's Home: its ways in, in order, and the app's link, one line each at 320 px
  * and fails on any sideways scroll, any policy violation, any request signed with a key (a visitor has none), any read
  * outside what the node lets a visitor read on the global profile, and any author, face or badge on the page. It also
  * measures: the one line under the first card in the one-column list, and from a grid width on a single line of its
@@ -36,11 +39,15 @@ const SHOTS_DIR = process.argv[2] || path.join(os.tmpdir(), 'bp-lobby-shots');
 const PHOTO = fs.readFileSync(path.join(PWA_DIR, 'public/assets/header-bg.png'));
 // `steps: 'list'` draws and measures the list only: the grid's first width, between the phone and the desktop.
 const VIEWS = [
-    { name: '320', viewport: { width: 320, height: 568 }, textScale: 1.3, steps: 'all' },
+    { name: '320', viewport: { width: 320, height: 568 }, textScale: 1.3, steps: 'all', phone: true },
     { name: '640', viewport: { width: 640, height: 800 }, textScale: 1, steps: 'list' },
     { name: '1280', viewport: { width: 1280, height: 800 }, textScale: 1, steps: 'all' },
 ];
 const LINKED_POST_STORAGE_KEY = 'beanpool_lobby_linked_post';
+// The Join card's ways in (lib/global-entry.ts lobbyJoinWays): the app first on a phone's browser at the app's global.
+const PHONE_WAYS = ['Open in the BeanPool app', 'or join here in your browser', 'Already have BeanPool?'];
+const COMPUTER_WAYS = ['Join', 'Already have BeanPool?'];
+const APP_LINK = 'https://beanpool.org/global';
 
 async function loadPolicy() {
     const source = fs.readFileSync(POLICY_SOURCE, 'utf8');
@@ -55,6 +62,9 @@ const VISITOR_READS_EXACT = new Set([
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
     '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
+    // The visitors' Home in one read (HOME_READ_EXACT, public with the visitors' view on, as here), and the consent a
+    // known community asks for at joining, which screen 1 reads: both on the node's list since this copy was made.
+    '/api/home', '/api/community/consent-terms',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/, /^\/api\/members\/callsign-available\/[^/]+$/, /^\/api\/recovery\/lookup\/[^/]+$/,
@@ -104,7 +114,10 @@ async function main() {
         for (const view of VIEWS) for (const theme of ['light', 'dark']) {
             const run = `${view.name} ${theme}`;
             const seen = { violations: [], signed: [], refused: [], hosts: new Set() };
-            const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce', colorScheme: theme });
+            const context = await browser.newContext({
+                viewport: view.viewport, reducedMotion: 'reduce', colorScheme: theme,
+                ...(view.phone ? { isMobile: true, hasTouch: true } : {}),
+            });
             await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
             await context.addInitScript(([scale, dark]) => {
                 document.addEventListener('securitypolicyviolation', (e) => {
@@ -132,7 +145,11 @@ async function main() {
                 if (!visitorMayRead(p)) seen.refused.push(p);
                 const reply = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
                 if (p === '/api/community/info') {
-                    return reply(200, { memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false, distanceSearch: true } });
+                    return reply(200, {
+                        memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global',
+                        features: { openJoin: true, guestListingsOnly: true, beans: false, distanceSearch: true },
+                        addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org',
+                    });
                 }
                 if (p === '/api/community/health') return reply(200, { status: 'ok', version: '1.2.26' });
                 if (p === '/api/marketplace/posts') {
@@ -200,8 +217,46 @@ async function main() {
                 return `${m.columns} columns, the note on one line above a first row of ${firstRow}`;
             }
 
+            /**
+             * The Join card on the visitor's Home (W1): its ways in, in order, once the browser's key check has answered;
+             * on a phone the app's link first, each way two lines at most (design §E: 320 px at 1.3x) and a 44 px target at
+             * least, nothing cut off.
+             */
+            async function checkJoinCard() {
+                await page.waitForSelector('[data-testid="lobby-join-card"] [data-testid="lobby-join"]:not([disabled])');
+                const m = await page.evaluate(() => {
+                    const card = document.querySelector('[data-testid="lobby-join-card"]');
+                    card.scrollIntoView({ block: 'start' });
+                    return Array.from(card.querySelectorAll('a, button')).map((el) => {
+                        const r = el.getBoundingClientRect();
+                        // The text's own rendered lines: one rect per line box (a button centres its text in its 48 px).
+                        const range = document.createRange();
+                        range.selectNodeContents(el);
+                        const tops = new Set(Array.from(range.getClientRects()).filter((x) => x.width > 0).map((x) => Math.round(x.top)));
+                        return {
+                            text: el.textContent.trim(), href: el.getAttribute('href'), height: r.height, width: r.width,
+                            lines: tops.size, clipped: el.scrollWidth > el.clientWidth + 1,
+                        };
+                    });
+                });
+                const want = view.phone ? PHONE_WAYS : COMPUTER_WAYS;
+                const got = m.map((w) => w.text);
+                if (JSON.stringify(got) !== JSON.stringify(want)) throw new Failure(`the Join card's ways: ${JSON.stringify(got)}, not ${JSON.stringify(want)}`);
+                if (view.phone && m[0].href !== APP_LINK) throw new Failure(`the app's link is ${m[0].href}, not ${APP_LINK}`);
+                if (!view.phone && m.some((w) => w.href)) throw new Failure(`a computer's Join card has a link: ${m.find((w) => w.href).href}`);
+                for (const w of m.slice(0, view.phone ? 2 : 1)) {
+                    if (w.height < 44) throw new Failure(`"${w.text}" is ${Math.round(w.height)} px tall`);
+                    if (w.clipped) throw new Failure(`"${w.text}" is cut off`);
+                    if (w.lines > 2) throw new Failure(`"${w.text}" runs to ${w.lines} lines`);
+                }
+                await shot('0-join-card');
+                const lines = m.slice(0, view.phone ? 2 : 1).map((w) => w.lines).join('+');
+                return view.phone ? `the app first, then the browser (${lines} lines)` : 'Join, as before';
+            }
+
             try {
                 await page.goto(`${origin}/app`, { waitUntil: 'load' });
+                const card = view.steps === 'all' ? await checkJoinCard() : 'not checked at this width';
                 // A visitor lands on their Home (DESIGN-home-dashboard-fable.md H3); these pictures are of the Market, one tap away.
                 await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click();
                 await page.waitForSelector('[data-testid="visitor-list"]');
@@ -250,6 +305,10 @@ async function main() {
                 await page.waitForSelector('[data-testid="join-screen-guard"]');
                 await page.evaluate(() => document.querySelector('[data-testid="join-screen-guard"]')?.scrollIntoView({ block: 'start' }));
                 await shot('4-join-screen-1');
+                // Under the choices: bring the account you have (W1, design §D).
+                await page.evaluate(() => document.querySelector('[data-testid="join-guard-one-account"]')?.scrollIntoView({ block: 'center' }));
+                if (!(await page.$('[data-testid="join-guard-one-account"]'))) throw new Failure('screen 1 has no line about bringing the account you have');
+                await shot('4b-join-screen-1-one-account');
 
                 // A shared link (4112421730): the listing opens in the lobby, and this tab keeps its id, and only that,
                 // for after the join; the address loses `?post=`.
@@ -264,7 +323,7 @@ async function main() {
                 if (seen.violations.length) throw new Failure(`policy violations: ${JSON.stringify(seen.violations)}`);
                 if (seen.signed.length) throw new Failure(`requests signed with a key: ${seen.signed.join(', ')}`);
                 if (seen.refused.length) throw new Failure(`reads a visitor can't make: ${[...new Set(seen.refused)].join(', ')}`);
-                console.log(`✓ ${run}: ${layout}; cards named in full; ✕ ${close.w}x${close.h} px; the shared link kept; no sideways scroll, no person on the page, 0 policy violations, no signed request, only visitor reads`);
+                console.log(`✓ ${run}: the Join card: ${card}; ${layout}; cards named in full; ✕ ${close.w}x${close.h} px; the shared link kept; no sideways scroll, no person on the page, 0 policy violations, no signed request, only visitor reads`);
             } catch (e) {
                 failures.push(run);
                 console.error(`✗ ${run}\n    ${e instanceof Failure ? e.message : e.stack}`);

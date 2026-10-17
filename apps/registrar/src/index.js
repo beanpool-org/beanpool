@@ -126,9 +126,10 @@ async function logEvent(env, name, event, detail) {
 }
 
 // The admin's phone hears of it too (src/alerts.js, design §2.2): `make` builds the message — a name, its community
-// name and counts, never its contact. Like logEvent, it never undoes what it reports.
+// name and counts, never its contact — or null when there is nothing to tell. Like logEvent, it never undoes what it
+// reports.
 async function tell(env, make) {
-    try { await alerts.notify(env, await make()); }
+    try { const ev = await make(); if (ev) await alerts.notify(env, ev); }
     catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
@@ -1362,8 +1363,68 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
             if (!(await releaseRow(env, a, by, now))) return null;
             return json({ status: 'released', name, ...(atOnce ? {} : held(by, now)) });
         }
+        case 'forget':
+            return forgetRow(env, a, now);
     }
     return json({ error: 'unknown action' }, 400);
+}
+
+// --- Remove from the list ---
+// A released name nobody holds any more (holdsName) and no key can take back as its own (isOwnRow) — freed at once, or
+// the admin's release from every key past its hold — becomes 'abandoned': it leaves the admin's list (db.listActive)
+// and stays free to anyone, as it already was. Removing changes nothing about who may claim the name — only what the
+// list shows; its history stays in name_events. Refused (409) for every other row: a name someone holds (live,
+// pending, paused, blocked), a release still inside its hold, and an owner's or 'admin-held' release past its hold,
+// which its old key still takes back as its own (live again without the admin's approval, outside the new-name
+// budget: abandoned, that key would be a new claimant — r4302742456). "Free now" first, which says what it frees and
+// ends that take-back on purpose. Whatever the row still records at Cloudflare — a delete Cloudflare refused at the
+// release — goes first, row first as every take-down's does (stopRouting): what Cloudflare refuses again stays on the
+// row and is owed (teardown), the tunnel too, so the sweep retries it and a later claim of the name deletes it as its own.
+async function forgetRow(env, a, now) {
+    const name = a.name;
+    // Removed already (a double click, another tab): nothing done, and it says so — no event, no alert, not counted.
+    if (a.status === 'abandoned') return json({ status: 'abandoned', name, already: true });
+    if (a.status !== 'released')
+        return json({ error: `${name} is ${a.status}: only a released name nobody holds can be removed from the list`, status: a.status }, 409);
+    if (holdsName(env, a, now)) {
+        const until = (a.released_at || 0) + releaseCooloffS(env);
+        return json({ error: `${name} is still held (${a.pause_reason || 'released'}) until ${new Date(until * 1000).toISOString()}: free it now first`, status: a.status, held_until: until }, 409);
+    }
+    if (isOwnRow(a, a.node_pubkey))
+        return json({ error: `${name} can still be taken back by the key that released it (${a.pause_reason || 'released'}): free it now first`, status: a.status, takes_back: true }, 409);
+    const had = [a.tunnel_id && 'tunnel', a.dns_record_id && 'DNS record'].filter(Boolean);
+    if (!(await stopRouting(env, a, { status: 'abandoned' }))) return null;
+    const after = await db.getAllocation(env, name);
+    if (after?.status === 'abandoned') await owe(env, '[FORGET_LEFT]', name, 'tunnel', after.tunnel_id);
+    const left = after?.status === 'abandoned' ? [after.tunnel_id && 'tunnel', after.dns_record_id && 'DNS record'].filter(Boolean) : [];
+    const freeSince = freedAtOnce(a) ? (a.released_at || 0) : (a.released_at || 0) + releaseCooloffS(env);
+    await logEvent(env, name, 'removed', `removed from the list by the admin (was released/${a.pause_reason || '—'}, free since `
+        + `${new Date(freeSince * 1000).toISOString()}): abandoned, free to anyone as it was`
+        + (had.length ? `; its leftover ${had.join(' and ')} ${left.length ? `deleted, but Cloudflare refused the ${left.join(' and ')}: owed, the sweep retries` : 'deleted at Cloudflare'}` : ''));
+    return json({ status: 'abandoned', name });
+}
+
+// The bulk form: the names the admin's list showed as removable, each decided as its own forget is (onFreshRow), at
+// most FORGET_MAX a request (the page sends them in batches). Answers which were removed, which were refused and why,
+// and (`already`, only when there are any) which were removed before; the admin's phone hears of the removed once. FORGET_MAX keeps one request inside D1's smallest per-invocation budget
+// (50 queries on Workers Free): a forget is about 6 queries, its one alert about 10.
+const FORGET_MAX = 5;
+async function handleForgetMany(env, bodyText) {
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const names = Array.isArray(b?.names) ? [...new Set(b.names.map((n) => String(n).toLowerCase()))] : null;
+    if (!names || !names.length || names.length > FORGET_MAX || !names.every((n) => NAME_RE.test(n)))
+        return json({ error: `names must be 1 to ${FORGET_MAX} names` }, 400);
+    const removed = [];
+    const refused = [];
+    const already = [];
+    for (const name of names) {
+        const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? forgetRow(env, a, nowS()) : json({ error: 'unknown name' }, 404)));
+        const out = await res.json();
+        if (res.status !== 200) refused.push({ name, ...out });
+        else (out.already ? already : removed).push(name);
+    }
+    if (removed.length) await tell(env, () => alerts.adminRemoved(env, removed));
+    return json({ removed, refused, ...(already.length ? { already } : {}) });
 }
 
 // --- Switchboard (Invite resolution / trampoline) ---
@@ -1758,9 +1819,22 @@ export default {
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
                 return await handleRelease(request, env, bodyText);
 
+            // Each row says whether it holds its name now (holdsName) and, for a release still held, until when; a release
+            // says too whether its old key can still take it back (isOwnRow, past the hold too). What the admin's list
+            // offers ("Free now" while either is so, "Remove from the list" once neither is) is the Worker's rule (forgetRow).
             if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
-                return json({ allocations: await db.listActive(env) });
+                const now = nowS();
+                return json({ allocations: (await db.listActive(env)).map((a) => {
+                    const holds = holdsName(env, a, now);
+                    if (a.status !== 'released') return { ...a, holds };
+                    return { ...a, holds, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
+                }) });
+            }
+            // Remove from the list, in bulk: { "names": [...] } (handleForgetMany). One name's is /:name/forget below.
+            if (method === 'POST' && p === '/api/local/admin/registrar/forget') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return await handleForgetMany(env, bodyText);
             }
             if (method === 'GET' && p === '/api/local/admin/registrar/events') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
@@ -1789,7 +1863,7 @@ export default {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 return json(await alerts.sendTest(env));
             }
-            const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke)$/);
+            const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke|forget)$/);
             if (m && method === 'POST') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 // Release takes { "free_now": true }; nothing else (no body, any other value) is the default hold.

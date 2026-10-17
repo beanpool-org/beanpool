@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 133,
-  "hash": "9ba375252769cd58bbaa09fc6dce60afdfe751425fc1e7e05994893f21c577a5",
+  "version": 135,
+  "hash": "7b19626b2b73196f702c40b032719736d1fc8913b71eccc3b541c93a5931b84c",
   "sections": [
     {
       "id": "setup",
@@ -174,6 +174,10 @@
             "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
             "It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
           ]
+        },
+        {
+          "type": "p",
+          "text": "To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself, go to **Find a community** (or **Start a community**), tap **Set up a new community server**, then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code."
         },
         {
           "type": "p",
@@ -387,7 +391,7 @@
         },
         {
           "type": "p",
-          "text": "On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone, or in BeanPool open **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup."
+          "text": "On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone's camera, or in BeanPool open **Find a community**, tap **Set up a new community server**, then **Scan the code**. Or in **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup."
         },
         {
           "type": "h2",
@@ -3192,7 +3196,7 @@
         },
         {
           "type": "p",
-          "text": "The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from, or if another server has already taken over with them (see Two standbys, one set of keys). It also refuses if the standby's NODE_PROFILE is not the community's: a global community's standby needs NODE_PROFILE=global in its .env. Set it, restart the standby, and try again. In each case it writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server."
+          "text": "The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from, or if another server has already taken over with them (see Two standbys, one set of keys). It also refuses if the standby's NODE_PROFILE is not the community's: a global community's standby needs NODE_PROFILE=global in its .env. Set it, run docker compose up -d on the standby, and try again. In each case it writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server."
         },
         {
           "type": "h2",
@@ -3827,7 +3831,7 @@
           "type": "ul",
           "items": [
             "**The community has no name of its own**: its name is blank, or exactly \"BeanPool Community\". Type the community's name in **Community Name** and press **Save**. Your server tells the directory at once, with no restart. First-time setup asks for the name too, and won't go on without one.",
-            "**The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and restart the server. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts."
+            "**The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and run docker compose up -d. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts."
           ]
         },
         {
@@ -3948,7 +3952,7 @@
         },
         {
           "type": "p",
-          "text": "A busy day: once DOOR_BUSY_NEW_MEMBERS_PER_DAY people have joined through the open door (both ways in) in the last 24 hours, every 12-words join asks for at least level 3, until the count falls below 90% of that number. The default is 300; set it in .env and restart the server, or set it to 0 to switch it off. Nobody is turned away for it: people just wait a little longer for the setting-up work, and the sign-in way is unchanged. A connection's or the community's own steps can still ask for more. The log says when it starts and when it ends, with the count and no names, and your alerts tell you when it starts (the push to your phone at most once a day)."
+          "text": "A busy day: once DOOR_BUSY_NEW_MEMBERS_PER_DAY people have joined through the open door (both ways in) in the last 24 hours, every 12-words join asks for at least level 3, until the count falls below 90% of that number. The default is 300; set it in .env, or set it to 0 to switch it off, and run docker compose up -d. Nobody is turned away for it: people just wait a little longer for the setting-up work, and the sign-in way is unchanged. A connection's or the community's own steps can still ask for more. The log says when it starts and when it ends, with the count and no names, and your alerts tell you when it starts (the push to your phone at most once a day)."
         },
         {
           "type": "p",
@@ -4049,7 +4053,7 @@
         },
         {
           "type": "p",
-          "text": "If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise everyone looks like the proxy's address, so everything counted per address (people not signed in, sign-in and recovery attempts, Settings, the password brake) is one shared allowance. Signed-in members still keep their own. For the password brake that means everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake."
+          "text": "If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise everyone looks like the proxy's address, so everything counted per address (people not signed in, sign-in and recovery attempts, Settings, the password brake) is one shared allowance. Signed-in members still keep their own. For the password brake that means everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and run docker compose up -d; starting the server again also clears the brake."
         },
         {
           "type": "h2",
@@ -4109,7 +4113,7 @@
         },
         {
           "type": "p",
-          "text": "Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it. It takes 1, true, yes or on, and 0, false, no or off. Any other value, or one kept in quotes, stops the server at start, and the log says why: a typo never leaves it open."
+          "text": "Set PRIVATE_PREVIEW=1 in the server's .env and run docker compose up -d. To open the server, remove the setting (or set it to 0) and run docker compose up -d again. It is off unless you set it. It takes 1, true, yes or on, and 0, false, no or off. Any other value, or one kept in quotes, stops the server at start, and the log says why: a typo never leaves it open."
         },
         {
           "type": "p",
@@ -4144,7 +4148,7 @@
     {
       "slug": "showcase",
       "title": "Showing what a local community does",
-      "summary": "The showcase switch: whether the apps show a switched-off feature from an example community or hide it. On for a global community, off for a local one, and yours to change. Where Start a community leads.",
+      "summary": "The showcase switch: whether the apps show a switched-off feature from an example community or hide it. On for a global community, off for a local one, and yours to change. Where Start a community and the Global community link lead.",
       "section": "server",
       "related": [
         "members-and-invites",
@@ -4258,6 +4262,22 @@
         {
           "type": "p",
           "text": "The web app and the phone app both link it from their Start a community screens."
+        },
+        {
+          "type": "h2",
+          "text": "Where the Global community link leads"
+        },
+        {
+          "type": "p",
+          "text": "On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "To name another global community, set GLOBAL_COMMUNITY_URL in the server's .env to its address, such as GLOBAL_COMMUNITY_URL=https://global.example.org, and run docker compose up -d (a restart keeps the old setting). It must start https:// and have no user name or password in it.",
+            "To show no link at all, set GLOBAL_COMMUNITY_URL=off and run docker compose up -d. A value that isn't such an address shows no link either, never ours in its place.",
+            "It is reported to the apps on /api/community/info as globalCommunityUrl. A global community's own Settings shows no such row."
+          ]
         }
       ]
     },

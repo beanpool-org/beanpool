@@ -10,6 +10,8 @@
  *   place), and nothing to write with. The Market's list starts with a Join card, with "Already have BeanPool?".
  * - Join opens screen 1 of the browser join over the lobby ("Have you used BeanPool before?"), "Already have
  *   BeanPool?" its ways back; ← Back returns to the listings. Once joined, App draws the member's app.
+ * - On a phone's browser at the community the BeanPool app's link opens, the Join card offers **Open in the BeanPool
+ *   app** first and the browser join second (lib/global-entry.ts); the header keeps Join (DESIGN-global-entry §B.3).
  * - It asks for nothing a visitor couldn't already read: the visitors' Home (GET /api/home, unsigned), the guest list
  *   read, the socket's doorbells (unsigned, so nothing else), and `/api/community/info`, which App read once to decide
  *   on the lobby and hands down.
@@ -29,10 +31,12 @@ import { LedgerPage } from './LedgerPage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
 import { modeFor } from '../lib/features';
+import { APP_GLOBAL_LINK, isAppsGlobal, lobbyJoinWays, usePhoneBrowser } from '../lib/global-entry';
+import { webAppHost } from '../lib/former-address';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-import { helpSheetFor, webHelpKey } from '@beanpool/core';
+import { helpSheetFor, t, webHelpKey } from '@beanpool/core';
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
@@ -100,6 +104,10 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
 
     const doorOpen = info.profile === 'global' && info.features?.openJoin === true;
     const beans = beansOn(info);
+    // On a phone's browser at the community the BeanPool app's link opens: the app first, the browser second (design
+    // DESIGN-global-entry-fable.md §B.3, decision 3), so a phone keeps one account in the app. Anywhere else, as before.
+    const phone = usePhoneBrowser();
+    const appFirst = lobbyJoinWays({ phone, appsGlobal: isAppsGlobal(info, webAppHost()), doorOpen })[0] === 'app';
 
     function openJoin(start: 'guard' | 'restore') {
         setJoin({ start: start === 'guard' && canHoldKey === false ? undefined : start });
@@ -142,8 +150,19 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     ? `Post what you can offer and what you need, and talk with the people here. ${joinTakes(info.features?.wordsDoor === true)}`
                     : 'This community takes new members with an invite from one of them.'}
             </p>
+            {appFirst && (
+                <a href={APP_GLOBAL_LINK} data-testid="lobby-open-app"
+                    className="mb-2 flex items-center justify-center w-full min-h-[48px] px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2">
+                    {t('Open in the BeanPool app')}
+                </a>
+            )}
             {canHoldKey === false ? (
                 <p role="alert" data-testid="lobby-too-old" className="m-0 mb-2 text-sm font-semibold text-nature-900 dark:text-white">{keyProblemText}</p>
+            ) : appFirst ? (
+                <button type="button" data-testid="lobby-join" disabled={canHoldKey === null} onClick={() => openJoin('guard')}
+                    className="w-full min-h-[48px] px-3 rounded-xl border-2 border-blue-600 dark:border-blue-400 bg-white/70 dark:bg-transparent hover:bg-white dark:hover:bg-blue-900/40 disabled:opacity-60 text-blue-800 dark:text-blue-100 font-bold text-base cursor-pointer">
+                    {t('or join here in your browser')}
+                </button>
             ) : (
                 <button type="button" data-testid="lobby-join" disabled={canHoldKey === null} onClick={() => openJoin('guard')}
                     className="w-full min-h-[48px] rounded-xl border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-base cursor-pointer">

@@ -16,6 +16,10 @@
           {
             "/": "/app*",
             "comment": "Match legacy app paths"
+          },
+          {
+            "/": "/global",
+            "comment": "The global community's smart link (beanpool.org/global, website global.html)"
           }
         ]
       }

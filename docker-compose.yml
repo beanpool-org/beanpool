@@ -152,6 +152,10 @@ services:
       # Off the public directory whatever the settings say (apps/server/src/services/directory-publisher.ts): 1/true/
       # yes/on. Our own test and review nodes set it in their .env; empty for a community.
       - DIRECTORY_UNLISTED=${DIRECTORY_UNLISTED:-}
+      # The global community the web app's Settings links on a local community (apps/server/src/config/global-community.ts):
+      # an https address. EMPTY = BeanPool's own (https://global.beanpool.org); off = no link. Nothing on this server
+      # ever contacts it.
+      - GLOBAL_COMMUNITY_URL=${GLOBAL_COMMUNITY_URL:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

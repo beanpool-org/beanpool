@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { extractNodeOrigin, normaliseInviteCode } from '../../utils/invite-parser';
+import { normaliseInviteCode, redeemTargetUrl } from '../../utils/invite-parser';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
@@ -569,19 +569,8 @@ export default function PeopleScreen() {
         if (!rawInvite) return;
         setRedeeming(true);
         try {
-            const extractedOrigin = extractNodeOrigin(rawInvite);
-            let targetNodeUrl = anchorUrl;
-
-            if (extractedOrigin) {
-                targetNodeUrl = extractedOrigin;
-            } else {
-                let nodeUrl = redeemNodeUrl.trim();
-                if (nodeUrl && !nodeUrl.startsWith('http')) {
-                    const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(nodeUrl) || nodeUrl.startsWith('localhost');
-                    nodeUrl = (isIpOrLocal ? 'http://' : 'https://') + nodeUrl;
-                }
-                if (nodeUrl) targetNodeUrl = nodeUrl;
-            }
+            // The invite's own address, else the one typed beside it (a bare public IP gets https://), else this community.
+            const targetNodeUrl = redeemTargetUrl(rawInvite, redeemNodeUrl, anchorUrl);
 
             if (targetNodeUrl === anchorUrl) {
                 let isMember = false;

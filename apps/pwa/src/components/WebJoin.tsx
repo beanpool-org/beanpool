@@ -19,6 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { t } from '@beanpool/core';
 import {
     clearUnsentPendingJoin,
     completePendingJoin,
@@ -1306,6 +1307,11 @@ export function WebJoin({
                             <button type="button" data-testid="join-guard-signin" style={secondaryButton} onClick={() => onRestore('signin')}>
                                 I joined with a sign-in before
                             </button>
+                            {/* The account someone already has, wherever it is, comes here; a new one never merges with it
+                                (DESIGN-global-entry-fable.md §D). */}
+                            <p data-testid="join-guard-one-account" style={{ ...lede, marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+                                {t("Already on BeanPool, on any phone or computer? Don't start a new account here: bring yours, so you have one account everywhere.")}
+                            </p>
                         </>
                     )}
                     <button type="button" style={quietButton} onClick={() => backFrom('guard')}>← Back</button>

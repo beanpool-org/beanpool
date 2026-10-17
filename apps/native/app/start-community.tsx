@@ -11,6 +11,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails, runANodeLabel, runANodeUrl } from '../utils/start-community';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { SetUpServerRow } from '../components/SetUpServerRow';
 
 export { ErrorBoundary };
 
@@ -48,6 +49,8 @@ export default function StartCommunityScreen() {
         link: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginTop: 8 },
         linkText: { fontSize: 15, fontWeight: '700', color: colors.brand.primary, flexShrink: 1, textDecorationLine: 'underline' },
         note: { fontSize: 14, color: colors.text.body, marginTop: 8, lineHeight: 20 },
+        // The claim's way in (components/SetUpServerRow.tsx) in a card of its own, as Find a community shows it.
+        serverCard: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, marginBottom: 12 },
     }));
 
     const details = { name, place, contact, organiser: identity?.callsign ?? null };
@@ -109,6 +112,9 @@ export default function StartCommunityScreen() {
                 {copied && <Text style={styles.note} accessibilityLiveRegion="polite">{START_COMMUNITY_COPY.copied}</Text>}
 
                 <Text style={styles.sectionLabel}>ONCE IT'S RUNNING</Text>
+                <View style={styles.serverCard}>
+                    <SetUpServerRow />
+                </View>
                 <Text style={styles.intro}>{START_COMMUNITY_COPY.after}</Text>
             </KeyboardAwareScrollView>
         </SafeAreaView>

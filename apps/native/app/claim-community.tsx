@@ -1,9 +1,10 @@
 /**
  * "Claim ‹community›": become the first owner of a community server that has none yet, with the one-time code its first
  * boot wrote on the server. Opened only for a node that answered GET /api/local/claim `unclaimed: true`: from the
- * `beanpool://claim?node=…[&id=…][&code=…]` link (the terminal QR `beanpool claim` prints, the manager's unclaimed card)
- * or from Find a community's address check. utils/node-claim.ts has the steps and the reasons; the code never leaves
- * the phone.
+ * `beanpool://claim?node=…[&id=…][&code=…]` link (the terminal QR `beanpool claim` prints, the manager's unclaimed card),
+ * from Find a community's address check, or with no server yet from "Set up a new community server" (Find a community,
+ * Start a community: components/SetUpServerRow.tsx), where Scan the code reads the server's QR before its address is
+ * known. utils/node-claim.ts has the steps and the reasons; the code never leaves the phone.
  *
  * One column at 320dp and 1.3× font, 48dp targets, as settings-signin.tsx. The full address is shown wrapped, never
  * truncated: it is the one thing a phishing server cannot make look right.
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { t } from '@beanpool/core';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +31,7 @@ import {
     claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
     claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeHasAddress, type ClaimStatus,
 } from '../utils/node-claim';
+import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan } from '../utils/claim-link';
 
 export { ErrorBoundary };
 
@@ -55,6 +58,7 @@ export default function ClaimCommunityScreen() {
         codeBox: { borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, paddingHorizontal: 12, paddingTop: 8 },
         codePrefix: { fontSize: 16, color: colors.text.secondary, fontFamily: 'monospace' },
         codeInput: { minHeight: 48, fontSize: 16, color: colors.text.heading, fontFamily: 'monospace', paddingVertical: 8, paddingHorizontal: 0 },
+        hint: { fontSize: 13, color: colors.text.secondary, marginTop: 6, lineHeight: 18 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, color: colors.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
         primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
@@ -107,8 +111,13 @@ export default function ClaimCommunityScreen() {
     };
 
     // ── The code and the callsign ───────────────────────────────────────────────────────────────────────
-    const linkCode = typeof params.code === 'string' ? params.code : '';
-    const linkId = typeof params.id === 'string' ? params.id : '';
+    const [link, setLink] = useState(() => ({
+        code: typeof params.code === 'string' ? params.code : '',
+        id: typeof params.id === 'string' ? params.id : '',
+    }));
+    const { code: linkCode, id: linkId } = link;
+    // A QR with the code but no address (the server had none yet): the code is kept for the server typed next.
+    const [scanNote, setScanNote] = useState<string | null>(null);
     const [digits, setDigits] = useState(() => (linkCode ? claimCodeDigits(linkCode) : ''));
     const [callsign, setCallsign] = useState('');
     const [phase, setPhase] = useState<Phase>('form');
@@ -140,7 +149,25 @@ export default function ClaimCommunityScreen() {
     };
 
     const onScanned = ({ data }: BarcodeScanningResult) => {
-        if (scanLock.current || !origin) return;
+        if (scanLock.current) return;
+        if (!origin) {
+            // No server yet: its QR names it, as the `beanpool://claim` link does when the phone's camera opens it.
+            const scanned = claimLinkFromScan(data);
+            if (!scanned) return;
+            scanLock.current = true;
+            setScanning(false);
+            setLink({ code: scanned.code ?? '', id: scanned.codeId ?? '' });
+            if (scanned.code) setDigits(claimCodeDigits(scanned.code));
+            if (scanned.node) {
+                setAddressError(null);
+                setScanNote(null);
+                setOrigin(scanned.node);
+                return;
+            }
+            setAddressError(scanned.nodeRefused ? t("The QR code named an address BeanPool won't use. Type the server's address instead.") : null);
+            setScanNote(scanned.code ? t("The code is filled in. Now type the server's address.") : null);
+            return;
+        }
         const code = claimCodeFromScan(data, origin);
         if (!code) return;
         scanLock.current = true;
@@ -227,6 +254,14 @@ export default function ClaimCommunityScreen() {
         body = (
             <>
                 <Text style={styles.title}>Claim a community</Text>
+                <Text style={styles.lead}>{t('Scan the QR code your server shows, or type its address.')}</Text>
+                <View style={styles.actions}>
+                    <Pressable style={styles.secondary} onPress={openScanner} accessibilityRole="button" testID="claim-scan-server">
+                        <MaterialCommunityIcons name="qrcode-scan" size={20} color={placeholder} />
+                        <Text style={styles.secondaryText}>{t('Scan the code')}</Text>
+                    </Pressable>
+                </View>
+                {scanNote ? <Text style={styles.note} testID="claim-scan-note">{scanNote}</Text> : null}
                 <Text style={styles.lead}>The address of the server you installed, as you reach it from this phone.</Text>
                 <Text style={styles.label}>Server address</Text>
                 <TextInput
@@ -325,8 +360,8 @@ export default function ClaimCommunityScreen() {
                     <TextInput
                         style={styles.codeInput}
                         value={digits}
-                        onChangeText={t => setDigits(claimCodeDigits(t))}
-                        placeholder="a1b2-c3d4-e5f6-7890"
+                        onChangeText={text => setDigits(claimCodeDigits(text))}
+                        placeholder={CLAIM_CODE_PLACEHOLDER}
                         placeholderTextColor={placeholder}
                         autoCapitalize="none"
                         autoCorrect={false}
@@ -336,6 +371,7 @@ export default function ClaimCommunityScreen() {
                         accessibilityLabel="Claim code"
                     />
                 </View>
+                <Text style={styles.hint} testID="claim-code-hint">{t('The code is on your server: {command} shows it.', { command: 'beanpool claim' })}</Text>
                 <View style={styles.actions}>
                     <Pressable style={styles.secondary} onPress={paste} disabled={busy} accessibilityRole="button">
                         <MaterialCommunityIcons name="content-paste" size={20} color={placeholder} />
@@ -353,7 +389,7 @@ export default function ClaimCommunityScreen() {
                         <TextInput
                             style={styles.input}
                             value={callsign}
-                            onChangeText={t => setCallsign(t.slice(0, 20))}
+                            onChangeText={text => setCallsign(text.slice(0, 20))}
                             placeholder="Your callsign"
                             placeholderTextColor={placeholder}
                             autoCorrect={false}

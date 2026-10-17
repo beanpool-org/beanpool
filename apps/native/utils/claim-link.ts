@@ -10,6 +10,13 @@ export const CLAIM_CODE_ID = /^[0-9a-f]{8}$/;
 const CODE_ID = CLAIM_CODE_ID;
 const CODE = /^claim-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 
+/**
+ * The empty code field's example (app/claim-community.tsx, under its `claim-`): a pattern, never a code. A real-looking
+ * one (`a1b2-c3d4-…`, grey on the box) read as filled in, and the Claim button stayed pale with no reason given (Marty's
+ * claim, 17 Oct). No hex digit in it, so claimCodeDigits reads nothing from it.
+ */
+export const CLAIM_CODE_PLACEHOLDER = 'xxxx-xxxx-xxxx-xxxx';
+
 /** A whole claim code, `claim-` and four groups of four hex digits, in any case and with spaces around. */
 export function isClaimCode(code: unknown): code is string {
     return typeof code === 'string' && CODE.test(code.trim().toLowerCase());
@@ -121,6 +128,26 @@ export function claimRouteFor(link: ClaimLink): string {
     if (link.codeId) q.push(`id=${link.codeId}`);
     if (link.code) q.push(`code=${link.code}`);
     return `/claim-community${q.length ? `?${q.join('&')}` : ''}`;
+}
+
+/**
+ * "Set up a new community server" (components/SetUpServerRow.tsx, on Find a community and Start a community): the claim
+ * screen before it knows the server, which asks for its address or scans its QR (claimLinkFromScan). The phone's camera
+ * reaches the same screen through the QR's `beanpool://claim` link; this is the way from inside the app.
+ */
+export const CLAIM_NEW_SERVER_ROUTE = '/claim-community' as const;
+
+/**
+ * What a QR scanned on the claim screen BEFORE it knows the server fills: a claim link's checked fields (the QR
+ * `beanpool claim` prints has the address and the code, or only the code when the server has no address yet; the settings
+ * page's has the address and the code's id), or a bare claim code. A refused address is kept as `nodeRefused`, so the
+ * screen can say so. Null when the scan holds none of these, so the camera keeps looking.
+ */
+export function claimLinkFromScan(raw: unknown): ClaimLink | null {
+    if (typeof raw !== 'string') return null;
+    const link = parseClaimLink(raw);
+    if (link) return link.node || link.nodeRefused || link.code ? link : null;
+    return isClaimCode(raw) ? { node: null, nodeRefused: false, codeId: null, code: raw.trim().toLowerCase() } : null;
 }
 
 /**

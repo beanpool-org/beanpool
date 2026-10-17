@@ -23,6 +23,7 @@ import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
 import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
+import { SetUpServerRow } from '../components/SetUpServerRow';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 
 export { ErrorBoundary };
@@ -565,6 +566,7 @@ export default function FindCommunityScreen() {
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
                     </Pressable>
+                    <SetUpServerRow divider />
                     <View style={[styles.row, styles.divider]}>
                         <MaterialCommunityIcons name="bell-ring-outline" size={24} color={colors.brand.primary} />
                         <View style={styles.rowText}>

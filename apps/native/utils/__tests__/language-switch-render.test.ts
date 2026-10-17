@@ -286,7 +286,10 @@ describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right 
  * whole 3,800-line screen would need its 67 imports stubbed. The words are the catalogs' (or the pseudo-locale's).
  */
 describe('the welcome and join screens\' words at 320 dp with 1.3× text', () => {
-    const source = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+    // The home screen's two doors and the lines under them are components/WelcomeDoors.tsx's (DESIGN-global-entry §B.3):
+    // its words and lines are the screen's, so they are read with it.
+    const doorsSource = fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf8');
+    const source = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8') + '\n' + doorsSource;
     // The home screen's two big buttons: one line in English, a second line for a longer language, shrinking to 0.6 at most.
     const ONE_LINE_BUTTONS = ['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide'];
     // homeContent padding 24 a side, memberBtn paddingHorizontal 12 a side: the label's line.
@@ -321,7 +324,7 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     it('the screens\' sentences are through t(), and the two big buttons are the only lines with a limit (two lines)', () => {
         for (const key of ONE_LINE_BUTTONS) expect(keys).toContain(key);
         expect(keys.length).toBeGreaterThanOrEqual(40);
-        const home = source.slice(source.indexOf('// --- MAIN WELCOME SCREEN ---'), source.indexOf('function makeStyles('));
+        const home = source.slice(source.indexOf('// --- MAIN WELCOME SCREEN ---'), source.indexOf('function makeStyles(')) + doorsSource;
         expect((home.match(/numberOfLines=\{\d\}/g) ?? []).length).toBe(2);
         expect((home.match(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(2);
         expect((home.match(/adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(2);

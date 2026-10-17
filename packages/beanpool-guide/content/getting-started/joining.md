@@ -34,7 +34,7 @@ To join:
 
 You can join in the phone app or in a web browser. In a browser, open global.beanpool.org and tap **Join**: see "Using BeanPool in a web browser" for the steps. In the phone app:
 
-- On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.
+- On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.
 - Choose one of the two ways in, side by side. **Create an account with 12 secret words** needs no Google, Apple or Facebook account: your 12 words are the only way back in.
 - **Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.
 - Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others.
@@ -49,7 +49,7 @@ If you sign in, the community keeps only a scrambled reference to your sign-in a
 
 If you join with 12 words, nothing about you reaches the community but your key and your name, and your 12 words are your only way back: nobody can reset them, not BeanPool and not the community. **Safety Backup** says so, and offers **Add a sign-in as a second way back**. After joining, a card on **Home** says **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** Tap **✕** to put it away: it comes back once after your first post and once after a week, then stays in **Settings**, under **Account Protection**, until you add a sign-in or tap **I still have my 12 words**. An account made with 12 words also has smaller limits for its first 7 days, and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message a day, and one report hides its post while it is new. Adding a sign-in, any time, lifts it to the usual new-account limits. You can add one from any phone where you are in your account, not only the one you joined on. If BeanPool's key vault already keeps a copy of your account, the card is not shown, and **Settings** offers **Add a sign-in** quietly.
 
-**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
+**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Global community**: it is always there, and when you can join it its second line says **Join with this account: 12 words or a sign-in** (or **…: a sign-in**). If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
 
 ## The steps
 
@@ -73,7 +73,7 @@ If you close the app halfway, it carries on from the same step next time.
 
 ## If joining the global community does not work
 
-- **No Explore BeanPool worldwide button:** the global community isn't open yet, or the app couldn't reach it. Check your connection and open the app again. You can still join a community with an invite.
+- **Can't reach the global community right now** (the line under **Explore BeanPool worldwide**): check your connection, then tap the button: it asks again. You can still join a community with an invite.
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
 - **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Choose another way** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.

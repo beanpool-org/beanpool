@@ -630,19 +630,22 @@ test('the names page: Release has a "free now" box and sends free_now only when 
     try {
         const p = await adminPage(w);
         const key = 'ab'.repeat(32);
+        // `holds`: as /pending sends it (the Worker's holdsName), which decides "Free now" against "Remove from the list".
         p.ctx.renderActive([
-            { name: 'blockedname', status: 'blocked', pause_reason: 'admin', node_pubkey: key, mode: 'tunnel', paused_at: 1 },
-            { name: 'heldname', status: 'released', pause_reason: 'admin-held', node_pubkey: key, mode: 'tunnel', released_at: 1 },
-            { name: 'ownerheld', status: 'released', pause_reason: 'owner', node_pubkey: key, mode: 'tunnel', released_at: 1 },
-            { name: 'freedname', status: 'released', pause_reason: 'admin', node_pubkey: key, mode: 'tunnel', released_at: 1 },
-            { name: 'livename', status: 'live', node_pubkey: key, mode: 'tunnel' },
+            { name: 'blockedname', status: 'blocked', pause_reason: 'admin', node_pubkey: key, mode: 'tunnel', paused_at: 1, holds: true },
+            { name: 'heldname', status: 'released', pause_reason: 'admin-held', node_pubkey: key, mode: 'tunnel', released_at: 1, holds: true },
+            { name: 'ownerheld', status: 'released', pause_reason: 'owner', node_pubkey: key, mode: 'tunnel', released_at: 1, holds: true },
+            { name: 'freedname', status: 'released', pause_reason: 'admin', node_pubkey: key, mode: 'tunnel', released_at: 1, holds: false },
+            { name: 'livename', status: 'live', node_pubkey: key, mode: 'tunnel', holds: true },
         ]);
         p.ctx.renderPending([{ name: 'sydney', status: 'pending', node_pubkey: key, mode: 'tunnel', requested_at: 1 }]);
         p.shoot();
         const table = p.els.activeTableContainer.innerHTML;
         assert.match(table, /<input type="checkbox" data-free-now-for="blockedname">/, 'the box sits by Release');
         assert.doesNotMatch(table, /data-free-now-for="(heldname|ownerheld|freedname|livename)"/, 'only by Release');
-        assert.doesNotMatch(table, /data-name="freedname"/, 'a name already free has no action');
+        // A name already free has nothing to free: no Release, no "Free now" — only "Remove from the list" (2026-10-17).
+        assert.doesNotMatch(table, /data-name="freedname" data-action="(?!forget")/, 'a name already free has no action but Remove');
+        assert.match(table, /data-name="freedname" data-action="forget"/);
         assert.doesNotMatch(table, /data-name="livename" data-action="release"/, 'a live name still has no Release');
 
         // Release on a blocked name, box not ticked: held — from every key, the blocked one included (r4117740868).

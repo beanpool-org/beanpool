@@ -10,12 +10,26 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
   this Worker was deployed from (`null` if its deploy didn't say) and the signing protocols it accepts
-- **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every held name, any state) ·
+- **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every name in any state but `abandoned`, each
+  with `holds` — does it keep its name from other keys now — and, for a release, `takes_back` — can its old key still
+  take it back as its own — and, while it is still held, `held_until`) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
-  `approve | pause | resume | block | release` (`revoke` is block's old name; `release` takes
-  `{"free_now": true}`, below). Every action is logged in `name_events`. Alerts (below):
+  `approve | pause | resume | block | release | forget` (`revoke` is block's old name; `release` takes
+  `{"free_now": true}`, below) · `POST /api/local/admin/registrar/forget {"names": [...]}` (forget in bulk, at most
+  5 a request — inside D1's per-invocation query budget on Workers Free; /admin sends them in batches — answers
+  `{removed, refused}`, and `already` for names removed before: neither counted nor told). `forget` is /admin's
+  "Remove from the list" (a repeat answers `already: true`, and changes nothing): a `released` row nobody
+  holds any more and no key can take back as its own (freed at once, or `admin-held-all` past its hold) becomes
+  `abandoned`, leaves the list and stays free to anyone, as it was: who may claim it does not change. Any other row is
+  refused with a 409: live, pending, paused, blocked, a release still inside its hold, and an `owner` or `admin-held`
+  release past its hold, which its key still takes back as its own (without approval on a gated name, outside the
+  new-name budget) — "free now" ends that first, on purpose.
+  A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is
+  logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
-  `GET …/servers` (the outside checks of our servers)
+  `GET …/servers` (the outside checks of our servers). The page's tables fit their card at every width: the
+  registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
+  browser at 320–1280 px (by hand: CI's test job has no browser)
 - **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
   `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
   anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
@@ -157,7 +171,7 @@ or — a later PR — after a long, warned abandonment. States (`name_allocation
 | `paused` | no | no | sweep impostor (`pause_reason` `impostor`), sweep content swap (`content-swap`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal (or rotate), except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
 | `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`; the admin's of a name it had blocked or paused, `admin-held-all`, which its own key can't claim either) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time (not after `admin-held-all`: it waits out the hold like anyone, then claims as a new claimant); others once free |
 | `blocked` | no | never | admin block (the kill switch) · admin resume or release (held 30 days from every key, this one included, unless "free now"); the owner can't heal or release it |
-| `abandoned` | no | yes | a later PR |
+| `abandoned` | no | yes | the admin's "Remove from the list" (`forget`) of a release nobody holds any more and no key can take back as its own (an abandonment clock is a later PR) · any key's claim, as a new claimant (a gated name waits for approval) |
 
 A heal (`claim` of your own name, or `heal`) never deprovisions first: `ensure` keeps the tunnel if
 Cloudflare still has it, re-PUTs the ingress, and finds the DNS record by name — keeps it, PATCHes it if it

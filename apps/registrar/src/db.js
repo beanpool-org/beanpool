@@ -280,17 +280,18 @@ export const pruneSources = (env, before) => env.DB.prepare('DELETE FROM claim_s
 export const recentSources = async (env, since) => ((await env.DB.prepare(
     `SELECT s.at, s.name, s.node_pubkey, s.source_hash, s.asn, s.as_org, s.country, s.held_reason AS held_at_claim,
             a.status, a.held_reason, a.verified_at, a.community_name
-     FROM claim_sources s LEFT JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at >= s.at - 60
+     FROM claim_sources s LEFT JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at
      WHERE s.at > ? ORDER BY s.at DESC LIMIT 1000`
 ).bind(since).all()).results || []);
 
-// A source's names still held by the tenure its claim made, that "Block all" acts on: pending (rejected), live and
-// paused (blocked). At most `limit`, oldest first.
-export const sourceNames = async (env, hash, since, limit) => ((await env.DB.prepare(
-    `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey
-     WHERE s.source_hash = ? AND s.at > ? AND a.requested_at >= s.at - 60 AND a.status IN ('pending', 'live', 'paused')
+// A group's names (claimed since `since` from one source, or from one network) still held by the tenure its claim made,
+// that /admin's "Block all" acts on — pending (rejected), live and paused (blocked) — or, `pendingOnly`, "Reject all
+// held": the pending ones. At most `limit`, oldest first.
+export const groupNames = async (env, { source = null, asn = null, pendingOnly = false }, since, limit) => ((await env.DB.prepare(
+    `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at
+     WHERE ${source ? 's.source_hash = ?' : 's.asn = ?'} AND s.at > ? AND a.status IN (${pendingOnly ? "'pending'" : "'pending', 'live', 'paused'"})
      ORDER BY a.requested_at LIMIT ?`
-).bind(hash, since, limit).all()).results || []);
+).bind(source || asn, since, limit).all()).results || []);
 
 // The latest facts the registrar keeps of a source (its network, country): what a block's label says.
 export const sourceFacts = async (env, hash) => env.DB.prepare(

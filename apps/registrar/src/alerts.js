@@ -152,6 +152,27 @@ export function adminFreedAll(env, { who = null, run, total = null }) {
         body: `${you} chose Free all and remove for ${n}: each freed now (its old server can no longer take it back), then removed from the list, free to anyone. What each one did is under Name events.`,
     };
 }
+// The admin's "Block all" or "Reject all held" on a group of new names in /admin (index.js handleSourceAction): one
+// message for the click, however many requests its names take (once per `run`, as adminFreedAll). `label`: what the
+// admin saw of the group — its network and country, never an address.
+export function adminSourceDid(env, { who = null, run, block, label = null, total = null }) {
+    const you = who || 'You';
+    const n = total ? plural(total, 'name') : 'its names';
+    return {
+        category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null, once: `source:${run}`,
+        title: block ? `${you} blocked a source (${n})` : `${you} rejected held names from one source (${n})`,
+        body: block
+            ? `${you} chose Block all for one source${label ? ` (${label})` : ''}: ${n}, each held one rejected and each live one blocked; its new claims are refused for 7 days. What each name did is under Name events.`
+            : `${you} chose Reject all held for one source${label ? ` (${label})` : ''}: ${n}, each freed again. What each name did is under Name events.`,
+    };
+}
+// The admin changed a live setting, the hold switch or a block in /admin: said, with the value (the ntfy topic is the
+// admin's own), so a change nobody meant is seen.
+export const adminSetting = (env, { who = null, what }) => ({
+    category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name: null,
+    title: `${who || 'You'} changed the registrar's settings`, body: `${who || 'You'} ${what}.`,
+});
+
 // A6: a heal refused (told once per pause: its node heals every 5 minutes while it lasts), a name repaired.
 export const healRefused = (env, name, verdict, pausedAt) => ({
     category: 'names', priority: PRIORITY.low, tag: TAG.warning, name, title: `Heal refused: ${name}`, once: `heal-refused:${name}:${pausedAt ?? ''}`,

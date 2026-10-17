@@ -1614,6 +1614,138 @@ async function handleForgetMany(env, bodyText, who = null) {
     return json({ removed, refused, ...(already.length ? { already } : {}), ...(freeNow ? { freed } : {}) });
 }
 
+// --- New names, last 24 h (design §4.4, slice S3) ---
+// /admin's panel: the last day's new names (claim_sources, kept 24 h) grouped by their source — one connecting address,
+// as its keyed hash — and by network, each name with its row as it is now (held, live, on probation). Counts, names,
+// networks and countries: never an address, never a contact.
+const groupOf = (rows, key) => {
+    const m = new Map();
+    for (const r of rows) {
+        const k = key(r);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(r);
+    }
+    return [...m.entries()];
+};
+async function sourcesPanel(env) {
+    const now = nowS();
+    const s = await settings.read(env);
+    if (!s.schema) return { schema: false, error: 'migration 0011 is not applied: nothing is recorded or held' };
+    const rows = await db.recentSources(env, now - SOURCE_KEEP_S);
+    const nameOf = (r) => ({
+        name: r.name, at: r.at, status: r.status ?? 'gone', held_reason: r.held_reason ?? null, held_at_claim: r.held_at_claim ?? null,
+        probation: r.status === 'live' && r.verified_at === null, community_name: r.community_name ?? null, key: key16(r.node_pubkey),
+    });
+    const summary = (list) => ({
+        names: list.length, held: list.filter((r) => r.status === 'pending' && r.held_reason).length,
+        pending: list.filter((r) => r.status === 'pending').length, live: list.filter((r) => r.status === 'live').length,
+        verified: list.filter((r) => r.status === 'live' && r.verified_at !== null).length,
+        keys: new Set(list.map((r) => r.node_pubkey)).size, first: Math.min(...list.map((r) => r.at)), last: Math.max(...list.map((r) => r.at)),
+    });
+    const groups = groupOf(rows, (r) => r.source_hash || '').map(([source, list]) => ({
+        source: source || null, asn: list[0].asn ?? null, as_org: list[0].as_org ?? null, country: list[0].country ?? null,
+        ...summary(list), rows: list.map(nameOf),
+    })).sort((a, b) => b.names - a.names || b.last - a.last);
+    const networks = groupOf(rows.filter((r) => r.asn), (r) => r.asn).map(([asn, list]) => ({
+        asn: Number(asn), as_org: list[0].as_org ?? null, country: list[0].country ?? null, sources: new Set(list.map((r) => r.source_hash)).size, ...summary(list),
+    })).sort((a, b) => b.names - a.names);
+    const names = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status IN ('live', 'pending')").first())?.n) || 0;
+    return {
+        schema: true, source_key_set: typeof env.SOURCE_KEY === 'string' && env.SOURCE_KEY.length > 0, since: now - SOURCE_KEEP_S,
+        groups, networks, blocked: await db.listBlocked(env, now),
+        hold: { on: settings.holding(s, now), until: s.hold_until || null },
+        capacity: { names, capacity: s.capacity, alert_at: s.capacity_alert_at, hold_at: s.capacity_hold_at },
+        settings: settings.describe(env, s),
+    };
+}
+
+// "Block all" ({ source, block: true }) or "Reject all held" ({ source } or { asn }) on a group of the panel, in batches
+// of at most SOURCE_MAX names a request (each is about ten D1 queries, its decision taken as its own action would take
+// it: onFreshRow, adminAction): a pending one is rejected (released, free at once, as Reject frees it), and with
+// `block` a live or paused one is blocked, as Block blocks it; and the source goes on blocked_sources for SOURCE_BLOCK_S,
+// so its next claim of a new name is refused 403 before anything is written. Only names whose tenure that claim began.
+// Answers what was done, and `more` (the page asks again until it is false, or a batch did nothing). The admin's phone
+// hears of the click once (`run`, `total`, as Free all and remove).
+const SOURCE_MAX = 3;
+const SOURCE_BLOCK_S = 7 * 86400;
+const HASH_RE = /^[0-9a-f]{64}$/;
+async function handleSourceAction(env, bodyText, who = null) {
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const block = b?.block === true;
+    const source = typeof b?.source === 'string' && HASH_RE.test(b.source) ? b.source : null;
+    const asn = !source && !block && Number.isSafeInteger(b?.asn) && b.asn > 0 ? b.asn : null;
+    if (!source && !asn) return json({ error: block ? 'source must be a source id from the panel' : 'source (a source id from the panel) or asn (a number) is needed' }, 400);
+    const run = typeof b.run === 'string' && RUN_RE.test(b.run) ? b.run : null;
+    const total = Number.isInteger(b.total) && b.total > 0 && b.total <= 100000 ? b.total : null;
+    const now = nowS();
+    const since = now - SOURCE_KEEP_S;
+    let label = null;
+    if (source) {
+        const f = await db.sourceFacts(env, source);
+        label = f ? [f.asn ? `AS${f.asn}${f.as_org ? ` ${f.as_org}` : ''}` : null, f.country].filter(Boolean).join(', ') || null : null;
+    }
+    if (block) await db.blockSource(env, 'source', source, now + SOURCE_BLOCK_S, now, who?.email, label);
+    const done = { rejected: [], blocked: [], refused: [] };
+    for (const row of await db.groupNames(env, { source, asn, pendingOnly: !block }, since, SOURCE_MAX)) {
+        const res = await onFreshRow(() => db.getAllocation(env, row.name), async (a) => {
+            if (!a || a.node_pubkey !== row.node_pubkey || a.requested_at !== row.requested_at) return json({ error: 'another tenure now' }, 409);
+            if (a.status === 'pending') return adminAction(env, a, 'release', nowS(), { freeNow: true, who });
+            if (block && (a.status === 'live' || a.status === 'paused')) return adminAction(env, a, 'block', nowS(), { who });
+            return json({ error: `${a.status} now` }, 409);
+        });
+        const out = await res.json();
+        if (res.status !== 200) done.refused.push({ name: row.name, ...out });
+        else (out.status === 'blocked' ? done.blocked : done.rejected).push(row.name);
+    }
+    const acted = done.rejected.length + done.blocked.length;
+    const more = acted > 0 && (await db.groupNames(env, { source, asn, pendingOnly: !block }, since, 1)).length > 0;
+    if (block || acted) {
+        const tag = source ? `source ${source.slice(0, 8)}` : `AS${asn}`;
+        console.warn('[SOURCE_ACTION]', `${actorOf(who)}: ${block ? 'Block all' : 'Reject all held'} for ${tag}: ${done.rejected.length} rejected, ${done.blocked.length} blocked, ${done.refused.length} refused`);
+        if (run) await tell(env, () => alerts.adminSourceDid(env, { who: who?.email, run, block, label: label || (asn ? `AS${asn}` : null), total }));
+    }
+    return json({ ...done, more, ...(block ? { blocked_until: now + SOURCE_BLOCK_S } : {}) });
+}
+
+// A network blocked by hand ({ kind: 'asn', value, days }), or any block lifted ({ kind, value, remove: true }). A network
+// block refuses every new name claimed from it, honest ones too (a hosting network carries many): /admin says so.
+async function handleBlocked(env, bodyText, who = null) {
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const kind = b?.kind === 'asn' || b?.kind === 'source' ? b.kind : null;
+    const value = kind === 'asn' ? (Number.isSafeInteger(Number(b.value)) && Number(b.value) > 0 ? String(Number(b.value)) : null)
+        : kind === 'source' && typeof b.value === 'string' && HASH_RE.test(b.value) ? b.value : null;
+    if (!kind || !value) return json({ error: 'kind must be asn (value: its number) or source (value: its id)' }, 400);
+    const now = nowS();
+    const tag = kind === 'asn' ? `AS${value}` : `source ${value.slice(0, 8)}`;
+    if (b.remove === true) {
+        const gone = await db.unblockSource(env, kind, value);
+        if (gone) await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: `lifted the block on ${tag}` }));
+        return json({ removed: gone, blocked: await db.listBlocked(env, now) });
+    }
+    if (kind !== 'asn') return json({ error: 'a source is blocked by its group\'s Block all' }, 400);
+    const days = Number.isInteger(b.days) && b.days >= 1 && b.days <= 90 ? b.days : 7;
+    await db.blockSource(env, kind, value, now + days * 86400, now, who?.email, typeof b.label === 'string' ? b.label.replace(BAD_TEXT, '').slice(0, 120) : null);
+    await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: `blocked new names from network ${tag} for ${days} days` }));
+    return json({ blocked: await db.listBlocked(env, now) });
+}
+
+// A live setting ({ key, value }; value null = back to its default), or the hold switch ({ hold: true | false }).
+async function handleSettings(env, bodyText, who = null) {
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const now = nowS();
+    if (typeof b?.hold === 'boolean') {
+        const until = await settings.setHold(env, b.hold, who?.email, now);
+        await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: b.hold
+            ? `turned Hold all new names on: every new name waits for your approval until ${new Date(until * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, then it lets go by itself`
+            : 'turned Hold all new names off' }));
+        return json(await sourcesPanel(env));
+    }
+    const problem = await settings.write(env, b?.key, b?.value ?? null, who?.email, now);
+    if (problem) return json({ error: problem }, 400);
+    await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: b.value === null || b.value === '' ? `put ${b.key} back to its default` : `set ${b.key} to ${b.value}` }));
+    return json(await sourcesPanel(env));
+}
+
 // --- Switchboard (Invite resolution / trampoline) ---
 // A paused community still exists (the app shows it unreachable, which is true), so its invites still resolve;
 // a released, abandoned or blocked name's do not. Nor do a name's on probation (onProbation): beanpool.org vouches for
@@ -2159,18 +2291,33 @@ export default {
                 // made ("Setting up": its claim's Cloudflare work did not finish), and nobody needs to approve it.
                 if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                     const now = nowS();
-                    // As awaitingApproval decides it (a name with no policy row, or an empty tier, is auto), in one read.
+                    // As awaitingApproval decides it (a name with no policy row, or an empty tier, is auto; one held for
+                    // approval waits too), in one read.
                     const tiers = await db.pendingTiers(env);
+                    // A pending row's source (its claim's, from claim_sources): the page groups held names by it.
+                    const sources = new Map();
+                    try {
+                        for (const r of await db.recentSources(env, now - SOURCE_KEEP_S))
+                            if (r.status === 'pending' && !sources.has(r.name)) sources.set(r.name, { id: r.source_hash || null, asn: r.asn ?? null, as_org: r.as_org ?? null, country: r.country ?? null });
+                    } catch (e) { if (!/no such table/i.test(String(e?.message || e))) throw e; }
                     return json({ allocations: (await db.listActive(env)).map((a) => {
                         const holds = holdsName(env, a, now);
-                        const awaiting_approval = a.status === 'pending' && (tiers.get(a.name) || 'auto') !== 'auto';
-                        if (a.status !== 'released') return { ...a, holds, awaiting_approval };
+                        const awaiting_approval = a.status === 'pending' && (!!a.held_reason || (tiers.get(a.name) || 'auto') !== 'auto');
+                        const s3 = { ...(sources.has(a.name) ? { source: sources.get(a.name) } : {}), ...(a.status === 'live' && onProbation(a) ? { probation: true } : {}) };
+                        if (a.status !== 'released') return { ...a, holds, awaiting_approval, ...s3 };
                         return { ...a, holds, awaiting_approval, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
                     }) });
                 }
                 // Remove from the list, in bulk: { "names": [...] } (handleForgetMany), and "Free all and remove" with
                 // "free_now": true. One name's is /:name/forget below.
                 if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await finishing(env, handleForgetMany(env, bodyText, who));
+                // New names, last 24 h (design §4.4): the groups by source and network, the blocks, the live settings and the
+                // hold switch; "Block all" / "Reject all held" on a group; a network blocked by hand, a block lifted; a
+                // setting changed, the switch pressed.
+                if (method === 'GET' && p === '/api/local/admin/registrar/sources') return json(await sourcesPanel(env));
+                if (method === 'POST' && p === '/api/local/admin/registrar/sources') return await finishing(env, handleSourceAction(env, bodyText, who));
+                if (method === 'POST' && p === '/api/local/admin/registrar/blocked') return await handleBlocked(env, bodyText, who);
+                if (method === 'POST' && p === '/api/local/admin/registrar/settings') return await handleSettings(env, bodyText, who);
                 if (method === 'GET' && p === '/api/local/admin/registrar/events') {
                     const name = (url.searchParams.get('name') || '').toLowerCase();
                     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);

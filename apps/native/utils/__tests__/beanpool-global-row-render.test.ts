@@ -405,6 +405,14 @@ describe("the global community can't be reached: the community in use isn't affe
         expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
     });
 
+    it('not while the phone is a guest in the community in use: it answers, but it isn\'t "your own"', async () => {
+        list.rows = [{ ...RIVERSIDE, status: 'guest' }];
+        scene.door = 'offline';
+        await open();
+        expect(texts(row())).not.toContain(AFFECTED);
+        expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+    });
+
     it('in every catalog TalkBack reads one stop between the two, the language\'s own (hi, bn: "।"; ur: "۔"; ja, zh: "。")', async () => {
         const dir = path.resolve(__dirname, '../../words');
         for (const f of fs.readdirSync(dir).filter((x) => /^[A-Za-z-]+\.json$/.test(x))) {

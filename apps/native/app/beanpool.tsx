@@ -151,7 +151,8 @@ export default function BeanPoolSheet() {
         : globalEntry === 'closed' || globalEntry === 'preview' ? openDoor
         : undefined;
     const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press to remove it.') : undefined;
-    // The global community can't be reached, and the community in use is another one that answers: say so under the line
+    // The global community can't be reached, and the community in use is another one this account is a member of and that
+    // answers (online; a guest's isn't "your own"): say so under the line
     // (DESIGN-global-mothership-fable.md §2.5, pick 1: one community among many, which yours never needs). Not while the
     // phone is on the global community, nor while the community in use can't be reached either: it would read as false.
     const globalAside = globalEntry === 'unreachable' && !!communities.active && !isGlobalCommunity(communities.active)

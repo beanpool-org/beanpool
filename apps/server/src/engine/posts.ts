@@ -2167,7 +2167,9 @@ type ArchiveRow = CancelledPostRow & { status: string | null };
  * no tombstone of their own (scrubEndedEvents), and an UPDATE that shrinks a wide row only leaves a sparse page.
  *
  * Left alone: a listing with a deal open on it (asked for, or Beans held: an unanswered request expires after a week and
- * a later run takes it), one a report waits on (a moderator looks at it as it was), one a keeper's wage claim waits on
+ * a later run takes it), one a report waits on (a moderator looks at it as it was), one hidden for the moderators
+ * (`hidden_by_reports_at`; a burst clean-up hides with no report row, and a restore stamps `updated_at`, so the clock
+ * starts again there), one a keeper's wage claim waits on
  * (escrow.ts requestPost records it with no deal and no change to the listing, and processDeferredWageClaims pays it the
  * day the enterprise can, and cancels it if the listing is cancelled first), and a copy of another community's listing
  * (origin_node: that community keeps its own).
@@ -2187,6 +2189,7 @@ export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowM
           FROM posts p
          WHERE p.type IN ('offer', 'need')
            AND p.origin_node IS NULL
+           AND p.hidden_by_reports_at IS NULL
            AND COALESCE(p.updated_at, p.created_at) < ?
            AND (COALESCE(p.status, 'active') IN ('active', 'paused')
                 OR (p.status IN ('completed', 'cancelled') AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)))

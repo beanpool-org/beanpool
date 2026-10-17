@@ -16,8 +16,9 @@
  *  3. The archive on global. A listing unchanged for 91 days and a paused one for 100 are taken off the Market (cancelled,
  *     inactive, stamped now) and lose their photos: the rows gone, a post_photos tombstone per slot, the image store's
  *     objects left to its orphan sweep, which takes them. One taken down 120 days ago loses its photos and is stamped;
- *     one taken down with none is not touched. Left alone: 89 days, one a report waits on, one a keeper's wage claim
- *     waits on (the claim waits on too), an event, a poll, another community's copy. Each archived listing is `post_removed` to its audience, and its author hears once a run. The
+ *     one taken down with none is not touched. Left alone: 89 days, one a report waits on, one hidden for the moderators
+ *     with no report (a burst clean-up's), one a keeper's wage claim waits on (the claim waits on too), an event, a poll,
+ *     another community's copy. Each archived listing is `post_removed` to its audience, and its author hears once a run. The
  *     phone's delta brings the cancelled row with no photos. A second run does nothing.
  *  4. Crash-safe, bounded, main server only, the operator's. A listing whose transaction fails keeps everything and the
  *     rest go; the next run takes it. A batch of 1 says more are due. A standby archives nothing. LISTING_ARCHIVE_DAYS=120
@@ -253,6 +254,10 @@ async function main() {
     const reported = listing(ana, 'Reported', 1, 100);
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status) VALUES (?, ?, ?, ?, 'spam', 'pending')`)
         .run(crypto.randomUUID(), gia.pubKeyHex, ana.pubKeyHex, reported);
+    // Hidden 100 days ago as a burst clean-up hides (engine/burst-cleanup.ts hideBurstPosts): the hide stamp is the
+    // listing's last change, and there is no report row.
+    const hidden = listing(ana, 'Hidden for review', 1, 101);
+    db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ?').run(ago(100), ago(100), hidden);
     // A keeper's job its enterprise asked to pay for and couldn't yet (escrow.ts requestPost): no deal row, the listing's
     // clock not moved, and the claim paid the day the enterprise can (processDeferredWageClaims).
     const waged = listing(ana, 'Waged job', 1, 100);
@@ -268,7 +273,7 @@ async function main() {
     raw.run(pollId, 'poll', 'Old poll', ana.pubKeyHex, ago(100), ago(100), null);
     const copy = `copy-${crypto.randomUUID()}`;
     raw.run(copy, 'offer', 'Another community\'s', ana.pubKeyHex, ago(100), ago(100), 'peer-elsewhere');
-    const untouched = [young, reported, waged, event, pollId, copy, downBare];
+    const untouched = [young, reported, hidden, waged, event, pollId, copy, downBare];
     const before = new Map(untouched.map(id => [id, rowOf(id).updated_at]));
     const oldKeys = keysOf(old);
     const youngKeys = keysOf(young);
@@ -297,6 +302,7 @@ async function main() {
             `left alone: ${db.prepare('SELECT title FROM posts WHERE id = ?').pluck().get(id)} (${JSON.stringify(rowOf(id))})`);
     }
     assert(photosOf(young) === 1 && photosOf(reported) === 1, 'the 89-day listing and the reported one keep their photos');
+    assert(photosOf(hidden) === 1, `one hidden for the moderators with no report keeps its photos, for a moderator to see as it was (${photosOf(hidden)})`);
     const claimStatus = db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').pluck().get(claim);
     assert(photosOf(waged) === 1 && claimStatus === 'pending',
         `one a keeper's wage claim waits on keeps its photos, and the claim still waits to be paid (${photosOf(waged)}, ${claimStatus})`);

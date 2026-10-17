@@ -448,7 +448,9 @@ export default function NodeMismatchScreen() {
                                 <Text style={styles.globalIcon}>🌍</Text>
                                 <View style={styles.globalText}>
                                     <Text style={styles.globalTitle}>{t('Global community')}</Text>
-                                    <Text style={styles.globalSub} numberOfLines={2}>{globalLine[globalEntry]}</Text>
+                                    {/* Never clipped: at 320 dp and 1.3× this card leaves the line about 15 characters, so
+                                        "Join with this account: 12 words or a sign-in" takes four (PR #2098 review). */}
+                                    <Text style={styles.globalSub}>{globalLine[globalEntry]}</Text>
                                 </View>
                                 {globalTap ? <Text style={styles.globalChevron}>›</Text> : null}
                             </Pressable>

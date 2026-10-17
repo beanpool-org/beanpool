@@ -27,9 +27,10 @@ import { createRoot, type Root } from 'react-dom/client';
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, value, onChangeText, disabled, testID } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, value, onChangeText, disabled, testID, numberOfLines } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
+        if (numberOfLines) attrs['data-lines'] = numberOfLines;
         if (onPress) attrs.onClick = () => { if (!disabled) onPress({ stopPropagation() {} }); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -281,6 +282,8 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         expect(button('Reconnect')).toBeTruthy();
         expect(button('Paste an invite')).toBeTruthy();
         expect(globalRow()?.getAttribute('aria-label')).toBe('Global community, Join with this account: 12 words or a sign-in');
+        expect(globalRow()!.textContent).toContain('Join with this account: 12 words or a sign-in');
+        expect(globalRow()!.querySelector('[data-lines]')).toBeNull();
         await act(async () => { globalRow()!.click(); });
         expect(nav.pushed).toContain('/join-global');
     });
@@ -289,6 +292,8 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         globalThis.fetch = network({ global: 'unreachable' });
         await render();
         expect(globalRow()?.getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
+        // Its line is never clipped (PR #2098 review): at 320 dp and 1.3× it takes three or four lines here.
+        expect(globalRow()!.querySelector('[data-lines]')).toBeNull();
         expect(button('Reconnect')).toBeTruthy();
         expect(button('Paste an invite')).toBeTruthy();
     });

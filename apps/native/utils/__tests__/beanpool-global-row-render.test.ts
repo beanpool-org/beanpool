@@ -586,7 +586,7 @@ describe('the row\'s words', () => {
         const head = n(/rowTitle: \{ fontSize: (\d+)/);
         // A generous glyph (0.62 em, 1.25 for an emoji, 1 for CJK, none for a combining mark) at 1.3×, as
         // language-switch-render.test.ts measures; the words are the catalogs' (all 24) and the pseudo-locale's.
-        const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+        const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f＀-￯]/u;
         const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
         const widthOf = (s: string, size: number) => Array.from(s).reduce((w, c) => w + em(c) * size * 1.3, 0);
         const widest = (s: string) => s.split(/[\s~]+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');

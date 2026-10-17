@@ -154,7 +154,7 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
     const FONT_SCALE = 1.3;
     // A line box of 1.2 em (Roboto's is about 1.17).
     const lineBox = (fontSize: number) => fontSize * FONT_SCALE * 1.2;
-    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f＀-￯]/u;
     const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widthOf = (s: string, size: number) => Array.from(s).reduce((w, c) => w + em(c) * size * FONT_SCALE, 0);
     /** Lines a text takes, wrapped word by word (character by character in CJK), at the generous glyph widths above. */

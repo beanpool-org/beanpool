@@ -178,6 +178,9 @@ export default function BeanPoolSheet() {
     // draw, so React would swap the Pressable under a press, a long press or TalkBack's focus.
     const renderGlobalRow = (saved: CommunityRow | null, first: boolean) => {
         const isCurrent = !!saved && saved.url === communities.active;
+        // A saved row keeps the saved rows' dot while its state is being asked (a member's own row never flashes the door's
+        // earth); the earth is for a row whose line is about the door.
+        const dot = !!saved && (globalEntry === 'member' || globalEntry === 'checking');
         return (
             <Pressable
                 key={saved?.url ?? 'global'}
@@ -193,7 +196,7 @@ export default function BeanPoolSheet() {
                 accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
             >
-                {globalEntry === 'member' && saved
+                {dot && saved
                     ? <View style={[styles.dot, { backgroundColor: dotFor(saved.status) }]} />
                     : <MaterialCommunityIcons name="earth" size={24} color={colors.brand.primary} />}
                 <View style={styles.rowText}>
@@ -289,7 +292,9 @@ export default function BeanPoolSheet() {
                             </Pressable>
                         );
                     })}
-                    {!globalSaved && renderGlobalRow(null, communities.rows.length === 0)}
+                    {/* Not while the saved list is still being read: the phone may have it saved, and its row would then move from
+                        here, under another name, into the saved row's place. */}
+                    {!globalSaved && communities.active !== undefined && renderGlobalRow(null, communities.rows.length === 0)}
                     <Pressable
                         style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
                         onPress={connect}

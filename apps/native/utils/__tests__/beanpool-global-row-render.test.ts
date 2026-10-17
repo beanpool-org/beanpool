@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { act, createElement } from 'react';
 import * as ReactAll from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
@@ -108,7 +109,8 @@ vi.mock('../global-join-existing', () => ({
 // The phone's saved communities, as use-communities.ts reports them (each row's own probe is that hook's, not this row's).
 const list = vi.hoisted(() => ({
     rows: [] as { url: string; name: string; status: 'checking' | 'online' | 'guest' | 'offline' }[],
-    active: 'https://riverside.example' as string | null,
+    // undefined: use-communities.ts is still reading the saved list (its rows are [] until then).
+    active: 'https://riverside.example' as string | null | undefined,
     switched: [] as string[],
     removed: [] as string[],
 }));
@@ -125,7 +127,9 @@ vi.mock('../use-communities', () => ({
 }));
 
 import BeanPoolSheet from '../../app/beanpool';
-import { forgetGlobalDoorOffer } from '../global-door-offer';
+import { askGlobalDoorOffer, forgetGlobalDoorOffer } from '../global-door-offer';
+import { forgetSettledGlobalEntry } from '../use-global-entry';
+import { GLOBAL_STANDING_STORE_KEY } from '../global-entry';
 import { setLanguage } from '@beanpool/core';
 
 const GLOBAL = 'https://global.beanpool.org';
@@ -177,6 +181,7 @@ beforeEach(() => {
     scene.door = 'open';
     scene.standing = 'stranger';
     forgetGlobalDoorOffer();
+    forgetSettledGlobalEntry();
     setLanguage('en');
     globalThis.fetch = vi.fn(async (input: unknown) => {
         const u = String(input);
@@ -195,24 +200,38 @@ async function open(): Promise<void> {
     await act(async () => { root.render(createElement(BeanPoolSheet) as any); });
     await settle();
 }
+/**
+ * The sheet's first draw, before any effect has run: what the phone paints while the sheet slides in, before its own
+ * reads of the phone's store (the saved list, the kept answer) come back.
+ */
+function firstDraw(): HTMLElement {
+    const el = document.createElement('div');
+    el.innerHTML = renderToString(createElement(BeanPoolSheet) as any);
+    return el;
+}
 /** The global community's rows: there must be exactly one. */
-const globalRows = () => Array.from(host.querySelectorAll('[data-testid="global-community-row"]'));
-function row(): HTMLElement {
-    const rows = globalRows();
+const globalRows = (scope: ParentNode = host) => Array.from(scope.querySelectorAll('[data-testid="global-community-row"]'));
+function row(scope?: ParentNode): HTMLElement {
+    const rows = globalRows(scope);
     expect(rows, 'exactly one global row').toHaveLength(1);
     return rows[0] as HTMLElement;
 }
 const texts = (el: Element) => Array.from(el.querySelectorAll('span')).map((s) => s.textContent ?? '');
-const title = () => texts(row())[0];
-const line = () => texts(row())[1];
+const title = (scope?: ParentNode) => texts(row(scope))[0];
+const line = (scope?: ParentNode) => texts(row(scope))[1];
 const icon = () => row().querySelector('i')?.getAttribute('data-icon') ?? (row().querySelector('div > div') ? 'dot' : null);
+/** What leads the row: a saved row's dot, or an icon (the earth). */
+const lead = (scope?: ParentNode) => {
+    const first = row(scope).firstElementChild;
+    return first?.tagName === 'I' ? first.getAttribute('data-icon') : 'dot';
+};
 async function tap(): Promise<void> {
     await act(async () => { row().click(); });
     await settle();
 }
 /** The rows under YOUR COMMUNITIES, in order, by what TalkBack reads. */
-function communityRows(): string[] {
-    const label = Array.from(host.querySelectorAll('span')).find((s) => s.textContent === 'YOUR COMMUNITIES')!;
+function communityRows(scope: ParentNode = host): string[] {
+    const label = Array.from(scope.querySelectorAll('span')).find((s) => s.textContent === 'YOUR COMMUNITIES')!;
     const group = label.nextElementSibling!;
     return Array.from(group.children).map((c) => c.getAttribute('aria-label') ?? '');
 }
@@ -440,6 +459,65 @@ describe('the phone has it saved: the saved row is the global row, never a secon
             expect(row().querySelector('i[data-icon="earth"]')).toBeNull();
         });
     }
+
+    // The global community answered `member` for this key under a day ago, and the phone kept it.
+    const keptMember = () => store.map.set(GLOBAL_STANDING_STORE_KEY, JSON.stringify({ [KEY]: { standing: 'member', at: Date.now() - 60_000 } }));
+    const STRANGERS = ['Join with this account: a sign-in', 'Not taking new members right now.',
+        'This community is in a private preview. Ask its owner for an invite.', "Can't reach it right now"];
+
+    for (const door of ['open', 'shut', 'preview', 'offline'] as const) {
+        it(`a member's own row, first open this app start with the door ${door}: its first draw is Checking… and its dot, never the strangers' words (fails on aefa582a)`, async () => {
+            list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+            list.active = GLOBAL;
+            scene.door = door;
+            scene.standing = 'member';
+            keptMember();
+            await askGlobalDoorOffer(); // the door already answered this app start
+            const drawn = firstDraw();
+            expect(title(drawn)).toBe('BeanPool Global');
+            expect(line(drawn)).toBe('Checking…');
+            expect(STRANGERS).not.toContain(line(drawn));
+            expect(lead(drawn)).toBe('dot');
+            // Then its own row, in the same place.
+            await open();
+            expect(line()).toBe('global.beanpool.org');
+            expect(lead()).toBe('dot');
+        });
+    }
+
+    it('a member\'s own row, opened again this app start: drawn as a member from its first draw (fails on aefa582a)', async () => {
+        list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+        list.active = GLOBAL;
+        scene.door = 'shut';
+        scene.standing = 'member';
+        await open();
+        expect(line()).toBe('global.beanpool.org');
+        act(() => root.unmount());
+        root = createRoot(host);
+        const drawn = firstDraw();
+        expect(line(drawn)).toBe('global.beanpool.org');
+        expect(lead(drawn)).toBe('dot');
+    });
+
+    it('not drawn while the saved list is still being read, then drawn once, in the saved row\'s place (fails on aefa582a)', async () => {
+        list.rows = [];
+        list.active = undefined;
+        scene.standing = 'member';
+        keptMember();
+        await open();
+        expect(globalRows()).toHaveLength(0);
+        expect(communityRows()).toEqual(['Add a community']);
+        // The list arrives: global is saved, so its row is the saved one, under its saved name, after Riverside.
+        list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+        list.active = GLOBAL;
+        await act(async () => { root.render(createElement(BeanPoolSheet) as any); });
+        await settle();
+        expect(title()).toBe('BeanPool Global');
+        expect(line()).toBe('global.beanpool.org');
+        const group = row().parentElement!;
+        expect(Array.from(group.children).indexOf(row())).toBe(1);
+        expect(group.children).toHaveLength(3);
+    });
 
     it('the row keeps its node when the sheet draws again (a press, a long press or TalkBack\'s focus on it survives)', async () => {
         list.rows = [RIVERSIDE, SAVED];

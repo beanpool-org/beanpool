@@ -520,14 +520,16 @@
 
             <div class="cta-card run-node-card">
                 <h2>Start a community</h2>
-                <p>About half an hour, if you can follow a recipe. Four things to know first:</p>
+                <p>About half an hour, if you can follow a recipe. Six things to know first:</p>
                 <ul class="run-node-facts">
                     <li><strong>What it costs.</strong> The software is free. It runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system), or on a small rented server for a few dollars a month (about US$6).</li>
                     <li><strong>Who hosts it.</strong> You do, on your own machine or the one you rent. It never needs beanpool.org: your own web address works.</li>
                     <li><strong>What you take on.</strong> Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners. Keep the server on and updated.</li>
                     <li><strong>What you never see.</strong> Your members' direct messages.</li>
+                    <li><strong>Docker first.</strong> The machine needs Docker installed before the block below; a freshly rented server has none.</li>
+                    <li><strong>A name phones can reach.</strong> Your community needs a name: the claim at the end gives it a free one, or use your own domain with https. A bare IP address works only on a home network.</li>
                 </ul>
-                <p>Then, on that machine with Docker installed, paste this one block. It fetches the compose file, creates the network the node uses, pulls the published image (Intel/AMD or ARM64), starts it, waits until the server has made its one-time claim code (up to five minutes, for a slow first start on a Raspberry Pi), and claims it. There is nothing to configure before it starts; Docker may warn that some settings are not set, and that is expected.</p>
+                <p>Then, on that machine with Docker installed, paste this one block. It fetches the compose file, creates the network the node uses, pulls the published image (Intel/AMD or ARM64), starts it, waits until the server has made its one-time claim code (up to five minutes, for a slow first start on a Raspberry Pi), and claims it. There is nothing to configure before it starts.</p>
 
                 <!-- macOS Style Terminal Window -->
                 <div class="terminal-window">
@@ -559,7 +561,7 @@ docker compose exec beanpool-node beanpool claim</code>
 
                 <h3 class="run-node-sub">The last line: beanpool claim</h3>
                 <ol class="run-node-steps">
-                    <li><strong>Your address.</strong> It asks for the first part of your address (type just <strong>yourtown</strong> for yourtown.beanpool.org; Enter skips) and waits up to three minutes for it to go live. For your own domain, run it with <code>--address https://your.domain</code> instead; to choose later in Settings, <code>--no-name</code>, and add <code>--direct http://IP:PORT</code> (this server's own address) so the QR code carries it, or the phone asks for it. If the BeanPool project's address service is down, the claim still works.</li>
+                    <li><strong>Your address.</strong> It asks for the first part of your address (type just <strong>yourtown</strong> for yourtown.beanpool.org; Enter skips) and waits up to three minutes for it to go live. For your own domain, run it with <code>--address https://your.domain</code> instead; to choose later in Settings, <code>--no-name</code>, and add <code>--direct http://IP:PORT</code> (this server's own address) so the QR code carries it, or the phone asks for it. A plain <code>http://</code> address works only on a home network: phones refuse it on the internet, and the claim warns you. If the BeanPool project's address service is down, the claim still works.</li>
                     <li><strong>The code and QR.</strong> It shows a one-time claim code and a QR code. Scan the QR code with your phone's camera, or open BeanPool, type the server's address under <strong>Find your community</strong> and tap <strong>Claim</strong>. That phone becomes the owner.</li>
                     <li><strong>Settings.</strong> Open your address (or the server's own address) followed by <strong>/settings</strong>. The setup wizard names your community, asks you to add a second owner, and makes three founding invites. Set your place on the map under Node Identity so people nearby can find you.</li>
                 </ol>

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 132,
-  "hash": "0cc43b377a5e52039c7d14fd50c42de98958bc929cbde76a4c8a50db854d4b9f",
+  "version": 133,
+  "hash": "9ba375252769cd58bbaa09fc6dce60afdfe751425fc1e7e05994893f21c577a5",
   "sections": [
     {
       "id": "setup",
@@ -9,6 +9,7 @@
       "summary": "The first start, signing in, finding your way around Settings, and keeping the admin door locked.",
       "slugs": [
         "first-time-setup",
+        "install-with-ai",
         "signing-in",
         "the-settings-screens",
         "settings-map",
@@ -88,7 +89,9 @@
         "access-and-security",
         "roles",
         "members-and-invites",
-        "backups-and-replicas"
+        "backups-and-replicas",
+        "address-and-peers",
+        "install-with-ai"
       ],
       "blocks": [
         {
@@ -131,6 +134,29 @@
         },
         {
           "type": "h2",
+          "text": "Your community needs an address phones can reach"
+        },
+        {
+          "type": "p",
+          "text": "The BeanPool app reaches a server on the internet only over https. Before you claim your community, choose one of these two. Either works as well as the other:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A free name ending in .beanpool.org.** beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand. Some names, such as big cities, wait for approval by the BeanPool project.",
+            "**Your own domain, over https.** Point your domain at your server, with port 443 open, and give it a certificate: your server gets one from Let's Encrypt by itself when the domain's DNS is in a Cloudflare account of yours (CF_RECORD_NAME, CF_API_TOKEN and CF_ZONE_ID in .env), or put a web server of your own with a certificate in front of it. Then claim with --address https://your.domain. BeanPool does not need to be involved."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A bare IP address, such as http://203.0.113.7, works only on a home network today. A phone never uses plain http to a server on the internet, so a claim QR code that carries one does not open. beanpool claim warns you before it shows such a QR code, and when you press Enter to skip the name on a server with no https address. Run it again with a name or your own address: the claim code waits until a phone uses it."
+        },
+        {
+          "type": "p",
+          "text": "Setting your server up with an AI assistant? See Setting up your server with an AI assistant: what to ask it, and what stays yours."
+        },
+        {
+          "type": "h2",
           "text": "Claim your community: the address, then your phone"
         },
         {
@@ -145,7 +171,7 @@
           "type": "ul",
           "items": [
             "It asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.",
-            "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.",
+            "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
             "It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
           ]
         },
@@ -251,6 +277,91 @@
             "Set up backups (Backups and restore).",
             "Invite your first members."
           ]
+        }
+      ]
+    },
+    {
+      "slug": "install-with-ai",
+      "title": "Setting up your server with an AI assistant",
+      "summary": "What to ask an AI assistant that sets up your server for you, what it does, and what stays yours: the claim, your 12 words and your keys.",
+      "section": "setup",
+      "related": [
+        "first-time-setup",
+        "ai-assistant",
+        "address-and-peers",
+        "access-and-security",
+        "backups-and-replicas"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "An AI assistant that can run commands on a server for you (Claude Code, for example) can set up a BeanPool server from the public instructions. The assistant prepares the server; you claim the community with your own phone, so you are its owner and the assistant never is."
+        },
+        {
+          "type": "h2",
+          "text": "What to ask it"
+        },
+        {
+          "type": "p",
+          "text": "Copy this, put in your community's name, and give it to your assistant with your server's address and a way in that you can take back (see What stays yours, below):"
+        },
+        {
+          "type": "p",
+          "text": "Set up a BeanPool community server for me."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If I have no server yet, help me rent a small one: Ubuntu 24.04 with at least 1 GB of memory, about US$6 a month. I sign up and pay myself.",
+            "Install Docker and Docker Compose from the system's own packages (on Ubuntu 24.04: docker.io and docker-compose-v2).",
+            "On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.",
+            "Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from source, and change nothing in docker-compose.yml.",
+            "For the block's last line, take a name for the community's address: docker compose exec beanpool-node beanpool claim --name NAME. If I have my own domain with https, use --address https://my.domain instead. Never give the phone a plain http:// address on the internet: phones refuse it.",
+            "Stop when it shows the one-time claim code and the QR code, and show me both. Never claim the community yourself, and never run beanpool claim --key.",
+            "Tell me what you ran, and anything you decided on your own."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What the assistant does"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Looks at the server: its system, memory and disk.",
+            "Installs Docker, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.",
+            "Runs the one block: fetches the compose file, creates the network the server uses, pulls the published image, starts it, and waits until the server has made its one-time claim code.",
+            "Runs beanpool claim with your name. Your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live. A name that waits for approval moves over by itself once approved. With your own domain, there is nothing to wait for. See Your community needs an address phones can reach, in First-time setup.",
+            "Shows you the claim code and the QR code."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If beanpool claim prints a warning that phones will not connect to the address, the QR code will not work: run it again with a name or your own https address. The claim code waits until a phone uses it."
+        },
+        {
+          "type": "h2",
+          "text": "What stays yours"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The claim.** Your phone claims the community and becomes its owner: scan the QR code, or open BeanPool, go to **Find a community**, type the address in the search box and tap **Claim ‹name›**. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.",
+            "**Your 12 words.** Your phone shows them when it makes your key. Write them on paper and keep them. Never type them into an assistant, a chat or a server: whoever has them is you.",
+            "**Your keys and secrets.** Give the assistant nothing more than a token you can revoke: an SSH key made for this job, which you remove from the server when it is done, or a cloud provider's token you can revoke. Never your cloud account's password, and never your phone. Afterwards, change anything you keep secret that it saw."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Later, to ask your assistant about the running server (\"what needs me?\"), connect it from Settings: see AI assistants. It then gets a pass you can disconnect at any time."
+        },
+        {
+          "type": "h2",
+          "text": "Then"
+        },
+        {
+          "type": "p",
+          "text": "Open your address followed by /settings and run the setup wizard: see First-time setup. Add a second owner as soon as someone you trust has joined, and set up backups."
         }
       ]
     },
@@ -4160,7 +4271,8 @@
         "reports-and-takedowns",
         "backups-and-replicas",
         "roles",
-        "what-the-server-sees"
+        "what-the-server-sees",
+        "install-with-ai"
       ],
       "blocks": [
         {
@@ -4170,6 +4282,10 @@
         {
           "type": "p",
           "text": "The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with what it was given is refused."
+        },
+        {
+          "type": "p",
+          "text": "This page is about a server that is already running. To have an assistant set up a new one, see Setting up your server with an AI assistant: what to ask it, and what stays yours."
         },
         {
           "type": "h2",

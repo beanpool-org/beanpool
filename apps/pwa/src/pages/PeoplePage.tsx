@@ -134,6 +134,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             const area = await readMyArea();
             if (cancelled) return;
             if (area === undefined) { setNearState('failed'); return; }
+            // A key the node says isn't a member (a private preview, a closed account): its sentence, not "set your area".
+            if (area && 'sentence' in area) { setNearRefusal(area.sentence); setNearState('failed'); return; }
             if (area === null) { setNear([]); setNearState('none'); return; }
             try {
                 const people = await membersNear(area);

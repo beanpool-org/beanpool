@@ -45,6 +45,7 @@ export * from './release-line-trade.js';
 export * from './onboarding-funnel.js';
 export * from './live-updates.js';
 export * from './request-signing.js';
+export * from './cleartext-address.js';
 export * from './claim-proof.js';
 export * from './push-notice.js';
 export * from './vault-wire.js';

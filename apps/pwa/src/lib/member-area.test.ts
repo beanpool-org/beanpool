@@ -43,4 +43,24 @@ describe('writeArea: a save that never answers', () => {
         expect(await writeArea(quiet.send, { lat: 1, lng: 2 }, { signal: already.signal })).toEqual({ ok: false, error: NO_REACH });
         expect(quiet.signals).toEqual([]);
     });
+
+    it('returns the node sentence on private_preview standing refusal, not NO_REACH', async () => {
+        const previewRefusal = Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        });
+        const send: AreaSender = () => Promise.reject(previewRefusal);
+        const result = await writeArea(send, { lat: 1, lng: 2 });
+        expect(result).toEqual({ ok: false, error: 'This community is in a private preview. Ask its owner for an invite.' });
+    });
+
+    it('returns the closed sentence on account_closed standing refusal, not NO_REACH', async () => {
+        const closedRefusal = Object.assign(new Error('Closed'), {
+            status: 403,
+            code: 'account_closed',
+        });
+        const send: AreaSender = () => Promise.reject(closedRefusal);
+        const result = await writeArea(send, { lat: 1, lng: 2 });
+        expect(result).toEqual({ ok: false, error: 'Your account in this community was closed.' });
+    });
 });

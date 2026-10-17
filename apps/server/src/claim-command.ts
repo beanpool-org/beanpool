@@ -10,6 +10,8 @@
  *      registrar that is down or refuses only means the QR carries the server's direct address.
  *   3. The code, from data/claim-code.txt, and a QR of beanpool://claim?node=<address>&id=<codeId>&code=<code>. The
  *      terminal is the operator's own shell, the same trust as `cat` on the file; nothing here writes the node's log.
+ *      Before the QR, a warning when the phone will refuse its address, or it carries none (phoneAddressWarning). A
+ *      warning only: a server on a home network, and testing, still work.
  *
  * Its own process beside the node, as `beanpool recover` is: it reads local-config.json and state.db (read-only) and
  * writes neither; the name goes to the node in a file the node takes.
@@ -20,7 +22,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline/promises';
 import Database from 'better-sqlite3';
 import QRCode from 'qrcode';
-import { CLAIM_SCRYPT } from '@beanpool/core';
+import { CLAIM_SCRYPT, isPrivateHost, shouldBlockCleartextNodeUrl } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { ADDRESS_REQUEST_FILE, isAddressLabel, writeAddressRequestFile } from './address-request.js';
 import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
@@ -42,6 +44,8 @@ tap "Claim ‹name›": that phone becomes the owner.
   --address <url>     your own address (https://…); no beanpool.org name is asked for.
   --no-name           no address now; set one later in Settings.
   --direct <url>      this server's own address (http://<ip>:<port>), for the QR when no name is live yet.
+                      Phones take a plain http:// address only on a home network (192.168.…, 10.…),
+                      and https:// only by a name, never by a public IP address.
   --contact <email>   a contact for the BeanPool project, if the name awaits approval.
   --key, --callsign   make that key the owner from here, without a phone claim (it joins with that callsign).
 
@@ -131,7 +135,8 @@ async function nameReachesThisNode(hostname: string, codeId: string): Promise<bo
     }
 }
 
-type NameOutcome = { kind: 'live'; address: string } | { kind: 'pending' | 'timeout' } | { kind: 'refused'; reason: string };
+/** `taken`: the node took the request and keeps asking; false when it never did, and the request was withdrawn. */
+type NameOutcome = { kind: 'live'; address: string } | { kind: 'pending' } | { kind: 'timeout'; taken: boolean } | { kind: 'refused'; reason: string };
 
 const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -163,10 +168,11 @@ async function askForName(dir: string, name: string, contact: string | null, cod
         if (view.request?.name === name && view.request.refused) return { kind: 'refused', reason: view.request.refused };
         last = view.request?.name === name ? 'the node is asking the address service' : last;
     }
-    // Never half-done: a request the node has not taken is withdrawn.
-    try { fs.rmSync(path.join(dir, ADDRESS_REQUEST_FILE), { force: true }); } catch { /* gone */ }
+    // Never half-done: a request the node has not taken is withdrawn. The file already gone is the node having taken it.
+    let taken = false;
+    try { fs.unlinkSync(path.join(dir, ADDRESS_REQUEST_FILE)); } catch (e) { taken = (e as NodeJS.ErrnoException).code === 'ENOENT'; }
     out(`No answer within ${Math.round(waitMs / 1000)} s (last: ${last}).`);
-    return { kind: 'timeout' };
+    return { kind: 'timeout', taken };
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -230,10 +236,24 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
 
     let address: string | null = own;
     if (!address && held && view.address?.status === 'live' && view.address.hostname) address = `https://${view.address.hostname}`;
+    // A name that is not live yet (awaiting approval, or still asked for by the node): a later QR can carry it. A pending
+    // record holds the label and no hostname, so it is named as it was asked for: <label>.beanpool.org.
+    const pa = view.address;
+    let coming: string | null = !address && held ? (pa?.hostname || (pa?.name ? `${pa.name}.beanpool.org` : held)) : null;
+    // Once per address: none at all (the phone then asks, and refuses a public http:// one), or one the phone refuses. An
+    // address it takes (http://192.168.…, https by a name) is never warned about, however the command got to it.
+    const warnedFor = new Set<string>();
+    const warnPhones = (to: string | null) => {
+        if ((to && !phoneRefuses(to)) || warnedFor.has(to ?? '')) return;
+        warnedFor.add(to ?? '');
+        io.out('');
+        for (const line of phoneAddressWarning(to, coming)) io.out(line);
+    };
     if (!address && !noName && !held) {
         if (name === undefined && io.ask) {
             const typed = (await io.ask("Name for your community's address (<label>.beanpool.org), or Enter to skip: ")).toLowerCase();
             name = typed || undefined;
+            if (name === undefined) warnPhones(direct);
         }
         while (name !== undefined) {
             if (!isAddressLabel(name)) {
@@ -242,17 +262,26 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
             } else {
                 const got = await askForName(dir, name, contact, view.claim.id, io.out);
                 if (got.kind === 'live') { address = got.address; io.out(`✓ ${got.address} is live and reaches this server.`); break; }
+                // Only a name still being asked for is on its way. What the QR carries meanwhile, the warning or the Address
+                // line below says: --direct may not be known yet, and the phone refuses a public http:// one.
+                if (got.kind === 'pending' || (got.kind === 'timeout' && got.taken)) coming = `${name}.beanpool.org`;
                 if (got.kind === 'pending') {
-                    io.out(`${name}.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved; until then the phone uses this server's direct address.`);
+                    io.out(`${name}.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved.`);
                     break;
                 }
-                if (got.kind === 'timeout') { io.out('The phone will use this server\'s direct address for now; the name keeps being asked for by the node.'); break; }
+                if (got.kind === 'timeout') {
+                    io.out(got.taken
+                        ? `The node keeps asking for ${name}.beanpool.org.`
+                        : `The node never took the request, so ${name}.beanpool.org was not asked for. Once the node is running (docker compose ps): beanpool claim --name ${name}`);
+                    break;
+                }
                 if (got.kind !== 'refused') break;
                 io.err(`The address service refused ${name}.beanpool.org: ${got.reason}`);
                 if (!io.ask) { io.err('Nothing was changed.'); return 1; }
             }
             const again = (await io.ask("Another name (<label>.beanpool.org), or Enter to skip: ")).toLowerCase();
             name = again || undefined;
+            if (name === undefined) warnPhones(direct);
         }
     }
     if (!address && !direct && io.ask) {
@@ -261,6 +290,8 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
         if (typed && !direct) io.err('That is not an http(s)://<ip>:<port> address; the phone will ask for it.');
     }
     address = address || direct;
+    // Before the QR.
+    warnPhones(address);
 
     const link = `beanpool://claim?${address ? `node=${encodeURIComponent(address)}&` : ''}id=${view.claim.id}&code=${view.claim.code}`;
     io.out('');
@@ -268,10 +299,51 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     io.out('');
     io.out(await QRCode.toString(link, { type: 'terminal', small: true }));
     if (!address) io.out('The QR code carries no address: the phone will ask for this server\'s address.');
-    else io.out(`Address: ${address}`);
+    else io.out(`Address: ${address}${phoneRefuses(address) ? ' (phones will not connect to it: see the warning above)' : ''}`);
     io.out('');
     for (const line of phoneSteps(address)) io.out(line);
     return 0;
+}
+
+/**
+ * https:// to a public IPv4 address: the phone checks the certificate (it has no trust override), and a node has none a
+ * phone trusts for an IP. Its own is self-signed for beanpool.local and 127.0.0.1 (services/tls.ts makeServerPair); a
+ * Let's Encrypt one is for its hostname. A home-network IP is left alone, as for http.
+ */
+function httpsToPublicIp(to: string): boolean {
+    const ip = /^https:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?\/?$/i.exec(to)?.[1];
+    return !!ip && !isPrivateHost(ip);
+}
+
+/** Whether the phone won't reach `to`: refused outright (a public http:// address), or failing TLS (https by public IP). */
+export function phoneRefuses(to: string): boolean {
+    return shouldBlockCleartextNodeUrl(to) || httpsToPublicIp(to);
+}
+
+/**
+ * What the owner is told when the phone won't reach the address the QR gives it (17 Oct 2026: an AI assistant installed
+ * a $6 server, ran `beanpool claim --no-name --direct http://<its IP>:80`, and the phone refused the QR: "The link named
+ * an address BeanPool won't use"). The phone reaches a server on the internet only over https, by @beanpool/core's
+ * shouldBlockCleartextNodeUrl, the rule read here too, so a home-network address (http://192.168.…) is never warned
+ * about; over https, only by a name (httpsToPublicIp). `to` is the address the QR carries, null when it carries none;
+ * `coming` is a name that is not live yet.
+ * The two ways out stand as equals, a free <name>.beanpool.org or the owner's own domain, and neither is required.
+ */
+export function phoneAddressWarning(to: string | null, coming: string | null = null): string[] {
+    return [
+        to ? `WARNING: phones will not connect to ${to}.` : 'WARNING: with no https address, phones will not reach this server over the internet.',
+        ...(to && httpsToPublicIp(to) ? [
+            'A phone checks an https:// server\'s certificate, and this server has none a phone trusts for an IP address:',
+            'https works by a name. Give this community an address phones can reach:',
+        ] : [
+            'The BeanPool app reaches a server on the internet only over https: a plain http:// address works',
+            'only on a home network (192.168.…, 10.…). Give this community an address phones can reach:',
+        ]),
+        coming
+            ? `  the name you asked for:  once ${coming} is live, run beanpool claim again; its QR code carries it`
+            : '  a free name:      beanpool claim --name <name>   (<name>.beanpool.org: no ports to open, no DNS to set up)',
+        '  your own domain:  beanpool claim --address https://your.domain   (a domain of yours serving this server over https)',
+    ];
 }
 
 /**

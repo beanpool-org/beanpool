@@ -34,6 +34,7 @@ import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFo
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
+import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
@@ -620,6 +621,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // The member's area could not be read (the node busy or down): a note says so, with Try again, as the Market's line
     // does, rather than reading from everywhere with no word.
     const [areaFailed, setAreaFailed] = useState(false);
+    const [areaStanding, setAreaStanding] = useState<string | null>(null);
     const [areaTry, setAreaTry] = useState(0);
     useEffect(() => {
         // A visitor reads the lobby's list as before, and asks nothing more for it.
@@ -634,9 +636,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 setNearbyListings(nearby);
                 if (nearby && identity?.publicKey) {
                     let failed = false;
-                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    let standingMsg: string | null = null;
+                    const me = await getCommunityMe().catch((e) => {
+                        const standing = standingFromRefusal(e);
+                        if (standing) {
+                            standingMsg = standing.sentence;
+                        } else {
+                            failed = true;
+                        }
+                        return null;
+                    });
                     if (!cancelled) {
                         setAreaFailed(failed);
+                        setAreaStanding(standingMsg);
                         setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
                     }
                 }
@@ -1914,7 +1926,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </p>
             )}
 
-            {areaFailed && !near && !everywhere && nearKnown && !showLocationHint && !showNewPost && (
+            {areaStanding && !near && !everywhere && nearKnown && !showLocationHint && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-area-failed"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                >
+                    <span>{areaStanding}</span>
+                </p>
+            )}
+
+            {!areaStanding && areaFailed && !near && !everywhere && nearKnown && !showLocationHint && !showNewPost && (
                 <p
                     role="status"
                     data-testid="map-area-failed"

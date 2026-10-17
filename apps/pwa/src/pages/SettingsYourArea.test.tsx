@@ -141,4 +141,19 @@ describe('Settings → Your area (S4)', () => {
         const row = await screen.findByTestId('settings-your-area');
         await waitFor(() => expect(row).toHaveTextContent("Couldn't check right now"));
     });
+
+    it.each([
+        ['private_preview', 'This community is in a private preview. Ask its owner for an invite.', 'This community is in a private preview. Ask its owner for an invite.'],
+        ['account_closed', 'Closed', 'Your account in this community was closed.'],
+    ])("a key the node says isn't a member (403 %s): the node's sentence, never 'Not set'", async (code, said, shown) => {
+        // As lib/api's request throws it: the body's `error` as the message, with its status and code.
+        vi.mocked(api.request).mockImplementation((async () => { throw Object.assign(new Error(said), { status: 403, code }); }) as any);
+        open();
+        const row = await screen.findByTestId('settings-your-area');
+        await waitFor(() => expect(row).toHaveTextContent(shown));
+        expect(row).not.toHaveTextContent('Not set');
+        fireEvent.click(row);
+        expect(screen.getByTestId('settings-area-current')).toHaveTextContent(shown);
+        expect(screen.queryByTestId('settings-area-clear')).toBeNull();
+    });
 });

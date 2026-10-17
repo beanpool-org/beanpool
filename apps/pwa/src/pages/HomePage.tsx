@@ -58,6 +58,7 @@ import { loadRadiusSettings } from '../lib/geo';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide } from '../lib/guide';
+import { standingFromRefusal } from '../lib/standing-refusal';
 import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
@@ -484,7 +485,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             }
         } catch (e) {
             if (!mounted.current || !holds(epoch)) return;
-            if (answerRef.current) {
+            const standing = standingFromRefusal(e);
+            if (standing) {
+                answerRef.current = null;
+                setAnswer(null);
+                statusRef.current = 'failed';
+                setStatus('failed');
+                setFailure({ message: standing.sentence });
+                setLive(standing.sentence);
+            } else if (answerRef.current) {
                 statusRef.current = 'offline';
                 setStatus('offline');
                 setLive(t(HOME_WORDS.offline));

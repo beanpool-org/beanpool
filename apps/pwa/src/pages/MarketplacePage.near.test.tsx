@@ -184,6 +184,38 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
     });
 
+    it('when the area check meets private_preview, the line shows the node sentence, never "Couldn\'t check your area"', async () => {
+        info.current = GLOBAL;
+        const previewRefusal = Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        });
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(previewRefusal);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }]);
+        const line = screen.getByTestId('market-near-line');
+        expect(line).toHaveTextContent('This community is in a private preview. Ask its owner for an invite.');
+        expect(line).not.toHaveTextContent("Couldn't check your area");
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
+    it('when the area check meets account_closed, the line shows closed sentence, never "Couldn\'t check your area"', async () => {
+        info.current = GLOBAL;
+        const closedRefusal = Object.assign(new Error('Closed'), {
+            status: 403,
+            code: 'account_closed',
+        });
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(closedRefusal);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }]);
+        const line = screen.getByTestId('market-near-line');
+        expect(line).toHaveTextContent('Your account in this community was closed.');
+        expect(line).not.toHaveTextContent("Couldn't check your area");
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
     it('a node that never answers its info still gets a list, read as before', async () => {
         info.current = GLOBAL;
         const gate = await import('../lib/visitor-lobby-gate');

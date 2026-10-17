@@ -139,6 +139,7 @@ export const SUITES = [
     'test-beanpool-recover',
     'test-beanpool-restore',
     'test-claim-cli',
+    'test-claim-address-warning',
     'test-atomic-state-writes',
     'test-write-file-atomic',
     'test-boot-file-safety',

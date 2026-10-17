@@ -20,12 +20,12 @@ services:
       - "8080:8080" # Legacy HTTP (fallback while Azure NSG is updated)
       - "8443:8443" # Legacy HTTPS (fallback while Azure NSG is updated)
     environment:
-      - PUBLIC_IP=${PUBLIC_IP}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - PUBLIC_IP=${PUBLIC_IP:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - BEANPOOL_DATA_DIR=/data
-      - CF_API_TOKEN=${CF_API_TOKEN}
-      - CF_ZONE_ID=${CF_ZONE_ID}
-      - CF_RECORD_NAME=${CF_RECORD_NAME}
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      - CF_RECORD_NAME=${CF_RECORD_NAME:-}
       - PUBLIC_ADDRESS_AUTO=${PUBLIC_ADDRESS_AUTO:-0}
       - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =

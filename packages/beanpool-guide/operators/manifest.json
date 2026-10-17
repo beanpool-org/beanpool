@@ -4,7 +4,7 @@
       "id": "setup",
       "title": "Setting up",
       "summary": "The first start, signing in, finding your way around Settings, and keeping the admin door locked.",
-      "pages": ["first-time-setup", "signing-in", "the-settings-screens", "settings-map", "access-and-security"]
+      "pages": ["first-time-setup", "install-with-ai", "signing-in", "the-settings-screens", "settings-map", "access-and-security"]
     },
     {
       "id": "people",

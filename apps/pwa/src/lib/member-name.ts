@@ -11,6 +11,7 @@
  */
 import { checkMembership, registerMember } from './api';
 import { updateCallsign, type BeanPoolIdentity } from './identity';
+import { standingFromRefusal } from './standing-refusal';
 
 /**
  * The name a node's member card gives `identity`'s key (a redeem's, a register's or a profile update's answer), or null
@@ -41,12 +42,19 @@ export async function adoptNodeName(identity: BeanPoolIdentity, nodeName: string
  * `identity`: the updated identity when this browser's name changed, else null.
  */
 export async function openWithNodeName(identity: BeanPoolIdentity): Promise<{ isMember: boolean; identity: BeanPoolIdentity | null }> {
-    const membership = await checkMembership(identity.publicKey);
-    if (membership.isMember) {
-        return { isMember: true, identity: await keepQuietly(identity, membership.callsign) };
+    try {
+        const membership = await checkMembership(identity.publicKey);
+        if (membership.isMember) {
+            return { isMember: true, identity: await keepQuietly(identity, membership.callsign) };
+        }
+        const answer = await registerMember(identity.publicKey, identity.callsign).catch(() => null);
+        return { isMember: false, identity: await keepQuietly(identity, nodeNameFor(identity, answer?.member)) };
+    } catch (e) {
+        if (standingFromRefusal(e)) {
+            return { isMember: false, identity: null };
+        }
+        throw e;
     }
-    const answer = await registerMember(identity.publicKey, identity.callsign).catch(() => null);
-    return { isMember: false, identity: await keepQuietly(identity, nodeNameFor(identity, answer?.member)) };
 }
 
 /** adoptNodeName on opening: a failed write leaves this browser's name for the next open, which asks again. */

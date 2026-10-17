@@ -102,8 +102,12 @@ Node-facing `/api/registrar/*` routes and `/i/*` never need one.
 - **Who did it:** events and alerts name the admin by the token's email ("paused by martin@…", "martin@… paused x")
   where they said "the admin" and "You".
 - **A self-hoster without Access** leaves all three vars unset: the `ADMIN_SECRET` header (`x-admin-secret`) works as
-  before, and the page shows its secret box (kept in the tab's memory only, never stored). Put Access, or another
-  sign-in, in front before the page is reachable from the internet if you can: the secret is one factor.
+  before, and the page shows its secret box (kept in the tab's memory only, never stored). The committed
+  `wrangler.toml` sets all three for our registrar: delete those three lines before you deploy from a clone, or
+  `ADMIN_SECRET` opens nothing and `/admin` only says to sign in through Access. Put Access, or another sign-in, in
+  front before the page is reachable from the internet if you can: the secret is one factor.
+- **Local dev** (`npm run dev`): the tracked `.dev.vars` sets the three empty (it overrides `[vars]` under
+  `wrangler dev`, and an empty value counts as unset), so the local control room signs in with its `ADMIN_SECRET`.
 
 Tests: `test/admin-access-2026-10-18.test.js` (a local RSA key pair stands in for the team's certs).
 
@@ -513,7 +517,8 @@ npx wrangler d1 migrations apply beanpool-registrar --remote
 npx wrangler secret put CF_API_TOKEN             # scoped: Account·Tunnel·Edit + Zone·DNS·Edit
 npx wrangler secret put CF_ACCOUNT_ID            # 151a28c4fd1e6ee09768f4226be76b4d
 npx wrangler secret put CF_ZONE_ID               # 060a99ae34e53b26dcf3be6578722b31
-npx wrangler secret put ADMIN_SECRET             # only for a registrar with no Cloudflare Access in front (Admin sign-in)
+npx wrangler secret put ADMIN_SECRET             # only with no Cloudflare Access in front: then delete wrangler.toml's
+                                                 # ACCESS_TEAM_DOMAIN, ACCESS_AUD and ADMIN_EMAILS (Admin sign-in)
 npx wrangler secret put NTFY_URL                 # optional: the control room's ntfy topic URL (alerts above)
 npx wrangler secret put NTFY_TOKEN               # optional: an ntfy access token for it
 

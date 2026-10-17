@@ -9,7 +9,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import worker, { holdsName, isOwnRow } from '../src/index.js';
+import { ACCESS_VARS, accessMode } from '../src/access.js';
 import { world, makeKey, liveName, nowS, routing } from './harness.js';
 
 const DAY = 86400;
@@ -743,4 +745,34 @@ test('the page: "Free all and remove" says how many are still inside their hold,
         assert.equal(p.confirms.at(-1), 'Free and remove 1 released name? Their old servers can no longer take them back.');
         assert.equal(p.sent.length, before, 'each cancelled: nothing sent');
     } finally { w.restore(); }
+});
+
+// `wrangler dev` (getVarsForDev, wrangler 3 and 4): wrangler.toml's [vars], then .dev.vars over them, parsed by dotenv
+// (`KEY=` is ''). Only the plain KEY=value lines this file holds are read here.
+const tomlVar = (toml, k) => new RegExp(`^${k} = "([^"]*)"`, 'm').exec(toml)?.[1];
+const dotVars = (text) => Object.fromEntries(text.split('\n').filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]));
+
+test('local dev: the tracked .dev.vars empties wrangler.toml\'s Access vars, so `wrangler dev` signs in with its ADMIN_SECRET; as committed, deployed, that secret opens nothing', async () => {
+    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+    const devVars = dotVars(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8'));
+    const vars = Object.fromEntries(ACCESS_VARS.map((k) => [k, tomlVar(toml, k)]));
+    assert.ok(ACCESS_VARS.every((k) => vars[k]), 'wrangler.toml sets all three: our registrar is behind Access');
+    assert.ok(devVars.ADMIN_SECRET);
+    const local = Object.fromEntries(ACCESS_VARS.map((k) => [k, k in devVars ? devVars[k] : vars[k]]));
+    assert.deepEqual(Object.values(local), ['', '', '']);
+    assert.equal(accessMode(local), false);
+    const whoami = (w) => call(w, new Request(`https://beanpool.org${ADMIN_API}/whoami`, { headers: { 'x-admin-secret': devVars.ADMIN_SECRET } }));
+
+    const dev = await world({ env: { ...local, ADMIN_SECRET: devVars.ADMIN_SECRET } });
+    try {
+        const r = await whoami(dev);
+        assert.deepEqual([r.status, r.body], [200, { email: null, via: 'admin-secret' }]);
+        assert.match((await call(dev, new Request('https://beanpool.org/admin'))).body, /id="secretRow"/);
+    } finally { dev.restore(); }
+
+    const deployed = await world({ env: { ...vars, ADMIN_SECRET: devVars.ADMIN_SECRET } });
+    try {
+        const r = await whoami(deployed);
+        assert.deepEqual([r.status, r.body.sign_in], [401, 'cloudflare-access']);
+    } finally { deployed.restore(); }
 });

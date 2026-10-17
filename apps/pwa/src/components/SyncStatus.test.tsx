@@ -100,6 +100,34 @@ describe('SyncStatus', () => {
         expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toBe(`Network status: Guest. ${sentence}`);
     });
 
+    // jsdom lays nothing out, so the chip's place and the sentence's width are given as a 320 px screen measures them.
+    // Before the fix the sentence was always `left: 0` under the chip: a chip at x 223 put a 289 px sentence over 223..512.
+    it.each([
+        { side: 'left', chipLeft: 12 },
+        { side: 'right', chipLeft: 223 },
+    ])('the sentence stays on a 320 px screen with the chip on the $side', async ({ chipLeft }) => {
+        const SENTENCE_WIDTH = 289;
+        vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(320);
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+            const isNote = this.getAttribute('data-testid') === 'sync-note';
+            const left = isNote ? chipLeft + (parseFloat((this as HTMLElement).style.left) || 0) : chipLeft;
+            const width = isNote ? SENTENCE_WIDTH : 60;
+            return { left, right: left + width, width, x: left, top: 0, bottom: 20, height: 20, y: 0, toJSON: () => ({}) } as DOMRect;
+        });
+        vi.spyOn(api, 'checkMembership').mockRejectedValue(Object.assign(new Error('This community is in a private preview. Ask its owner for an invite.'), {
+            status: 403,
+            code: 'private_preview',
+        }));
+
+        render(<SyncStatus stacked />);
+
+        const box = (await screen.findByTestId('sync-note')).getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(320);
+        // On the left it hangs from the chip's edge, as it always did.
+        if (chipLeft === 12) expect(box.left).toBe(12);
+    });
+
     it('shows Offline on network failure (connectivity failure, no answer)', async () => {
         vi.spyOn(api, 'checkMembership').mockRejectedValue(new TypeError('Failed to fetch'));
 

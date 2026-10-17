@@ -155,14 +155,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const areaLimits = useNearbyLimits();
     const [myArea, setMyArea] = useState<MemberArea | null | undefined>(undefined);
     const [areaLoaded, setAreaLoaded] = useState(false);
+    // The node's sentence when it says this key isn't a member (a private preview, a closed account), in place of "Not set".
+    const [areaRefusal, setAreaRefusal] = useState<string | null>(null);
     const [areaError, setAreaError] = useState<string | null>(null);
     const [areaClearing, setAreaClearing] = useState(false);
     const loadMyArea = () => {
         setAreaLoaded(false);
-        readMyArea().then((a) => { setMyArea(a); setAreaLoaded(true); });
+        readMyArea().then((a) => {
+            if (a && 'sentence' in a) { setAreaRefusal(a.sentence); setMyArea(undefined); }
+            else { setAreaRefusal(null); setMyArea(a); }
+            setAreaLoaded(true);
+        });
     };
     useEffect(() => { if (areaLimits) loadMyArea(); }, [areaLimits]);
-    const areaLine = !areaLoaded ? 'Checking…' : myArea === undefined ? "Couldn't check right now" : describeArea(myArea, recallAreaPlace());
+    const areaLine = !areaLoaded ? 'Checking…' : areaRefusal ?? (myArea === undefined ? "Couldn't check right now" : describeArea(myArea, recallAreaPlace()));
     const clearMyArea = async () => {
         setAreaClearing(true);
         setAreaError(null);
@@ -1557,7 +1563,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             hideTitle
                             skipLabel="← Back to Settings"
                             onSkip={() => setMode('menu')}
-                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
+                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
                         />
                     </div>
                 )}

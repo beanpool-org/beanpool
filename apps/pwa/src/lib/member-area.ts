@@ -12,7 +12,7 @@ import { roundToArea } from '@beanpool/core';
 import { request, signedFetchWithKey, type CommunityInfo } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { bounded } from './bounded';
-import { standingFromRefusal } from './standing-refusal';
+import { standingFromRefusal, type StandingRefusal } from './standing-refusal';
 
 export interface MemberArea { lat: number; lng: number; updatedAt?: string | null }
 export type AreaWriteResult = { ok: true; area: MemberArea | null } | { ok: false; error: string };
@@ -75,14 +75,17 @@ export function senderForKey(privateKey: string, publicKey: string): AreaSender 
 /** The sender for the signed-in member (Settings). */
 export const senderForMe: AreaSender = (body, signal) => request('POST', '/api/community/me/area', body, signal);
 
-/** The signed-in member's stored area: an area, null (none), or undefined (couldn't ask, or no answer in time). */
-export async function readMyArea(): Promise<MemberArea | null | undefined> {
+/**
+ * The signed-in member's stored area: an area, null (none), undefined (couldn't ask, or no answer in time), or the node's
+ * refusal when this key isn't a member there (a private preview, a closed account), whose sentence the screen shows: "no
+ * area set" would send a non-member to set one the node would refuse.
+ */
+export async function readMyArea(): Promise<MemberArea | StandingRefusal | null | undefined> {
     try {
         const me = await bounded((signal) => request<{ area?: unknown }>('GET', '/api/community/me', undefined, signal), AREA_REQUEST_TIMEOUT_MS);
         return readArea(me?.area);
     } catch (e) {
-        if (standingFromRefusal(e)) return null;
-        return undefined;
+        return standingFromRefusal(e) ?? undefined;
     }
 }
 
@@ -141,13 +144,16 @@ export function useNearbyLimits(enabled = true): { radiusKm: number; max: number
     return limits;
 }
 
-/** The signed-in member's area while `enabled`: an area, null (known unset), or undefined (not asked, or couldn't ask). */
+/**
+ * The signed-in member's area while `enabled`: an area, null (known unset), or undefined (not asked, or couldn't ask; a
+ * key the node refused as not a member, whose post the node refuses in its own words).
+ */
 export function useMyArea(enabled: boolean): MemberArea | null | undefined {
     const [area, setArea] = useState<MemberArea | null | undefined>(undefined);
     useEffect(() => {
         if (!enabled) { setArea(undefined); return; }
         let cancelled = false;
-        readMyArea().then((a) => { if (!cancelled) setArea(a); });
+        readMyArea().then((a) => { if (!cancelled) setArea(a && 'sentence' in a ? undefined : a); });
         return () => { cancelled = true; };
     }, [enabled]);
     return area;

@@ -5,6 +5,7 @@
  * LAN nodes (self-signed): Shows QR trust bootstrap + CA cert download
  *
  * Endpoints:
+ *   GET /.well-known/acme-challenge/:token — the http-01 answer (services/acme/challenge.ts), before everything else
  *   GET /         — Redirect to HTTPS landing page (public) or trust bootstrap (LAN)
  *   GET /trust    — Downloads the Root CA certificate (.pem)  [LAN only]
  *   /ws, /ws/logs — WebSocket upgrades, handed to the HTTPS server's handler (same auth)
@@ -17,6 +18,7 @@ import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
+import { acmeChallengeMiddleware } from './services/acme/challenge.js';
 import QRCode from 'qrcode';
 
 /**
@@ -30,6 +32,10 @@ export async function startHttpServer(port: number): Promise<number> {
     // Cache compiled callback handler for delegating HTTP requests to HTTPS Koa app
     let cachedKoaCallback: ((req: any, res: any) => void) | null = null;
     let lastKoaAppRef: Koa | null = null;
+
+    // The ACME http-01 answer, first: never delegated to the HTTPS app (a tunnel request carries cf-connecting-ip), never
+    // redirected to CF_RECORD_NAME. Everything else goes on below unchanged.
+    app.use(acmeChallengeMiddleware());
 
     // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
     app.use(async (ctx, next) => {

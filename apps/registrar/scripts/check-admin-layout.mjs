@@ -62,10 +62,11 @@ const bad = [];
 try {
     for (const width of [320, 768, 1000, 1001, 1280]) {
         const page = await browser.newPage({ viewport: { width, height: 900 } });
-        await page.addInitScript(() => sessionStorage.setItem('bp_registrar_admin_secret', 'layout-check'));
         await page.route('**/*', (route) => {
             const p = new URL(route.request().url()).pathname;
             if (p === '/admin') return route.fulfill({ contentType: 'text/html', body: ADMIN_HTML });
+            // Signed in by Cloudflare Access, as the live page is (README "Admin sign-in").
+            if (p === '/api/local/admin/registrar/whoami') return route.fulfill({ json: { email: 'admin@example.org', via: 'cloudflare-access' } });
             if (p === '/api/local/admin/registrar/pending') return route.fulfill({ json: { allocations: rows } });
             if (p === '/api/local/admin/registrar/events') return route.fulfill({ json: { events: [{ at: now, name: 'mullum', event: 'claimed', detail: 'claimed by key 0001000100010001 (tunnel, tier auto)' }] } });
             if (p === '/api/local/admin/registrar/alerts') return route.fulfill({ json: { channel: { set: false }, cap: {}, settings: {} } });

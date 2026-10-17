@@ -216,3 +216,14 @@ test('every address the script can send anyone to is https and ours', () => {
         for (const [, to] of visit({ ua }).went) assert.ok(to.startsWith('intent://') ? oursAndHttps(intentParts(to).url) && oursAndHttps(intentParts(to).fallback) : oursAndHttps(to), to);
     }
 });
+
+test('beanpool.org claims /global for the app on iPhones, and keeps the paths it claimed before', () => {
+    const aasa = JSON.parse(fs.readFileSync(path.join(SITE, '.well-known/apple-app-site-association'), 'utf8'));
+    const ours = aasa.applinks.details.find((d) => d.appIDs.includes('485XM2R33S.org.beanpool.pillar'));
+    assert.ok(ours, 'the app\'s entry');
+    const paths = ours.components.map((c) => c['/']);
+    assert.ok(paths.includes('/global'), `/global in ${JSON.stringify(paths)}`);
+    assert.ok(ours.components.some((c) => c['/'] === '/' && c['?']?.invite === '*'), 'invite links');
+    assert.ok(paths.includes('/app*'), 'the old app paths');
+    assert.ok(!paths.some((p) => p === '*' || p === '/*'), 'no path takes every page of the website into the app');
+});

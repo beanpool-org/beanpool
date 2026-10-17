@@ -46,6 +46,9 @@ const STATUS_TEXT: Record<CommunityStatus | 'none', string> = {
     none: 'Not connected to a community yet',
 };
 
+// What TalkBack reads for a saved community's row: its name, its state, and whether it is the one in use.
+const savedRowLabel = (name: string, state: string, isCurrent: boolean) => `${name}, ${state}${isCurrent ? ', in use' : ''}`;
+
 function syncedAgo(at: number | null): string | null {
     if (!at) return null;
     const s = Math.max(0, Math.floor((Date.now() - at) / 1000));
@@ -191,8 +194,11 @@ export default function BeanPoolSheet() {
                 disabled={!globalTap || communities.switching}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isCurrent, disabled: !globalTap }}
-                // The saved row is read by the name it shows, as the saved rows beside it; a switch to the one in use does nothing.
-                accessibilityLabel={saved ? `${saved.name}, ${globalLine}` : t('Global community, {state}', { state: globalLine })}
+                // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the
+                // dot's colour says) or what its line says, and in use; a switch to the one in use does nothing.
+                accessibilityLabel={saved
+                    ? savedRowLabel(saved.name, globalEntry === 'member' ? STATUS_TEXT[saved.status] : globalLine, isCurrent)
+                    : t('Global community, {state}', { state: globalLine })}
                 accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
             >
@@ -278,7 +284,7 @@ export default function BeanPoolSheet() {
                                 disabled={communities.switching}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isCurrent }}
-                                accessibilityLabel={`${r.name}, ${STATUS_TEXT[r.status]}${isCurrent ? ', in use' : ''}`}
+                                accessibilityLabel={savedRowLabel(r.name, STATUS_TEXT[r.status], isCurrent)}
                                 accessibilityHint={isCurrent ? undefined : 'Switches to this community. Long press to remove it.'}
                             >
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />

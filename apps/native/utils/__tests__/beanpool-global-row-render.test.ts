@@ -427,22 +427,22 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(line()).toBe('Join with this account: a sign-in');
     });
 
-    it('in use as a member: no hint of a switch the tap doesn\'t do, and TalkBack reads the name it shows', async () => {
+    it('in use as a member: no hint of a switch the tap doesn\'t do, and TalkBack reads the name it shows, its connection and in use', async () => {
         list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
         list.active = GLOBAL;
         scene.standing = 'member';
         await open();
         expect(row().getAttribute('aria-selected')).toBe('true');
         expect(row().getAttribute('data-hint')).toBeNull();
-        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, global.beanpool.org');
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Connected. You are a member here., in use');
     });
 
-    it('not in use, a member: the hint stays, and the label is the shown name, as the rows beside it', async () => {
+    it('not in use, a member: the hint stays, and the label is the shown name and its connection, as the rows beside it', async () => {
         list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
         scene.standing = 'member';
         await open();
         expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press to remove it.');
-        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, global.beanpool.org');
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Connected. You are a member here.');
     });
 
     for (const door of ['shut', 'preview'] as const) {
@@ -517,6 +517,27 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         const group = row().parentElement!;
         expect(Array.from(group.children).indexOf(row())).toBe(1);
         expect(group.children).toHaveLength(3);
+    });
+
+    for (const inUse of [GLOBAL, LOCAL]) {
+        it(`a member, both saved communities offline, ${inUse === GLOBAL ? 'global' : 'Riverside'} in use: TalkBack reads each row the same way, can't reach it and in use (fails on aefa582a)`, async () => {
+            list.rows = [{ ...RIVERSIDE, status: 'offline' }, { ...SAVED, status: 'offline' }];
+            list.active = inUse;
+            scene.door = 'offline';
+            keptMember();
+            await open();
+            expect(line()).toBe('global.beanpool.org');
+            expect(communityRows()).toEqual(inUse === GLOBAL
+                ? ["Riverside, Can't reach it right now", "BeanPool Global, Can't reach it right now, in use", 'Add a community']
+                : ["Riverside, Can't reach it right now, in use", "BeanPool Global, Can't reach it right now", 'Add a community']);
+        });
+    }
+
+    it('in use and not a member there: the line it shows, then in use (fails on aefa582a)', async () => {
+        list.rows = [RIVERSIDE, SAVED];
+        list.active = GLOBAL;
+        await open();
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Join with this account: a sign-in, in use');
     });
 
     it('the row keeps its node when the sheet draws again (a press, a long press or TalkBack\'s focus on it survives)', async () => {

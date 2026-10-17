@@ -2,7 +2,7 @@
 slug: first-time-setup
 title: First-time setup
 summary: The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.
-related: signing-in, access-and-security, roles, members-and-invites, backups-and-replicas
+related: signing-in, access-and-security, roles, members-and-invites, backups-and-replicas, address-and-peers, install-with-ai
 ---
 
 ## Before the first start
@@ -25,6 +25,17 @@ A server set up before the claim code keeps its admin password exactly as it was
 - **data/claim-code.txt**: the one-time claim code, in plain text, until a phone claims the community with it. Then it is deleted. A backup from Settings never carries it.
 - **data/first-admin-password.txt**: only on a server set up before the claim code with ADMIN_PASSWORD empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.
 
+## Your community needs an address phones can reach
+
+The BeanPool app reaches a server on the internet only over https. Before you claim your community, choose one of these two. Either works as well as the other:
+
+- **A free name ending in .beanpool.org.** beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand. Some names, such as big cities, wait for approval by the BeanPool project.
+- **Your own domain, over https.** Point your domain at your server, with port 443 open, and give it a certificate: your server gets one from Let's Encrypt by itself when the domain's DNS is in a Cloudflare account of yours (CF_RECORD_NAME, CF_API_TOKEN and CF_ZONE_ID in .env), or put a web server of your own with a certificate in front of it. Then claim with --address https://your.domain. BeanPool does not need to be involved.
+
+A bare IP address, such as http://203.0.113.7, works only on a home network today. A phone never uses plain http to a server on the internet, so a claim QR code that carries one does not open. beanpool claim warns you before it shows such a QR code, and when you press Enter to skip the name on a server with no https address. Run it again with a name or your own address: the claim code waits until a phone uses it.
+
+Setting your server up with an AI assistant? See Setting up your server with an AI assistant: what to ask it, and what stays yours.
+
 ## Claim your community: the address, then your phone
 
 The last step of an install, on the server:
@@ -32,7 +43,7 @@ The last step of an install, on the server:
 docker compose exec beanpool-node beanpool claim
 
 - It asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.
-- Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.
+- Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).
 - It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up.
 
 If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told.

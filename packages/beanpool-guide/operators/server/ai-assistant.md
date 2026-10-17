@@ -2,12 +2,14 @@
 slug: ai-assistant
 title: AI assistants
 summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, its limits, and disconnecting it.
-related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees
+related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 
 An owner or an admin can connect their own AI assistant to the server, and ask it things like "what needs me?", "summarise the open reports" or "are the backups all right?". The assistant is yours: you bring it, and the company that runs it (Anthropic, OpenAI and so on) receives what it reads. Nothing of BeanPool's talks to an AI, and the server keeps no AI key.
 
 The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with what it was given is refused.
+
+This page is about a server that is already running. To have an assistant set up a new one, see Setting up your server with an AI assistant: what to ask it, and what stays yours.
 
 ## Connecting from Claude or ChatGPT (owners and admins)
 

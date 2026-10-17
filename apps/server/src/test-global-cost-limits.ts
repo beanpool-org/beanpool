@@ -12,7 +12,8 @@
  *     nearby set holds NEARBY_LISTINGS_MAX (3 here) of the 5 listings near it. A sixth photo on a new listing and on an
  *     edit: 400, "A post can have at most 5 photos. Take one off to add another." A fourth place watch: 409 watch_limit,
  *     limit 3, "You can watch up to 3 places. Remove one to watch another."; PLACE_WATCHES_MAX=2 makes it the third; a
- *     value out of range keeps 3 and says so once.
+ *     value out of range keeps 3 and says so once. So do NEARBY_LISTINGS_MAX and NEARBY_LISTINGS_RADIUS_KM, in a fresh process
+ *     (the set's limits are read once, at the first ask).
  *  3. The archive on global. A listing unchanged for 91 days and a paused one for 100 are taken off the Market (cancelled,
  *     inactive, stamped now) and lose their photos: the rows gone, a post_photos tombstone per slot, the image store's
  *     objects left to its orphan sweep, which takes them. One taken down 120 days ago loses its photos and is stamped;
@@ -44,6 +45,8 @@ process.env.ADMIN_PASSWORD = 'Global-Cost-Limits-Admin-77!';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
@@ -243,6 +246,15 @@ async function main() {
     assert(profileLimits().placeWatches === 3 && outOfRange.warns.filter(x => x.includes('PLACE_WATCHES_MAX="500"')).length === 1,
         `PLACE_WATCHES_MAX=500 is out of range: 3, said once (${outOfRange.warns.join(' | ')})`);
     delete process.env.PLACE_WATCHES_MAX;
+    // The nearby set's two are read once, at the first ask, so a fresh process asks for them, twice.
+    const nearbyRun = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e',
+        `const m = await import(${JSON.stringify(new URL('./config/node-profile.ts', import.meta.url).href)});
+         m.nearbyListingsLimits(); console.log(JSON.stringify(m.nearbyListingsLimits())); process.exit(0);`],
+        { env: { ...process.env, BEANPOOL_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'bp-nearby-')), NODE_PROFILE: 'global',
+            NEARBY_LISTINGS_MAX: '2500', NEARBY_LISTINGS_RADIUS_KM: 'abc' }, encoding: 'utf8', timeout: 60_000 });
+    const saidOnce = (name: string) => nearbyRun.stderr.split('\n').filter(x => x.includes(`${name}=`) && x.includes('so this node keeps its default')).length === 1;
+    assert(nearbyRun.stdout.trim().endsWith('{"radiusKm":250,"max":500}') && saidOnce('NEARBY_LISTINGS_MAX') && saidOnce('NEARBY_LISTINGS_RADIUS_KM'),
+        `NEARBY_LISTINGS_MAX=2500 and NEARBY_LISTINGS_RADIUS_KM=abc are the defaults, 500 and 250 km, and each is said once (${nearbyRun.status}: ${nearbyRun.stdout.trim()} | ${nearbyRun.stderr.trim()})`);
 
     // ── 3. The archive ──
     console.log('\n── 3. the 90-day archive on global ──');

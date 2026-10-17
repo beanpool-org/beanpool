@@ -450,26 +450,18 @@ export const NEARBY_LISTINGS_MAX_DEFAULT = 500;
 const NEARBY_LISTINGS_RADIUS_KM_MAX = 2_000;
 const NEARBY_LISTINGS_MAX_MAX = 2_000;
 
-/** A whole number from the env within [1, ceiling], or the default when unset or anything else. */
-function envWhole(name: string, fallback: number, ceiling: number): number {
-    const raw = process.env[name];
-    if (raw === undefined || raw.trim() === '') return fallback;
-    const n = Number(raw);
-    return Number.isInteger(n) && n >= 1 && n <= ceiling ? n : fallback;
-}
-
 let nearbyLimits: { radiusKm: number; max: number } | null = null;
 /**
  * The radius and the cap of a member's set: NEARBY_LISTINGS_RADIUS_KM and NEARBY_LISTINGS_MAX on a self-hosted node
  * (design §9 Q6), else 250 km and 500. Read once, at the first ask (boot), so the node and `features` agree for the
- * life of the process; a value out of range is the default, never a set of every listing. Beside them,
- * NEARBY_SET_MEMORY_MB (default 32, 0 off) bounds the memory of the sets this node named, by which a changed set is sent
- * as a diff (engine/nearby-set-memory.ts nearbySetMemoryLimits).
+ * life of the process; a value out of range is the default, never a set of every listing, and the log says so once.
+ * Beside them, NEARBY_SET_MEMORY_MB (default 32, 0 off) bounds the memory of the sets this node named, by which a
+ * changed set is sent as a diff (engine/nearby-set-memory.ts nearbySetMemoryLimits).
  */
 export function nearbyListingsLimits(): { radiusKm: number; max: number } {
     return nearbyLimits ??= {
-        radiusKm: envWhole('NEARBY_LISTINGS_RADIUS_KM', NEARBY_LISTINGS_RADIUS_KM_DEFAULT, NEARBY_LISTINGS_RADIUS_KM_MAX),
-        max: envWhole('NEARBY_LISTINGS_MAX', NEARBY_LISTINGS_MAX_DEFAULT, NEARBY_LISTINGS_MAX_MAX),
+        radiusKm: envLimit('NEARBY_LISTINGS_RADIUS_KM', NEARBY_LISTINGS_RADIUS_KM_DEFAULT, 1, NEARBY_LISTINGS_RADIUS_KM_MAX),
+        max: envLimit('NEARBY_LISTINGS_MAX', NEARBY_LISTINGS_MAX_DEFAULT, 1, NEARBY_LISTINGS_MAX_MAX),
     };
 }
 

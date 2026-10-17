@@ -49,7 +49,7 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
 import { db } from '../db/db.js';
-import { getAvatarService } from '../engine/avatar.js';
+import { getAvatarService, routePhotoValueRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, groupPictureKeyMatches } from '../engine/avatar-keys.js';
 import { membersOnlyHere } from './viewer.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -275,6 +275,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.status = 400;
             ctx.body = { error: 'name is required' };
             return;
+        }
+
+        if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== '') {
+            const avatarRefusal = routePhotoValueRefusal(avatarUrl);
+            if (avatarRefusal) {
+                ctx.status = 400;
+                ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) };
+                return;
+            }
         }
 
         try {
@@ -520,6 +529,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         const body = (ctx as any).requestBody || {};
         const { name, description, avatarUrl, category, joinPolicy } = body;
+
+        if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== '') {
+            const avatarRefusal = routePhotoValueRefusal(avatarUrl);
+            if (avatarRefusal) {
+                ctx.status = 400;
+                ctx.body = { error: photoRefusalText(avatarRefusal, AVATAR_FORMAT_ERROR) };
+                return;
+            }
+        }
 
         try {
             let group;

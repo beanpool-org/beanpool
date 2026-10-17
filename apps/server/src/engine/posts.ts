@@ -2167,8 +2167,10 @@ type ArchiveRow = CancelledPostRow & { status: string | null };
  * no tombstone of their own (scrubEndedEvents), and an UPDATE that shrinks a wide row only leaves a sparse page.
  *
  * Left alone: a listing with a deal open on it (asked for, or Beans held: an unanswered request expires after a week and
- * a later run takes it), one a report waits on (a moderator looks at it as it was), and a copy of another community's
- * listing (origin_node: that community keeps its own).
+ * a later run takes it), one a report waits on (a moderator looks at it as it was), one a keeper's wage claim waits on
+ * (escrow.ts requestPost records it with no deal and no change to the listing, and processDeferredWageClaims pays it the
+ * day the enterprise can, and cancels it if the listing is cancelled first), and a copy of another community's listing
+ * (origin_node: that community keeps its own).
  *
  * Crash-safe and idempotent: each listing is its own transaction, and its end state (off, with no photo) is what keeps a
  * second run from finding it again. Oldest first, at most `batch` a run. Main server only: a standby gets the result
@@ -2190,6 +2192,7 @@ export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowM
                 OR (p.status IN ('completed', 'cancelled') AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)))
            AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id AND t.status IN ('requested', 'pending'))
            AND NOT EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.status = 'pending')
+           AND NOT EXISTS (SELECT 1 FROM deferred_wage_claims w WHERE w.post_id = p.id AND w.status = 'pending')
          ORDER BY COALESCE(p.updated_at, p.created_at), p.id
          LIMIT ?`).all(cutoff, batch + 1) as ArchiveRow[];
     run.more = due.length > batch;

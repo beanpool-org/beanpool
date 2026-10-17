@@ -16,8 +16,8 @@
  *  3. The archive on global. A listing unchanged for 91 days and a paused one for 100 are taken off the Market (cancelled,
  *     inactive, stamped now) and lose their photos: the rows gone, a post_photos tombstone per slot, the image store's
  *     objects left to its orphan sweep, which takes them. One taken down 120 days ago loses its photos and is stamped;
- *     one taken down with none is not touched. Left alone: 89 days, one a report waits on, an event, a poll, another
- *     community's copy. Each archived listing is `post_removed` to its audience, and its author hears once a run. The
+ *     one taken down with none is not touched. Left alone: 89 days, one a report waits on, one a keeper's wage claim
+ *     waits on (the claim waits on too), an event, a poll, another community's copy. Each archived listing is `post_removed` to its audience, and its author hears once a run. The
  *     phone's delta brings the cancelled row with no photos. A second run does nothing.
  *  4. Crash-safe, bounded, main server only, the operator's. A listing whose transaction fails keeps everything and the
  *     rest go; the next run takes it. A batch of 1 says more are due. A standby archives nothing. LISTING_ARCHIVE_DAYS=120
@@ -253,6 +253,13 @@ async function main() {
     const reported = listing(ana, 'Reported', 1, 100);
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status) VALUES (?, ?, ?, ?, 'spam', 'pending')`)
         .run(crypto.randomUUID(), gia.pubKeyHex, ana.pubKeyHex, reported);
+    // A keeper's job its enterprise asked to pay for and couldn't yet (escrow.ts requestPost): no deal row, the listing's
+    // clock not moved, and the claim paid the day the enterprise can (processDeferredWageClaims).
+    const waged = listing(ana, 'Waged job', 1, 100);
+    const workshop = member('Workshop');
+    const claim = crypto.randomUUID();
+    db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount, status) VALUES (?, ?, ?, ?, 40, 'pending')`)
+        .run(claim, workshop.pubKeyHex, ana.pubKeyHex, waged);
     const raw = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, origin_node)
                             VALUES (?, ?, 'general', ?, '', 0, ?, 'active', 1, ?, ?, ?)`);
     const event = `ev-${crypto.randomUUID()}`;
@@ -261,7 +268,7 @@ async function main() {
     raw.run(pollId, 'poll', 'Old poll', ana.pubKeyHex, ago(100), ago(100), null);
     const copy = `copy-${crypto.randomUUID()}`;
     raw.run(copy, 'offer', 'Another community\'s', ana.pubKeyHex, ago(100), ago(100), 'peer-elsewhere');
-    const untouched = [young, reported, event, pollId, copy, downBare];
+    const untouched = [young, reported, waged, event, pollId, copy, downBare];
     const before = new Map(untouched.map(id => [id, rowOf(id).updated_at]));
     const oldKeys = keysOf(old);
     const youngKeys = keysOf(young);
@@ -290,6 +297,9 @@ async function main() {
             `left alone: ${db.prepare('SELECT title FROM posts WHERE id = ?').pluck().get(id)} (${JSON.stringify(rowOf(id))})`);
     }
     assert(photosOf(young) === 1 && photosOf(reported) === 1, 'the 89-day listing and the reported one keep their photos');
+    const claimStatus = db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').pluck().get(claim);
+    assert(photosOf(waged) === 1 && claimStatus === 'pending',
+        `one a keeper's wage claim waits on keeps its photos, and the claim still waits to be paid (${photosOf(waged)}, ${claimStatus})`);
     const removedIds = heard.filter(h => h.event?.type === 'post_removed').map(h => h.event.id);
     assert(removedIds.length === 2 && removedIds.includes(old) && removedIds.includes(paused), `post_removed for each archived listing, and nothing else (${JSON.stringify(removedIds)})`);
     assert(told.length === 1 && told[0].to[0] === ana.pubKeyHex && told[0].kind === 'market.listing' && /^2 of your listings were taken off the Market: nothing had changed on them in 90 days/.test(told[0].body),

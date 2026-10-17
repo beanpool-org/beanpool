@@ -29,7 +29,7 @@ Once an hour the main server looks for Offers and Needs that nothing has changed
 - A listing still up is taken off the Market as its author's own removal takes it: cancelled, and every member's app drops it. Its author gets one notification for the run, with their Marketplace Activity alerts.
 - Its photos are deleted. So are the photos of a listing taken down or finished that long ago.
 - Its words stay in the database; the apps no longer show the listing.
-- Left alone: a listing with a deal asked for or under way on it, one a report waits on (so a moderator sees it as it was), and copies of another community's listings.
+- Left alone: a listing with a deal asked for or under way on it, one a report waits on (so a moderator sees it as it was), one a keeper's wage claim waits on (an enterprise asked to pay for the job and can't yet; the claim is paid when it can), and copies of another community's listings.
 
 At most 200 listings go in one run; the rest go in the next hour's runs. Each listing goes in its own transaction, so a run stopped halfway leaves every listing either whole or archived.
 

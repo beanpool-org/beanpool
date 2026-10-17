@@ -4,7 +4,7 @@
  * wouldn't fit beside its words. The real layout at every width and text size is e2e/tour-check.mjs's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { HeaderTitle, useDotOnlyChip } from './HeaderControls';
 import { SyncChip } from './SyncChip';
 
@@ -54,5 +54,30 @@ describe('useDotOnlyChip', () => {
         wordsOfTitle = 60; // 72 <= 100
         render(<Header ready title="Home" />);
         expect(screen.getByTestId('sync-chip').dataset.dotOnly).toBe('false');
+    });
+});
+
+describe('HeaderTitle', () => {
+    it('renders with button role, tabIndex 0, and triggers onClick on Enter/Space keys when onClick is provided', () => {
+        const handleClick = vi.fn();
+        render(<HeaderTitle title="Commons" onClick={handleClick} />);
+
+        const titleEl = screen.getByTestId('header-title');
+        expect(titleEl.getAttribute('role')).toBe('button');
+        expect(titleEl.getAttribute('tabindex')).toBe('0');
+
+        fireEvent.keyDown(titleEl, { key: 'Enter' });
+        expect(handleClick).toHaveBeenCalledTimes(1);
+
+        fireEvent.keyDown(titleEl, { key: ' ' });
+        expect(handleClick).toHaveBeenCalledTimes(2);
+    });
+
+    it('omits button role and tabIndex when onClick is not provided', () => {
+        render(<HeaderTitle title="Commons" />);
+
+        const titleEl = screen.getByTestId('header-title');
+        expect(titleEl.getAttribute('role')).toBeNull();
+        expect(titleEl.getAttribute('tabindex')).toBeNull();
     });
 });

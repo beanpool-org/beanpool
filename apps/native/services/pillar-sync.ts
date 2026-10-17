@@ -32,6 +32,14 @@ import {
 
 const SYNC_TIMEOUT_MS = 20_000;
 /**
+ * How long a sync waits to read this phone's key once more when the first read found none (performSync). At a cold
+ * start, as just after an update, the key can be slow to read for a moment: a cycle that went on without it read a
+ * members-only community unsigned, was refused (401 `members_only`), and the Market's first sync failed, so it said
+ * "Having trouble connecting" (Android 1.2.66, 18 Oct). It is the same read of this phone's own key, never another; a
+ * phone that holds no key waits this once a cycle and reads as before.
+ */
+export const KEY_READ_AGAIN_MS = 500;
+/**
  * The node's key for the next page of a posts sync read, while the one it answers is full (apps/server
  * routes/marketplace.ts, paged by key). None: the read is complete. A node from before it sends none, so its one page
  * is the whole read, as it always was.
@@ -481,7 +489,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let signer: { publicKey: string; privateKey: string } | null = null;
         try {
             const { loadIdentity } = await import('../utils/identity');
-            const identity = await loadIdentity();
+            let identity = await loadIdentity();
+            // None found: read once more a moment later before the cycle goes on without it (KEY_READ_AGAIN_MS).
+            if (!identity?.publicKey || !identity?.privateKey) {
+                await new Promise(resolve => setTimeout(resolve, KEY_READ_AGAIN_MS));
+                identity = await loadIdentity();
+            }
             pubKey = identity?.publicKey || '';
             signer = identity?.publicKey && identity?.privateKey ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null;
         } catch (e) {
@@ -841,6 +854,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const note = postsRes.status === 401 ? undefined
                     : refusal?.code === 'private_preview' ? await noteForPreview(anchorUrl, signer, refusal)
                     : refusal;
+                // Said in the log, never a quiet end: the cycle fails, and the Market's wait asks for one more (market.tsx).
+                if (postsRes.status === 401) {
+                    console.warn(`[Pillar Sync] ${anchorUrl} refused the posts read as unsigned (401)${signer ? '' : ': this phone could not read its key'}.`);
+                }
                 if (note !== undefined) await noteRefusal(anchorUrl, note);
                 // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
                 // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community

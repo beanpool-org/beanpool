@@ -274,6 +274,44 @@ docker compose exec beanpool-node beanpool claim
 server's address in the search box and tap **Claim ‹name›**. The
 operator manual's [First-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest.
 
+Your community needs an address phones can reach: the phone talks to a server on the internet only over https. Take the free
+name the claim offers (a tunnel: no ports to open, no DNS to set up) or give your own domain with https; either works as well.
+A bare `http://IP` address works only on a home network, and `beanpool claim` warns before it shows a QR code the phone will refuse.
+
+#### Install with an AI assistant
+
+An AI assistant that can run commands on a server (Claude Code, for example) can do the install for you. Give it this, with
+your server's address and a way in that you can take back:
+
+```text
+Set up a BeanPool community server for me.
+- If I have no server yet, help me rent a small one: Ubuntu 24.04 with at least 1 GB of memory, about US$6 a month.
+  I sign up and pay myself.
+- Install Docker and Docker Compose from the system's own packages (on Ubuntu 24.04: docker.io and docker-compose-v2).
+- On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.
+- Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at
+  github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from
+  source, and change nothing in docker-compose.yml.
+- For the block's last line, take a name for the community's address:
+  docker compose exec beanpool-node beanpool claim --name NAME
+  If I have my own domain with https, use --address https://my.domain instead. Never give the phone a plain http://
+  address on the internet: phones refuse it.
+- Stop when it shows the one-time claim code and the QR code, and show me both. Never claim the community yourself,
+  and never run beanpool claim --key.
+- Tell me what you ran, and anything you decided on your own.
+```
+
+Three things stay yours:
+
+- **The claim.** Your phone claims the community and becomes its owner. The code works once, for the first phone that uses
+  it: claim straight away, and never let the assistant claim it.
+- **Your 12 words.** Write them on paper. Never type them into an assistant, a chat or a server.
+- **Your keys and secrets.** Give the assistant nothing more than a token you can revoke (an SSH key made for the job, removed
+  afterwards, or a cloud token you can revoke), never your cloud account's password, and change anything secret it saw.
+
+The operator manual's page [Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md)
+has what the assistant does and what comes next.
+
 #### Updating an Existing Node
 
 ```bash

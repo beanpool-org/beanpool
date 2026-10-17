@@ -6,7 +6,9 @@
  * are the phone chip's 8. `dotOnly` (a mobile header too narrow for the tab's title beside the words, HeaderControls'
  * useDotOnlyChip) draws the dot alone: the words stay laid out, hidden, so the header can tell when they fit again, and the
  * chip's name (and its title, on hover) still says which state it is. The dot has its own colour: alone it carries the
- * state, so it holds 3:1 against the chip (WCAG 1.4.11); #10b981 on the white chip is 2.5:1, emerald-600 3.8:1.
+ * state, so it holds 3:1 against the chip (WCAG 1.4.11); #10b981 on the white chip is 2.5:1, emerald-600 3.8:1. `note`: the
+ * node's sentence about this key's standing (a private preview, a closed account), in the chip's name and its title; SyncStatus
+ * also shows it under the chip, since a touch screen has no hover.
  */
 
 export type SyncMode = 'online' | 'guest' | 'offline';
@@ -35,7 +37,21 @@ const STATUS_CONFIG = {
     },
 } as const;
 
-export function SyncChip({ mode, ago, pulsing, stacked = false, dotOnly = false }: { mode: SyncMode; ago: string | null; pulsing: boolean; stacked?: boolean; dotOnly?: boolean }) {
+export function SyncChip({
+    mode,
+    ago,
+    pulsing,
+    stacked = false,
+    dotOnly = false,
+    note,
+}: {
+    mode: SyncMode;
+    ago: string | null;
+    pulsing: boolean;
+    stacked?: boolean;
+    dotOnly?: boolean;
+    note?: string | null;
+}) {
     const config = STATUS_CONFIG[mode];
     const twoLines = stacked && !!ago;
     const name = `${config.label}${ago ? `, last synced ${ago}` : ''}`;
@@ -53,8 +69,8 @@ export function SyncChip({ mode, ago, pulsing, stacked = false, dotOnly = false 
         <div
             role="status"
             aria-live="polite"
-            aria-label={`Network status: ${name}`}
-            title={dotOnly ? name : undefined}
+            aria-label={`Network status: ${name}${note ? `. ${note}` : ''}`}
+            title={note || (dotOnly ? name : undefined)}
             data-testid="sync-chip"
             data-dot-only={dotOnly}
             style={{

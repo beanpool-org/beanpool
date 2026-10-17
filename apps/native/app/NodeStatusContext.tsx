@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { fetchMembership } from '../utils/membership-probe';
+import { membershipAnswerOf } from '../utils/membership-answer';
 
 /**
  * Whether the active community node recognises this identity as a member.
@@ -10,10 +11,16 @@ import { fetchMembership } from '../utils/membership-probe';
  *                 oddly. We deliberately do NOT act on this — never punish a flaky
  *                 connection by treating it as a rejection.
  *  - 'member'   : the node confirmed membership.
- *  - 'stranger' : the node is reachable and definitively says this key is NOT a member.
- *                 Only this state drives the wrong-node recovery screen.
+ *  - 'stranger' : the node is reachable and definitively says this key is NOT a member
+ *                 (or refuses it as one: 403 `members_only` / `private_preview`).
+ *  - 'closed'   : the node closed this key's account there (403 `account_closed`: removed, or
+ *                 deleted by its owner). A definite answer, diverted like 'stranger' to the
+ *                 not-recognised screen's closed page (DESIGN-global-entry-fable.md §C.3),
+ *                 never read as a connection problem.
+ * 'stranger' and 'closed' drive the not-recognised screen. The probe's answer is read by
+ * utils/membership-answer.ts, the one reader every place that asks shares.
  */
-export type NodeRecognition = 'unknown' | 'member' | 'stranger' | 'recovering';
+export type NodeRecognition = 'unknown' | 'member' | 'stranger' | 'closed' | 'recovering';
 
 interface NodeStatusState {
     recognition: NodeRecognition;
@@ -53,13 +60,12 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
             // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
             const res = await fetchMembership(url, identity, controller.signal);
             clearTimeout(timeoutId);
-            if (!res.ok) {
-                // Reachable but the endpoint misbehaved — don't treat as a rejection.
-                if (mounted.current) setRecognition('unknown');
-                return 'unknown';
-            }
-            const data = await res.json();
-            const result: NodeRecognition = data && data.isMember ? 'member' : data && data.isRecovering ? 'recovering' : 'stranger';
+            const answer = await membershipAnswerOf(res);
+            // No definite answer (an odd status, a body that isn't the probe's): don't treat it as a rejection.
+            const result: NodeRecognition = !answer ? 'unknown'
+                : answer.kind === 'member' ? 'member'
+                : answer.kind === 'closed' ? 'closed'
+                : answer.recovering ? 'recovering' : 'stranger';
             if (mounted.current) setRecognition(result);
             return result;
         } catch {

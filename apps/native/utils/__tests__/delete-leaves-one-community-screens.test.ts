@@ -69,8 +69,9 @@ describe('Settings: Permanently Delete Account follows the plan', () => {
         expect(purge()).toContain('lastCommunityLine(plan, words)');
         expect(s).toContain('const purgeBlocked = advancedLoading || !isPurgeInputValid || !deletePlan;');
         expect(s).toContain('disabled={purgeBlocked}');
-        // The plan is asked as the member opens the delete.
-        const open = slice(s, "setWipeType('purge');", '}}');
+        // The plan is asked as the member opens the delete (its button; the closed page's way in opens it the same way,
+        // closed-account-reaches-delete.test.ts).
+        const open = slice(s, "setPurgeConfirm('');\n                                        setWipeType('purge');", '}}');
         expect(open).toContain('askDeletePlan();');
     });
 });

@@ -12,9 +12,7 @@ import {
 } from '../utils/guide';
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityStatus } from '../utils/use-communities';
-import { doorOfferedToAccount, isGlobalCommunity, type GlobalStanding } from '../utils/global-join-existing';
-import { useGlobalDoorOpen } from '../utils/use-global-door-open';
-import { useAccountClosedAtGlobal } from '../utils/use-account-closed';
+import { useGlobalEntry } from '../utils/use-global-entry';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE } from '@beanpool/core';
@@ -116,15 +114,12 @@ export default function BeanPoolSheet() {
     };
     const connect = () => router.navigate({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
 
-    // The global community's door, for the account on this phone (utils/global-join-existing.ts): offered once the global
-    // community has said its door is open, unless the phone is a member there. Read from its row: none, a guest, a member,
-    // or not known yet (still asking, or no answer), which offers nothing so a member never sees it flash up.
+    // The global community's door, for the account on this phone (utils/global-join-existing.ts): offered when the one rule
+    // says `join` (utils/global-entry.ts): the door open, and the global community itself not saying this key is a member.
+    // Not from the rows (a row in the list is no answer about the key); not while its standing is still being asked, so a
+    // member never sees it flash up. The always-present row is P2's (DESIGN-global-entry §B.3).
     const { identity } = useIdentity();
-    const doorOpen = useGlobalDoorOpen(!!identity);
-    const globalRow = communities.rows.find(r => isGlobalCommunity(r.url));
-    const globalStanding: GlobalStanding = !globalRow ? 'none'
-        : globalRow.status === 'guest' ? 'guest' : globalRow.status === 'online' ? 'member' : 'unknown';
-    const offerGlobal = doorOfferedToAccount({ doorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
+    const offerGlobal = useGlobalEntry(!!identity) === 'join';
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 

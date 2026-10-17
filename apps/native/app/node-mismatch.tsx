@@ -3,9 +3,10 @@ import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView,
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, ErrorBoundary } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import { t } from '@beanpool/core';
 
 export { ErrorBoundary };
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import { normalizeNodeUrl, looksLikeNodeAddress, assertPlainNodeAddress } from '../utils/node-url';
@@ -21,7 +22,14 @@ import {
     type KeptCommunity,
 } from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
-import { communitySwitched } from '../utils/community-switch';
+import { askBeforeSwitch } from '../utils/reconnect';
+import { CLOSED_ACCOUNT_DELETE, mismatchPlan, inviteFromText } from '../utils/mismatch-plan';
+import { GLOBAL_NODE_URL, checkGlobalDoor, fetchNodeProfile, getCachedNodeProfile, wordsDoorOn, type NodeProfile } from '../utils/node-profile';
+import { isGlobalCommunity } from '../utils/global-join-existing';
+import { doorStateFromCheck, type GlobalDoorState } from '../utils/global-entry';
+import { useGlobalEntry } from '../utils/use-global-entry';
+import { communityName } from '../utils/community-name';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -29,25 +37,33 @@ import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 
 /**
- * Shown when the active node is reachable but definitively does NOT recognise this
- * identity as a member (usually a wrong/typo'd node address). We keep the identity —
- * the keys and 12-word phrase are valid — and just let the user point at the right
- * community, or log out and start over. Routed to from the root layout when
- * NodeStatus recognition === 'stranger'.
+ * Shown when the active community is reachable but definitively does NOT recognise this identity as a member, or has
+ * closed its account there. We keep the identity (the keys and 12-word phrase are valid). Routed to from the root layout
+ * when NodeStatus recognition is 'stranger' or 'closed'.
+ *
+ * The screen asks the community it reached what it is (its profile) and draws one of four pages (utils/mismatch-plan.ts,
+ * DESIGN-global-entry-fable.md §C): an open door (the global community: being a stranger is normal before joining, so
+ * the first action is Join with this account), an invite door (a wrong address, or not joined yet: the saved
+ * communities, another address, an invite), a private preview (its sentence and an owner's invite), or a closed account.
+ *
+ * Reconnect and the saved-community picker ask the community first (utils/reconnect.ts) and move the phone only for a
+ * member, or a guest visit it chose. A refusal writes nothing: the page is drawn for THAT community with the phone still
+ * on the one it came from (decision 4, Damo's case).
  */
 export default function NodeMismatchScreen() {
     const { colors, dark } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const router = useRouter();
     const { identity, setIdentity } = useIdentity();
-    const { nodeUrl, recheck } = useNodeStatus();
+    const { nodeUrl, recognition, recheck } = useNodeStatus();
     const [input, setInput] = useState(nodeUrl || '');
     const [loading, setLoading] = useState(false);
     // The delete asks each community to stop the push alerts first, which can take a few seconds (UNREGISTER_TIMEOUT_MS):
     // nothing else on the screen may start meanwhile.
     const [deleting, setDeleting] = useState(false);
     const [checking, setChecking] = useState(false);
-    const busy = loading || deleting || checking;
+    const [joiningInvite, setJoiningInvite] = useState(false);
+    const busy = loading || deleting || checking || joiningInvite;
     const [error, setError] = useState<string | null>(null);
 
     // nodeUrl can resolve after first render; prefill once it's known.
@@ -71,51 +87,146 @@ export default function NodeMismatchScreen() {
     // tap, before the lock (`checking`). One that does is where the member is sent instead, and nothing is removed.
     const [keptBy, setKeptBy] = useState<KeptCommunity[] | null>(null);
 
-    const [otherNodes, setOtherNodes] = useState<SavedNode[]>([]);
+    const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
     useEffect(() => {
-        getSavedNodes()
-            .then((nodes) => setOtherNodes(nodes.filter((n) => n.url !== nodeUrl)))
-            .catch(() => {});
+        getSavedNodes().then(setSavedNodes).catch(() => {});
     }, [nodeUrl]);
+    const otherNodes = useMemo(() => savedNodes.filter((n) => n.url !== nodeUrl), [savedNodes, nodeUrl]);
+
+    // What the community in use is: this phone's copy at once, then the community's own answer (§C.1).
+    const [here, setHere] = useState<{ profile: NodeProfile | null; reachable: boolean }>({ profile: null, reachable: false });
+    useEffect(() => {
+        if (!nodeUrl) return;
+        let alive = true;
+        getCachedNodeProfile(nodeUrl)
+            .then((p) => { if (alive && p) setHere((h) => (h.reachable ? h : { profile: p, reachable: false })); })
+            .catch(() => {});
+        fetchNodeProfile(nodeUrl)
+            .then((p) => { if (alive && p) setHere({ profile: p, reachable: true }); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [nodeUrl]);
+
+    // The community the page is about: the one in use, or one that a Reconnect (or a saved pick) asked and that said no.
+    // The phone is still on the one in use then: nothing was written.
+    const [asked, setAsked] = useState<{ url: string; answer: 'stranger' | 'closed'; profile: NodeProfile | null; reachable: boolean } | null>(null);
+    const pageUrl = asked?.url ?? nodeUrl;
+    const pageIsGlobal = isGlobalCommunity(pageUrl);
+    const plan = mismatchPlan({
+        recognition: asked ? asked.answer : recognition === 'closed' ? 'closed' : 'stranger',
+        profile: asked ? asked.profile : here.profile,
+        reachable: asked ? asked.reachable : here.reachable,
+        // The door screen (join-global.tsx) is the global community's alone until slice P5.
+        doorScreenTakes: pageIsGlobal,
+    });
+    const nameOf = (url: string | null) => {
+        const saved = savedNodes.find((n) => n.url === url);
+        return communityName({ url, alias: saved?.alias });
+    };
+    const pageName = pageIsGlobal ? t('the global community') : nameOf(pageUrl);
+
+    // The address field is folded on the open page, where a stranger has every reason to be, and on the closed page, whose
+    // answer is about the account, not the address (§C.1, §C.3).
+    const [addressUnfolded, setAddressUnfolded] = useState(false);
+    const addressShown = plan.page === 'invite' || plan.page === 'preview' || addressUnfolded;
+
+    // The global community, offered on the other pages as the sheet will offer it (§B), state-labelled. Not on a page about
+    // the global community itself. Its door is asked fresh here: this screen may be drawn with no network, and a failure
+    // must read as "can't reach it", never vanish (no-domain-lock-in: everything else on the screen works without it).
+    const offerGlobalRow = plan.page !== 'open' && !pageIsGlobal && !otherNodes.some((n) => isGlobalCommunity(n.url));
+    const [globalDoor, setGlobalDoor] = useState<{ state: GlobalDoorState; wordsDoor: boolean }>({ state: 'unknown', wordsDoor: false });
+    const askGlobalDoor = useCallback(() => {
+        setGlobalDoor((d) => ({ ...d, state: 'unknown' }));
+        checkGlobalDoor(GLOBAL_NODE_URL)
+            .then((c) => setGlobalDoor({ state: doorStateFromCheck(c), wordsDoor: c.ok && wordsDoorOn(c.profile.features) }))
+            .catch(() => setGlobalDoor({ state: 'unreachable', wordsDoor: false }));
+    }, []);
+    useEffect(() => { if (offerGlobalRow && identity) askGlobalDoor(); }, [offerGlobalRow, !!identity, askGlobalDoor]);
+    const globalEntry = useGlobalEntry(offerGlobalRow, globalDoor.state);
 
     async function handleReconnect() {
         const url = normalizeNodeUrl(input);
         if (!url || !looksLikeNodeAddress(url)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError(t("That address doesn't look right. Use something like node.yourcommunity.org"));
             return;
         }
         await switchToNode(url);
     }
 
     async function switchToNode(url: string) {
+        if (!identity?.privateKey) return;
         setLoading(true);
         setError(null);
         try {
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             assertPlainNodeAddress(url);
-            // Each node has its own local DB — swap it the same way Settings does.
-            const { closeDB, initDB } = await import('../utils/db');
-            await closeDB();
-            await AsyncStorage.setItem('beanpool_anchor_url', url);
-            await initDB();
-            // The update screen asks the community now in use (utils/community-switch.ts).
-            communitySwitched();
-
-            const result = await recheck();
-            const { isGuestNode } = await import('../utils/nodes');
-            const intentionalGuest = result === 'stranger' && await isGuestNode(url);
-            if (result === 'member' || intentionalGuest) {
+            // Asked first (utils/reconnect.ts): the phone moves only for a member, or a guest visit it chose. Any other
+            // answer writes nothing (decision 4): not the community in use, not its database, not the saved list.
+            const answer = await askBeforeSwitch(url, { publicKey: identity.publicKey, privateKey: identity.privateKey });
+            if (answer.kind === 'member' || answer.kind === 'guest') {
+                await recheck();
                 requestSync().catch(() => {});
                 router.replace('/(tabs)');
-            } else if (result === 'stranger') {
-                setError("That community also doesn't recognise your account. Double-check the address with whoever invited you.");
+            } else if (answer.kind === 'unreachable') {
+                setError(t("Couldn't reach that community. Check the address and your connection, then try again."));
+            } else if (url === nodeUrl) {
+                setAsked(null);
+                setHere({ profile: answer.profile, reachable: answer.reachable });
             } else {
-                setError("Couldn't reach that node. Check the address and your connection, then try again.");
+                setAsked({ url, answer: answer.kind, profile: answer.profile, reachable: answer.reachable });
+                setAddressUnfolded(false);
             }
         } catch (e: any) {
-            setError(e?.message || 'Could not switch to that node.');
+            setError(e?.message || t('Could not switch to that community.'));
         } finally {
             setLoading(false);
+        }
+    }
+
+    // An invite (§C.1, the invite and preview pages): for the community a link names, else the one the page is about. The
+    // join path every second community takes (join-another-community.ts): the phone moves there, redeems, and goes back
+    // to the community it came from if the redeem fails.
+    const [inviteText, setInviteText] = useState('');
+    async function pasteInvite() {
+        try {
+            const pasted = ((await Clipboard.getStringAsync()) ?? '').trim();
+            if (pasted) setInviteText(pasted);
+        } catch {
+            // Nothing pasted: the field takes typing too.
+        }
+    }
+    async function joinWithInvite() {
+        if (!identity) return;
+        setError(null);
+        let invite: { targetUrl: string; code: string } | null;
+        try {
+            invite = inviteFromText(inviteText, pageUrl);
+        } catch (e: any) {
+            setError(e?.message || t("That invite doesn't look right."));
+            return;
+        }
+        if (!invite) return;
+        setJoiningInvite(true);
+        try {
+            const joined = await joinAnotherCommunity({
+                targetUrl: invite.targetUrl, code: invite.code, identity, returnUrl: nodeUrl,
+                knownName: invite.targetUrl === pageUrl && !pageIsGlobal ? pageName : null,
+            });
+            await recheck().catch(() => 'unknown');
+            setInviteText('');
+            const nudge = joinedNudge(joined.name);
+            Alert.alert(nudge.title, nudge.body, [
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
+            ], { cancelable: false });
+        } catch (e: any) {
+            // The community's own words; the phone is back where it was (join-another-community.ts).
+            setError(e?.message || t('Your join could not be completed. Please try again.'));
+        } finally {
+            setJoiningInvite(false);
         }
     }
 
@@ -190,54 +301,181 @@ export default function NodeMismatchScreen() {
         );
     }
 
+    // The page's words (§E). A page about a community the phone isn't on says so: nothing was changed.
+    const title = plan.page === 'open' ? t("You're not a member here yet")
+        : plan.page === 'closed' ? t('Your account in {name} was closed', { name: pageName })
+        : t("This community doesn't recognise you");
+    const body = plan.page === 'open'
+        ? t('{name} lets anyone join. Your account is fine: join with it, or go back to one of your communities.', { name: pageIsGlobal ? t('The global community') : nameOf(pageUrl) })
+        : plan.page === 'closed' ? t('You deleted it, or the community removed it. Your other communities are not affected.')
+        : plan.page === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
+        : asked ? t("Your account is fine, but that community doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.")
+        : t("Your account is fine, but the community you're connected to doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.");
+    const emoji = plan.page === 'open' ? '🌍' : plan.page === 'closed' ? '🔒' : '🧭';
+
+    // The global community's row (§B.3's words), on the invite, preview and closed pages.
+    const globalLine: Record<string, string | null> = {
+        join: globalDoor.wordsDoor ? t('Join with this account: 12 words or a sign-in') : t('Join with this account: a sign-in'),
+        checking: t('Checking…'),
+        unreachable: t("Can't reach it right now. Tap to try again."),
+        closed: t('Not taking new members right now.'),
+        preview: t('This community is in a private preview. Ask its owner for an invite.'),
+        closedAccount: t('Your account there was closed.'),
+        member: GLOBAL_NODE_URL.replace(/^https?:\/\//, ''),
+        noAccount: null,
+    };
+    const globalTap = globalEntry === 'join' ? () => router.push('/join-global')
+        : globalEntry === 'unreachable' ? askGlobalDoor
+        : globalEntry === 'member' ? () => switchToNode(GLOBAL_NODE_URL)
+        : undefined;
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
             <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
-                        <Text style={styles.emoji}>🧭</Text>
-                        <Text style={styles.title}>This community doesn't recognise you</Text>
-                        <Text style={styles.body}>
-                            Your account is fine — but the community node you're connected to doesn't
-                            have you as a member. This almost always means the node address is wrong.
-                        </Text>
+                        <Text style={styles.emoji}>{emoji}</Text>
+                        <Text style={styles.title} accessibilityRole="header">{title}</Text>
+                        <Text style={styles.body}>{body}</Text>
 
-                        {nodeUrl ? (
+                        {pageUrl ? (
                             <View style={styles.currentBox}>
-                                <Text style={styles.currentLabel}>Currently connected to</Text>
-                                <Text style={styles.currentUrl}>{nodeUrl}</Text>
+                                <Text style={styles.currentLabel}>{asked ? t('You asked about') : t('Currently connected to')}</Text>
+                                <Text style={styles.currentUrl}>{pageUrl}</Text>
+                                {asked && nodeUrl ? (
+                                    <Text style={[styles.currentLabel, { marginTop: 6, marginBottom: 0 }]}>
+                                        {t('Your phone is still on {community}. Nothing was changed.', { community: nameOf(nodeUrl) })}
+                                    </Text>
+                                ) : null}
                             </View>
                         ) : null}
+
+                        {plan.page === 'open' && (
+                            <Pressable
+                                style={styles.primaryBtn}
+                                onPress={() => router.push('/join-global')}
+                                disabled={busy}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Join with this account')}
+                            >
+                                <Text style={styles.primaryBtnText}>{t('Join with this account')}</Text>
+                            </Pressable>
+                        )}
 
                         <SavedNodePicker
                             nodes={otherNodes}
                             onPick={switchToNode}
                             disabled={busy}
-                            label="Switch to one of your communities"
-                            actionLabel="Switch to"
-                            hint="Or enter a different address below."
+                            label={t('Switch to one of your communities')}
+                            actionLabel={t('Switch to')}
+                            hint={addressShown ? t('Or enter a different address below.') : undefined}
                         />
 
-                        <Text style={styles.inputLabel}>Correct community node address</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. node.yourcommunity.org"
-                            placeholderTextColor={colors.text.muted}
-                            value={input}
-                            onChangeText={(t) => { setInput(t); setError(null); }}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            keyboardType="url"
-                            accessibilityLabel="Community node address"
-                        />
-                        <Text style={styles.hint}>Not sure? Ask whoever invited you for the exact address.</Text>
+                        {!addressShown ? (
+                            <Pressable style={styles.linkBtn} onPress={() => setAddressUnfolded(true)} disabled={busy} accessibilityRole="button">
+                                <Text style={styles.linkBtnText}>{t('Not this community? Enter another address')}</Text>
+                            </Pressable>
+                        ) : (
+                            <>
+                                <Text style={styles.inputLabel}>{t('Community address')}</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. node.yourcommunity.org"
+                                    placeholderTextColor={colors.text.muted}
+                                    value={input}
+                                    onChangeText={(v) => { setInput(v); setError(null); }}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                    accessibilityLabel={t('Community address')}
+                                />
+                                <Text style={styles.hint}>{t('Not sure? Ask whoever invited you for the exact address.')}</Text>
+                                <Pressable
+                                    style={plan.page === 'open' ? styles.outlineBtn : styles.primaryBtn}
+                                    onPress={handleReconnect}
+                                    disabled={busy}
+                                    accessibilityRole="button"
+                                >
+                                    {loading
+                                        ? <ActivityIndicator color={plan.page === 'open' ? colors.text.secondary : colors.text.inverse} />
+                                        : <Text style={plan.page === 'open' ? styles.outlineBtnText : styles.primaryBtnText}>{t('Reconnect')}</Text>}
+                                </Pressable>
+                            </>
+                        )}
+
+                        {(plan.page === 'invite' || plan.page === 'preview') && (
+                            <View style={styles.inviteBox}>
+                                <Text style={styles.inputLabel}>
+                                    {plan.page === 'preview' ? t('Got an invite from its owner or an admin?') : t('Have an invite?')}
+                                </Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={t('Invite code or link')}
+                                    placeholderTextColor={colors.text.muted}
+                                    value={inviteText}
+                                    onChangeText={(v) => { setInviteText(v); setError(null); }}
+                                    autoCapitalize="characters"
+                                    autoCorrect={false}
+                                    accessibilityLabel={t('Invite code or link')}
+                                />
+                                <View style={styles.inviteActions}>
+                                    <Pressable style={styles.outlineBtnSmall} onPress={pasteInvite} disabled={busy} accessibilityRole="button">
+                                        <Text style={styles.outlineBtnText}>{t('Paste an invite')}</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[styles.outlineBtnSmall, !inviteText.trim() && { opacity: 0.5 }]}
+                                        onPress={joinWithInvite}
+                                        disabled={busy || !inviteText.trim()}
+                                        accessibilityRole="button"
+                                    >
+                                        {joiningInvite
+                                            ? <ActivityIndicator color={colors.text.secondary} />
+                                            : <Text style={styles.outlineBtnText}>{t('Join with this invite')}</Text>}
+                                    </Pressable>
+                                </View>
+                            </View>
+                        )}
+
+                        {offerGlobalRow && globalLine[globalEntry] ? (
+                            <Pressable
+                                style={styles.globalRow}
+                                onPress={globalTap}
+                                disabled={busy || !globalTap}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Global community, {state}', { state: globalLine[globalEntry] ?? '' })}
+                            >
+                                <Text style={styles.globalIcon}>🌍</Text>
+                                <View style={styles.globalText}>
+                                    <Text style={styles.globalTitle}>{t('Global community')}</Text>
+                                    {/* Never clipped: at 320 dp and 1.3× this card leaves the line about 15 characters, so
+                                        "Join with this account: 12 words or a sign-in" takes four (PR #2098 review). */}
+                                    <Text style={styles.globalSub}>{globalLine[globalEntry]}</Text>
+                                </View>
+                                {globalTap ? <Text style={styles.globalChevron}>›</Text> : null}
+                            </Pressable>
+                        ) : null}
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleReconnect} disabled={busy} accessibilityRole="button">
-                            {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Reconnect</Text>}
-                        </Pressable>
+                        {/* The community in use closed the account: its Delete account is the one request it still takes
+                            from this key, and the only way to erase the profile a removal keeps (Settings deletes at the
+                            community the phone is on, so not for one a Reconnect asked). */}
+                        {plan.page === 'closed' && !asked && (
+                            <View style={styles.closedDeleteBox}>
+                                <Text style={styles.hint}>
+                                    {t('If {name} removed you, it still keeps your profile, so a vote could bring you back. Deleting your account there erases it.', { name: pageName })}
+                                </Text>
+                                <Pressable
+                                    style={styles.outlineBtn}
+                                    onPress={() => router.push(CLOSED_ACCOUNT_DELETE)}
+                                    disabled={busy}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={styles.outlineBtnText}>{t('Delete my account at {name}', { name: pageName })}</Text>
+                                </Pressable>
+                            </View>
+                        )}
 
                         {keptBy && keptBy.length > 0 && !showWipe && (
                             <View style={styles.keptBox} accessibilityLiveRegion="polite">
@@ -342,5 +580,30 @@ function makeStyles(colors: AppColors, dark: boolean) {
         primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
         secondaryBtn: { padding: 14, alignItems: 'center' },
         secondaryBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '500' },
+        // The outlined buttons and the global row wrap their text at 320 dp and 1.3× font: no fixed heights, flex rows
+        // that shrink their text, at least 48 dp to tap.
+        outlineBtn: {
+            borderRadius: 12, padding: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+            borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card,
+        },
+        outlineBtnSmall: {
+            flexGrow: 1, flexBasis: 120, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, minHeight: 48,
+            alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card,
+        },
+        outlineBtnText: { color: colors.text.heading, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+        linkBtn: { minHeight: 48, justifyContent: 'center', paddingVertical: 10, marginBottom: 8 },
+        linkBtnText: { color: dark ? colors.text.body : palette.blue600, fontSize: 15, fontWeight: '600' },
+        inviteBox: { marginTop: 8, marginBottom: 8 },
+        closedDeleteBox: { marginTop: 8 },
+        inviteActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+        globalRow: {
+            flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 12, paddingHorizontal: 14,
+            marginTop: 8, marginBottom: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app,
+        },
+        globalIcon: { fontSize: 22 },
+        globalText: { flex: 1, minWidth: 0 },
+        globalTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700' },
+        globalSub: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
+        globalChevron: { color: colors.text.muted, fontSize: 22, fontWeight: '300' },
     });
 }

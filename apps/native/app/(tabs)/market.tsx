@@ -81,6 +81,9 @@ export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c
 
 const MIN_FEED_UNDER_PANEL = 48;
 
+/** How long the Market waits on a first sync (and on its one retry) before it says "Having trouble connecting". */
+const FIRST_SYNC_WAIT_MS = 12_000;
+
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
     // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
@@ -752,21 +755,48 @@ export default function MarketScreen() {
     // still downloading on a slow connection keeps the loader (it used to flash the banner, then
     // the listings arrived a moment later). A real failure — offline, node down, a request timing
     // out — still ends the cycle unsuccessfully and shows the banner.
+    //
+    // Never on one failed cycle, though. A first sync that failed early (a read that went unsigned because the key
+    // couldn't be read yet at a cold start, and was refused; a cold radio's first request) got no second try before the
+    // verdict, so the banner showed and Retry worked at once (Android 1.2.66, 18 Oct). Each wait asks for one sync more:
+    // the first time a cycle fails before the first success, or the 12s pass with none running and none succeeded. The
+    // banner shows only if that one fails too, or its own 12s pass with nothing running and no success.
     const syncWaitElapsedRef = useRef(false);
+    const syncWaitRetriedRef = useRef(false);
+    const firstSyncDoneRef = useRef(firstSyncDone);
+    firstSyncDoneRef.current = firstSyncDone;
     const syncWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const armSyncWait = React.useCallback(() => {
         syncWaitElapsedRef.current = false;
+        syncWaitRetriedRef.current = false;
         setSyncTimedOut(false);
-        if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
-        syncWaitTimerRef.current = setTimeout(() => {
+        const waitOver = () => {
             syncWaitElapsedRef.current = true;
-            if (!isPillarSyncActive()) setSyncTimedOut(true);
-        }, 12000);
+            if (firstSyncDoneRef.current || isPillarSyncActive()) return;
+            if (syncWaitRetriedRef.current) {
+                setSyncTimedOut(true);
+                return;
+            }
+            syncWaitRetriedRef.current = true;
+            requestSync();
+            syncWaitTimerRef.current = setTimeout(waitOver, FIRST_SYNC_WAIT_MS);
+        };
+        if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
+        syncWaitTimerRef.current = setTimeout(waitOver, FIRST_SYNC_WAIT_MS);
     }, []);
     useEffect(() => {
         armSyncWait();
+        // The boot sync may have ended before this screen was listening, its pillar_sync_done missed with nothing in the
+        // copy to show: one sync of the Market's own, unless one is queued or running already.
+        if (!firstSyncDoneRef.current && !isPillarSyncActive()) requestSync();
         const endedSub = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, (e?: { success?: boolean }) => {
-            if (syncWaitElapsedRef.current && !e?.success) setSyncTimedOut(true);
+            if (e?.success || firstSyncDoneRef.current) return;
+            if (!syncWaitRetriedRef.current) {
+                syncWaitRetriedRef.current = true;
+                requestSync();
+            } else if (syncWaitElapsedRef.current) {
+                setSyncTimedOut(true);
+            }
         });
         return () => {
             endedSub.remove();

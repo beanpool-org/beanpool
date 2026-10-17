@@ -15,6 +15,7 @@ import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from '../engine/photo-upload-budget.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2894,6 +2895,10 @@ export function createCrowdfundProject(
     // updateProfile: read it as "no photo" rather than rejecting the whole save.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
+    const incomingBytes = photoUrl ? incomingPhotoBytes(photoUrl) : 0;
+    if (incomingBytes > 0 && creator_pubkey) {
+        assertMayStorePhotoBytes(creator_pubkey, incomingBytes);
+    }
     const now = new Date().toISOString();
     const callsign = projectRowName(db, title, id);
 
@@ -2922,6 +2927,10 @@ export function createCrowdfundProject(
             VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
         `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
+
+    if (incomingBytes > 0 && creator_pubkey) {
+        recordStoredPhotoBytes(creator_pubkey, incomingBytes);
+    }
 }
 
 /**
@@ -2973,6 +2982,10 @@ export function updateCrowdfundProject(
     // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
+    const incomingBytes = photoUrl ? incomingPhotoBytes(photoUrl) : 0;
+    if (incomingBytes > 0 && creator_pubkey) {
+        assertMayStorePhotoBytes(creator_pubkey, incomingBytes);
+    }
     photos = ownAvatarUrlsAsStored(id, project.photos, photos);
     // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
     const rowName = projectRowName(db, title, id);
@@ -3005,6 +3018,10 @@ export function updateCrowdfundProject(
         }
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
+
+    if (incomingBytes > 0 && creator_pubkey) {
+        recordStoredPhotoBytes(creator_pubkey, incomingBytes);
+    }
 }
 
 /** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */

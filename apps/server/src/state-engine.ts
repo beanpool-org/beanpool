@@ -7956,6 +7956,10 @@ export function createTreasury(
     if (avatarRefusal) throw photoRefusalError(avatarRefusal, AVATAR_FORMAT_ERROR);
     // Served by /api/avatar/<enterprise key> to anyone who asks, so it is stored without its metadata (G9a-3).
     avatar = stripImageValue(avatar);
+    const incomingBytes = incomingPhotoBytes(avatar);
+    if (incomingBytes > 0 && opts.leadKeeperPubkey) {
+        assertMayStorePhotoBytes(opts.leadKeeperPubkey, incomingBytes);
+    }
     // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
@@ -8031,6 +8035,10 @@ export function createTreasury(
                     VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
     })();
+
+    if (incomingBytes > 0 && opts.leadKeeperPubkey) {
+        recordStoredPhotoBytes(opts.leadKeeperPubkey, incomingBytes);
+    }
 
     clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);

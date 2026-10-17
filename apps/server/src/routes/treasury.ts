@@ -38,6 +38,7 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { photoValueRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
@@ -592,6 +593,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         photoUrl = stripImageValue(photoUrl);
+        const incomingBytes = incomingPhotoBytes(photoUrl);
+        if (incomingBytes > 0) {
+            try {
+                assertMayStorePhotoBytes(actor, incomingBytes);
+            } catch (e) {
+                if (respondProfileRefusal(ctx, e)) return;
+                throw e;
+            }
+        }
         const enterprisePurpose = replaceLoneSurrogates(String(purpose || description || enterpriseName).trim());
         // Its name and purpose are sent whole by every list of enterprises (#1493): each held to its limit.
         try { assertEnterpriseText(enterpriseName, enterprisePurpose); } catch (e: any) {
@@ -662,6 +672,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 deadlineAt: parsedDeadline,
             };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             ctx.status = 400;
             ctx.body = { error: memberErrorText(e, 'Failed to create enterprise') };
         }

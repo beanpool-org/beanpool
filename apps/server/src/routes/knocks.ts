@@ -58,6 +58,8 @@ import {
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
 import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
 import { NamesListError } from '../engine/names-list.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -229,14 +231,30 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         const fromNode = parseFromNode(body.fromNode);
         if (!fromNode.ok) return answer(ctx, 400, fromNode.error, 'bad_request');
 
-        const outcome = submitKnock({
-            pubkey: applicant,
-            callsign: callsign.value,
-            message: message.value,
-            avatar: avatar.value,
-            fromNode: fromNode.value,
-            address: clientLimiterKey(ctx),
-        });
+        const incomingBytes = incomingPhotoBytes(avatar.value);
+        if (incomingBytes > 0) {
+            try {
+                assertMayStorePhotoBytes(applicant, incomingBytes);
+            } catch (e) {
+                if (respondProfileRefusal(ctx, e)) return;
+                throw e;
+            }
+        }
+
+        let outcome;
+        try {
+            outcome = submitKnock({
+                pubkey: applicant,
+                callsign: callsign.value,
+                message: message.value,
+                avatar: avatar.value,
+                fromNode: fromNode.value,
+                address: clientLimiterKey(ctx),
+            });
+        } catch (e) {
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
         if (!outcome.ok) return refuseKnock(ctx, outcome.reason);
         ctx.status = 201;
         ctx.body = { knock: { status: 'pending' } };

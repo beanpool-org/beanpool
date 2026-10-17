@@ -404,6 +404,112 @@ async function main(): Promise<void> {
         check('restart-budget-sentence', errorOf(s2) === BUDGET_SENTENCE, `refusal after restart has budget sentence`);
     }
 
+    // ── 8. Missed paths: createTreasury, routes/treasury, routes/knocks, crowdfund projects ──
+    {
+        resetPhotoBudgetForTests();
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '25000'; // 25 KB budget
+        const hugeImg = du('image/jpeg', await noiseJpeg(200, 200)); // ~35 KB > 25 KB
+
+        // 8.1 createTreasury direct call: checks and records when leadKeeperPubkey is passed
+        {
+            const lead = member('BudLeadTreasury');
+            const t1 = se.createTreasury('TreasuryPass', bigImg, 0, { leadKeeperPubkey: lead.pk });
+            check('treasury-create-under-budget', !!t1.publicKey, 'createTreasury under budget succeeds');
+
+            let threwTreasury = false;
+            try {
+                se.createTreasury('TreasuryRefused', bigImg, 0, { leadKeeperPubkey: lead.pk });
+            } catch (e: any) {
+                threwTreasury = String(e?.message).includes("You've shared a lot of photos today");
+            }
+            check('treasury-create-over-budget', threwTreasury, 'createTreasury crossing budget throws');
+        }
+
+        // 8.2 POST /api/enterprise (routes/treasury.ts): under budget passes, over budget 429
+        {
+            const entMember = member('BudEntMember');
+            const e1 = await req('POST', '/api/enterprise', entMember, {
+                name: 'EntOne',
+                purpose: 'Testing enterprise budget',
+                avatar: bigImg,
+            });
+            check('enterprise-route-under-budget', e1.status === 200, `POST /api/enterprise under budget → 200 (got ${e1.status})`);
+
+            const e2 = await req('POST', '/api/enterprise', entMember, {
+                name: 'EntTwo',
+                purpose: 'Testing enterprise budget over',
+                avatar: bigImg,
+            });
+            check('enterprise-route-over-budget-status', e2.status === 429, `POST /api/enterprise over budget → 429 (got ${e2.status})`);
+            check('enterprise-route-over-budget-sentence', errorOf(e2) === BUDGET_SENTENCE, `POST /api/enterprise refusal has budget sentence`);
+            check('enterprise-route-retry-after', !!e2.headers.get('retry-after'), `POST /api/enterprise has Retry-After header`);
+        }
+
+        // 8.3 POST /api/join/knock (routes/knocks.ts): under budget passes, over budget 429
+        {
+            const applicant1 = newId();
+            const k1 = await req('POST', '/api/join/knock', applicant1, {
+                callsign: 'KnockOne',
+                message: 'Hello, I want to join the community.',
+                avatar: bigImg,
+                fromNode: 'https://global.beanpool.org/',
+            });
+            check('knock-route-under-budget', k1.status === 201, `POST /api/join/knock under budget → 201 (got ${k1.status})`);
+
+            const applicant2 = newId();
+            const k2 = await req('POST', '/api/join/knock', applicant2, {
+                callsign: 'KnockTwo',
+                message: 'Hello again.',
+                avatar: hugeImg,
+                fromNode: 'https://global.beanpool.org/',
+            });
+            check('knock-route-over-budget-status', k2.status === 429, `POST /api/join/knock over budget → 429 (got ${k2.status})`);
+            check('knock-route-over-budget-sentence', errorOf(k2) === BUDGET_SENTENCE, `POST /api/join/knock refusal has budget sentence`);
+            check('knock-route-retry-after', !!k2.headers.get('retry-after'), `POST /api/join/knock has Retry-After header`);
+        }
+
+        // 8.4 Crowdfund project creation & update (routes/commons.ts & db.ts)
+        {
+            const crowdfundCreator = member('BudCrowdCreator');
+            const p1 = await req('POST', '/api/crowdfund/projects', crowdfundCreator, {
+                title: 'Community Garden Project',
+                description: 'Seeds and tools for everyone in town',
+                goalAmount: 500,
+                photos: [bigImg],
+            });
+            check('crowdfund-create-under-budget', p1.status === 200, `POST /api/crowdfund/projects under budget → 200 (got ${p1.status})`);
+
+            const p2 = await req('POST', '/api/crowdfund/projects', crowdfundCreator, {
+                title: 'Community Bakery Project',
+                description: 'Flour and ovens for baking bread',
+                goalAmount: 1000,
+                photos: [bigImg],
+            });
+            check('crowdfund-create-over-budget-status', p2.status === 429, `POST /api/crowdfund/projects over budget → 429 (got ${p2.status})`);
+            check('crowdfund-create-over-budget-sentence', errorOf(p2) === BUDGET_SENTENCE, `POST /api/crowdfund/projects refusal has budget sentence`);
+
+            const cfMember2 = member('BudCrowdUpdate');
+            const p3 = await req('POST', '/api/crowdfund/projects', cfMember2, {
+                title: 'Library Project',
+                description: 'Books for all members',
+                goalAmount: 300,
+                photos: [smallImg],
+            });
+            check('crowdfund-update-init', p3.status === 200, `POST /api/crowdfund/projects initial project → 200 (got ${p3.status})`);
+            const projId = p3.body?.project?.id;
+
+            const p4 = await req('POST', '/api/crowdfund/projects/update', cfMember2, {
+                id: projId,
+                title: 'Library Project Updated',
+                description: 'Books and shelves for all members',
+                goalAmount: 300,
+                photos: [hugeImg],
+            });
+            check('crowdfund-update-over-budget-status', p4.status === 429, `POST /api/crowdfund/projects/update over budget → 429 (got ${p4.status})`);
+            check('crowdfund-update-over-budget-sentence', errorOf(p4) === BUDGET_SENTENCE, `POST /api/crowdfund/projects/update refusal has budget sentence`);
+        }
+    }
+
     console.log(`\n${passed}/${run} passed.`);
     if (fails.length > 0) {
         console.error(`FAILS: ${fails.join(', ')}`);

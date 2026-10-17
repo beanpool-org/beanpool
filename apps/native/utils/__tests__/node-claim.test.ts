@@ -12,7 +12,7 @@ vi.mock('expo-crypto', async () => {
 
 import {
     APP_CLAIM_SCRYPT, CLAIM_NAME_MAX, buildClaimBody, cleanClaimName, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, type OwnerCheck,
+    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, claimLinkFromScan, CLAIM_CODE_PLACEHOLDER, type OwnerCheck,
 } from '../node-claim';
 
 // core's fixed vectors (packages/beanpool-core/src/__tests__/claim-proof.test.ts), made with Node's crypto.
@@ -405,6 +405,25 @@ describe('the success buttons and the scan', () => {
         expect(claimCodeFromScan(`beanpool://claim?node=https://other.example&code=${CODE}`, ORIGIN)).toBeNull();
         expect(claimCodeFromScan(` ${CODE.toUpperCase()} `, ORIGIN)).toBe(CODE);
         expect(claimCodeFromScan('https://evil.example', ORIGIN)).toBeNull();
+    });
+
+    it('a scan before the server is known reads its address and code, the code alone, or a refused address; nothing else', () => {
+        expect(claimLinkFromScan(`beanpool://claim?node=${encodeURIComponent(ORIGIN)}&id=${CODE_ID}&code=${CODE}`))
+            .toEqual({ node: ORIGIN, nodeRefused: false, codeId: CODE_ID, code: CODE });
+        expect(claimLinkFromScan(`beanpool://claim?node=${ORIGIN}&id=${CODE_ID}`)).toEqual({ node: ORIGIN, nodeRefused: false, codeId: CODE_ID, code: null });
+        expect(claimLinkFromScan(`beanpool://claim?id=${CODE_ID}&code=${CODE}`)).toEqual({ node: null, nodeRefused: false, codeId: CODE_ID, code: CODE });
+        expect(claimLinkFromScan(`beanpool://claim?node=http://203.0.113.7:8080&code=${CODE}`)).toEqual({ node: null, nodeRefused: true, codeId: null, code: CODE });
+        expect(claimLinkFromScan(` ${CODE.toUpperCase()} `)).toEqual({ node: null, nodeRefused: false, codeId: null, code: CODE });
+        for (const raw of ['beanpool://claim', `beanpool://claim?id=${CODE_ID}`, 'https://evil.example', `https://${HOST}/claim?code=${CODE}`, CLAIM_CODE_PLACEHOLDER, '', null]) {
+            expect(claimLinkFromScan(raw), String(raw)).toBeNull();
+        }
+    });
+
+    it('the empty code field\'s example is a pattern no field or scan reads as a code', () => {
+        expect(CLAIM_CODE_PLACEHOLDER).toBe('xxxx-xxxx-xxxx-xxxx');
+        expect(claimCodeDigits(CLAIM_CODE_PLACEHOLDER)).toBe('');
+        expect(isClaimCode(`claim-${CLAIM_CODE_PLACEHOLDER}`)).toBe(false);
+        expect(claimCodeFromScan(CLAIM_CODE_PLACEHOLDER, ORIGIN)).toBeNull();
     });
 });
 

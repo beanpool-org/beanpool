@@ -116,9 +116,14 @@ async function main(): Promise<void> {
     // ── E5: a series between its date's end and the minute roll ──
     {
         const host = member('FfRlHost'), ivy = member('FfIvy');
+        // The series is Saturdays at 18:00 in Brisbane (UTC+10, no daylight saving): the NEXT date is the first Saturday whose 18:00
+        // there is still ahead, so the date before it has always passed. Counted in UTC, 'the Saturday before' was today, still to come,
+        // for the ten hours each Saturday before 08:00Z (17 Oct, CI red on every PR).
         const now = new Date();
-        const daysToSat = ((6 - now.getUTCDay()) + 7) % 7 || 7;
-        const sat = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToSat));
+        const brisbane = new Date(now.getTime() + 10 * HOUR);
+        let satMs = Date.UTC(brisbane.getUTCFullYear(), brisbane.getUTCMonth(), brisbane.getUTCDate() + ((6 - brisbane.getUTCDay()) + 7) % 7);
+        if (satMs + 8 * HOUR <= now.getTime()) satMs += 7 * DAY; // that Saturday's 18:00 in Brisbane (08:00Z) has passed
+        const sat = new Date(satMs);
         const ymd = sat.toISOString().slice(0, 10), prev = new Date(sat.getTime() - 7 * DAY).toISOString().slice(0, 10);
         const s = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff weekly', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartLocal: `${ymd}T18:00`, eventEndLocal: `${ymd}T19:00`, eventTz: 'Australia/Brisbane', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' } });
         const id = s.body?.post?.id;

@@ -83,7 +83,8 @@ sees the page without 2FA): the app "BeanPool control room (registrar admin)" on
 `tradeconnector.cloudflareaccess.com`, its policy one email, with its own MFA (an email code and an authenticator).
 Access signs every request it lets through (`Cf-Access-Jwt-Assertion`, an RS256 JWT), and the Worker believes nothing
 else (`src/access.js`): the signature against the team's keys (`https://<team>/cdn-cgi/access/certs`, cached an hour,
-fetched again once for a key id it doesn't know and then not for 30 s, fail closed when they can't be fetched; a key
+fetched again once for a key id it doesn't know and then not for 30 s — requests that arrive during that fetch wait
+for it — fail closed when they can't be fetched; a key
 shorter than RSA 2048 is skipped), `aud` holding `ACCESS_AUD`, `iss` = `https://<ACCESS_TEAM_DOMAIN>`, `exp`
 (required), `nbf` and `iat` with 60 s of skew, and the `email` claim in `ADMIN_EMAILS` (a comma list, any case). Not
 Access's plain email header, not a cookie, and not the route: workers.dev, or a path Access doesn't cover, reaches the

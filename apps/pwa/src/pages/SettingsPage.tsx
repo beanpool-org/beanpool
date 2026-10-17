@@ -23,7 +23,7 @@ import {
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
-import { webAppHost } from '../lib/former-address';
+import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -224,7 +224,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const communityInfo = useCommunityInfo();
     const pageHost = webAppHost();
     const phoneLater = phoneLaterLines({
-        where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: pageHost, hasWords, signIns: signInRecoveryNames,
+        where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: webAppAddress(), hasWords, signIns: signInRecoveryNames,
     });
     const globalCommunity = globalCommunityLink(communityInfo, pageHost);
 

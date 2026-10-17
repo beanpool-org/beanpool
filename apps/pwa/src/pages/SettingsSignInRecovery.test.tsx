@@ -252,7 +252,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
         expect(lines()).toEqual([
-            `To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, localhost.`,
+            `To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, localhost:3000.`,
         ]);
     });
 
@@ -267,7 +267,37 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         expect(row.getAttribute('target')).toBe('_blank');
         expect(row.getAttribute('rel')).toBe('noopener noreferrer');
         expect(row).toHaveAccessibleName('Global community, global.example.org, opens in a new tab');
-        expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, localhost."]);
+        // jsdom serves the page at http://localhost:3000: the address keeps its port (review 4302869884).
+        expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, localhost:3000."]);
+    });
+
+    it('a community served on a port of its own: the phone is told the port too, as the Node line says it (review 4302869884)', async () => {
+        // Nothing here may reach a network: every call this page makes that isn't mocked is refused.
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+        localStorage.setItem('bp_node_url', 'https://mynode.example.org:8443');
+        try {
+            vi.mocked(api.getCommunityInfo).mockResolvedValue({ ...LOCAL, addresses: ['mynode.example.org'] });
+            vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+            renderSettings();
+            await screen.findByTestId('signin-recovery');
+            await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/12 words/));
+            expect(lines()).toEqual([
+                "To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, mynode.example.org:8443.",
+                'If you joined with Google, Recover with Social works too.',
+            ]);
+            cleanup();
+            resetCommunityInfoOnce();
+
+            // The same for a browser without its words, in the sign-in line that stands alone.
+            renderSettings(noWordsIdentity);
+            await screen.findByTestId('signin-recovery');
+            await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
+            expect(lines()).toEqual([
+                "To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, mynode.example.org:8443.",
+            ]);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it('a node that names no global community, or one that cannot be asked: no row, never a guess at ours', async () => {

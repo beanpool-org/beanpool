@@ -236,8 +236,9 @@ describe('the words screen says how to put the same account on a phone (W1)', ()
 
     it("a self-hoster's global community: its own address, never Global community, which would restore into ours", async () => {
         const lines = await toTheWordsAt({ ...GLOBAL_OPEN, addresses: ['global.example.org'] }, null);
-        // jsdom serves the page at localhost: the address the phone is told to type is the one this page is at.
-        expect(lines.textContent).toBe("To use BeanPool on your phone later: install the app, tap Already a member and type these 12 words and this community's address, localhost.");
+        // jsdom serves the page at http://localhost:3000: the address the phone is told to type is the one this page is
+        // at, port and all (review 4302869884; lib/former-address.test.ts has https://mynode.example.org:8443).
+        expect(lines.textContent).toBe("To use BeanPool on your phone later: install the app, tap Already a member and type these 12 words and this community's address, localhost:3000.");
         expect(lines).not.toHaveTextContent(/Global community/);
     });
 });

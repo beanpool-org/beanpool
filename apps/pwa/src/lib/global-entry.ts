@@ -75,7 +75,8 @@ export function lobbyJoinWays({ phone, appsGlobal, doorOpen }: { phone: boolean;
 /**
  * How to put this account on a phone (design §D), where the 12 words are on screen (`backup`, Safety Backup) or not
  * (`settings`). At the community the app offers by name: choose **Global community**, as the phone's restore lists it.
- * At any other: that community's address, typed with the words, as the phone's restore asks for it. `host` null: no
+ * At any other: that community's address, typed with the words, as the phone's restore asks for it (`host`, with the
+ * port it is served on when that isn't the scheme's own: lib/former-address.ts webAppAddress). `host` null: no
  * address to give, so no words line. `hasWords` false (a browser restored from a copy without them): no words line
  * either, as nothing in Settings tells such a browser to rely on words it hasn't got (components/SignInRecoveryLine).
  * `signIns`: the sign-ins that bring this account back, as a member reads them ("Google"); null or empty, no sign-in

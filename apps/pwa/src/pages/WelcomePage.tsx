@@ -12,7 +12,7 @@
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { BoldWords } from '../components/BoldWords';
 import { isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
-import { webAppHost } from '../lib/former-address';
+import { webAppAddress, webAppHost } from '../lib/former-address';
 import { useLanguage } from '../lib/useLanguage';
 import React, { useState, useRef, useEffect, useId } from 'react';
 import {
@@ -2154,7 +2154,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 made again (DESIGN-global-entry-fable.md §D). */}
                             <div data-testid="backup-phone-later" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                 {phoneLaterLines({
-                                    where: 'backup', appsGlobal, host: webAppHost(),
+                                    where: 'backup', appsGlobal, host: webAppAddress(),
                                     signIns: signInRecovery ? providerLabel(signInRecovery) : null,
                                 }).map((line) => <p key={line} style={{ margin: '0 0 0.4rem' }}><BoldWords text={line} /></p>)}
                             </div>

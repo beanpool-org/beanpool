@@ -2,8 +2,8 @@
  * Who is told a DM participant's former keys (DESIGN-dm-peer-key-pin-fable.md §5 slice 3, P11; #1871 review NB1, NB4).
  * Over REAL HTTPS through the real signature middleware, with real Ed25519 identities and the members' own signed
  * statements. Run with read auth on (the plain run) and with ENFORCE_READ_AUTH=false (an open node, the readauth-off
- * variant in scripts/server-suites.mjs): on an open node anyone may read anyone's list or DM, so only the routes' own
- * choice of reader keeps `formerKeys` to the DM's people.
+ * variant in scripts/server-suites.mjs): someone else's list or DM is refused on an open node too (#1909, #2119), and
+ * `formerKeys` goes only to the DM's people.
  *
  *   A.  every reader (a guest with no key, Cat a member outside the DM, Adam the node's admin, Olive its owner, Ben and
  *       Ana₃ the DM's two, Zed whom Ana₃ blocked) reads their own list, Ben's list, the DM by id, a DM nobody re-keyed by
@@ -11,8 +11,7 @@
  *       someone in that DM reading it as theirs: Ben and Ana₃ on their own lists and on the DM by id, Zed on his own list
  *       and on his withheld DM by id (left out there, it would tell him he is blocked). Every other answer names no former
  *       key anywhere in its body. Read auth on: the refusals as before (a guest 401, someone else's list or DM 403).
- *       Read auth off: every answer is a 200, so "none" is never a refusal passing for one — except someone else's
- *       conversation list, which is its owner's alone whatever read auth says (#1909): a guest 401, anyone else 403.
+ *       Read auth off: the same, but a guest reading a DM by id gets the route's 403, not the read gate's 401 (#2119).
  *   B.  a participant who deleted their account (#1871 review NB4): Fay₂'s former keys are served to nobody, while Dan₂'s
  *       in the same DM still are, on the list and by id; a DM in which only Fay re-keyed is served as one nobody re-keyed.
  *       Fay's replaced keys stay refused (their rows are kept).
@@ -153,15 +152,14 @@ async function main(): Promise<void> {
     const sweep = async (phase: string) => {
         console.log(`\n── A. every reader, every route (${phase}) ──`);
         for (const { name, who } of readers) {
-            // ownerOnly: refused to anyone else even on an open node (a conversation list, #1909).
-            const routes: { route: string; path: string; conv: string; theirs: boolean; refused: number | null; ownerOnly?: boolean }[] = [];
+            const routes: { route: string; path: string; conv: string; theirs: boolean; refused: number | null }[] = [];
             const unsigned = who === null;
             if (who) {
                 const conv = who === zed ? dmZed : dmAna;
                 routes.push({ route: 'their own list', path: `/api/messages/conversations/${who.pk}`, conv, theirs: who === ben || who === ana3 || who === zed, refused: null });
             }
             routes.push(
-                { route: 'Ben\'s list', path: `/api/messages/conversations/${ben.pk}`, conv: dmAna, theirs: who === ben, refused: unsigned ? 401 : who === ben ? null : 403, ownerOnly: true },
+                { route: 'Ben\'s list', path: `/api/messages/conversations/${ben.pk}`, conv: dmAna, theirs: who === ben, refused: unsigned ? 401 : who === ben ? null : 403 },
                 { route: 'the DM by id', path: `/api/messages/${dmAna}?limit=1`, conv: dmAna, theirs: who === ben || who === ana3, refused: unsigned ? (OPEN ? 403 : 401) : who === ben || who === ana3 ? null : 403 },
                 { route: 'Eve\'s DM by id', path: `/api/messages/${dmEve}?limit=1`, conv: dmEve, theirs: false, refused: unsigned ? (OPEN ? 403 : 401) : who === ben ? null : 403 },
                 { route: 'Zed\'s withheld DM by id', path: `/api/messages/${dmZed}?limit=1`, conv: dmZed, theirs: who === zed, refused: unsigned ? (OPEN ? 403 : 401) : who === zed ? null : 403 },

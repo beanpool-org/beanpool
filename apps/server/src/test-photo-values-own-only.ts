@@ -69,8 +69,7 @@ const OUTSIDE_URLS = [
     'http://insecure.org/pic.jpg',
     '//protocol-relative.net/asset.png',
     'javascript:alert(1)',
-    'https://attacker.com/api/marketplace/posts/fake/photos/0',
-    'http://attacker.com/api/avatar/evil',
+    'https://evil.com/other-path',
 ];
 
 async function main(): Promise<void> {
@@ -110,6 +109,8 @@ async function main(): Promise<void> {
     check('profile-bundled', profBundled.status === 200, `profile update accepts bundled:// avatar → 200 (got ${profBundled.status})`);
     const profSelf = await req('POST', '/api/profile/update', alice, { avatar: `/api/avatar/${alice.pk}` });
     check('profile-self', profSelf.status === 200, `profile update accepts /api/avatar/:pk → 200 (got ${profSelf.status})`);
+    const profSelfAbs = await req('POST', '/api/profile/update', alice, { avatar: `${BASE}/api/avatar/${alice.pk}` });
+    check('profile-self-abs', profSelfAbs.status === 200, `profile update accepts absolute own avatar URL → 200 (got ${profSelfAbs.status})`);
     const profClear = await req('POST', '/api/profile/update', alice, { avatar: '' });
     check('profile-clear', profClear.status === 200, `profile update accepts empty string (clear) → 200 (got ${profClear.status})`);
     // Restore Alice's avatar for subsequent routes (e.g. marketplace)
@@ -128,6 +129,10 @@ async function main(): Promise<void> {
     check('enterprise-bundled', entBundled.status === 200 && !!entBundled.body?.publicKey, `enterprise accepts bundled:// avatar → 200 (got ${entBundled.status})`);
     const entSelf = await req('POST', '/api/enterprise', alice, { name: 'Ent Self', avatar: `/api/avatar/${alice.pk}`, purpose: 'Test' });
     check('enterprise-self', entSelf.status === 200 && !!entSelf.body?.publicKey, `enterprise accepts own photo path → 200 (got ${entSelf.status})`);
+    const entSelfAbs = await req('POST', '/api/enterprise', bob, { name: 'Ent Self Abs', avatar: `${BASE}/api/avatar/${bob.pk}`, purpose: 'Test' });
+    check('enterprise-self-abs', entSelfAbs.status === 200 && !!entSelfAbs.body?.publicKey, `enterprise accepts absolute own avatar URL → 200 (got ${entSelfAbs.status})`);
+    const entPhotosAbs = await req('POST', '/api/enterprise', bob, { name: 'Ent Photos Abs', photos: [`${BASE}/api/avatar/${bob.pk}`], purpose: 'Test' });
+    check('enterprise-photos-abs', entPhotosAbs.status === 200 && !!entPhotosAbs.body?.publicKey, `enterprise accepts absolute own photos URL → 200 (got ${entPhotosAbs.status})`);
 
     // ── 3. POST /api/local/admin/treasury ──
     for (const url of OUTSIDE_URLS) {
@@ -140,6 +145,8 @@ async function main(): Promise<void> {
     check('admin-treasury-bundled', admBundled.status === 200 && !!admBundled.body?.publicKey, `admin treasury accepts bundled:// → 200 (got ${admBundled.status})`);
     const admSelf = await req('POST', '/api/local/admin/treasury', undefined, { name: 'Admin Self', avatar: `/api/avatar/${alice.pk}` }, adminHeaders);
     check('admin-treasury-self', admSelf.status === 200 && !!admSelf.body?.publicKey, `admin treasury accepts own photo path → 200 (got ${admSelf.status})`);
+    const admSelfAbs = await req('POST', '/api/local/admin/treasury', undefined, { name: 'Admin Self Abs', avatar: `${BASE}/api/avatar/${alice.pk}` }, adminHeaders);
+    check('admin-treasury-self-abs', admSelfAbs.status === 200 && !!admSelfAbs.body?.publicKey, `admin treasury accepts absolute own avatar URL → 200 (got ${admSelfAbs.status})`);
 
     // ── 4. POST /api/crowdfund/projects & POST /api/crowdfund/projects/update ──
     for (const url of OUTSIDE_URLS) {
@@ -161,6 +168,14 @@ async function main(): Promise<void> {
     });
     const cfId = cfOk.body?.project?.id;
     check('crowdfund-data', cfOk.status === 200 && !!cfId, `crowdfund create accepts data: PNG → 200 (got ${cfOk.status} ${JSON.stringify(cfOk.body)})`);
+    const cfAbs = await req('POST', '/api/crowdfund/projects', alice, {
+        creatorPubkey: alice.pk,
+        title: 'Crowdfund Abs',
+        description: 'desc',
+        goalAmount: 100,
+        photos: [`${BASE}/api/avatar/${alice.pk}`],
+    });
+    check('crowdfund-abs', cfAbs.status === 200 && !!cfAbs.body?.project?.id, `crowdfund create accepts absolute own photo URL → 200 (got ${cfAbs.status})`);
     if (cfId) {
         for (const url of OUTSIDE_URLS) {
             const resUp = await req('POST', '/api/crowdfund/projects/update', alice, {
@@ -185,6 +200,13 @@ async function main(): Promise<void> {
             photos: [`/api/avatar/${alice.pk}`],
         });
         check('crowdfund-update-self', cfUpSelf.status === 200, `crowdfund update accepts own photo path → 200 (got ${cfUpSelf.status})`);
+        const cfUpSelfAbs = await req('POST', '/api/crowdfund/projects/update', alice, {
+            id: cfId,
+            title: 'Crowdfund Ok',
+            goalAmount: 100,
+            photos: [`${BASE}/api/avatar/${alice.pk}`],
+        });
+        check('crowdfund-update-self-abs', cfUpSelfAbs.status === 200, `crowdfund update accepts absolute own photo URL → 200 (got ${cfUpSelfAbs.status})`);
     }
 
     // ── 5. POST /api/groups & PATCH /api/groups/:id ──
@@ -199,6 +221,8 @@ async function main(): Promise<void> {
     check('groups-bundled', grpBundled.status === 201 && !!(grpBundled.body?.id ?? grpBundled.body?.group?.id), `groups create accepts bundled:// → 201 (got ${grpBundled.status})`);
     const grpSelf = await req('POST', '/api/groups', alice, { name: 'Group Self', avatarUrl: `/api/groups/grp1/picture` });
     check('groups-self', grpSelf.status === 201 && !!(grpSelf.body?.id ?? grpSelf.body?.group?.id), `groups create accepts own group picture path → 201 (got ${grpSelf.status})`);
+    const grpSelfAbs = await req('POST', '/api/groups', alice, { name: 'Group Self Abs', avatarUrl: `${BASE}/api/groups/grp1/picture` });
+    check('groups-self-abs', grpSelfAbs.status === 201 && !!(grpSelfAbs.body?.id ?? grpSelfAbs.body?.group?.id), `groups create accepts absolute own group picture URL → 201 (got ${grpSelfAbs.status})`);
 
     if (gid) {
         for (const url of OUTSIDE_URLS) {
@@ -209,6 +233,8 @@ async function main(): Promise<void> {
         check('groups-patch-data', patchData.status === 200, `groups patch accepts data: PNG → 200 (got ${patchData.status})`);
         const patchSelf = await req('PATCH', `/api/groups/${gid}`, alice, { avatarUrl: `/api/groups/${gid}/picture` });
         check('groups-patch-self', patchSelf.status === 200, `groups patch accepts own group picture path → 200 (got ${patchSelf.status})`);
+        const patchSelfAbs = await req('PATCH', `/api/groups/${gid}`, alice, { avatarUrl: `${BASE}/api/groups/${gid}/picture` });
+        check('groups-patch-self-abs', patchSelfAbs.status === 200, `groups patch accepts absolute own group picture URL → 200 (got ${patchSelfAbs.status})`);
     }
 
     // ── 6. POST /api/pricing-guide/admin/item ──
@@ -238,6 +264,14 @@ async function main(): Promise<void> {
         thumbnailUrl: '/api/marketplace/posts/fake1/photos/0',
     }, adminHeaders);
     check('pricing-guide-self', pgSelf.status === 200, `pricing guide item accepts own post photo path → 200 (got ${pgSelf.status})`);
+    const pgSelfAbs = await req('POST', '/api/pricing-guide/admin/item', undefined, {
+        category: 'produce',
+        emoji: '🍎',
+        name: 'Apple Self Abs',
+        priceBeans: 5,
+        thumbnailUrl: `${BASE}/api/marketplace/posts/fake1/photos/0`,
+    }, adminHeaders);
+    check('pricing-guide-self-abs', pgSelfAbs.status === 200, `pricing guide item accepts absolute own post photo path → 200 (got ${pgSelfAbs.status})`);
 
     // ── 7. POST /api/marketplace/posts & POST /api/marketplace/posts/update ──
     for (const url of OUTSIDE_URLS) {
@@ -265,7 +299,6 @@ async function main(): Promise<void> {
         lng: 153.5,
         photos: [TINY_PNG],
     });
-    check('posts-data', postOk.status === 200 && !!postOk.body?.post?.id, `marketplace post accepts data: PNG → 200 (got ${postOk.status} ${JSON.stringify(postOk.body)})`);
     const postId = postOk.body?.post?.id;
     if (postId) {
         for (const url of OUTSIDE_URLS) {
@@ -283,6 +316,12 @@ async function main(): Promise<void> {
             photos: [`/api/marketplace/posts/${postId}/photos/0`],
         });
         check('posts-update-own', resOwn.status === 200, `post update accepts its own photo path → 200 (got ${resOwn.status})`);
+        const resOwnAbs = await req('POST', '/api/marketplace/posts/update', alice, {
+            id: postId,
+            authorPublicKey: alice.pk,
+            photos: [`${BASE}/api/marketplace/posts/${postId}/photos/0`],
+        });
+        check('posts-update-own-abs', resOwnAbs.status === 200, `post update accepts absolute its own photo path → 200 (got ${resOwnAbs.status})`);
         // Update with new data: PNG
         const resNewData = await req('POST', '/api/marketplace/posts/update', alice, {
             id: postId,
@@ -316,6 +355,60 @@ async function main(): Promise<void> {
         avatar: 'bundled://default',
     });
     check('knock-bundled', knockBundled.status === 201 && knockBundled.body?.knock?.status === 'pending', `knock accepts bundled:// → 201 (got ${knockBundled.status})`);
+
+    // ── 9. POST /api/treasury/:treasury/event (and offer/need) ──
+    const treasuryPk = entData.body?.publicKey;
+    if (treasuryPk) {
+        for (const url of OUTSIDE_URLS) {
+            const resEvent = await req('POST', `/api/treasury/${treasuryPk}/event`, alice, {
+                title: 'Community Event Out',
+                description: 'desc',
+                photos: [url],
+            });
+            check('treasury-event-outside-photos', resEvent.status === 400 && errorOf(resEvent) === 'Each photo must be a JPEG, PNG or WebP image', `treasury event refuses outside photo url ${url} → 400 (got ${resEvent.status} ${JSON.stringify(resEvent.body)})`);
+        }
+        const evData = await req('POST', `/api/treasury/${treasuryPk}/event`, alice, {
+            title: 'Community Event Data',
+            description: 'desc',
+            photos: [TINY_PNG],
+            lat: -28.55,
+            lng: 153.5,
+            eventStartAt: new Date(Date.now() + 30 * 3600 * 1000).toISOString(),
+            eventPlaceName: 'Community Garden',
+        });
+        check('treasury-event-data', evData.status === 200 && !!evData.body?.post?.id, `treasury event accepts data: PNG → 200 (got ${evData.status})`);
+
+        // Offer & Need
+        for (const url of OUTSIDE_URLS) {
+            const resOffer = await req('POST', `/api/treasury/${treasuryPk}/offer`, alice, {
+                title: 'Treasury Offer Out',
+                category: 'goods',
+                photos: [url],
+            });
+            check('treasury-offer-outside-photos', resOffer.status === 400 && errorOf(resOffer) === 'Each photo must be a JPEG, PNG or WebP image', `treasury offer refuses outside photo url ${url} → 400`);
+        }
+        const offerData = await req('POST', `/api/treasury/${treasuryPk}/offer`, alice, {
+            title: 'Treasury Offer Data',
+            category: 'goods',
+            photos: [TINY_PNG],
+        });
+        check('treasury-offer-data', offerData.status === 200 && !!offerData.body?.post?.id, `treasury offer accepts data: PNG → 200 (got ${offerData.status})`);
+
+        for (const url of OUTSIDE_URLS) {
+            const resNeed = await req('POST', `/api/treasury/${treasuryPk}/need`, alice, {
+                title: 'Treasury Need Out',
+                category: 'supplies',
+                photos: [url],
+            });
+            check('treasury-need-outside-photos', resNeed.status === 400 && errorOf(resNeed) === 'Each photo must be a JPEG, PNG or WebP image', `treasury need refuses outside photo url ${url} → 400`);
+        }
+        const needData = await req('POST', `/api/treasury/${treasuryPk}/need`, alice, {
+            title: 'Treasury Need Data',
+            category: 'supplies',
+            photos: [TINY_PNG],
+        });
+        check('treasury-need-data', needData.status === 200 && !!needData.body?.post?.id, `treasury need accepts data: PNG → 200 (got ${needData.status})`);
+    }
 
     console.log(`\n${passed}/${run} passed; failing: ${[...new Set(fails)].join(' ') || 'none'}`);
     process.exit(fails.length ? 1 : 0);

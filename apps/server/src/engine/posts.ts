@@ -1218,7 +1218,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                 })
         );
         updates.photos = updates.photos.map(p => {
-            const m = typeof p === 'string' ? p.match(/^\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/) : null;
+            const m = typeof p === 'string' ? p.match(/(?:^|[a-z][a-z0-9+.-]*:\/\/[^/\s]*)\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/i) : null;
             if (m && m[1] === id) {
                 const data = existingByOrder.get(Number(m[2]));
                 if (data) return data;

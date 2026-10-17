@@ -896,6 +896,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title) { ctx.status = 400; ctx.body = { error: 'title is required' }; return; }
+        if (Array.isArray(b.photos)) {
+            const refusal = routePhotosRefusal(b.photos);
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+        }
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);

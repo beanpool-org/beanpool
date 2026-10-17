@@ -149,18 +149,25 @@ export function isSelfPostPhotoUrl(value: string): boolean {
 /**
  * Is this string one of this node's own photo paths/keys, sent back by an app?
  *
- * Must be a RELATIVE path on this node starting with `/api/`:
+ * May be relative or absolute on any host (e.g. https://<host>/api/...):
  *   - `/api/avatar/<id>...` (member, enterprise or treasury avatar)
  *   - `/api/groups/<id>/picture...` (a group's picture)
  *   - `/api/marketplace/posts/<id>/photos/<n>...` (a post photo / pricing thumbnail)
  *
- * Never an absolute URL: an outside host (e.g. https://... or http://...) or a scheme
- * like `javascript:` or a protocol-relative `//host` must never be stored, because viewers
- * would fetch from that server (a tracking pixel) and load unvouched bytes (#2082).
+ * Reuses the three existing isSelf* helpers while keeping the narrow path shapes.
+ * Refuses protocol-relative `//host`, `javascript:`, and outside paths (`https://evil/other-path`).
  */
 export function isSelfPhotoPath(value: string): boolean {
+    if (typeof value !== 'string') return false;
     const trimmed = value.trim();
-    return /^\/api\/(?:avatar\/[^/?#\s]+|groups\/[^/?#\s]+\/picture|marketplace\/posts\/[^/?#\s]+\/photos\/\d+)(?:[?#]\S*)?$/i.test(trimmed);
+    if (!trimmed) return false;
+    if (/^javascript:/i.test(trimmed) || /^\/\//.test(trimmed)) return false;
+    if (isSelfGroupPictureUrl(trimmed)) return true;
+    if (isSelfPostPhotoUrl(trimmed)) return true;
+    if (isSelfAvatarUrl(trimmed)) {
+        return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/avatar\/[^/?#\s]+(?:[?#]\S*)?$/i.test(trimmed);
+    }
+    return false;
 }
 
 /**

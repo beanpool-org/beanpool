@@ -75,7 +75,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         .acts label { font-size: 0.75rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem; }
         .pair { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
         .mono { font-family: monospace; }
-        .muted { color: var(--text-muted); }
         .domain { font-weight: 700; font-family: monospace; }
         .sub { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }
         .page { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem; }

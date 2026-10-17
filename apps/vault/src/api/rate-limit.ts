@@ -12,7 +12,8 @@ export class RateLimiter {
     /** Counts one against `key`; refused once `limit` are counted in the current window. */
     take(key: string, now: number): { ok: true } | { ok: false; retryAfterMs: number } {
         let entry = this.hits.get(key);
-        if (!entry || now - entry.start >= this.windowMs) {
+        // A clock stepped backwards starts a new window too, rather than holding the old one shut until it catches up (VLT-04).
+        if (!entry || now - entry.start >= this.windowMs || now < entry.start) {
             if (!entry && this.hits.size >= this.maxKeys) this.prune(now);
             entry = { start: now, count: 0 };
             this.hits.set(key, entry);

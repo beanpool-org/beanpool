@@ -62,7 +62,7 @@ import {
 } from '../utils/sso-recovery';
 import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
-import { VAULT_WORDS } from '../utils/vault-words';
+import { VAULT_WORDS, vaultErrorText, vaultTooMany } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -271,7 +271,7 @@ export default function WelcomeScreen() {
             }
         } catch (e) {
             if (e instanceof VaultError && e.message === VAULT_MESSAGES.gone) setSsoWaiting(null);
-            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError((e as Error).message);
+            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError(vaultErrorText(e, t));
         } finally {
             setSsoChecking(false);
         }
@@ -1326,7 +1326,7 @@ export default function WelcomeScreen() {
                 setError(null);
                 setSsoAtCommunity(provider);
             } else {
-                setError(e?.message || `Recovery failed: ${String(e)}`);
+                setError(vaultTooMany(e) ? t(VAULT_WORDS.tooMany) : (e?.message || `Recovery failed: ${String(e)}`));
             }
             // A restore whose answer was lost stays on the phone, and the next try comes back to the same hold.
             setSsoWaiting(await waitingSsoRestore().catch(() => null));
@@ -1378,7 +1378,7 @@ export default function WelcomeScreen() {
             // its key unless even that failed): the app must not go on as it. The restore stays on the phone to try again.
             if (e instanceof ReplaceNotSaved) setIdentity(null);
             if (e?.reason !== 'cancelled') {
-                setError(e?.message || `Recovery failed: ${String(e)}`);
+                setError(vaultTooMany(e) ? t(VAULT_WORDS.tooMany) : (e?.message || `Recovery failed: ${String(e)}`));
                 leaveReplace('ssoRecover');
             }
         } finally {

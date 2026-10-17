@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS } from '../api/server.js';
-import { addressBucket } from '../api/rate-limit.js';
+import { addressBucket, RateLimiter } from '../api/rate-limit.js';
 import { deposit, doGenesis, newMember, signed, startRestore, startVault, type VaultUnderTest } from './harness.js';
 
 /** Rate limits (key vault design §1.6), in memory, keyed by address, by key or by sign-in account. */
@@ -57,6 +57,36 @@ describe('rate limits', () => {
         expect((await deposit(v, g, newMember(), 'google', 'someone-else')).status).toBe(200);
         v.clock.advance(DAY);
         expect((await deposit(v, g, member, 'google', 'next-day')).status).toBe(200);
+    });
+
+    it('restores: a sign-in with no copy is answered 404 without spending its 5 a day, which start once a copy exists (VLT-03)', async () => {
+        v = await startVault();
+        const g = await doGenesis(v);
+        for (let i = 0; i < LIMITS.restoresPerAccountPerDay; i++) {
+            expect((await startRestore(v, 'google', 'no-copy-yet')).reply).toMatchObject({ status: 404, body: { code: 'no_copy' } });
+        }
+        v.clock.advance(61_000);
+        expect((await startRestore(v, 'google', 'no-copy-yet')).reply).toMatchObject({ status: 404, body: { code: 'no_copy' } });
+        v.clock.advance(61_000);
+        // The member deposits the same day: the restore they then start opens a hold.
+        expect((await deposit(v, g, newMember(), 'google', 'no-copy-yet')).status).toBe(200);
+        v.clock.advance(61_000);
+        expect((await startRestore(v, 'google', 'no-copy-yet')).reply).toMatchObject({ status: 200, body: { status: 'held' } });
+        for (let i = 1; i < LIMITS.restoresPerAccountPerDay; i++) {
+            if (i === 3) v.clock.advance(61_000);
+            expect([200, 409]).toContain((await startRestore(v, 'google', 'no-copy-yet')).reply.status);
+        }
+        v.clock.advance(61_000);
+        expect((await startRestore(v, 'google', 'no-copy-yet')).reply.status).toBe(429);
+    });
+
+    it('a clock stepped backwards starts a new window rather than holding the old one shut (VLT-04)', () => {
+        const T = 1_800_000_000_000;
+        const rl = new RateLimiter(1, 60_000);
+        expect(rl.take('a', T).ok).toBe(true);
+        expect(rl.take('a', T + 1).ok).toBe(false);
+        expect(rl.take('a', T - 3_600_000).ok).toBe(true);
+        expect(rl.take('a', T - 3_600_000 + 1).ok).toBe(false);
     });
 
     it('buckets IPv6 addresses by /64 and IPv4-mapped ones as IPv4', () => {

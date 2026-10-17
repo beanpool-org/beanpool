@@ -59,6 +59,7 @@ import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import { enrolmentFromVault, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
+import { vaultErrorText } from '../../utils/vault-words';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
@@ -418,7 +419,7 @@ export default function SettingsScreen() {
             setProtectionResult(await vaultProtection(identity));
             setProtectionNote(null);
         } catch (e) {
-            setProtectionNote(e instanceof VaultError ? e.message : VAULT_MESSAGES.unreachable);
+            setProtectionNote(e instanceof VaultError ? vaultErrorText(e, t) : VAULT_MESSAGES.unreachable);
             console.warn('[Protection] the key vault could not say:', (e as Error).message);
         } finally {
             setProtectionLoading(false);

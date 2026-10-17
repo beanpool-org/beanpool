@@ -2,6 +2,7 @@
  * Shared helpers for community-node addresses, used by onboarding (welcome) and the
  * wrong-node recovery screen so they normalise and validate identically.
  */
+import { isPrivateHost } from '@beanpool/core';
 
 /**
  * The domain community names expand under.
@@ -31,6 +32,28 @@ const LOCALHOST = /^localhost(:\d+)?$/i;
 
 const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
 
+/** A bracketed IPv6 literal, optionally with a port (looksLikeNodeAddress checks what is inside, {@link isIpv6}). */
+const IPV6 = /^\[[0-9a-f:.]+\](?::\d+)?$/i;
+
+const DOTTED_QUAD = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+
+/**
+ * An IPv6 address as written between the brackets: eight groups of one to four hex digits, or fewer with one `::` for
+ * the rest, the last two optionally written as an IPv4 address (`::ffff:192.0.2.1`). No zone (`%en0`).
+ */
+function isIpv6(inner: string): boolean {
+    const halves = inner.split('::');
+    if (halves.length > 2) return false;
+    const groups = halves.flatMap((h) => (h === '' ? [] : h.split(':')));
+    let room = 0;
+    if (halves[halves.length - 1] !== '' && groups[groups.length - 1].includes('.')) {
+        if (!DOTTED_QUAD.test(groups.pop()!)) return false;
+        room = 2;
+    }
+    if (!groups.every((g) => /^[0-9a-f]{1,4}$/i.test(g))) return false;
+    return halves.length === 2 ? groups.length + room <= 7 : groups.length + room === 8;
+}
+
 /** A hostname label: alphanumeric ends, hyphens only inside. `mullum-` is not a valid label. */
 const BARE_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
 
@@ -45,7 +68,10 @@ const BARE_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
  * community are you part of?" is something they simply know. Bare names were previously rejected
  * outright by `looksLikeNodeAddress`, which requires a dotted host.
  *
- * http:// for raw IPs and localhost, https:// for everything else. Returns '' for blank input.
+ * http:// for localhost and a private/LAN IPv4 address (core's isPrivateHost, the cleartext rule's own reading),
+ * https:// for everything else: a public IPv4 address too, which the app would refuse over cleartext
+ * (shouldBlockCleartextNodeUrl), and a bracketed IPv6 literal, which that rule can't tell public from private (it lets
+ * every one through), so it never gets cleartext unless the member typed http:// themselves. Returns '' for blank input.
  * Idempotent for full URLs.
  */
 /**
@@ -66,7 +92,9 @@ export function normalizeNodeUrl(raw: string): string {
     const u = raw.trim();
     if (!u) return '';
     if (SCHEME.test(u)) return u;
-    if (IPV4.test(u) || LOCALHOST.test(u)) return 'http://' + u;
+    if (LOCALHOST.test(u)) return 'http://' + u;
+    if (IPV4.test(u)) return (isPrivateHost(u) ? 'http://' : 'https://') + u;
+    if (IPV6.test(u)) return 'https://' + u;
     if (BARE_NAME.test(u)) return `https://${u.toLowerCase()}.${COMMUNITY_DOMAIN}`;
     return 'https://' + u;
 }
@@ -76,10 +104,15 @@ export function normalizeNodeUrl(raw: string): string {
  * or localhost) — enough to catch a blank or a single-word typo. Deliberately NOT a
  * reachability check: that needs the network and would wrongly reject a valid address
  * on a flaky connection.
+ *
+ * An IPv6 literal only over https: the cleartext rule lets every IPv6 literal through (core isPrivateHost), so a typed
+ * `http://[2001:db8::7]` would reach a public address in cleartext with nothing to refuse it.
  */
 export function looksLikeNodeAddress(url: string): boolean {
+    const v6 = /^https:\/\/\[([^\]]*)\](?::\d+)?(?:\/|$)/i.exec(url);
     return (/^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/|$)/i.test(url)
-        || /^https?:\/\/localhost(:\d+)?(\/|$)/i.test(url))
+        || /^https?:\/\/localhost(:\d+)?(\/|$)/i.test(url)
+        || (v6 !== null && isIpv6(v6[1])))
         && isPlainNodeAddress(url);
 }
 

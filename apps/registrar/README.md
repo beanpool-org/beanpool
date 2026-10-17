@@ -82,7 +82,8 @@ tunnel. The sweep retries each one, but not while it is a live name's routing
 hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
-minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
+minutes ago (over 2 minutes ago for a pending name: what a claim cut off after making its tunnel left behind, which
+the sweep and its node's heal then finish). Otherwise the claim answers **503** "cleaning up … try again shortly".
 
 ## Admin sign-in
 

@@ -216,9 +216,12 @@ const STALE_TUNNEL_S = 600;
 // A new bp-<name> tunnel for `a`. Cloudflare refuses a second live tunnel of one name (1013), so one left behind — by
 // an earlier holder, or a delete Cloudflare refused — would fail every tunnel for the name, for good. On that refusal
 // the ones provably nobody's go, and the tunnel is made again (once): not the row's, and owed (teardown), or made
-// before this tenure began, or made over STALE_TUNNEL_S ago. One that may still be a request's in flight is left:
-// `cleaningUp` (the caller answers 503, try again shortly). If the row changed meanwhile, the tunnel may be the request
-// that changed it: `raced`.
+// before this tenure began, or made over STALE_TUNNEL_S ago — over ORPHAN_AFTER_S ago for a pending tenure: a claim
+// whose Worker was cut off after making its tunnel leaves one no row records, and every request that could still be
+// making a pending name's tunnel (its claim, its node's heal, an approve, a sweep) has had its node's 25 s and
+// waitUntil's 30 s by then, so the sweep and its node's heal finish the name in minutes, not 10 (review of #2125). One
+// that may still be a request's in flight is left: `cleaningUp` (the caller answers 503, try again shortly). If the
+// row changed meanwhile, the tunnel may be the request that changed it: `raced`.
 async function createTunnelFor(env, a, expected) {
     const tunnelName = `bp-${a.name}`;
     try { return await cf.createTunnel(env, tunnelName); }
@@ -226,7 +229,7 @@ async function createTunnelFor(env, a, expected) {
     if (!(await db.isUnchanged(env, a.name, expected, { withIds: true }))) throw raced();
     const owedRows = await db.listTeardown(env, a.name).catch((e) => { console.error('[TEARDOWN_READ]', a.name, e.message || e); return []; });
     const owed = new Set(owedRows.filter((t) => t.kind === 'tunnel').map((t) => t.cf_id));
-    const before = Math.max(a.requested_at || 0, nowS() - STALE_TUNNEL_S);
+    const before = Math.max(a.requested_at || 0, nowS() - (expected.status === 'pending' ? ORPHAN_AFTER_S : STALE_TUNNEL_S));
     const stale = (await cf.listTunnelsNamed(env, tunnelName)).filter((t) => t.id !== a.tunnel_id && t.id !== expected.tunnel_id
         && (owed.has(t.id) || Date.parse(t.created_at) / 1000 < before));
     if (!stale.length) throw cleaningUp(a.name);

@@ -289,3 +289,49 @@ test('F3: an orphan Cloudflare refuses again stays pending, and the next sweep f
         routedLive(w, 'temp', await w.row('temp'));
     } finally { w.restore(); }
 });
+
+// A claim whose Worker was cut off after createTunnel (past even waitUntil's 30 s) leaves a live bp-<name> tunnel no row
+// records. Cloudflare refuses a second one of that name (1013), and createTunnelFor called it nobody's only once it was
+// STALE_TUNNEL_S (10 minutes) old: until then the sweep left the name pending and its node's heal got 503 (review of #2125).
+async function orphanWithTunnel(w, key, name, { ago = 180, tunnelAge } = {}) {
+    const row = await orphan(w, key, name, ago);
+    const createdAt = tunnelAge === undefined ? row.requested_at + 3 : Math.floor(Date.now() / 1000) - tunnelAge;
+    const t = { id: `tun-left-${name}`, name: `bp-${name}`, created_at: new Date(createdAt * 1000).toISOString(), deleted_at: null };
+    w.cf.tunnels.set(t.id, t);
+    return t;
+}
+
+test('F3: an orphan whose cut-off claim left its tunnel at Cloudflare is finished by the sweep, and by its heal, in minutes', async () => {
+    const w = await world();
+    try {
+        const [a, b] = await Promise.all([makeKey(), makeKey()]);
+        const left = await orphanWithTunnel(w, a, 'temp');
+        await attestSweep(w.env);
+        const row = await w.row('temp');
+        routedLive(w, 'temp', row);
+        assert.equal(w.cf.liveTunnel(left.id), null, 'the leftover went: the claim that made it ended long ago');
+        assert.equal((await w.status(a)).body.tunnelToken, `token-${row.tunnel_id}`);
+
+        const other = await orphanWithTunnel(w, b, 'other');
+        const h = await w.heal(b, { name: 'other' });
+        assert.equal(h.status, 200, JSON.stringify(h.body));
+        assert.equal(h.body.status, 'live', JSON.stringify(h.body));
+        routedLive(w, 'other', await w.row('other'));
+        assert.equal(w.cf.liveTunnel(other.id), null);
+    } finally { w.restore(); }
+});
+
+test('F3: a pending name\'s tunnel made moments ago may be a request\'s in flight: the sweep and a heal leave it, and the name pending', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        const young = await orphanWithTunnel(w, key, 'temp', { tunnelAge: 10 });
+        const before = await w.row('temp');
+        await attestSweep(w.env);
+        assert.deepEqual(await w.row('temp'), before, 'nothing written');
+        assert.ok(w.cf.liveTunnel(young.id), 'another request\'s tunnel is not deleted from under it');
+        const h = await w.heal(key, { name: 'temp' });
+        assert.equal(h.status, 503, JSON.stringify(h.body));
+        assert.ok(w.cf.liveTunnel(young.id));
+    } finally { w.restore(); }
+});

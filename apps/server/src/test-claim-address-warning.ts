@@ -4,7 +4,8 @@
  * address BeanPool won't use", while the terminal had said nothing).
  *
  * No node runs here: the command reads a data dir this suite writes (state.db with no owner, a claim code waiting), as it
- * reads a real one, and talks through a fake terminal. No name is asked for, so nothing reaches a registrar.
+ * reads a real one, and talks through a fake terminal. A name asked for goes no further than the data dir's request file,
+ * which a stand-in for the node takes or leaves, so nothing reaches a registrar.
  *   1. A public address over plain http: the warning, before the QR, naming the address and both ways out (a free name,
  *      your own https domain) as equals; the QR still prints (never a refusal) and the Address line points back at it.
  *   2. A home-network address, or an https one: no warning.
@@ -15,6 +16,9 @@
  *   5. --no-name with no address at all, off a terminal: the warning before the QR.
  *   6. A name that is not live yet: the way out is to run the claim again once it is, not to ask for another name. The
  *      node's pending record holds the label and no hostname, and the warning names <label>.beanpool.org.
+ *   7. --name with no answer in the wait. A node that never took the request: the request is withdrawn, so no name is
+ *      on its way, and the way out is --name again. A node that took it (still asking, or the name awaits approval):
+ *      the name is on its way. No line before the warning says the phone uses the public http:// address it refuses.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-address-warning.ts
  */
@@ -24,6 +28,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { CLAIM_SCRYPT, shouldBlockCleartextNodeUrl } from '@beanpool/core';
 import { phoneAddressWarning, runClaim, type ClaimIo } from './claim-command.js';
+import { ADDRESS_REQUEST_FILE, takeAddressRequestFile } from './address-request.js';
 
 let run = 0, passed = 0;
 function check(cond: unknown, msg: string): void {
@@ -69,6 +74,27 @@ async function claim(args: string[], answers: string[] | null = null, dir = node
     const qr = at(l => /[▀▄█]/.test(l));
     const warnings = lines.filter(l => l.startsWith('WARNING:'));
     return { code, lines, text: lines.join('\n'), qr, warnings, at };
+}
+
+/**
+ * A stand-in for the node's 2 s tick (services/public-address-agent.ts): takes the request file and keeps the request in
+ * local-config.json, as the node does; with `pending`, the address service's answer too (a name awaiting approval).
+ */
+function standInNode(dir: string, pending: boolean): () => void {
+    const tick = setInterval(() => {
+        const req = takeAddressRequestFile(dir);
+        if (!req) return;
+        const file = path.join(dir, 'local-config.json');
+        const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+        config.addressRequest = { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null };
+        fs.writeFileSync(file, JSON.stringify(config));
+        if (!pending) return;
+        const db = new Database(path.join(dir, 'state.db'));
+        db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('node_config', ?)")
+            .run(JSON.stringify({ publicAddress: { name: req.name, mode: 'tunnel', status: 'pending' } }));
+        db.close();
+    }, 200);
+    return () => clearInterval(tick);
 }
 
 const PUBLIC = 'http://203.0.113.7';
@@ -156,7 +182,40 @@ async function main(): Promise<void> {
     check(tail.includes('once mullum.beanpool.org is live, run beanpool claim again') && !tail.includes('--name <name>') && tail.includes('--address https://'),
         'the way out is to wait for the name (or your own domain), not to ask for another');
 
-    console.log('\n7. The words');
+    console.log('\n7. --name with no answer in the wait');
+    process.env.NODE_ENV = 'test';
+    process.env.BEANPOOL_CLAIM_NAME_WAIT_MS = '2500';
+    /** A line that tells the owner the phone takes this server's direct address, which it refuses when that is public http. */
+    const SAYS_DIRECT = /phone (?:uses|will use) this server's direct address/;
+    const nobodyDir = nodeDir();
+    const nobody = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, nobodyDir);
+    const nw = nobody.at(l => l.startsWith('WARNING:'));
+    const nobodyTail = nobody.lines.slice(nw, nw + BLOCK).join('\n');
+    check(nobody.code === 0 && /No answer within/.test(nobody.text) && !fs.existsSync(path.join(nobodyDir, ADDRESS_REQUEST_FILE)),
+        `no node took it: the request is withdrawn (${nobody.code})`);
+    check(nobody.text.includes('riverbend.beanpool.org was not asked for') && nobody.text.includes('beanpool claim --name riverbend')
+        && !/keeps asking/.test(nobody.text), 'it says the name was not asked for, and how to ask again');
+    check(nw >= 0 && nw < nobody.qr && nobodyTail.includes('beanpool claim --name <name>') && !nobodyTail.includes('once riverbend.beanpool.org is live'),
+        'the warning offers --name, not a wait for a name nothing is asking for');
+    const askingDir = nodeDir();
+    const stopAsking = standInNode(askingDir, false);
+    const asking = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, askingDir).finally(stopAsking);
+    const aw = asking.at(l => l.startsWith('WARNING:'));
+    check(asking.code === 0 && asking.text.includes('The node keeps asking for riverbend.beanpool.org.') && !/not asked for/.test(asking.text),
+        `the node took it and keeps asking (${asking.code})`);
+    check(aw >= 0 && aw < asking.qr && asking.lines.slice(aw, aw + BLOCK).join('\n').includes('once riverbend.beanpool.org is live, run beanpool claim again'),
+        'the warning waits for the name on its way');
+    const gatedDir = nodeDir();
+    const stopGated = standInNode(gatedDir, true);
+    const gated = await claim(['--name', 'riverbend', '--direct', `${PUBLIC}:80`], null, gatedDir).finally(stopGated);
+    const gw = gated.at(l => l.startsWith('WARNING:'));
+    check(gated.code === 0 && gated.text.includes('riverbend.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved.'),
+        `a name awaiting approval: the message (${gated.code})`);
+    check(gw >= 0 && gw < gated.qr && gated.lines.slice(gw, gw + BLOCK).join('\n').includes('once riverbend.beanpool.org is live'), 'and the warning waits for it');
+    check(![nobody, asking, gated].some(r => r.lines.some(l => SAYS_DIRECT.test(l))),
+        'no line says the phone uses the direct address the warning says it refuses');
+
+    console.log('\n8. The words');
     const lines = [...phoneAddressWarning(PUBLIC), ...phoneAddressWarning(null), ...phoneAddressWarning(PUBLIC, 'x.beanpool.org')];
     check(lines.every(l => l.length <= 120), 'every line fits a wide terminal (≤ 120 characters)');
     check(lines.every(l => !/beanpool\.org (?:is )?(?:required|needed)/i.test(l)), 'nothing says a beanpool.org name is required');

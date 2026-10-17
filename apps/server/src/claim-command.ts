@@ -134,7 +134,8 @@ async function nameReachesThisNode(hostname: string, codeId: string): Promise<bo
     }
 }
 
-type NameOutcome = { kind: 'live'; address: string } | { kind: 'pending' | 'timeout' } | { kind: 'refused'; reason: string };
+/** `taken`: the node took the request and keeps asking; false when it never did, and the request was withdrawn. */
+type NameOutcome = { kind: 'live'; address: string } | { kind: 'pending' } | { kind: 'timeout'; taken: boolean } | { kind: 'refused'; reason: string };
 
 const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -166,10 +167,11 @@ async function askForName(dir: string, name: string, contact: string | null, cod
         if (view.request?.name === name && view.request.refused) return { kind: 'refused', reason: view.request.refused };
         last = view.request?.name === name ? 'the node is asking the address service' : last;
     }
-    // Never half-done: a request the node has not taken is withdrawn.
-    try { fs.rmSync(path.join(dir, ADDRESS_REQUEST_FILE), { force: true }); } catch { /* gone */ }
+    // Never half-done: a request the node has not taken is withdrawn. The file already gone is the node having taken it.
+    let taken = false;
+    try { fs.unlinkSync(path.join(dir, ADDRESS_REQUEST_FILE)); } catch (e) { taken = (e as NodeJS.ErrnoException).code === 'ENOENT'; }
     out(`No answer within ${Math.round(waitMs / 1000)} s (last: ${last}).`);
-    return { kind: 'timeout' };
+    return { kind: 'timeout', taken };
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -259,12 +261,19 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
             } else {
                 const got = await askForName(dir, name, contact, view.claim.id, io.out);
                 if (got.kind === 'live') { address = got.address; io.out(`✓ ${got.address} is live and reaches this server.`); break; }
-                if (got.kind === 'pending' || got.kind === 'timeout') coming = `${name}.beanpool.org`;
+                // Only a name still being asked for is on its way. What the QR carries meanwhile, the warning or the Address
+                // line below says: --direct may not be known yet, and the phone refuses a public http:// one.
+                if (got.kind === 'pending' || (got.kind === 'timeout' && got.taken)) coming = `${name}.beanpool.org`;
                 if (got.kind === 'pending') {
-                    io.out(`${name}.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved; until then the phone uses this server's direct address.`);
+                    io.out(`${name}.beanpool.org awaits approval by the BeanPool project. It moves over by itself once approved.`);
                     break;
                 }
-                if (got.kind === 'timeout') { io.out('The phone will use this server\'s direct address for now; the name keeps being asked for by the node.'); break; }
+                if (got.kind === 'timeout') {
+                    io.out(got.taken
+                        ? `The node keeps asking for ${name}.beanpool.org.`
+                        : `The node never took the request, so ${name}.beanpool.org was not asked for. Once the node is running (docker compose ps): beanpool claim --name ${name}`);
+                    break;
+                }
                 if (got.kind !== 'refused') break;
                 io.err(`The address service refused ${name}.beanpool.org: ${got.reason}`);
                 if (!io.ask) { io.err('Nothing was changed.'); return 1; }

@@ -210,6 +210,31 @@ describe('other links are not the global link, and are routed as before', () => 
     });
 });
 
+describe('a door a link opened holds its signed work until the member taps (app/join-global.tsx, app/welcome.tsx)', () => {
+    // The 12-words door's work (utils/door-work.ts) is a POST signed by the joining key. Opened by a tap it starts with the
+    // door; opened by a link or the install referrer it waits: the link only opens the screen.
+    const read = (file: string) => fs.readFileSync(path.join(appDir, file), 'utf8');
+
+    it('join-global: from=link holds the work; the door\'s opening starts it only when not held; either way in releases it', () => {
+        const src = read('join-global.tsx');
+        expect(src).toContain('useState(fromParam === FROM_LINK)');
+        expect(src).toContain("if (!heldForTap) startWork(GLOBAL_NODE_URL, account.identity, 'words');");
+        expect(src).toMatch(/function chooseWords\(\) \{[\s\S]{0,300}setHeldForTap\(false\);/);
+        expect(src).toMatch(/async function handleSignIn\(provider: SsoProvider\) \{\s*setHeldForTap\(false\);/);
+    });
+
+    it('welcome: only the link and the referrer open the door held; a tap on Explore (a press event) never does', () => {
+        const src = read('welcome.tsx');
+        expect(src).toContain("setDoorHeld(how === 'link');");
+        expect(src.match(/openGlobalDoor\('link'\)/g)).toHaveLength(1);
+        expect(src).toContain("if (!doorHeld) doorWork.start(GLOBAL_NODE_URL, key.identity, 'words');");
+        expect(src).toMatch(/function chooseWordsAtDoor\(\) \{[\s\S]{0,300}setDoorHeld\(false\);/);
+        expect(src).toMatch(/async function handleGlobalSignIn\(provider: SsoProvider\) \{\s*setDoorHeld\(false\);/);
+        // The link's door and the referrer's both go through the one check (doorFromLink).
+        expect(src.match(/await openDoorFromLink\(\)|void openDoorFromLink\(\)/g)).toHaveLength(2);
+    });
+});
+
 describe('the first screen and the link (doorFromLink): an invite or a wizard wins, and nothing the member is doing is interrupted', () => {
     const MODES: WelcomeMode[] = ['home', 'member', 'create', 'globalJoin', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'];
     const OPENS = new Set<WelcomeMode>(['home', 'member', 'create']);

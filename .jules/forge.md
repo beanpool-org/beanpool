@@ -161,3 +161,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
+
+## 2026-10-24 - [Missing try/catch around deleteAllShares in DELETE /api/recovery/shares]
+**Issue:** `DELETE /api/recovery/shares` in `apps/server/src/routes/keepers.ts` called `deleteAllShares(owner)` without enclosing it in a try/catch block.
+**Learning:** `deleteAllShares` executes database operations and seal handling, which can throw recovery seal errors (e.g. `RecoverySealKeyMissing` or `RecoverySealUnopenable`). Without try/catch, these errors produced unhandled 500 exceptions rather than structured 503 error responses formatted by `recoverySealFailure(ctx, e)`.
+**Pattern:** Wrap calls to recovery share operations in `try/catch` blocks and delegate seal errors to `recoverySealFailure(ctx, e)`.

@@ -417,7 +417,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const removed = deleteAllShares(owner);
+        let removed: number;
+        try {
+            removed = deleteAllShares(owner);
+        } catch (e) {
+            if (recoverySealFailure(ctx, e)) return;
+            throw e;
+        }
         ctx.status = 200;
         ctx.body = { removed, generation: getCurrentGeneration(owner), keepers: [] };
     });

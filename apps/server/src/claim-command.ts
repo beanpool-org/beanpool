@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline/promises';
 import Database from 'better-sqlite3';
 import QRCode from 'qrcode';
-import { CLAIM_SCRYPT, shouldBlockCleartextNodeUrl } from '@beanpool/core';
+import { CLAIM_SCRYPT, isPrivateHost, shouldBlockCleartextNodeUrl } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { ADDRESS_REQUEST_FILE, isAddressLabel, writeAddressRequestFile } from './address-request.js';
 import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
@@ -44,7 +44,8 @@ tap "Claim ‹name›": that phone becomes the owner.
   --address <url>     your own address (https://…); no beanpool.org name is asked for.
   --no-name           no address now; set one later in Settings.
   --direct <url>      this server's own address (http://<ip>:<port>), for the QR when no name is live yet.
-                      Phones take a plain http:// address only on a home network (192.168.…, 10.…).
+                      Phones take a plain http:// address only on a home network (192.168.…, 10.…),
+                      and https:// only by a name, never by a public IP address.
   --contact <email>   a contact for the BeanPool project, if the name awaits approval.
   --key, --callsign   make that key the owner from here, without a phone claim (it joins with that callsign).
 
@@ -240,10 +241,10 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     const pa = view.address;
     let coming: string | null = !address && held ? (pa?.hostname || (pa?.name ? `${pa.name}.beanpool.org` : held)) : null;
     // Once per address: none at all (the phone then asks, and refuses a public http:// one), or one the phone refuses. An
-    // address it takes (http://192.168.…, https) is never warned about, however the command got to it.
+    // address it takes (http://192.168.…, https by a name) is never warned about, however the command got to it.
     const warnedFor = new Set<string>();
     const warnPhones = (to: string | null) => {
-        if ((to && !shouldBlockCleartextNodeUrl(to)) || warnedFor.has(to ?? '')) return;
+        if ((to && !phoneRefuses(to)) || warnedFor.has(to ?? '')) return;
         warnedFor.add(to ?? '');
         io.out('');
         for (const line of phoneAddressWarning(to, coming)) io.out(line);
@@ -298,10 +299,25 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     io.out('');
     io.out(await QRCode.toString(link, { type: 'terminal', small: true }));
     if (!address) io.out('The QR code carries no address: the phone will ask for this server\'s address.');
-    else io.out(`Address: ${address}${shouldBlockCleartextNodeUrl(address) ? ' (phones will not connect to it: see the warning above)' : ''}`);
+    else io.out(`Address: ${address}${phoneRefuses(address) ? ' (phones will not connect to it: see the warning above)' : ''}`);
     io.out('');
     for (const line of phoneSteps(address)) io.out(line);
     return 0;
+}
+
+/**
+ * https:// to a public IPv4 address: the phone checks the certificate (it has no trust override), and a node has none a
+ * phone trusts for an IP. Its own is self-signed for beanpool.local and 127.0.0.1 (services/tls.ts makeServerPair); a
+ * Let's Encrypt one is for its hostname. A home-network IP is left alone, as for http.
+ */
+function httpsToPublicIp(to: string): boolean {
+    const ip = /^https:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?\/?$/i.exec(to)?.[1];
+    return !!ip && !isPrivateHost(ip);
+}
+
+/** Whether the phone won't reach `to`: refused outright (a public http:// address), or failing TLS (https by public IP). */
+export function phoneRefuses(to: string): boolean {
+    return shouldBlockCleartextNodeUrl(to) || httpsToPublicIp(to);
 }
 
 /**
@@ -309,14 +325,20 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
  * a $6 server, ran `beanpool claim --no-name --direct http://<its IP>:80`, and the phone refused the QR: "The link named
  * an address BeanPool won't use"). The phone reaches a server on the internet only over https, by @beanpool/core's
  * shouldBlockCleartextNodeUrl, the rule read here too, so a home-network address (http://192.168.…) is never warned
- * about. `to` is the address the QR carries, null when it carries none; `coming` is a name that is not live yet.
+ * about; over https, only by a name (httpsToPublicIp). `to` is the address the QR carries, null when it carries none;
+ * `coming` is a name that is not live yet.
  * The two ways out stand as equals, a free <name>.beanpool.org or the owner's own domain, and neither is required.
  */
 export function phoneAddressWarning(to: string | null, coming: string | null = null): string[] {
     return [
         to ? `WARNING: phones will not connect to ${to}.` : 'WARNING: with no https address, phones will not reach this server over the internet.',
-        'The BeanPool app reaches a server on the internet only over https: a plain http:// address works',
-        'only on a home network (192.168.…, 10.…). Give this community an address phones can reach:',
+        ...(to && httpsToPublicIp(to) ? [
+            'A phone checks an https:// server\'s certificate, and this server has none a phone trusts for an IP address:',
+            'https works by a name. Give this community an address phones can reach:',
+        ] : [
+            'The BeanPool app reaches a server on the internet only over https: a plain http:// address works',
+            'only on a home network (192.168.…, 10.…). Give this community an address phones can reach:',
+        ]),
         coming
             ? `  the name you asked for:  once ${coming} is live, run beanpool claim again; its QR code carries it`
             : '  a free name:      beanpool claim --name <name>   (<name>.beanpool.org: no ports to open, no DNS to set up)',

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 141,
-  "hash": "0d33096600ab3cf110b364e9fbc99b2825d63913b935a9c9862412a9d0b3c306",
+  "version": 142,
+  "hash": "d46c15e79693c1495e4dd092a815b564510e9f4e2bf404068c4112512b5ba12b",
   "sections": [
     {
       "id": "about",
@@ -1229,7 +1229,7 @@
         {
           "type": "ul",
           "items": [
-            "On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.",
+            "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
             "Choose one of the two ways in, side by side. **Create an account with 12 secret words** needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
             "**Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
@@ -1257,7 +1257,7 @@
         },
         {
           "type": "p",
-          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
+          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Global community**: it is always there, and when you can join it its second line says **Join with this account: 12 words or a sign-in** (or **…: a sign-in**). If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
         },
         {
           "type": "h2",
@@ -1302,7 +1302,7 @@
         {
           "type": "ul",
           "items": [
-            "**No Explore BeanPool worldwide button:** the global community isn't open yet, or the app couldn't reach it. Check your connection and open the app again. You can still join a community with an invite.",
+            "**Can't reach the global community right now** (the line under **Explore BeanPool worldwide**): check your connection, then tap the button: it asks again. You can still join a community with an invite.",
             "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
             "**The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Choose another way** and **← Back to Home** still work.",
             "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
@@ -2049,7 +2049,7 @@
           "type": "ul",
           "items": [
             "**Your community:** its name, and whether it can be reached right now.",
-            "**Your communities:** tap one to switch to it, or tap **Add a community**.",
+            "**Your communities:** tap one to switch to it, or tap **Add a community**. The **Global community** is always one of them: its second line says whether you can join it.",
             "**The guides:** this guide, with its search, and what is new."
           ]
         },
@@ -2218,7 +2218,7 @@
         {
           "type": "ul",
           "items": [
-            "**Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**.",
+            "**Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**. The **Global community** is always one of the rows, with a second line that says whether you are a member, can join it, or why it can't be used right now. See \"More than one community\".",
             "**Guides:** how BeanPool works, the rules and how decisions are made, and common questions.",
             "**How to use the app:** one short page for each task, grouped the way the app is: Getting started, Market, Map, Talk, Pulse, Commons, Ledger and Settings and safety.",
             "**The BeanPool project:** what is new in this version, and a link to the website beanpool.org (on the phone, with a **Share** button to send it to a friend)."
@@ -2371,9 +2371,13 @@
           "text": "The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it when the global community is open and hasn't told the app that this account is already a member there."
         },
         {
+          "type": "p",
+          "text": "Under **Your communities** there is always a row for the **Global community**. Its second line says where you stand: its address when you are a member (tap it to switch to it), **Join with this account: 12 words or a sign-in** (**Join with this account: a sign-in** where the community doesn't take the 12 words) when you can join it, or why you can't right now: **Checking…**, **Can't reach it right now. Tap to try again.**, **Not taking new members right now.**, the community's own words when it is in a private preview, or **Your account there was closed.** Nothing else on the phone depends on it."
+        },
+        {
           "type": "ul",
           "items": [
-            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
             "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
             "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See \"Joining BeanPool\"."

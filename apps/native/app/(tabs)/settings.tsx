@@ -28,6 +28,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
+import { withNodeScheme } from '../../utils/node-address-scheme';
 import { fetchMembership } from '../../utils/membership-probe';
 import { remoteOwnTransactionCount } from '../../utils/diagnostics-own-count';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1394,11 +1395,8 @@ export default function SettingsScreen() {
 
         setAdvancedLoading(true);
         try {
-            let finalAnchorUrl = newAnchorInput.trim();
-            if (finalAnchorUrl && !finalAnchorUrl.startsWith('http')) {
-                const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(finalAnchorUrl) || finalAnchorUrl.startsWith('localhost');
-                finalAnchorUrl = (isIpOrLocal ? 'http://' : 'https://') + finalAnchorUrl;
-            }
+            // A bare public IP gets https://; http:// only for localhost and a LAN address (utils/node-address-scheme.ts).
+            const finalAnchorUrl = withNodeScheme(newAnchorInput);
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);

@@ -1,4 +1,5 @@
 import { assertPlainNodeAddress } from './node-url';
+import { withNodeScheme } from './node-address-scheme';
 
 /**
  * The community address in `raw` (an invite link, a deep link, a shared message: "Join my BeanPool community node:
@@ -20,7 +21,8 @@ export function extractNodeOrigin(raw: string): string | null {
 
 /**
  * The community address a deep link names (app/_layout.tsx "Switch Nodes?"): its first http(s) address, else its
- * `server=` value, read only when needed. A bare host gets http:// for an IP or localhost and https:// otherwise.
+ * `server=` value, read only when needed. A bare host gets its scheme from withNodeScheme (utils/node-address-scheme.ts):
+ * http:// only for localhost and a private/LAN IPv4 address, https:// otherwise, a public IPv4 address included.
  * Null when it names none. Throws UnsafeNodeAddressError, like {@link extractNodeOrigin}, for an address that isn't
  * plain `host[:port]`: the deep link must be refused, not followed to the community the phone is already on.
  */
@@ -29,14 +31,20 @@ export function deepLinkNodeOrigin(link: string, serverParam: () => string | und
     if (origin) return origin;
     const raw = serverParam();
     if (!raw) return null;
-    let decoded = decodeURIComponent(raw).trim();
+    const decoded = withNodeScheme(decodeURIComponent(raw));
     if (!decoded) return null;
-    if (!decoded.startsWith('http')) {
-        const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(decoded) || decoded.startsWith('localhost');
-        decoded = (isIpOrLocal ? 'http://' : 'https://') + decoded;
-    }
     assertPlainNodeAddress(decoded);
     return decoded;
+}
+
+/**
+ * The community People's invite box redeems at (app/(tabs)/people.tsx handleRedeem): the address the invite names, else
+ * the address typed beside it (its scheme from withNodeScheme), else the community the phone is on. Throws
+ * UnsafeNodeAddressError, like {@link extractNodeOrigin}, for an invite naming an address that isn't plain. A typed one
+ * is checked where the phone moves (utils/join-another-community.ts).
+ */
+export function redeemTargetUrl(rawInvite: string, typedNodeUrl: string, anchorUrl: string): string {
+    return extractNodeOrigin(rawInvite) ?? (withNodeScheme(typedNodeUrl) || anchorUrl);
 }
 
 export function extractInviteToken(raw: string): string {

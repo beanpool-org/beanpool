@@ -18,7 +18,7 @@ The Manager shows whether it is on, under Node Identity ("Private preview: on" o
 ## What changes while it is on
 
 - **Joining.** Only an invite made by the server's owner or an admin lets someone in. Every other way in is refused with one sentence that the apps show as it is: "This community is in a private preview. Ask its owner for an invite." That covers the open door (12 secret words or a sign-in), asking to join, and an invite a member made, even one made before the preview. Members can't make invites during a preview; owners and admins can, even on a server that normally takes no invites, such as the global community. Each invite lets one person in and lapses after 30 days, as usual.
-- **Visitors.** Someone who isn't a member sees nothing: no listings, map, people, feed or live updates. Their app shows the sentence above. The server still answers what an app needs to show that, to sign a member in and to take an invite, plus the checks other servers and the address service make (its version, its public information, its key check, a peer's member check).
+- **Visitors.** Someone who isn't a member sees nothing: no listings, map, people, feed or live updates. Their app shows the sentence above. The server still answers what an app needs to show that, to sign a member in and to take an invite, plus the checks other servers and the address service make (its version, its public information, its key check, a peer's member check). It also tells a signed key whether it is a member (the key only, about itself).
 - **Members.** Nothing changes. They sign in, recover with their 12 words or a sign-in, and use everything as before.
 
 ## Inviting someone

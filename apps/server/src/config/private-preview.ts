@@ -86,6 +86,7 @@ export const JOIN_ROUTES: readonly RegExp[] = [
  */
 export const VISITOR_OPEN_ROUTES: readonly { path: RegExp; why: string }[] = [
     { path: /^\/api\/community\/info\/?$/, why: 'the node\'s public info: the apps read `privatePreview` here to show the message and hide the doors' },
+    { path: /^\/api\/community\/membership\/[^/]+\/?$/, why: 'the key asks only about itself; the route refuses unsigned and other keys' },
     { path: /^\/api\/node\/config\/?$/, why: 'the phone map reads the community\'s service area unsigned (map.tsx): a non-member gets that area alone, no other setting (routes/settings.ts)' },
     { path: /^\/api\/version\/?$/, why: 'the build a node runs, which the apps and the Manager check' },
     { path: /^\/api\/node\/info\/?$/, why: 'the node\'s identity, read by the apps and by peers before anything else' },

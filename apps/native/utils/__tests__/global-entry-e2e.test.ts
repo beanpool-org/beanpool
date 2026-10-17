@@ -14,6 +14,10 @@
  *      key; the phone's stored key is unchanged; the probe now says member, and the rule says `member`.
  *   3. A refusing node of the other kind: a moderator closes that account. Reconnect is answered 403 `account_closed`, read
  *      as a definite answer (the closed page), and again nothing moves.
+ *   4. That closed account still reaches Delete account and the community takes it (PR #2098 review, BLOCKING 4302678596):
+ *      with the phone on that node, the root guard leaves it on Settings, and Settings' own plan and delete
+ *      (delete-here.ts) send `POST /api/member/purge`, the one request a closed key may sign. The node erases the profile
+ *      the removal kept, and only then the phone clears the key, as at the member's last community.
  *
  * Nothing else is contacted: the phone's fetch is held to this node's address and throws for anything else.
  */
@@ -58,10 +62,12 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 // The phone's database is never opened here: a switch would load it, and this test proves there is none.
-const switched = vi.hoisted(() => ({ db: 0 }));
+const switched = vi.hoisted(() => ({ db: 0, cleared: 0 }));
 vi.mock('../db', () => ({
     closeDB: vi.fn(async () => { switched.db++; }),
     initDB: vi.fn(async () => { switched.db++; }),
+    // Step 4's wipe, once the community deleted the account (account-leaves-phone.ts signOutOfThisPhone).
+    clearDB: vi.fn(async () => { switched.cleared++; }),
 }));
 
 import { createIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
@@ -70,7 +76,10 @@ import { checkNameAtDoor, submitWordsJoin } from '../global-join';
 import { startDoorWork, type DoorWorkRun } from '../door-work';
 import { accountKeyForDoor } from '../global-join-existing';
 import { askBeforeSwitch } from '../reconnect';
-import { mismatchPlan } from '../mismatch-plan';
+import { mismatchPlan, notRecognisedStays } from '../mismatch-plan';
+import { membershipAnswerOf } from '../membership-answer';
+import { fetchMembership } from '../membership-probe';
+import { deleteAccountHere, planDelete } from '../delete-here';
 import { askGlobalStanding, doorStateFromCheck, globalEntryState } from '../global-entry';
 import { getSavedNodes } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -256,5 +265,35 @@ describe('global entry P1 against a real global-profile node', () => {
         }, URL_BASE);
         expect(standing).toMatchObject({ closed: true, answered: true });
         expect(remembered).toEqual([damo.publicKey]);
+    }, STEP_MS);
+
+    it('4. that closed account still reaches Delete account, and the community takes it: the profile is erased, then the phone cleared', async () => {
+        // The phone is on that community, as a member it removed is (they joined it in step 2), and it has no other.
+        mem.async.set(ANCHOR, URL_BASE);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: URL_BASE, alias: 'Harness', lastConnected: '2026-10-17T00:00:00.000Z' }]));
+        // What NodeStatusContext reads from the probe there: closed. The root guard leaves that account on Settings, where
+        // the closed page sends it (mismatch-plan.ts CLOSED_ACCOUNT_DELETE); every other tab diverts to the closed page.
+        expect(await membershipAnswerOf(await fetchMembership(URL_BASE, damo))).toEqual({ kind: 'closed' });
+        expect(notRecognisedStays('closed', ['(tabs)', 'settings'])).toBe(true);
+        expect(notRecognisedStays('closed', ['(tabs)', 'market'])).toBe(false);
+        expect((await control('member', { key: damo.publicKey })).member).toMatchObject({ status: 'pruned', callsign: 'Damo' });
+
+        // Settings' Permanently Delete Account, as the screen runs it: the plan (no other community keeps the key), then
+        // the delete. Only the node's `{ ok: true }` lets the phone go on.
+        const plan = await planDelete(damo.publicKey);
+        expect(plan).toEqual({ kind: 'last', here: URL_BASE, hereName: 'Harness' });
+        const outcome = await deleteAccountHere(damo, plan);
+        expect(outcome).toEqual({ kind: 'wiped' });
+
+        // The community took it from the closed key, signed, and erased what the removal kept.
+        expect(sent.filter(s => s.path === '/api/member/purge')).toEqual([{ method: 'POST', path: '/api/member/purge', status: 200, signed: true }]);
+        const [row] = await control<any[]>('sql', {
+            sql: 'SELECT status, callsign, bio, deleted_by_owner_at FROM members WHERE public_key = ?', params: [damo.publicKey], all: true,
+        });
+        expect(row).toMatchObject({ status: 'pruned', callsign: 'Deleted Member', bio: null });
+        expect(row.deleted_by_owner_at).toBeTruthy();
+        // Then, and only then, the phone cleared the key, as at the member's last community.
+        expect(switched.cleared).toBe(1);
+        expect(await loadIdentity()).toBeNull();
     }, STEP_MS);
 });

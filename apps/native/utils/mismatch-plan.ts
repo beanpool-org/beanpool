@@ -53,6 +53,32 @@ export function mismatchPlan(input: MismatchInput): MismatchPlan {
     return { page: 'invite', fromCopy };
 }
 
+/** The screens the root guard never diverts a refused key off: this screen, and the ones it leads to. */
+const NOT_DIVERTED_FROM = new Set(['node-mismatch', 'welcome', 'recover-identity', 'join-global']);
+
+/**
+ * Whether the root guard (app/_layout.tsx) leaves a member on the screen at `segments` when the community in use answered
+ * `answer` about their key, instead of sending them to this screen. Pure.
+ *
+ * Never off this screen or the ones it leads to: welcome, guardian recovery (a freshly minted key probes as a stranger for
+ * a moment), the global community's door (this screen's Join with this account opens it). And, for an account the
+ * community closed, never off Settings: its Delete account sends `POST /api/member/purge`, the one request a community
+ * still takes from a closed key (server https-server.ts `isOwnDeleteAccount`), and the only way left to erase the profile
+ * a removal keeps there (Marty's card removed-member-delete, 2026-09-27). The closed page leads there
+ * ({@link CLOSED_ACCOUNT_DELETE}). A stranger has no account there to delete.
+ */
+export function notRecognisedStays(answer: 'stranger' | 'closed', segments: readonly string[]): boolean {
+    if (NOT_DIVERTED_FROM.has(segments[0] ?? '')) return true;
+    return answer === 'closed' && segments[0] === '(tabs)' && segments[1] === 'settings';
+}
+
+/**
+ * Where the closed page's Delete my account goes: Settings, open at Permanently Delete Account, which deletes at the
+ * community the phone is on (delete-here.ts `deleteAccountHere`). So only for the community in use, never for one a
+ * Reconnect asked: the phone isn't on that one, and a refusal moves nothing (decision 4).
+ */
+export const CLOSED_ACCOUNT_DELETE = { pathname: '/(tabs)/settings', params: { section: 'delete' } } as const;
+
 /**
  * The invite field on the invite and preview pages (§C.1: "Paste an invite", "Got an invite from its owner or an admin?"):
  * what was typed or pasted, read as People's "Join another community" reads it (invite-parser.ts). An invite link names its

@@ -577,6 +577,14 @@ export default function SettingsScreen() {
                 // progress. Without this branch the alert's "Review" button dropped them
                 // on the root menu with no sign of the attack.
                 setMode('protection');
+            } else if (params.section === 'delete') {
+                // The not-recognised screen's closed page sends a member here whose account the community closed: Delete
+                // account is the one request it still takes from their key (utils/mismatch-plan.ts CLOSED_ACCOUNT_DELETE).
+                // Opened as its Permanently Delete Account button opens it.
+                setMode('wipe');
+                setPurgeConfirm('');
+                setWipeType('purge');
+                askDeletePlan();
             } else {
                 setMode('menu');
             }

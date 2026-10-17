@@ -24,6 +24,7 @@ import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { memberRedirect } from '../utils/member-landing';
+import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { LanguageProvider } from '../components/LanguageProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -653,12 +654,13 @@ function RootLayoutNav() {
         // A key whose account the active community closed (403 `account_closed`: removed, or deleted by its owner) is told
         // so on the not-recognised screen's closed page, with its other communities (DESIGN-global-entry-fable.md §C.3),
         // instead of sitting on tabs that read every refusal as "trouble connecting". A definite answer, never a flaky
-        // network, and never waived for a guest mark: a closed account isn't a visit. The same guards as 'stranger' below.
+        // network, and never waived for a guest mark: a closed account isn't a visit. The same guards as 'stranger' below,
+        // and one more: Settings stays, because its Delete account is the one request the community still takes from a
+        // closed key, the only way left to erase the profile a removal keeps (utils/mismatch-plan.ts notRecognisedStays).
         // Nor is anyone diverted off the global community's door (join-global): the not-recognised screen's own Join with
         // this account opens it, for a key that is a stranger, or closed, where the phone is now (§C.1).
-        const notDivertedFrom = root === 'node-mismatch' || root === 'welcome' || root === 'recover-identity' || root === 'join-global';
         if (recognition === 'closed') {
-            if (!notDivertedFrom) {
+            if (!notRecognisedStays('closed', segments as string[])) {
                 router.replace('/node-mismatch');
             }
             return;
@@ -673,7 +675,7 @@ function RootLayoutNav() {
             // they submit, the freshly-minted key probes as a 'stranger' for the
             // brief window before createRecoveryRequest lands and the node starts
             // reporting 'recovering'. They're on that screen on purpose.
-            if (!notDivertedFrom) {
+            if (!notRecognisedStays('stranger', segments as string[])) {
                 // Nor a deliberate guest. Browsing a community you haven't joined is a
                 // real state, and it probes identically to a mistyped address — so it is
                 // distinguished by recorded intent, not by the probe. Without this the

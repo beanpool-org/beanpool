@@ -23,7 +23,7 @@ import {
 } from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
 import { askBeforeSwitch } from '../utils/reconnect';
-import { mismatchPlan, inviteFromText } from '../utils/mismatch-plan';
+import { CLOSED_ACCOUNT_DELETE, mismatchPlan, inviteFromText } from '../utils/mismatch-plan';
 import { GLOBAL_NODE_URL, checkGlobalDoor, fetchNodeProfile, getCachedNodeProfile, wordsDoorOn, type NodeProfile } from '../utils/node-profile';
 import { isGlobalCommunity } from '../utils/global-join-existing';
 import { doorStateFromCheck, type GlobalDoorState } from '../utils/global-entry';
@@ -456,6 +456,25 @@ export default function NodeMismatchScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
+                        {/* The community in use closed the account: its Delete account is the one request it still takes
+                            from this key, and the only way to erase the profile a removal keeps (Settings deletes at the
+                            community the phone is on, so not for one a Reconnect asked). */}
+                        {plan.page === 'closed' && !asked && (
+                            <View style={styles.closedDeleteBox}>
+                                <Text style={styles.hint}>
+                                    {t('If {name} removed you, it still keeps your profile, so a vote could bring you back. Deleting your account there erases it.', { name: pageName })}
+                                </Text>
+                                <Pressable
+                                    style={styles.outlineBtn}
+                                    onPress={() => router.push(CLOSED_ACCOUNT_DELETE)}
+                                    disabled={busy}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={styles.outlineBtnText}>{t('Delete my account at {name}', { name: pageName })}</Text>
+                                </Pressable>
+                            </View>
+                        )}
+
                         {keptBy && keptBy.length > 0 && !showWipe && (
                             <View style={styles.keptBox} accessibilityLiveRegion="polite">
                                 <Text style={styles.keptText}>🔑 {stillKeptLine(keptBy)}</Text>
@@ -573,6 +592,7 @@ function makeStyles(colors: AppColors, dark: boolean) {
         linkBtn: { minHeight: 48, justifyContent: 'center', paddingVertical: 10, marginBottom: 8 },
         linkBtnText: { color: dark ? colors.text.body : palette.blue600, fontSize: 15, fontWeight: '600' },
         inviteBox: { marginTop: 8, marginBottom: 8 },
+        closedDeleteBox: { marginTop: 8 },
         inviteActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
         globalRow: {
             flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 12, paddingHorizontal: 14,

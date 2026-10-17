@@ -312,4 +312,54 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         expect(globalRow()).toBeTruthy();
         expect(buttons().some(b => /Delete this account from this phone/.test(b.textContent ?? ''))).toBe(true);
     });
+
+    // PR #2098 review, BLOCKING 4302678596: Delete account is the one request a community still takes from a closed key,
+    // and the only way left to erase the profile a removal keeps. The closed page says so and leads there.
+    it("closed: Delete my account at Riverside opens Settings' Delete account, for the community the phone is on", async () => {
+        recognition.now = 'closed';
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain('If Riverside removed you, it still keeps your profile, so a vote could bring you back. Deleting your account there erases it.');
+        const all = buttons().map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
+        const there = all.indexOf('Delete my account at Riverside');
+        expect(there).toBeGreaterThanOrEqual(0);
+        // The phone-only delete stays, last.
+        expect(there).toBeLessThan(all.findIndex(l => /Delete this account from this phone/.test(l)));
+        await act(async () => { button('Delete my account at Riverside')!.click(); });
+        expect(nav.pushed).toEqual([{ pathname: '/(tabs)/settings', params: { section: 'delete' } }]);
+        // Nothing moved: Settings deletes at the community the phone is on, which is Riverside.
+        expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+        expect(nav.replaced).toEqual([]);
+    });
+
+    it('no such button for a stranger: it has no account there to delete', async () => {
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain("This community doesn't recognise you");
+        expect(buttons().some(b => /Delete my account at/.test(b.textContent ?? ''))).toBe(false);
+    });
+
+    it("nor on a closed page about a community the phone is NOT on (Reconnect asked it): Delete account goes to the one in use", async () => {
+        const ELSEWHERE = 'https://hilltop.example';
+        globalThis.fetch = vi.fn(async (input: unknown) => {
+            const u = String(input);
+            asked.push(u);
+            if (u === `${ELSEWHERE}/api/community/membership/${KEY}`) {
+                return new Response(JSON.stringify({ error: 'closed', code: 'account_closed' }), { status: 403 });
+            }
+            if (u === `${ELSEWHERE}/api/community/info`) {
+                return new Response(JSON.stringify({ name: 'Hilltop', profile: 'local', features: { invites: true } }), { status: 200 });
+            }
+            return (network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } }) as any)(input);
+        }) as typeof fetch;
+        await render();
+        await act(async () => { type(await addressField(), 'hilltop.example'); });
+        await settle();
+        await act(async () => { button('Reconnect')!.click(); });
+        await settle();
+        expect(text()).toContain('Your account in hilltop.example was closed');
+        expect(text()).toContain('Your phone is still on Riverside. Nothing was changed.');
+        expect(buttons().some(b => /Delete my account at/.test(b.textContent ?? ''))).toBe(false);
+        expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+    });
 });

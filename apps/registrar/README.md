@@ -78,9 +78,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   pause's alert) is kept 16 too. Measured: with alerts on, one orphan a sweep up to 4 live names and none from 5;
   without, 3 up to 2, 2 up to 6, 1 up to 12. From about 18 live names with alerts on, the sweep's own send no
   longer fits, orphans or not.
-- **The work of a claim, heal, rotate, release or approve runs under `ctx.waitUntil`:** a node that stops waiting (it
-  gives each of its four 25 s) never cuts it off half way; the runtime keeps it up to 30 s past the disconnect, and the
-  sweep finishes what even that missed.
+- **The work of a claim, heal, rotate or release, and of every admin action, runs under `ctx.waitUntil`:** a node that
+  stops waiting (it gives each of its four 25 s), or an admin's page closed part way, never cuts it off half way; the
+  runtime keeps it up to 30 s past the disconnect, and the sweep finishes a claim even that missed.
 
 A tunnel or record the registrar lets go of that Cloudflare refuses to delete is recorded in `teardown`, never
 dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or

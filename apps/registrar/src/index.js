@@ -1924,7 +1924,9 @@ const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
 // scratch/global-node/DESIGN-registrar-trust-fable.md §5.2); the sweep finishes what even that missed (finishOrphans).
 // A rotate and a release are Cloudflare work too, written to the row first (review of #2125): a rotate cut off there
 // leaves a live row on no tunnel, its old one deleted and its fresh one recorded nowhere; a release, a released name
-// still routed by a record nothing owes.
+// still routed by a record nothing owes. So is every admin action, its page closed or its connection lost part way: a
+// block or release cut off left the row still recording a tunnel Cloudflare kept, its token working, nothing owed; a
+// pause, its record; a resume and Remove from the list are the same shape.
 const finishing = (env, p) => {
     if (typeof env.waitUntil === 'function') env.waitUntil(p.catch(() => {}));
     return p;
@@ -2011,7 +2013,7 @@ export default {
                 }
                 // Remove from the list, in bulk: { "names": [...] } (handleForgetMany), and "Free all and remove" with
                 // "free_now": true. One name's is /:name/forget below.
-                if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await handleForgetMany(env, bodyText, who);
+                if (method === 'POST' && p === '/api/local/admin/registrar/forget') return await finishing(env, handleForgetMany(env, bodyText, who));
                 if (method === 'GET' && p === '/api/local/admin/registrar/events') {
                     const name = (url.searchParams.get('name') || '').toLowerCase();
                     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
@@ -2036,8 +2038,7 @@ export default {
                         let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
                         freeNow = b?.free_now === true;
                     }
-                    const act = handleAdmin(env, m[1], m[2], { freeNow, who });
-                    return await (m[2] === 'approve' ? finishing(env, act) : act);
+                    return await finishing(env, handleAdmin(env, m[1], m[2], { freeNow, who }));
                 }
                 return json({ error: 'not found' }, 404);
             }

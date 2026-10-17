@@ -6,7 +6,7 @@
 //   F1 a pending auto row is 'provisioning' (status, claim, heal), /pending says awaiting_approval per row, and /admin
 //      lists it under "Setting up" (Finish now, Reject), apart from the gated claims;
 //   F2 claim, heal and approve run under waitUntil, so a node that hangs up never cuts the work off (and, from the review
-//      of #2125, rotate and release: Cloudflare work written to the row first);
+//      of #2125, rotate, release and every admin action: Cloudflare work written to the row first);
 //   F3 the sweep finishes a pending auto row over 2 minutes old (at most 3 a sweep, and only while its D1 queries allow:
 //      from the review of #2125), never a gated one.
 // Every test here but one fails on origin/main 583a6cb0: /status answers 'awaiting-approval', /pending carries no
@@ -241,6 +241,24 @@ test('F2: a release whose node hangs up mid-way still takes the name down: no re
         assert.deepEqual(routing(w, 'temp'), { dns: null, tunnels: [] }, 'nothing at Cloudflare routes a released name');
     } finally { w.restore(); }
 });
+
+// The admin's take-downs write the row first and then delete at Cloudflare, as a node's release does: a page closed
+// part way left a blocked or released row still recording a tunnel Cloudflare kept, its token still working, and nothing
+// owed (review of #2125). A pause keeps its tunnel by design; only its record goes.
+for (const [action, status, tunnelKept] of [['block', 'blocked', false], ['release', 'released', false], ['pause', 'paused', true]]) {
+    test(`F2: the admin's ${action}, its page closed mid-way, still lands: no record${tunnelKept ? ', its tunnel kept' : ', no tunnel'}`, async () => {
+        const w = await world();
+        try {
+            const key = await makeKey();
+            await liveName(w, 'temp', key);
+            const tunnel = (await w.row('temp')).tunnel_id;
+            assert.ok(await w.cutAt(/^DELETE /, w.adminRequest('temp', action)), 'the page closed at the first delete');
+            const row = await w.row('temp');
+            assert.deepEqual([row.status, row.tunnel_id, row.dns_record_id], [status, tunnelKept ? tunnel : null, null], JSON.stringify(row));
+            assert.deepEqual(routing(w, 'temp'), { dns: null, tunnels: tunnelKept ? [tunnel] : [] });
+        } finally { w.restore(); }
+    });
+}
 
 // ── F3: the sweep finishes orphans ────────────────────────────────────────────────────────────────────────────────
 

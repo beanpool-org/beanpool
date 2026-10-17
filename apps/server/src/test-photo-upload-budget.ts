@@ -399,6 +399,11 @@ async function main(): Promise<void> {
             attachment: { data: ph.ciphertext, nonce: ph.nonce }
         });
         check('zero-turns-off', s.status === 200, `0 turns off budget check → 200 (got ${s.status})`);
+
+        // A budget of only spaces ("   ") does not turn the budget off (defaults to 100 MB, N4)
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '   ';
+        const { photoBytesPerMemberPerDay } = await import('./engine/photo-upload-budget.js');
+        check('spaces-env-is-default', photoBytesPerMemberPerDay() === 104_857_600, `budget of spaces defaults to 100 MB (got ${photoBytesPerMemberPerDay()})`);
     }
 
     // ── 5. Free-disk floor refuses on disk store (HTTP 507), owners/admins not exempt ──

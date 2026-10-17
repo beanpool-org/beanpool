@@ -56,7 +56,7 @@ export class StorageNearlyFullError extends Error {
  */
 export function photoBytesPerMemberPerDay(): number {
     const raw = process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY;
-    if (raw === undefined || raw === '') return DEFAULT_PHOTO_BYTES_PER_MEMBER_PER_DAY;
+    if (raw === undefined || raw.trim() === '') return DEFAULT_PHOTO_BYTES_PER_MEMBER_PER_DAY;
     const num = Number(raw.trim());
     return Number.isFinite(num) && num >= 0 ? num : DEFAULT_PHOTO_BYTES_PER_MEMBER_PER_DAY;
 }
@@ -67,7 +67,7 @@ export function photoBytesPerMemberPerDay(): number {
  */
 export function photoMinFreeDiskMb(): number {
     const raw = process.env.PHOTO_MIN_FREE_DISK_MB;
-    if (raw === undefined || raw === '') return DEFAULT_PHOTO_MIN_FREE_DISK_MB;
+    if (raw === undefined || raw.trim() === '') return DEFAULT_PHOTO_MIN_FREE_DISK_MB;
     const num = Number(raw.trim());
     return Number.isFinite(num) && num >= 0 ? num : DEFAULT_PHOTO_MIN_FREE_DISK_MB;
 }
@@ -153,47 +153,24 @@ export function incomingPhotosBytes(photos: unknown[]): number {
     return photos.reduce((sum: number, p: unknown) => sum + incomingPhotoBytes(p), 0);
 }
 
-let tableChecked = false;
-function ensurePhotoBudgetTable(): void {
-    if (tableChecked) return;
-    try {
-        db.prepare('SELECT 1 FROM photo_budget_log LIMIT 1').get();
-        tableChecked = true;
-    } catch {
-        try {
-            db.exec(`
-                CREATE TABLE IF NOT EXISTS photo_budget_log (
-                    member_pubkey TEXT NOT NULL,
-                    at INTEGER NOT NULL,
-                    bytes INTEGER NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_photo_budget_log_member_at ON photo_budget_log(member_pubkey, at);
-                CREATE INDEX IF NOT EXISTS idx_photo_budget_log_at ON photo_budget_log(at);
-            `);
-            tableChecked = true;
-        } catch {
-            // Ignore if db is not initialized yet
-        }
-    }
-}
-
 export function resetPhotoBudgetForTests(): void {
-    ensurePhotoBudgetTable();
     try {
         db.prepare('DELETE FROM photo_budget_log').run();
-    } catch { }
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to reset photo_budget_log:', e);
+    }
     simulatedFreeDiskBytes = null;
 }
 
 export function advancePhotoBudgetForTests(ms: number): void {
-    ensurePhotoBudgetTable();
     try {
         db.prepare('UPDATE photo_budget_log SET at = at - ?').run(ms);
-    } catch { }
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to advance photo_budget_log:', e);
+    }
 }
 
 export function getMemberPhotoUsageForTests(authorPubkey: string, now = Date.now()): { usedBytes: number; entryCount: number } {
-    ensurePhotoBudgetTable();
     try {
         const rows = db.prepare('SELECT bytes FROM photo_budget_log WHERE member_pubkey = ? AND at > ?')
             .all(authorPubkey, now - DAY_MS) as { bytes: number }[];
@@ -201,7 +178,8 @@ export function getMemberPhotoUsageForTests(authorPubkey: string, now = Date.now
             usedBytes: rows.reduce((sum, r) => sum + r.bytes, 0),
             entryCount: rows.length,
         };
-    } catch {
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to read photo_budget_log usage:', e);
         return { usedBytes: 0, entryCount: 0 };
     }
 }
@@ -218,13 +196,12 @@ export function assertMayStorePhotoBytes(authorPubkey: string, incomingBytes: nu
     const budget = photoBytesPerMemberPerDay();
     if (budget <= 0) return;
 
-    ensurePhotoBudgetTable();
-
     let rows: { at: number; bytes: number }[] = [];
     try {
         rows = db.prepare('SELECT at, bytes FROM photo_budget_log WHERE member_pubkey = ? AND at > ? ORDER BY at ASC')
             .all(authorPubkey, now - DAY_MS) as { at: number; bytes: number }[];
-    } catch {
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to query photo_budget_log:', e);
         rows = [];
     }
 
@@ -253,9 +230,10 @@ export function assertMayStorePhotoBytes(authorPubkey: string, incomingBytes: nu
  */
 export function recordStoredPhotoBytes(authorPubkey: string, bytes: number, now = Date.now()): void {
     if (bytes <= 0) return;
-    ensurePhotoBudgetTable();
     try {
         db.prepare('INSERT INTO photo_budget_log (member_pubkey, at, bytes) VALUES (?, ?, ?)').run(authorPubkey, now, bytes);
         db.prepare('DELETE FROM photo_budget_log WHERE at < ?').run(now - 48 * 60 * 60 * 1000);
-    } catch { }
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to record stored photo bytes:', e);
+    }
 }

@@ -501,6 +501,7 @@ export const TABLES: Record<string, TableEntry> = {
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
     photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
+    photo_budget_log: { kind: 'local', reason: "this server's own sliding-window photo upload byte log (engine/photo-upload-budget.ts), pruned > 48h" },
     message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },
     // A direct line to someone who had blocked its sender, and a conversation such a sender opened, kept for the sender
     // alone (engine/withheld-lines.ts). Never in a copy: no standby can then deliver one to the person who blocked them.

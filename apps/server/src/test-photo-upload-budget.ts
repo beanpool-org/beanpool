@@ -22,7 +22,9 @@ if (process.env.READ_AUTH === 'off') process.env.ENFORCE_READ_AUTH = 'false';
 process.env.DISABLE_UPDATE_CHECK = 'true';
 
 import crypto from 'node:crypto';
+import path from 'node:path';
 import sharp from 'sharp';
+import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -72,6 +74,11 @@ async function main(): Promise<void> {
     const { resetChatRateLimit } = await import('./chat-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { lockedDm } = await import('./dm-test-payload.js');
+    const safeLockedDm = (bytes = 32) => {
+        let d = lockedDm(bytes);
+        while (d.ciphertext.startsWith('/')) d = lockedDm(bytes);
+        return d;
+    };
     const {
         resetPhotoBudgetForTests,
         advancePhotoBudgetForTests,
@@ -108,11 +115,11 @@ async function main(): Promise<void> {
         const conv = se.createConversation('dm', [alice.pk, bob.pk], alice.pk)!;
 
         // Small attachment (~10 KB) is well under 50 KB
-        const ph = lockedDm(10_000);
+        const ph = safeLockedDm(10_000);
         const s = await req('POST', '/api/messages/send', alice, {
             conversationId: conv.id,
             authorPubkey: alice.pk,
-            ...lockedDm(),
+            ...safeLockedDm(),
             type: 'image',
             attachment: { data: ph.ciphertext, nonce: ph.nonce }
         });
@@ -130,22 +137,22 @@ async function main(): Promise<void> {
             const conv = se.createConversation('dm', [alice.pk, bob.pk], alice.pk)!;
 
             // Spend 20 KB
-            const ph1 = lockedDm(20_000);
+            const ph1 = safeLockedDm(20_000);
             const s1 = await req('POST', '/api/messages/send', alice, {
                 conversationId: conv.id,
                 authorPubkey: alice.pk,
-                ...lockedDm(),
+                ...safeLockedDm(),
                 type: 'image',
                 attachment: { data: ph1.ciphertext, nonce: ph1.nonce }
             });
             check('chat-first-pass', s1.status === 200, `first attachment passes → 200 (got ${s1.status})`);
 
             // Try another 20 KB (total 40 KB > 30 KB budget)
-            const ph2 = lockedDm(20_000);
+            const ph2 = safeLockedDm(20_000);
             const s2 = await req('POST', '/api/messages/send', alice, {
                 conversationId: conv.id,
                 authorPubkey: alice.pk,
-                ...lockedDm(),
+                ...safeLockedDm(),
                 type: 'image',
                 attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
             });
@@ -254,22 +261,22 @@ async function main(): Promise<void> {
         const conv = se.createConversation('dm', [frank.pk, grace.pk], frank.pk)!;
 
         // Use up budget
-        const ph1 = lockedDm(25_000);
+        const ph1 = safeLockedDm(25_000);
         const s1 = await req('POST', '/api/messages/send', frank, {
             conversationId: conv.id,
             authorPubkey: frank.pk,
-            ...lockedDm(),
+            ...safeLockedDm(),
             type: 'image',
             attachment: { data: ph1.ciphertext, nonce: ph1.nonce }
         });
         check('day-later-setup', s1.status === 200, `first attachment passes → 200`);
 
         // Second attachment blocked
-        const ph2 = lockedDm(15_000);
+        const ph2 = safeLockedDm(15_000);
         const s2 = await req('POST', '/api/messages/send', frank, {
             conversationId: conv.id,
             authorPubkey: frank.pk,
-            ...lockedDm(),
+            ...safeLockedDm(),
             type: 'image',
             attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
         });
@@ -282,7 +289,7 @@ async function main(): Promise<void> {
         const s3 = await req('POST', '/api/messages/send', frank, {
             conversationId: conv.id,
             authorPubkey: frank.pk,
-            ...lockedDm(),
+            ...safeLockedDm(),
             type: 'image',
             attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
         });
@@ -299,11 +306,11 @@ async function main(): Promise<void> {
         const conv = se.createConversation('dm', [heidi.pk, ivan.pk], heidi.pk)!;
 
         // Big attachment (~80 KB)
-        const ph = lockedDm(80_000);
+        const ph = safeLockedDm(80_000);
         const s = await req('POST', '/api/messages/send', heidi, {
             conversationId: conv.id,
             authorPubkey: heidi.pk,
-            ...lockedDm(),
+            ...safeLockedDm(),
             type: 'image',
             attachment: { data: ph.ciphertext, nonce: ph.nonce }
         });
@@ -349,6 +356,52 @@ async function main(): Promise<void> {
         // Cleanup
         delete process.env.IMAGE_STORE;
         setSimulatedFreeDiskBytesForTests(null);
+    }
+
+    // ── 7. Restart safety: budget persists across engine restart / database reopen ──
+    {
+        resetPhotoBudgetForTests();
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '25000'; // 25 KB budget
+        const reba = member('BudReba');
+        const bob = member('BudBobRestart');
+        const conv = se.createConversation('dm', [reba.pk, bob.pk], reba.pk)!;
+
+        // Store 20 KB photo (under 25 KB)
+        const ph1 = safeLockedDm(20_000);
+        const s1 = await req('POST', '/api/messages/send', reba, {
+            conversationId: conv.id,
+            authorPubkey: reba.pk,
+            ...safeLockedDm(),
+            type: 'image',
+            attachment: { data: ph1.ciphertext, nonce: ph1.nonce }
+        });
+        check('restart-first-store', s1.status === 200, `first upload stores 20 KB (got ${s1.status})`);
+
+        // Reopen database and verify photo_budget_log has the stored bytes
+        const reopenedDb = new Database(path.join(process.env.BEANPOOL_DATA_DIR!, 'state.db'), { readonly: true });
+        let row: { total: number | null } | undefined;
+        try {
+            row = reopenedDb.prepare("SELECT SUM(bytes) AS total FROM photo_budget_log WHERE member_pubkey = ?").get(reba.pk) as { total: number | null };
+        } catch {
+            row = undefined;
+        }
+        reopenedDb.close();
+        check('restart-db-has-row', (row?.total ?? 0) >= 20_000, `reopened database has photo_budget_log rows >= 20000 bytes (got ${row?.total})`);
+
+        // Restart engine: initStateEngine
+        se.initStateEngine();
+
+        // Further upload that exceeds remaining budget (10 KB > 5 KB left) is refused
+        const ph2 = safeLockedDm(10_000);
+        const s2 = await req('POST', '/api/messages/send', reba, {
+            conversationId: conv.id,
+            authorPubkey: reba.pk,
+            ...safeLockedDm(),
+            type: 'image',
+            attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
+        });
+        check('restart-budget-persists', s2.status === 429, `upload crossing budget refused after restart (got ${s2.status})`);
+        check('restart-budget-sentence', errorOf(s2) === BUDGET_SENTENCE, `refusal after restart has budget sentence`);
     }
 
     console.log(`\n${passed}/${run} passed.`);

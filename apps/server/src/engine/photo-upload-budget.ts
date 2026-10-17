@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSelfAvatarUrl, isSelfGroupPictureUrl } from '@beanpool/core';
+import { db } from '../db/db.js';
 import { configuredImageStoreKind, imagesDir } from '../storage/image-store.js';
 import { isSelfPostPhotoUrl } from './avatar.js';
 
@@ -130,7 +131,7 @@ export function incomingPhotoBytes(value: unknown): number {
         trimmed.startsWith('https://') ||
         trimmed.startsWith('bundled://') ||
         trimmed.startsWith('/api/') ||
-        trimmed.startsWith('/')
+        (trimmed.startsWith('/') && trimmed.length < 512)
     ) {
         return 0;
     }
@@ -152,34 +153,57 @@ export function incomingPhotosBytes(photos: unknown[]): number {
     return photos.reduce((sum: number, p: unknown) => sum + incomingPhotoBytes(p), 0);
 }
 
-interface StoredEntry {
-    bytes: number;
-    at: number;
-}
-
-const memberPhotoEntries = new Map<string, StoredEntry[]>();
-
-export function resetPhotoBudgetForTests(): void {
-    memberPhotoEntries.clear();
-    simulatedFreeDiskBytes = null;
-}
-
-export function advancePhotoBudgetForTests(ms: number): void {
-    for (const [key, entries] of memberPhotoEntries.entries()) {
-        for (const entry of entries) {
-            entry.at -= ms;
+let tableChecked = false;
+function ensurePhotoBudgetTable(): void {
+    if (tableChecked) return;
+    try {
+        db.prepare('SELECT 1 FROM photo_budget_log LIMIT 1').get();
+        tableChecked = true;
+    } catch {
+        try {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS photo_budget_log (
+                    member_pubkey TEXT NOT NULL,
+                    at INTEGER NOT NULL,
+                    bytes INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_photo_budget_log_member_at ON photo_budget_log(member_pubkey, at);
+                CREATE INDEX IF NOT EXISTS idx_photo_budget_log_at ON photo_budget_log(at);
+            `);
+            tableChecked = true;
+        } catch {
+            // Ignore if db is not initialized yet
         }
     }
 }
 
+export function resetPhotoBudgetForTests(): void {
+    ensurePhotoBudgetTable();
+    try {
+        db.prepare('DELETE FROM photo_budget_log').run();
+    } catch { }
+    simulatedFreeDiskBytes = null;
+}
+
+export function advancePhotoBudgetForTests(ms: number): void {
+    ensurePhotoBudgetTable();
+    try {
+        db.prepare('UPDATE photo_budget_log SET at = at - ?').run(ms);
+    } catch { }
+}
+
 export function getMemberPhotoUsageForTests(authorPubkey: string, now = Date.now()): { usedBytes: number; entryCount: number } {
-    const entries = memberPhotoEntries.get(authorPubkey);
-    if (!entries) return { usedBytes: 0, entryCount: 0 };
-    const valid = entries.filter(e => e.at > now - DAY_MS);
-    return {
-        usedBytes: valid.reduce((sum, e) => sum + e.bytes, 0),
-        entryCount: valid.length,
-    };
+    ensurePhotoBudgetTable();
+    try {
+        const rows = db.prepare('SELECT bytes FROM photo_budget_log WHERE member_pubkey = ? AND at > ?')
+            .all(authorPubkey, now - DAY_MS) as { bytes: number }[];
+        return {
+            usedBytes: rows.reduce((sum, r) => sum + r.bytes, 0),
+            entryCount: rows.length,
+        };
+    } catch {
+        return { usedBytes: 0, entryCount: 0 };
+    }
 }
 
 /**
@@ -194,27 +218,25 @@ export function assertMayStorePhotoBytes(authorPubkey: string, incomingBytes: nu
     const budget = photoBytesPerMemberPerDay();
     if (budget <= 0) return;
 
-    let entries = memberPhotoEntries.get(authorPubkey);
-    if (entries) {
-        entries = entries.filter(e => e.at > now - DAY_MS);
-        if (entries.length > 0) {
-            memberPhotoEntries.set(authorPubkey, entries);
-        } else {
-            memberPhotoEntries.delete(authorPubkey);
-            entries = undefined;
-        }
+    ensurePhotoBudgetTable();
+
+    let rows: { at: number; bytes: number }[] = [];
+    try {
+        rows = db.prepare('SELECT at, bytes FROM photo_budget_log WHERE member_pubkey = ? AND at > ? ORDER BY at ASC')
+            .all(authorPubkey, now - DAY_MS) as { at: number; bytes: number }[];
+    } catch {
+        rows = [];
     }
 
-    const usedBytes = entries ? entries.reduce((sum, e) => sum + e.bytes, 0) : 0;
+    const usedBytes = rows.reduce((sum, r) => sum + r.bytes, 0);
     if (usedBytes + incomingBytes > budget) {
         let resetsAtMs = now + DAY_MS;
-        if (entries && entries.length > 0) {
-            const sorted = [...entries].sort((a, b) => a.at - b.at);
+        if (rows.length > 0) {
             let freed = 0;
-            for (const e of sorted) {
-                freed += e.bytes;
+            for (const r of rows) {
+                freed += r.bytes;
                 if ((usedBytes - freed) + incomingBytes <= budget) {
-                    resetsAtMs = e.at + DAY_MS;
+                    resetsAtMs = r.at + DAY_MS;
                     break;
                 }
             }
@@ -227,13 +249,13 @@ export function assertMayStorePhotoBytes(authorPubkey: string, incomingBytes: nu
 
 /**
  * Record successfully stored photo bytes in the 24-hour sliding window.
+ * Prunes entries older than 48 hours.
  */
 export function recordStoredPhotoBytes(authorPubkey: string, bytes: number, now = Date.now()): void {
     if (bytes <= 0) return;
-    let entries = memberPhotoEntries.get(authorPubkey);
-    if (!entries) {
-        entries = [];
-        memberPhotoEntries.set(authorPubkey, entries);
-    }
-    entries.push({ bytes, at: now });
+    ensurePhotoBudgetTable();
+    try {
+        db.prepare('INSERT INTO photo_budget_log (member_pubkey, at, bytes) VALUES (?, ?, ?)').run(authorPubkey, now, bytes);
+        db.prepare('DELETE FROM photo_budget_log WHERE at < ?').run(now - 48 * 60 * 60 * 1000);
+    } catch { }
 }

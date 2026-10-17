@@ -938,7 +938,7 @@ async function partTwo(): Promise<void> {
     const kept = ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
     await served('the pricing-guide thumbnail after the refusals', decodeDataUrl(kept?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
     const link = await saveThumbnail('https://example.org/lemons.jpg');
-    assert(link.status === 200, `a link as the thumbnail still passes (${link.status})`);
+    assert(link.status === 400, `an outside link as the thumbnail is refused under #2082 (${link.status})`);
 
     console.log('\n── 2i. A member\'s photo as other members read it: POST /api/profile/update → groups, profile, chats ──');
     // A member's photo (member_photos) is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile

@@ -104,7 +104,7 @@ function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
         storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
 }
 
-const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
+export const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -1218,7 +1218,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                 })
         );
         updates.photos = updates.photos.map(p => {
-            const m = typeof p === 'string' ? p.match(/\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/) : null;
+            const m = typeof p === 'string' ? p.match(/(?:^|[a-z][a-z0-9+.-]*:\/\/[^/\s]*)\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/i) : null;
             if (m && m[1] === id) {
                 const data = existingByOrder.get(Number(m[2]));
                 if (data) return data;

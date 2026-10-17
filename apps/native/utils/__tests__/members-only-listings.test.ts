@@ -14,7 +14,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-import { isMembersOnlyAnswer, noteRefusal, refusalHere, refusalOf, probeSaysNoMember } from '../members-only-listings';
+import { isMembersOnlyAnswer, noteRefusal, refusalHere, refusalOf, noteAfterPreview } from '../members-only-listings';
 
 beforeEach(() => store.clear());
 
@@ -73,20 +73,24 @@ describe('refusalOf: which refusal, keeping its code', () => {
     });
 });
 
-describe("probeSaysNoMember: the signed membership probe's word on a preview's refusal", () => {
+describe("noteAfterPreview: what a preview's refusal notes, on the signed membership probe's word", () => {
+    const preview = { code: 'private_preview' as const, sentence: PREVIEW };
     it('no member here: 200 isMember false, or (a node from before the probe was opened) the probe refused with the preview', () => {
-        expect(probeSaysNoMember(200, { isMember: false })).toBe(true);
-        expect(probeSaysNoMember(200, { isMember: false, isRecovering: true })).toBe(true);
-        expect(probeSaysNoMember(403, { error: PREVIEW, code: 'private_preview' })).toBe(true);
+        expect(noteAfterPreview(preview, 200, { isMember: false })).toBe(preview);
+        expect(noteAfterPreview(preview, 200, { isMember: false, isRecovering: true })).toBe(preview);
+        expect(noteAfterPreview(preview, 403, { error: PREVIEW, code: 'private_preview' })).toBe(preview);
     });
-    it('a member (whose read went unsigned), or no clear answer, says nothing', () => {
-        expect(probeSaysNoMember(200, { isMember: true })).toBe(false);
-        expect(probeSaysNoMember(200, {})).toBe(false);
-        expect(probeSaysNoMember(200, null)).toBe(false);
-        expect(probeSaysNoMember(401, { error: 'Missing signature' })).toBe(false);
-        expect(probeSaysNoMember(403, { code: 'not_your_key' })).toBe(false);
-        expect(probeSaysNoMember(403, { code: 'account_closed' })).toBe(false);
-        expect(probeSaysNoMember(500, null)).toBe(false);
+    it("this key's account here was closed: the closed account, not the preview", () => {
+        expect(noteAfterPreview(preview, 403, { error: 'closed', code: 'account_closed' })).toEqual({ code: 'account_closed' });
+    });
+    it('a member (whose read went unsigned), or no clear answer: the note left as it was', () => {
+        expect(noteAfterPreview(preview, 200, { isMember: true })).toBeUndefined();
+        expect(noteAfterPreview(preview, 200, {})).toBeUndefined();
+        expect(noteAfterPreview(preview, 200, null)).toBeUndefined();
+        expect(noteAfterPreview(preview, 401, { error: 'Missing signature' })).toBeUndefined();
+        expect(noteAfterPreview(preview, 403, { code: 'not_your_key' })).toBeUndefined();
+        expect(noteAfterPreview(preview, 403, { code: 'key_invalidated' })).toBeUndefined();
+        expect(noteAfterPreview(preview, 500, null)).toBeUndefined();
     });
 });
 

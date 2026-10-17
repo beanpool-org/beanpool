@@ -137,7 +137,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
 
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => {}); };
-const render = async () => { await act(async () => { root.render(createElement(MarketScreen)); }); await settle(); };
+const render = async () => { await act(async () => { root.render(createElement(MarketScreen) as any); }); await settle(); };
 /** The 12 s the Market waits for a first sync before it gives a verdict (market.tsx armSyncWait). */
 const waitOutFirstSync = async () => { await act(async () => { vi.advanceTimersByTime(12_001); }); await settle(); };
 const text = () => host.textContent ?? '';

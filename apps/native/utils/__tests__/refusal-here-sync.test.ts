@@ -146,6 +146,14 @@ describe("a private preview's refusal", () => {
         expect((await refusalHere())?.code).toBe('private_preview');
     });
 
+    it("notes a closed account when the probe says this key's account there was closed (a closed key meets the preview first)", async () => {
+        store.set('beanpool_saved_nodes', JSON.stringify([{ url: ANCHOR, alias: 'Global community' }]));
+        node.posts = { status: 403, body: PREVIEW };
+        node.probe = { status: 403, body: CLOSED };
+        await sync();
+        expect(await refusalHere()).toEqual({ code: 'account_closed', community: 'Global community' });
+    });
+
     it("leaves the note as it was when the probe says the key IS a member: that read went unsigned (PR #1286's rule)", async () => {
         node.posts = { status: 403, body: PREVIEW };
         node.probe = { status: 200, body: { isMember: true } };

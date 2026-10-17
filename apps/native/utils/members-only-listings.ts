@@ -55,14 +55,23 @@ export function isMembersOnlyAnswer(status: number, body: unknown): boolean {
 
 /**
  * A preview's refusal is the same sentence for an unsigned read as for a stranger's (the gate refuses a request that
- * names no member's key), and a member's phone reads unsigned when it can't reach its key (a locked iPhone). So it is
- * noted only on the membership probe's word, signed with this phone's key: no member here (200 `isMember: false`), or
- * the probe itself refused with the preview's code by a node from before the probe was opened to visitors (signed by
- * this key, that too says it is no member). Anything else says nothing.
+ * names no member's key), and a member's phone reads unsigned when it can't reach its key (a locked iPhone). So what it
+ * notes is the membership probe's word, signed with this phone's key:
+ * - no member here (200 `isMember: false`), or the probe itself refused with the preview's code by a node from before the
+ *   probe was opened to visitors (signed by this key, that too says it is no member): the preview;
+ * - this key's account here was closed (403 `account_closed`, answered once the signature checks out; in a preview a
+ *   closed key's reads meet the preview first): the closed account;
+ * - anything else (a member, whose read went unsigned; no clear answer): undefined, the note left as it was.
  */
-export function probeSaysNoMember(status: number, body: unknown): boolean {
-    if (status === 200) return !!body && typeof body === 'object' && (body as { isMember?: unknown }).isMember === false;
-    return status === 403 && codeOf(body) === 'private_preview';
+export function noteAfterPreview(preview: Refusal & { code: 'private_preview' }, probeStatus: number, probeBody: unknown): Refusal | undefined {
+    if (probeStatus === 200) {
+        return probeBody && typeof probeBody === 'object' && (probeBody as { isMember?: unknown }).isMember === false ? preview : undefined;
+    }
+    if (probeStatus !== 403) return undefined;
+    const code = codeOf(probeBody);
+    if (code === 'private_preview') return preview;
+    if (code === 'account_closed') return { code };
+    return undefined;
 }
 
 /** Records, for this community's address, the refusal of its last posts answer (null: none). Never throws. */

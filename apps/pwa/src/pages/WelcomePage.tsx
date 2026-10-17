@@ -11,6 +11,8 @@
 
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { BoldWords } from '../components/BoldWords';
+import { isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
+import { webAppHost } from '../lib/former-address';
 import { useLanguage } from '../lib/useLanguage';
 import React, { useState, useRef, useEffect, useId } from 'react';
 import {
@@ -329,6 +331,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // browser is not asked for its position at the end, as it is on a local community.
     const [nearbyLimits, setNearbyLimits] = useState(() => (nearbyListingsOn(initialInfo) ? initialInfo!.features!.nearbyListings! : null));
     const byArea = nearbyLimits !== null;
+    // Where this account goes on a phone (DESIGN-global-entry-fable.md §D): the community the app lists by name, or
+    // this one by its address. Said at Safety Backup, so nobody taps "I'm new" there and makes a second account.
+    const [appsGlobal, setAppsGlobal] = useState(() => isAppsGlobal(initialInfo, webAppHost()));
     const [showAreaStep, setShowAreaStep] = useState(false);
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
@@ -337,7 +342,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); setAppsGlobal(isAppsGlobal(info, webAppHost())); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -2145,6 +2150,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 ))}
                             </div>
                             <WordsAreEnglish />
+                            {/* The same account on a phone later: restored there with these words (or the sign-in), never
+                                made again (DESIGN-global-entry-fable.md §D). */}
+                            <div data-testid="backup-phone-later" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                {phoneLaterLines({
+                                    where: 'backup', appsGlobal, host: webAppHost(),
+                                    signIns: signInRecovery ? providerLabel(signInRecovery) : null,
+                                }).map((line) => <p key={line} style={{ margin: '0 0 0.4rem' }}><BoldWords text={line} /></p>)}
+                            </div>
 
                             <RecoveryKitButton words={pendingWords} />
 

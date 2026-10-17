@@ -21,6 +21,9 @@ import {
     updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
+import { useCommunityInfo } from '../lib/features';
+import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
+import { webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -207,6 +210,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity.publicKey]);
     const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
+    // The same account on a phone (DESIGN-global-entry-fable.md §D), in the sign-in card; and on a local community, the
+    // global community its node names (§B.3). Nothing of either before the node's info arrives, or when it names none.
+    const communityInfo = useCommunityInfo();
+    const pageHost = webAppHost();
+    const phoneLater = phoneLaterLines({
+        where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: pageHost, signIns: signInRecoveryNames,
+    });
+    const globalCommunity = globalCommunityLink(communityInfo, pageHost);
     // Whether this browser holds the 12 words. One restored from a sign-in copy without them (web-restore.ts) does not:
     // nothing here tells it to save, view or rely on words it hasn't got, and each place says what brings it back.
     const hasWords = hasMnemonic(identity);
@@ -943,7 +954,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} />
                             </div>
                         </div>
 
@@ -1076,7 +1087,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}
-                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} />
+                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} globalCommunity={globalCommunity} />
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
@@ -1907,7 +1918,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
  * Settings → BeanPool: Help & how it works, Suggest a change (hidden while FEEDBACK_LIVE is false), beanpool.org.
  * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
  */
-export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE }: { onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean }) {
+export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null }: {
+    onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean;
+    /** The global community this node names (lib/global-entry.ts globalCommunityLink): a row of its own. Null: none. */
+    globalCommunity?: { href: string; host: string } | null;
+}) {
     const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
     return (
         <div>
@@ -1947,6 +1962,17 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         </a>
                     );
                 })}
+                {globalCommunity && (
+                    <a href={globalCommunity.href} target="_blank" rel="noopener noreferrer" className={rowClass} data-testid="settings-global-community"
+                        aria-label={t('Global community, {address}, opens in a new tab', { address: globalCommunity.host })}>
+                        <span className="text-xl" aria-hidden="true">🌍</span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block">{t('Global community')}</span>
+                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{globalCommunity.host}</span>
+                        </span>
+                        <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
+                    </a>
+                )}
             </div>
         </div>
     );

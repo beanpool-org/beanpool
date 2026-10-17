@@ -16,26 +16,58 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 /**
- * The sync engine as the Market sees it (services/pillar-sync.ts): requestSync starts a cycle, which ends after its time
- * with PILLAR_SYNC_ENDED (and pillar_sync_done when it landed), and isPillarSyncActive is true while one runs. Each
- * requestSync takes the next cycle from `queued`; with none queued it starts nothing, and nothing reports back.
+ * The sync engine as the Market sees it (services/pillar-sync.ts requestSync), on the faked clock. A request starts a
+ * cycle after a 150 ms debounce. One made while a cycle holds the queue, as the Market's is when it hears that cycle's
+ * PILLAR_SYNC_ENDED, queues one trailing cycle, which waits 2 s after that one ends and then its debounce.
+ * isPillarSyncActive is true from a request until its cycle ends, through that cooldown too (the
+ * pillar-sync-trailing-active.test.ts measure of the real engine). Each cycle takes the next of `queued` and ends after its
+ * `ms` with pillar_sync_done when it landed, then PILLAR_SYNC_ENDED; with none queued it runs nothing, and nothing
+ * reports back. `requests` counts the Market's requests, never the engine's own trailing one.
  */
 const sync = vi.hoisted(() => {
     const listeners = new Map<string, Set<(e?: unknown) => void>>();
     const emit = (name: string, e?: unknown) => { for (const l of [...(listeners.get(name) ?? [])]) l(e); };
+    type Cycle = { success: boolean; ms: number };
+    // A timer set in one test never acts in the next (reset).
+    let run = 0;
+    let holding = false;
+    let again = false;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    let cooldown: ReturnType<typeof setTimeout> | null = null;
+    const later = (fn: () => void, ms: number) => { const mine = run; return setTimeout(() => { if (mine === run) fn(); }, ms); };
+    const queue = () => {
+        if (holding) { again = true; return; }
+        if (debounce) clearTimeout(debounce);
+        debounce = later(() => {
+            debounce = null;
+            const cycle = state.queued.shift();
+            if (cycle) state.start(cycle);
+        }, 150);
+    };
     const state = {
-        active: false,
         requests: 0,
-        queued: [] as Array<{ success: boolean; ms: number }>,
+        queued: [] as Cycle[],
         listeners,
         emit,
-        /** One cycle: running now, ending after `ms` (on the faked clock) as it says. */
-        start(cycle: { success: boolean; ms: number }) {
-            state.active = true;
-            setTimeout(() => {
-                state.active = false;
+        get active() { return holding || debounce !== null || cooldown !== null; },
+        reset() {
+            run++;
+            holding = again = false;
+            debounce = cooldown = null;
+            state.requests = 0;
+            state.queued = [];
+        },
+        request() { state.requests++; queue(); },
+        /** One cycle: running now, ending after `ms` as it says. */
+        start(cycle: Cycle) {
+            holding = true;
+            later(() => {
                 if (cycle.success) emit('pillar_sync_done');
                 emit('pillar_sync_ended', { success: cycle.success });
+                holding = false;
+                if (!again) return;
+                again = false;
+                cooldown = later(() => { cooldown = null; queue(); }, 2_000);
             }, cycle.ms);
         },
     };
@@ -108,11 +140,7 @@ vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'denied' }), getLastKnownPositionAsync: async () => null,
 }));
 vi.mock('../../services/pillar-sync', () => ({
-    requestSync: async () => {
-        sync.requests++;
-        const cycle = sync.queued.shift();
-        if (cycle) sync.start(cycle);
-    },
+    requestSync: async () => { sync.request(); },
     isPillarSyncActive: () => sync.active,
     PILLAR_SYNC_ENDED: 'pillar_sync_ended',
 }));
@@ -173,7 +201,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     net.calls.length = 0;
-    Object.assign(sync, { active: false, requests: 0, queued: [] });
+    sync.reset();
     sync.listeners.clear();
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -263,7 +291,8 @@ describe('a first sync that fails', () => {
         await pass(9_001);
         expect(text()).toContain('Loading the marketplace');
         expect(text()).not.toContain(TROUBLE);
-        await pass(3_000);
+        // It ran after the engine's 2 s cooldown and its debounce, from 5.15 s.
+        await pass(5_150);
         expect(text()).toContain(TROUBLE);
         expect(sync.requests).toBe(1);
     });
@@ -276,7 +305,7 @@ describe('a first sync that fails', () => {
         await pass(3_000);
         expect(shown('market-feed')).toBe(false);
         expect(text()).toContain('Loading the marketplace');
-        await pass(2_000);
+        await pass(4_150);
         expect(shown('market-feed')).toBe(true);
         await pass(30_000);
         expect(text()).not.toContain(TROUBLE);
@@ -294,10 +323,10 @@ describe('a first sync that fails', () => {
         expect(text()).not.toContain(TROUBLE);
         // It fails: one sync more, which lands.
         sync.queued = [{ success: true, ms: 1_000 }];
-        await pass(8_000);
+        await pass(8_150);
         expect(sync.requests).toBe(2);
         expect(text()).not.toContain(TROUBLE);
-        await pass(1_000);
+        await pass(3_150);
         expect(shown('market-feed')).toBe(true);
     });
 
@@ -314,8 +343,42 @@ describe('a first sync that fails', () => {
         await act(async () => { retry!.click(); });
         await settle();
         expect(text()).not.toContain(TROUBLE);
-        await pass(2_000);
+        await pass(4_300);
         expect(sync.requests).toBe(requestsBefore + 2);
         expect(shown('market-feed')).toBe(true);
+    });
+
+    // The sync asked for as a cycle ends waits out the engine's 2 s cooldown before it runs: one that fails at 11 s has the
+    // 12 s pass inside it, with no cycle running. Read as nothing running, it showed the banner over a retry still to come
+    // (review of PR #2127).
+    it('fails at 11 s: no banner at 12 s while the sync after it waits its turn; that one landing shows the market', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        sync.start({ success: false, ms: 11_000 });
+        sync.queued = [{ success: true, ms: 3_000 }];
+        await render();
+        await pass(11_000);
+        expect(sync.requests).toBe(1);
+        await pass(1_001);
+        expect(text()).toContain('Loading the marketplace');
+        expect(text()).not.toContain(TROUBLE);
+        await pass(4_150);
+        expect(shown('market-feed')).toBe(true);
+        expect(text()).not.toContain(TROUBLE);
+        expect(sync.requests).toBe(1);
+    });
+
+    it('fails at 11 s and the sync after it fails too: the banner once that one has ended, not before', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        sync.start({ success: false, ms: 11_000 });
+        sync.queued = [{ success: false, ms: 3_000 }];
+        await render();
+        await pass(11_000);
+        await pass(1_001);
+        expect(text()).not.toContain(TROUBLE);
+        await pass(4_000);
+        expect(text()).not.toContain(TROUBLE);
+        await pass(150);
+        expect(text()).toContain(TROUBLE);
+        expect(sync.requests).toBe(1);
     });
 });

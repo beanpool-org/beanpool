@@ -429,11 +429,11 @@ export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMes
 }
 
 /**
- * True while a sync is queued (debounce window) or running. The market uses it so a sync that is
- * still downloading on a slow connection is not reported as "trouble connecting".
+ * True while a sync is queued (debounce window, or a trailing sync's cooldown) or running. The market uses it so a sync
+ * that is still downloading on a slow connection is not reported as "trouble connecting".
  */
 export function isPillarSyncActive(): boolean {
-    return isSyncing || syncPromise !== null || debounceTimeoutId !== null;
+    return isSyncing || syncPromise !== null || debounceTimeoutId !== null || trailingTimeoutId !== null;
 }
 
 /**
@@ -1681,6 +1681,10 @@ let needsAnotherSync = false;
 // in the workspace has pulled @types/node into scope. Adding a test runner to this app did
 // exactly that. This spelling is correct under either.
 let debounceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+// The trailing sync's cooldown (requestSync), pending. A sync asked for as a cycle ends (the Market's second try, heard on
+// PILLAR_SYNC_ENDED) waits it out before its debounce: counted as queued, or the Market read ~2 s of nothing running and
+// said "Having trouble connecting" with that sync still to come (review of PR #2127).
+let trailingTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Coordinated request wrapper. Ensures that only one performSync executes at a time,
@@ -1718,7 +1722,8 @@ export async function requestSync(): Promise<void> {
                 if (needsAnotherSync) {
                     needsAnotherSync = false;
                     // Protective 2000ms cooldown delay to prevent infinite consecutive trailing sync loops
-                    setTimeout(() => {
+                    trailingTimeoutId = setTimeout(() => {
+                        trailingTimeoutId = null;
                         requestSync();
                     }, 2000);
                 }

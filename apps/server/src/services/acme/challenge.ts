@@ -8,8 +8,9 @@
  * the tunnel's delegation nor the CF_RECORD_NAME redirect ever sees a challenge request.
  *
  * The self-check fetches the same URL the CA will, http://<identifier>:80/…, before anything is sent to the CA: an
- * identifier that does not reach this server is never submitted, which keeps a node under the CA's failed-validation
- * limit and makes a typo harmless. It answers in words what is missing.
+ * identifier it cannot reach is submitted at most once a day (schedule.ts), which keeps a node far under the CA's
+ * failed-validation limits and makes a typo cheap, while a home router without NAT loopback (the check fails from inside,
+ * the CA reaches the server from outside) still gets its certificate. It answers in words what is missing.
  */
 
 import type Koa from 'koa';

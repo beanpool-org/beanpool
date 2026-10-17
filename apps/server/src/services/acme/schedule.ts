@@ -6,7 +6,8 @@
  * one at a time:
  *   - a certificate with more than a third of its life left (30 of 90 days for a name, ~53 of ~160 hours for an IP) is
  *     left alone, unless it came from another ACME directory than ACME_DIRECTORY_URL names now (state.json records it);
- *   - otherwise, once `nextAttemptAt` has come, one order (order.ts), its self-check first. The old certificate serves
+ *   - otherwise, once `nextAttemptAt` has come, one order (order.ts), its self-check first; a failed self-check asks the
+ *     CA anyway when it was not asked so in the last day (UNCONFIRMED_EVERY_MS), else sends it nothing. The old certificate serves
  *     until the new one is on disk; a failed order keeps it and sets the next try: 1 h, 4 h, then daily after failures in
  *     a row, but for an identifier with a certificate never later than a third of the time it has left (so the window an
  *     IP certificate opens ~53 h before it expires is tried in, hourly as it closes). Failures at another directory than
@@ -36,10 +37,32 @@ export const RENEW_WHEN_LEFT = 1 / 3;
 /** The wait after 1, 2, 3+ failures in a row. */
 export const BACKOFF_MS = [HOUR, 4 * HOUR, 24 * HOUR] as const;
 export const ORDER_TIMEOUT_MS = 10 * 60_000;
+/**
+ * After a failed self-check, the CA is still asked, at most this often: the check runs from inside the server's network,
+ * and a home router without NAT loopback fails it although the CA reaches the server. Let's Encrypt allows 5 failed
+ * validations an hour per identifier, and pauses one after 1,152 in a row, giving one back a day
+ * (letsencrypt.org/docs/rate-limits, read 18 Oct 2026): one a day never comes near either.
+ */
+export const UNCONFIRMED_EVERY_MS = 24 * HOUR;
 
 /** The ACME directory: ACME_DIRECTORY_URL (Let's Encrypt staging for a trial, another CA), else Let's Encrypt production. */
 export function acmeDirectoryUrl(): string {
     return (process.env.ACME_DIRECTORY_URL ?? '').trim() || LETS_ENCRYPT_PRODUCTION;
+}
+
+/** The CA as the owner reads it: Let's Encrypt for its directories (production or staging), else "the CA". */
+export function caName(directoryUrl: string): string {
+    try {
+        const host = new URL(directoryUrl).hostname;
+        if (host === 'letsencrypt.org' || host.endsWith('.letsencrypt.org')) return "Let's Encrypt";
+    } catch { /* not a URL */ }
+    return 'the CA';
+}
+
+/** The owner's words for an attempt whose self-check failed (`problem`), with what the CA said if it was asked. */
+function unconfirmedWords(ca: string, problem: string, caAnswer: string | null): string {
+    return `could not confirm from inside your network; trying with ${ca} anyway, once a day.`
+        + (caAnswer ? ` ${ca[0].toUpperCase()}${ca.slice(1)} said: ${caAnswer}.` : '') + ` The check from here: ${problem}`;
 }
 
 /** What to order, in configured order: every tlsIdentifier on http-01, the fleet's CF_RECORD_NAME on dns-01. */
@@ -156,34 +179,50 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
     const sameAttempts = state.attemptDirectoryUrl === null || state.attemptDirectoryUrl === directoryUrl;
     const failuresSoFar = sameAttempts ? state.failures : 0;
     if (sameAttempts && now < state.nextAttemptAt) return 'waiting';
+    const lastUnconfirmed = sameAttempts ? state.unconfirmedAttemptAt : 0;
+    const ca = caName(directoryUrl);
 
     console.log(`🔐 ACME: ${held ? 'renewing' : 'ordering'} the certificate for ${target.host} (${target.challenge}) at ${directoryUrl}`
         + (otherDirectory ? `; the one held came from ${state.directoryUrl}` : '')
         + (!sameAttempts && state.failures ? `; the failures at ${state.attemptDirectoryUrl} do not count here` : ''));
-    const attempt: AcmeState = { ...state, lastAttemptAt: now, attemptDirectoryUrl: directoryUrl };
+    // A failed self-check: what it said, and whether the CA was asked anyway (never once this attempt is over).
+    let selfCheckProblem: string | null = null;
+    let askedUnconfirmed = false;
+    let settled = false;
+    const attempt = (): AcmeState => ({
+        ...state, lastAttemptAt: now, attemptDirectoryUrl: directoryUrl, unconfirmedAttemptAt: askedUnconfirmed ? now : lastUnconfirmed,
+    });
     try {
         const pair = await withTimeout(orderFn(target, {
             directoryUrl,
             accountKey: accountKey(),
             log: (line) => console.log(`   ACME: ${line}`),
-        }));
+            orderUnconfirmed: (problem) => {
+                selfCheckProblem = problem;
+                askedUnconfirmed = !settled && now - lastUnconfirmed >= UNCONFIRMED_EVERY_MS;
+                return askedUnconfirmed;
+            },
+        })).finally(() => { settled = true; });
         writePair(dataDir, target.host, pair);
         const problem = serveCertificate(target.host, pair, clock());
         if (problem) throw new Error(`the new certificate is on disk but cannot be served: ${problem}`);
         const fresh = servedCertificate(target.host)!;
         writeState(dataDir, {
-            ...attempt, validUntil: fresh.notAfter, lifetimeMs: fresh.notAfter - fresh.notBefore,
+            ...attempt(), validUntil: fresh.notAfter, lifetimeMs: fresh.notAfter - fresh.notBefore,
             nextAttemptAt: 0, failures: 0, lastError: null, lastSuccessAt: clock(), directoryUrl,
         });
-        console.log(`✅ ACME: certificate for ${target.host} until ${new Date(fresh.notAfter).toISOString()}`);
+        console.log(`✅ ACME: certificate for ${target.host} until ${new Date(fresh.notAfter).toISOString()}`
+            + (askedUnconfirmed ? ` (not confirmed from inside this network; ${ca} reached it)` : ''));
         return 'renewed';
     } catch (err) {
         const failures = failuresSoFar + 1;
         const why = (err as Error).message || String(err);
         const next = now + nextAttemptDelay(failures, held?.notAfter ?? null, now);
-        writeState(dataDir, { ...attempt, failures, lastError: why, nextAttemptAt: next });
-        const kind = err instanceof SelfCheckFailed ? 'self-check failed, nothing was sent to the CA' : 'order failed';
-        console.warn(`⚠️  ACME: ${target.host}: ${kind}: ${why}. ${held ? 'The current certificate stays. ' : ''}Next try ${new Date(next).toISOString()}.`);
+        const words = selfCheckProblem === null ? why : unconfirmedWords(ca, selfCheckProblem, askedUnconfirmed ? why : null);
+        writeState(dataDir, { ...attempt(), failures, lastError: words, nextAttemptAt: next });
+        const kind = err instanceof SelfCheckFailed ? `self-check failed, nothing was sent to the CA (asked anyway once a day)`
+            : askedUnconfirmed ? 'self-check failed, the CA was asked anyway; order failed' : 'order failed';
+        console.warn(`⚠️  ACME: ${target.host}: ${kind}: ${words}. ${held ? 'The current certificate stays. ' : ''}Next try ${new Date(next).toISOString()}.`);
         return 'failed';
     }
 }

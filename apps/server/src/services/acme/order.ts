@@ -4,7 +4,10 @@
  *
  *   - http-01 for every identifier but one: answered on this server's own port 80 (challenge.ts). A self-check fetches it
  *     from outside BEFORE the CA is asked anything, with a token of this server's own, and again with the CA's token
- *     before the challenge is submitted: an identifier that does not reach this server submits nothing.
+ *     before the challenge is submitted. One that fails submits nothing, unless the caller says to go on anyway
+ *     (`orderUnconfirmed`; schedule.ts does at most once a day): the check runs from inside the server's own network, and
+ *     a home router without NAT loopback fails it although the CA reaches the server from outside. Once gone on, the
+ *     order runs without a self-check and the CA's validation decides.
  *   - dns-01 through the Cloudflare API only for CF_RECORD_NAME with CF_API_TOKEN and CF_ZONE_ID set: our own fleet's
  *     names, as before.
  *
@@ -39,6 +42,8 @@ export interface OrderOptions {
     directoryUrl: string;
     accountKey: string;
     log?: (line: string) => void;
+    /** A self-check failed for `problem`: true to ask the CA anyway. Without it, nothing is sent to the CA. */
+    orderUnconfirmed?: (problem: string) => boolean;
 }
 
 function rsaKey(): string {
@@ -63,10 +68,23 @@ async function selfCheck(target: AcmeTarget, token: string, keyAuthorization: st
 /** Order a certificate for `target`; resolves with the pair, or throws with what went wrong. */
 export async function orderCertificate(target: AcmeTarget, opts: OrderOptions): Promise<CertPair> {
     const log = opts.log ?? (() => {});
+    let unconfirmed = false;
+    /** The self-check for `token`, or, once the caller has said to go on without one, the answer put up alone. */
+    const checked = async (token: string, keyAuthorization: string) => {
+        if (unconfirmed) return putChallenge(token, keyAuthorization);
+        try {
+            await selfCheck(target, token, keyAuthorization);
+        } catch (err) {
+            if (!(err instanceof SelfCheckFailed) || !opts.orderUnconfirmed?.(err.message)) throw err;
+            unconfirmed = true;
+            log(`could not confirm ${target.host} from inside this network (${err.message}); asking the CA anyway`);
+            putChallenge(token, keyAuthorization);
+        }
+    };
     if (target.challenge === 'http-01') {
         // Before the first request to the CA: does this identifier reach this server's port 80 at all?
         const probe = crypto.randomBytes(24).toString('base64url');
-        await selfCheck(target, probe, crypto.randomBytes(24).toString('base64url'));
+        await checked(probe, crypto.randomBytes(24).toString('base64url'));
         removeChallenge(probe);
     }
 
@@ -89,7 +107,7 @@ export async function orderCertificate(target: AcmeTarget, opts: OrderOptions): 
         if (!challenge) throw new Error(`the CA offered no ${target.challenge} challenge for ${target.host}`);
         const keyAuthorization = await client.getChallengeKeyAuthorization(challenge);
         if (target.challenge === 'http-01') {
-            await selfCheck(target, challenge.token, keyAuthorization);
+            await checked(challenge.token, keyAuthorization);
             try {
                 await client.completeChallenge(challenge);
                 await client.waitForValidStatus(challenge);

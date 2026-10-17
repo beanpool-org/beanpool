@@ -11,7 +11,9 @@
  *      until the new one is on disk;
  *   4. a failed order keeps the old certificate and schedules a retry (1 h, 4 h, then daily; never past a third of what
  *      is left);
- *   5. a self-check failure (port 80 not reachable, or answered by someone else) sends nothing to the CA;
+ *   5. a self-check failure (port 80 not reachable from here, or answered by someone else) asks the CA anyway, at most
+ *      once a day, saying so in words: a router without NAT loopback fails the check from inside although the CA reaches
+ *      the server (ordered at once, then served); within the day, the CA is asked nothing;
  *   6. an unknown token is 404 with an empty body, and the route wins over the CF_RECORD_NAME redirect and the tunnel's
  *      delegation;
  *   7. keys are 0600 when written and after the boot sweep; a restart serves them from disk and asks the CA nothing;
@@ -92,6 +94,8 @@ const fake = {
     failFinalize: false,
     /** Holds the certificate download until released. */
     hold: null as null | { reached: () => void; release: Promise<void> },
+    /** The port the CA "validates" an identifier on, when not the node's own (a port 80 the CA cannot reach either). */
+    caPortFor: {} as Record<string, number>,
 };
 const base = () => `http://127.0.0.1:${fake.port}`;
 
@@ -178,7 +182,8 @@ async function fakeHandle(req: http.IncomingMessage, body: string): Promise<{ st
             if (payload && o.challengeStatus === 'pending') {
                 // "Validation": fetch the node's own plain listener, as the CA's vantage points fetch port 80.
                 let got = '';
-                try { got = (await (await fetch(`http://127.0.0.1:${fake.nodeHttpPort}/.well-known/acme-challenge/${o.token}`)).text()).trim(); } catch { /* unreachable */ }
+                const port = fake.caPortFor[o.identifiers[0].value] ?? fake.nodeHttpPort;
+                try { got = (await (await fetch(`http://127.0.0.1:${port}/.well-known/acme-challenge/${o.token}`)).text()).trim(); } catch { /* unreachable */ }
                 o.challengeStatus = got === `${o.token}.${thumbprint(fake.jwk)}` ? 'valid' : 'invalid';
                 if (o.challengeStatus === 'valid') o.status = 'ready';
                 else o.status = 'invalid';
@@ -382,20 +387,66 @@ try {
     check('the owners\' tls.fallback alert promises what the back-off does: tried again within a day',
         Math.max(...schedule.BACKOFF_MS) <= DAY && /self-signed one\. It is tried again within a day\."/.test(alertsSource) && !/retried every 2 hours/.test(alertsSource));
 
-    console.log('\n5. A self-check failure sends nothing to the CA');
+    console.log('\n5. A self-check failure: the CA is asked anyway, at most once a day (a router without NAT loopback fails it from inside)');
     now = Date.now(); // the name renewed above is fresh again
+    const anyway = /^could not confirm from inside your network; trying with the CA anyway, once a day\./;
     for (const [host, words] of [['elsewhere.example.org', /does not reach this server on port 80 \(ECONNREFUSED\)/], ['stranger.example.org', /answers on port 80, but not as this server \(HTTP 404\)/]] as const) {
         configure(['beans.example.org', host]);
-        const reqs = fake.requests.length;
+        fake.caPortFor[host] = originFor[host]; // the CA cannot reach it either
+        const askedAt = now;
+        before = orderCount();
         const t5 = await schedule.runAcmeTick();
         const st5 = store.readState(dataDir, host);
-        check(`${host}: the attempt fails`, t5.outcomes[host] === 'failed', JSON.stringify(t5));
-        check(`${host}: not one request reached the CA (no directory, account, order or challenge)`, fake.requests.length === reqs,
-            JSON.stringify(fake.requests.slice(reqs)));
-        check(`${host}: state.json says why in words, and when to try next`, words.test(st5.lastError ?? '') && st5.failures === 1 && st5.nextAttemptAt === now + HOUR,
-            JSON.stringify(st5));
+        check(`${host}: the first failed self-check: the CA is asked anyway (one order), and its validation fails`,
+            t5.outcomes[host] === 'failed' && orderCount() === before + 1, JSON.stringify(t5));
+        check(`${host}: state.json says so in words: not confirmed from inside, tried anyway, the CA's answer and the check's`,
+            anyway.test(st5.lastError ?? '') && /The CA said: wrong answer\./.test(st5.lastError ?? '') && words.test(st5.lastError ?? ''), st5.lastError ?? '');
+        check(`${host}: 1 failure, the next try in an hour, the CA asked unconfirmed now`, st5.failures === 1 && st5.nextAttemptAt === now + HOUR
+            && st5.unconfirmedAttemptAt === askedAt, JSON.stringify(st5));
         check(`${host}: no key or certificate is written`, !store.readPair(dataDir, host));
+        now += HOUR + 60_000;
+        let reqs = fake.requests.length;
+        const t5b = await schedule.runAcmeTick();
+        const st5b = store.readState(dataDir, host);
+        check(`${host}: an hour later the self-check fails again: not one request reaches the CA (no directory, account, order or challenge)`,
+            t5b.outcomes[host] === 'failed' && fake.requests.length === reqs, JSON.stringify(fake.requests.slice(reqs)));
+        check(`${host}: …state.json: the same words without a CA answer, 2 failures, the next try in 4 hours`, anyway.test(st5b.lastError ?? '')
+            && words.test(st5b.lastError ?? '') && !/wrong answer/.test(st5b.lastError ?? '') && st5b.failures === 2 && st5b.nextAttemptAt === now + 4 * HOUR
+            && st5b.unconfirmedAttemptAt === askedAt, JSON.stringify(st5b));
+        // The back-off set aside (nextAttemptAt 0), to see the once-a-day limit alone.
+        now = askedAt + DAY - 60_000;
+        store.writeState(dataDir, { ...st5b, nextAttemptAt: 0 });
+        reqs = fake.requests.length;
+        const t5c = await schedule.runAcmeTick();
+        check(`${host}: a minute short of a day after the CA was asked: the CA is asked nothing`, t5c.outcomes[host] === 'failed' && fake.requests.length === reqs,
+            JSON.stringify(t5c));
+        now = askedAt + DAY;
+        store.writeState(dataDir, { ...store.readState(dataDir, host), nextAttemptAt: 0 });
+        before = orderCount();
+        const t5d = await schedule.runAcmeTick();
+        check(`${host}: a day after: the CA is asked again (one order)`, t5d.outcomes[host] === 'failed' && orderCount() === before + 1
+            && store.readState(dataDir, host).unconfirmedAttemptAt === now, JSON.stringify(store.readState(dataDir, host)));
+        delete fake.caPortFor[host];
     }
+    // No NAT loopback at home: the check from inside cannot reach the public address, the CA can.
+    const home = 'home.example.org';
+    originFor[home] = closedPort;
+    configure(['beans.example.org', home]);
+    before = orderCount();
+    const t5h = await schedule.runAcmeTick();
+    const s5h = await served(home);
+    const st5h = store.readState(dataDir, home);
+    check('unreachable from inside but not from the CA: ordered at once, and served by SNI', t5h.outcomes[home] === 'renewed' && orderCount() === before + 1
+        && s5h.authorized && s5h.identityOk, JSON.stringify({ t5h, san: s5h.san }));
+    check('…state.json: no failure, no error, the CA asked unconfirmed now', st5h.failures === 0 && st5h.lastError === null && st5h.unconfirmedAttemptAt === now,
+        JSON.stringify(st5h));
+    delete originFor[home];
+    check('the words name Let\'s Encrypt when it is the CA (production or staging), else "the CA"',
+        schedule.caName('https://acme-v02.api.letsencrypt.org/directory') === "Let's Encrypt"
+        && schedule.caName('https://acme-staging-v02.api.letsencrypt.org/directory') === "Let's Encrypt"
+        && schedule.caName(schedule.acmeDirectoryUrl()) === 'the CA' && schedule.caName('not a url') === 'the CA');
+    check('once a day is within Let\'s Encrypt\'s failed-validation limits (5 an hour; 1,152 in a row, given back 1 a day)',
+        schedule.UNCONFIRMED_EVERY_MS >= DAY);
 
     console.log('\n6. The challenge route: 404 for anything but a live token, before the CF_RECORD_NAME redirect and the tunnel');
     process.env.CF_RECORD_NAME = 'fleet.example.org';
@@ -510,13 +561,15 @@ try {
         const switched = 'switch.example.org';
         configure([switched]);
         originFor[switched] = closedPort;
+        fake.caPortFor[switched] = closedPort;
+        const firstAskedAt = now;
         const t10d = await schedule.runAcmeTick();
         now += HOUR + 60_000;
         const t10e = await schedule.runAcmeTick();
         const st10e = store.readState(dataDir, switched);
         check('no certificate, port 80 shut: two failures under the first directory, the next try in 4 hours',
             t10d.outcomes[switched] === 'failed' && t10e.outcomes[switched] === 'failed' && st10e.failures === 2
-            && st10e.nextAttemptAt === now + 4 * HOUR && st10e.attemptDirectoryUrl === firstDirectory, JSON.stringify(st10e));
+            && st10e.nextAttemptAt === now + 4 * HOUR && st10e.attemptDirectoryUrl === firstDirectory && st10e.unconfirmedAttemptAt === firstAskedAt, JSON.stringify(st10e));
         now += 5 * 60_000;
         const t10f = await schedule.runAcmeTick();
         check('…5 minutes later under the same directory: waiting', t10f.outcomes[switched] === 'waiting', JSON.stringify(t10f));
@@ -526,12 +579,16 @@ try {
         check('a wait that records no directory counts as this directory\'s: still waiting after the switch', t10g.outcomes[switched] === 'waiting',
             JSON.stringify(t10g));
         store.writeState(dataDir, st10e);
+        before = orderCount();
         const t10h = await schedule.runAcmeTick();
         const st10h = store.readState(dataDir, switched);
         check('the second directory configured: tried at once, and its first failure waits an hour, not 4 hours or a day',
             t10h.outcomes[switched] === 'failed' && st10h.failures === 1 && st10h.nextAttemptAt === now + HOUR
             && st10h.attemptDirectoryUrl === secondDirectory, JSON.stringify(st10h));
+        check('…and the CA is asked although the first directory\'s was asked within the day (the once-a-day limit is per directory)',
+            orderCount() === before + 1 && st10h.unconfirmedAttemptAt === now, JSON.stringify(st10h));
         delete originFor[switched];
+        delete fake.caPortFor[switched];
         now += HOUR + 60_000;
         before = orderCount();
         const t10i = await schedule.runAcmeTick();

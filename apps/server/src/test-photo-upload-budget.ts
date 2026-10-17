@@ -23,6 +23,8 @@ process.env.DISABLE_UPDATE_CHECK = 'true';
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import sharp from 'sharp';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -65,7 +67,45 @@ const errorOf = (r: { body: any }) => String(r.body?.message ?? r.body?.error ??
 const BUDGET_SENTENCE = "You've shared a lot of photos today. Try again tomorrow.";
 const FULL_SENTENCE = "This community's storage is nearly full. Tell its owner.";
 
+async function runRestartChild(): Promise<void> {
+    const { initTls } = await import('./services/tls.js');
+    const se = await import('./state-engine.js');
+    const { startHttpsServer } = await import('./https-server.js');
+    const { lockedDm } = await import('./dm-test-payload.js');
+    const safeLockedDm = (bytes = 32) => {
+        let d = lockedDm(bytes);
+        while (d.ciphertext.startsWith('/')) d = lockedDm(bytes);
+        return d;
+    };
+    await initTls();
+    se.initStateEngine();
+    const base = `https://localhost:${await startHttpsServer(0)}`;
+    const pk = process.argv[3];
+    const convId = process.argv[4];
+    const keyPem = Buffer.from(process.argv[5], 'base64').toString('utf8');
+    const reba: Id = { pk, privateKey: crypto.createPrivateKey(keyPem) };
+    const ph = safeLockedDm(10_000);
+    const s = JSON.stringify({
+        conversationId: convId,
+        authorPubkey: reba.pk,
+        ...safeLockedDm(),
+        type: 'image',
+        attachment: { data: ph.ciphertext, nonce: ph.nonce }
+    });
+    const headers = { ...signedHeaders('POST', '/api/messages/send', s, reba), 'Content-Type': 'application/json' };
+    const res = await fetch(`${base}/api/messages/send`, { method: 'POST', headers, body: s });
+    const text = await res.text();
+    let body: any;
+    try { body = JSON.parse(text); } catch { body = text; }
+    console.log(`RESTART_CHILD_RESULT:${JSON.stringify({ status: res.status, body })}`);
+    process.exit(0);
+}
+
 async function main(): Promise<void> {
+    if (process.argv[2] === '--restart-child') {
+        await runRestartChild();
+        return;
+    }
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -79,12 +119,11 @@ async function main(): Promise<void> {
         while (d.ciphertext.startsWith('/')) d = lockedDm(bytes);
         return d;
     };
-    const {
-        resetPhotoBudgetForTests,
-        advancePhotoBudgetForTests,
-        setSimulatedFreeDiskBytesForTests,
-        getMemberPhotoUsageForTests,
-    } = await import('./engine/photo-upload-budget.js');
+    const budgetModule = await import('./engine/photo-upload-budget.js').catch(() => null);
+    const resetPhotoBudgetForTests = budgetModule?.resetPhotoBudgetForTests ?? (() => {});
+    const advancePhotoBudgetForTests = budgetModule?.advancePhotoBudgetForTests ?? (() => {});
+    const setSimulatedFreeDiskBytesForTests = budgetModule?.setSimulatedFreeDiskBytesForTests ?? (() => {});
+    const getMemberPhotoUsageForTests = budgetModule?.getMemberPhotoUsageForTests ?? (() => ({ usedBytes: 0, entryCount: 0 }));
 
     beforeCall = () => { resetGatewayRateLimit(); resetChatRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
     await initTls(); se.initStateEngine();
@@ -433,20 +472,28 @@ async function main(): Promise<void> {
         reopenedDb.close();
         check('restart-db-has-row', (row?.total ?? 0) >= 20_000, `reopened database has photo_budget_log rows >= 20000 bytes (got ${row?.total})`);
 
-        // Restart engine: initStateEngine
-        se.initStateEngine();
-
-        // Further upload that exceeds remaining budget (10 KB > 5 KB left) is refused
-        const ph2 = safeLockedDm(10_000);
-        const s2 = await req('POST', '/api/messages/send', reba, {
-            conversationId: conv.id,
-            authorPubkey: reba.pk,
-            ...safeLockedDm(),
-            type: 'image',
-            attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
+        // Restart in a real child process on the same data dir
+        const keyBase64 = Buffer.from(reba.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64');
+        const scriptPath = fileURLToPath(import.meta.url);
+        const child = spawnSync(process.execPath, [
+            '--import', 'tsx',
+            scriptPath,
+            '--restart-child',
+            reba.pk,
+            conv.id,
+            keyBase64,
+        ], {
+            env: {
+                ...process.env,
+                PHOTO_BYTES_PER_MEMBER_PER_DAY: '25000',
+            },
+            encoding: 'utf8',
         });
-        check('restart-budget-persists', s2.status === 429, `upload crossing budget refused after restart (got ${s2.status})`);
-        check('restart-budget-sentence', errorOf(s2) === BUDGET_SENTENCE, `refusal after restart has budget sentence`);
+        const match = (child.stdout || '').match(/RESTART_CHILD_RESULT:(.+)/);
+        const childResult = match ? JSON.parse(match[1]) : { status: child.status, body: child.stderr || child.stdout };
+        const childError = String(childResult.body?.message ?? childResult.body?.error ?? '');
+        check('restart-budget-persists', childResult.status === 429, `upload crossing budget refused after restart (got ${childResult.status})`);
+        check('restart-budget-sentence', childError === BUDGET_SENTENCE, `refusal after restart has budget sentence`);
     }
 
     // ── 8. Missed paths: createTreasury, routes/treasury, routes/knocks, crowdfund projects ──

@@ -89,13 +89,11 @@ export function phoneLaterLines({ where, appsGlobal, host, hasWords = true, sign
     signIns: string | null;
 }): string[] {
     const lines: string[] = [];
-    if (!hasWords) {
-        // No words line.
-    } else if (appsGlobal) {
+    if (hasWords && appsGlobal) {
         lines.push(where === 'backup'
             ? t('To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type these 12 words.')
             : t('To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type your 12 words.'));
-    } else if (host) {
+    } else if (hasWords && host) {
         lines.push(where === 'backup'
             ? t("To use BeanPool on your phone later: install the app, tap **Already a member** and type these 12 words and this community's address, {address}.", { address: host })
             : t("To use BeanPool on your phone later: install the app, tap **Already a member** and type your 12 words and this community's address, {address}.", { address: host }));

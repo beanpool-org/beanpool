@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "No se puede conectar ahora. Toca para intentarlo de nuevo.",
   "Can't reach it right now": "No se puede conectar ahora",
   "Your account there was closed.": "Tu cuenta allí se cerró.",
+  "Your own community isn't affected.": "Tu propia comunidad no se ve afectada.",
   "Global community, {state}": "Comunidad global, {state}",
   "Switches to this community. Long press to remove it.": "Cambia a esta comunidad. Mantén pulsado para quitarla.",
   "Guest": "Invitado",

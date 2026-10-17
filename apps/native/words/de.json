@@ -2,7 +2,7 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "Gerade nicht erreichbar. Tippe, um es noch einmal zu versuchen.",
   "Can't reach it right now": "Gerade nicht erreichbar",
   "Your account there was closed.": "Dein Konto dort wurde geschlossen.",
+  "Your own community isn't affected.": "Deine eigene Gemeinschaft ist nicht betroffen.",
   "Global community, {state}": "Globale Gemeinschaft, {state}",
   "Switches to this community. Long press to remove it.": "Wechselt zu dieser Community. Lange drücken, um sie zu entfernen.",
   "Guest": "Gast",

@@ -398,6 +398,28 @@ describe("the global community can't be reached: the community in use isn't affe
         expect(row().getAttribute('aria-label')).toBe("Global community, Can't reach it right now. Tap to try again.");
     });
 
+    it('in every catalog TalkBack reads one stop between the two, the language\'s own (hi, bn: "।"; ur: "۔"; ja, zh: "。")', async () => {
+        const dir = path.resolve(__dirname, '../../words');
+        for (const f of fs.readdirSync(dir).filter((x) => /^[A-Za-z-]+\.json$/.test(x))) {
+            const cat = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Record<string, string>;
+            const aside = cat[AFFECTED];
+            const stop = aside.slice(-1);
+            expect(stop, `${f} ends "${aside}" with a full stop`).toMatch(/^[.。।۔]$/);
+            for (const saved of [false, true]) {
+                act(() => root.unmount());
+                root = createRoot(host);
+                forgetGlobalDoorOffer();
+                setLanguage(f.replace(/\.json$/, '') as Parameters<typeof setLanguage>[0], [cat]);
+                list.rows = saved ? [RIVERSIDE, SAVED] : [RIVERSIDE];
+                scene.door = 'offline';
+                await open();
+                // Unsaved, the line has its own stop; saved ("Can't reach it right now"), it takes the aside's.
+                const said = saved ? `${cat["Can't reach it right now"]}${stop} ${aside}` : `${cat["Can't reach it right now. Tap to try again."]} ${aside}`;
+                expect(row().getAttribute('aria-label'), `${f}${saved ? ', saved' : ''}`).toContain(said);
+            }
+        }
+    });
+
     for (const door of ['open', 'shut', 'preview'] as const) {
         it(`not when the global community answered (door ${door}): only "can't reach it" says it`, async () => {
             scene.door = door;

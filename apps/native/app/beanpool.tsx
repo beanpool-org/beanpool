@@ -156,8 +156,11 @@ export default function BeanPoolSheet() {
     // phone is on the global community, nor while the community in use can't be reached either: it would read as false.
     const globalAside = globalEntry === 'unreachable' && !!communities.active && !isGlobalCommunity(communities.active)
         && current?.status === 'online' ? t("Your own community isn't affected.") : null;
-    // TalkBack reads the two as sentences: a line without its own stop (the saved row's "Can't reach it right now") gets one.
-    const globalState = globalAside ? `${globalLine}${/[.!?…。]$/.test(globalLine) ? '' : '.'} ${globalAside}` : globalLine;
+    // TalkBack reads the two as sentences: a line without its own stop (the saved row's "Can't reach it right now") gets one,
+    // the language's own as the aside ends with it ("।" in hi and bn, "۔" in ur, "。" in ja and zh), never a second.
+    const globalState = globalAside
+        ? `${globalLine}${/[.!?…。।۔！？]$/.test(globalLine) ? '' : globalAside.match(/[.。।۔]$/)?.[0] ?? '.'} ${globalAside}`
+        : globalLine;
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 

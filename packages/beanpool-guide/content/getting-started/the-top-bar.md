@@ -20,7 +20,7 @@ In a web browser the top bar is simpler. It has the connection status on the lef
 Tap the bean at the top left to open the **BeanPool** sheet. It shows:
 
 - **Your community:** its name, and whether it can be reached right now.
-- **Your communities:** tap one to switch to it, or tap **Add a community**.
+- **Your communities:** tap one to switch to it, or tap **Add a community**. The **Global community** is always one of them: its second line says whether you can join it.
 - **The guides:** this guide, with its search, and what is new.
 
 The small dot on the bean tells you how things are:

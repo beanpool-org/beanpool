@@ -79,7 +79,11 @@ export function lobbyJoinWays({ phone, appsGlobal, doorOpen }: { phone: boolean;
  * address to give, so no words line. `hasWords` false (a browser restored from a copy without them): no words line
  * either, as nothing in Settings tells such a browser to rely on words it hasn't got (components/SignInRecoveryLine).
  * `signIns`: the sign-ins that bring this account back, as a member reads them ("Google"); null or empty, no sign-in
- * line. Each line marks the buttons' names in **bold** (components/BoldWords).
+ * line. Under the words line, the sign-in's is a short "works too". With no words line it stands alone, as the whole
+ * way onto a phone (review 4302869392): the app, **Already a member**, **Recover with Social**, the sign-in, and at
+ * any community but the app's global its address, as the phone asks for it after the sign-in (apps/native welcome.tsx
+ * ssoRecover fills in the global community). No address to give there: no line, as for the words. Each line marks the
+ * buttons' names in **bold** (components/BoldWords).
  */
 export function phoneLaterLines({ where, appsGlobal, host, hasWords = true, signIns }: {
     where: 'backup' | 'settings';
@@ -98,7 +102,14 @@ export function phoneLaterLines({ where, appsGlobal, host, hasWords = true, sign
             ? t("To use BeanPool on your phone later: install the app, tap **Already a member** and type these 12 words and this community's address, {address}.", { address: host })
             : t("To use BeanPool on your phone later: install the app, tap **Already a member** and type your 12 words and this community's address, {address}.", { address: host }));
     }
-    if (signIns) lines.push(t('If you joined with {provider}, **Recover with Social** works too.', { provider: signIns }));
+    if (!signIns) return lines;
+    if (lines.length > 0) {
+        lines.push(t('If you joined with {provider}, **Recover with Social** works too.', { provider: signIns }));
+    } else if (appsGlobal) {
+        lines.push(t('To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social** and sign in with {provider}.', { provider: signIns }));
+    } else if (host) {
+        lines.push(t("To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social**, sign in with {provider} and type this community's address, {address}.", { provider: signIns, address: host }));
+    }
     return lines;
 }
 

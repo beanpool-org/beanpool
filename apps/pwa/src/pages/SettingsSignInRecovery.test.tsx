@@ -235,13 +235,25 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         expect(document.body.textContent).not.toMatch(/Recover with Social/);
     });
 
-    it('a browser without its 12 words is never told to type them: the sign-in line alone', async () => {
+    it('a browser without its 12 words is never told to type them: the sign-in line alone, saying how onto a phone', async () => {
         vi.mocked(api.getCommunityInfo).mockResolvedValue(OURS);
         vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
         renderSettings(noWordsIdentity);
         await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
-        expect(lines()).toEqual(['If you joined with Google, Recover with Social works too.']);
+        // Review 4302869392: on its own, never "works too" pointing at a line that isn't drawn.
+        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social and sign in with Google.']);
+    });
+
+    it('a browser without its 12 words on a local community: the sign-in line names its address', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(LOCAL);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings(noWordsIdentity);
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
+        expect(lines()).toEqual([
+            `To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, localhost.`,
+        ]);
     });
 
     it('a local community: its own address in the line, and the Global community row its node names, opening in a new tab', async () => {

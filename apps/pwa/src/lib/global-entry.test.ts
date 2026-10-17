@@ -106,10 +106,26 @@ describe('phoneLaterLines: how to put this same account on a phone (§D)', () =>
     });
 
     it('a browser without its 12 words is never told to type them: the sign-in line alone, or nothing', () => {
-        expect(phoneLaterLines({ where: 'settings', appsGlobal: true, host: 'global.beanpool.org', hasWords: false, signIns: 'Google' })).toEqual([
-            'If you joined with Google, **Recover with Social** works too.',
-        ]);
         expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: 'mullum.beanpool.org', hasWords: false, signIns: null })).toEqual([]);
+    });
+
+    it('without the words line, the sign-in line stands alone: the app, Already a member, Recover with Social (review 4302869392)', () => {
+        // The app's global: the phone fills it in after the sign-in, so no address.
+        expect(phoneLaterLines({ where: 'settings', appsGlobal: true, host: 'global.beanpool.org', hasWords: false, signIns: 'Google' })).toEqual([
+            'To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social** and sign in with Google.',
+        ]);
+        // Any other community: its address, which the phone asks for after the sign-in.
+        expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: 'mullum.beanpool.org', hasWords: false, signIns: 'Google' })).toEqual([
+            "To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social**, sign in with Google and type this community's address, mullum.beanpool.org.",
+        ]);
+        // No address to give: nothing, never a sign-in line that would restore into the global community instead.
+        expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: null, hasWords: false, signIns: 'Google' })).toEqual([]);
+        // "too" only ever follows the line it points at.
+        for (const appsGlobal of [true, false]) for (const host of ['mullum.beanpool.org', null]) for (const hasWords of [true, false]) {
+            const lines = phoneLaterLines({ where: 'settings', appsGlobal, host, hasWords, signIns: 'Google' });
+            if (lines.some((line) => / too\.$/.test(line))) expect(lines[0]).toMatch(/12 words/);
+            for (const line of lines) expect(line).toMatch(/^To use BeanPool on your phone later: install the app|^If you joined with/);
+        }
     });
 
     it("never tells anyone to start again as new", () => {

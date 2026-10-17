@@ -31,7 +31,7 @@ import {
     claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
     claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeHasAddress, type ClaimStatus,
 } from '../utils/node-claim';
-import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan } from '../utils/claim-link';
+import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
 
 export { ErrorBoundary };
 
@@ -128,9 +128,10 @@ export default function ClaimCommunityScreen() {
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false);
 
-    // A link made for an older code: its code is no good here.
+    // A link made for an older code: its code is no good here. Keyed on the link itself, so a scan that brings the same
+    // older code again is emptied again.
     const staleLink = status?.kind === 'unclaimed' && !!linkId && linkId !== status.codeId;
-    useEffect(() => { if (staleLink && linkCode) setDigits(''); }, [staleLink, linkCode]);
+    useEffect(() => { if (staleLink && link.code) setDigits(''); }, [staleLink, link]);
 
     // The server's name, cleaned (node-claim.ts cleanClaimName), or the address's host when nothing was left of it.
     const name = (status && 'communityName' in status && status.communityName) || 'this community';
@@ -175,6 +176,9 @@ export default function ClaimCommunityScreen() {
         const code = claimCodeFromScan(data, origin);
         if (!code) return;
         scanLock.current = true;
+        // What was just read is the link now: the server's current QR ends "made a new code", an older one is caught
+        // again. A bare code carries no id, so nothing is left to call stale.
+        setLink({ code, id: parseClaimLink(data)?.codeId ?? '' });
         setDigits(claimCodeDigits(code));
         setScanning(false);
     };

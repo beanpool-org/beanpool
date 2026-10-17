@@ -242,6 +242,28 @@ describe('with no server yet, Scan the code reads the server\'s claim QR', () =>
         expect(codeField(host)!.value).toBe('');
     });
 
+    it('after an older code\'s QR, scanning the server\'s current QR fills the box and the "new code" note goes', async () => {
+        const host = await render();
+        await scan(host, `beanpool://claim?node=${encodeURIComponent(ORIGIN)}&id=ffffffff&code=${CODE}`);
+        expect(host.textContent).toContain('The server made a new code since this link.');
+        expect(codeField(host)!.value).toBe('');
+        // The form's own Scan the code, as the note says.
+        await scan(host, `beanpool://claim?node=${encodeURIComponent(ORIGIN)}&id=${CODE_ID}&code=${CODE}`);
+        expect(codeField(host)!.value).toBe('a1b2-c3d4-e5f6-7890');
+        expect(host.textContent).not.toContain('made a new code');
+        expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    it('scanning the older code\'s QR again from the form leaves the box empty and the note up', async () => {
+        const old = `beanpool://claim?node=${encodeURIComponent(ORIGIN)}&id=ffffffff&code=${CODE}`;
+        const host = await render();
+        await scan(host, old);
+        await scan(host, old);
+        expect(codeField(host)!.value).toBe('');
+        expect(host.textContent).toContain('The server made a new code since this link.');
+        expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBe('true');
+    });
+
     it('a QR with the code but no address keeps the code and asks for the address', async () => {
         const host = await render();
         await scan(host, `beanpool://claim?id=${CODE_ID}&code=${CODE}`);

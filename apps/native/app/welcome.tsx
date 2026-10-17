@@ -3385,7 +3385,9 @@ export default function WelcomeScreen() {
 
 
     // --- MAIN WELCOME SCREEN ---
-    // Centred as it always was, top first once it is taller than the phone. Nearly every first launch is a new user, so
+    // Drawn from the top, not centred: the line under Explore arrives after drawing (and comes and goes as the app returns
+    // to the front), and in a centred column it moved the doors up by half its height; from the top it moves only what is
+    // under it (utils/__tests__/welcome-doors-render.test.ts). Nearly every first launch is a new user, so
     // the two doors come right under the title (components/WelcomeDoors.tsx, DESIGN-global-entry §B.3): Join with an
     // invite first and primary, Explore BeanPool worldwide under it, always drawn, so at 320 dp with text at 1.3× both
     // are above the fold (the long sentence about BeanPool comes after them: above them it pushed Explore under the fold).
@@ -3394,7 +3396,7 @@ export default function WelcomeScreen() {
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
             {/* Scrolls: at 320dp and 1.3x text, the sentence about BeanPool and the paste offer are taller than a small phone. */}
-            <ScrollView contentContainerStyle={[styles.homeContent, styles.homeCentred]}>
+            <ScrollView contentContainerStyle={styles.homeContent}>
                 <View style={styles.homeMain}>
                     {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
                     <LanguageSwitch />
@@ -3443,7 +3445,6 @@ function makeStyles(colors: AppColors, dark: boolean) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
-    homeCentred: { justifyContent: 'center' },
     homeMain: { width: '100%', alignItems: 'center' },
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },

@@ -222,3 +222,31 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
         expect(exploreBottom(english, sentence)).toBeGreaterThan(VISIBLE);
     });
 });
+
+describe('a line under Explore that arrives late moves neither door', () => {
+    // The line is drawn when the ask answers (up to five seconds offline), and comes and goes as the app returns to the
+    // front (`unreachable` is asked again). In a column centred on the screen, as the home was, a line added under the
+    // doors moved them up by half its height on any phone tall enough to centre the home (review on #2105). Drawn from
+    // the top, nothing above the line depends on it: the doors stay where they were drawn, only what is under it moves.
+    const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+    const home = welcome.slice(welcome.indexOf('// --- MAIN WELCOME SCREEN ---'), welcome.indexOf('function makeStyles('));
+    const body = (name: string) => {
+        const m = welcome.match(new RegExp(`\\n\\s*${name}: \\{([^}]*)\\}`));
+        expect(m, name).not.toBeNull();
+        return m![1];
+    };
+
+    it('the home is drawn from the top, not centred', () => {
+        const scroll = home.match(/<ScrollView\b([^>]*)>/);
+        expect(scroll).not.toBeNull();
+        expect(scroll![1]).not.toMatch(/centerContent|justifyContent/);
+        const main = home.match(/<View style=\{styles\.(\w+)\}>\s*\{\/\*[^]*?\*\/\}\s*<LanguageSwitch \/>/);
+        expect(main, 'the column the switch, the title and the doors are drawn in').not.toBeNull();
+        const names = [...Array.from(scroll![1].matchAll(/styles\.(\w+)/g), (m) => m[1]), main![1]];
+        expect(names).toContain('homeContent');
+        for (const name of names) {
+            expect(body(name), name).not.toMatch(/justifyContent: '(center|flex-end|space-\w+)'/);
+            expect(body(name), name).not.toMatch(/margin(Top|Vertical)?: 'auto'/);
+        }
+    });
+});

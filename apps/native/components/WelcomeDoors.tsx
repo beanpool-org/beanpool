@@ -14,9 +14,10 @@ export interface WelcomeDoorsStyles {
 /**
  * The first screen's two doors (DESIGN-global-entry-fable.md §B.3, decision 2): **Join with an invite** first and
  * primary, **Explore BeanPool worldwide** right under it, then the hint. Both are always drawn, whatever the global
- * community has said or not said yet: no fade, nothing that waits on an answer, so nothing moves under a thumb and a new
- * member offline still sees both ways in. They sit right under the title, so at 320 dp with text at 1.3× both are above
- * the fold (utils/__tests__/welcome-doors-render.test.ts measures it).
+ * community has said or not said yet: no fade, nothing that waits on an answer, and a new member offline still sees both
+ * ways in. They sit right under the title, so at 320 dp with text at 1.3× both are above the fold
+ * (utils/__tests__/welcome-doors-render.test.ts measures it). The home is drawn from the top (app/welcome.tsx), so the
+ * line below, which can arrive after drawing, never moves the doors: only what is under it.
  *
  * `door` is what the global community's door said this app start (utils/global-door-offer.ts). Open, or not heard yet:
  * nothing more. Otherwise one line under the button says why it can't be used right now, and TalkBack reads it with the

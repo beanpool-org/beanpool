@@ -1946,12 +1946,14 @@ export default {
                 // made ("Setting up": its claim's Cloudflare work did not finish), and nobody needs to approve it.
                 if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                     const now = nowS();
-                    return json({ allocations: await Promise.all((await db.listActive(env)).map(async (a) => {
+                    // As awaitingApproval decides it (a name with no policy row, or an empty tier, is auto), in one read.
+                    const tiers = await db.pendingTiers(env);
+                    return json({ allocations: (await db.listActive(env)).map((a) => {
                         const holds = holdsName(env, a, now);
-                        const awaiting_approval = await awaitingApproval(env, a);
+                        const awaiting_approval = a.status === 'pending' && (tiers.get(a.name) || 'auto') !== 'auto';
                         if (a.status !== 'released') return { ...a, holds, awaiting_approval };
                         return { ...a, holds, awaiting_approval, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
-                    })) });
+                    }) });
                 }
                 // Remove from the list, in bulk: { "names": [...] } (handleForgetMany), and "Free all and remove" with
                 // "free_now": true. One name's is /:name/forget below.

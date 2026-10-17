@@ -187,6 +187,12 @@ export const teardownRefused = (env, kind, cfId, error) =>
 export const countAwaitingApproval = async (env) => Number((await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
 ).first())?.n) || 0;
+// The policy tier of every pending row's name that has a policy row (any other is auto), in one read: the admin's list
+// asks it once whatever the number of claims (D1 allows 50 queries an invocation on Workers Free).
+export const pendingTiers = async (env) => new Map(((await env.DB.prepare(
+    "SELECT p.pattern AS name, p.tier FROM name_policy p JOIN name_allocations a ON a.name = p.pattern WHERE a.status = 'pending'"
+).all()).results || []).map((r) => [r.name, r.tier]));
+
 // Claims whose provisioning never finished, for the sweep to finish (index.js finishOrphans): pending on a name that is
 // auto-approved (as policyTier decides: no policy row, or tier 'auto'), claimed before `before` (unix s), by a key the
 // admin has not stopped — none of its rows blocked, nor a release the admin holds from it ('admin-held-all') released

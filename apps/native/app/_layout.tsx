@@ -52,6 +52,7 @@ import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
+import { isGlobalLink } from '../utils/global-link';
 import * as WebBrowser from 'expo-web-browser';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -311,6 +312,9 @@ function RootLayoutNav() {
         // The web app's pairing QR opened from the camera app: routed to app/pair-device.tsx by +native-intent.ts. Not an
         // invite: its `node=` host could otherwise be read as one (extractInviteToken looks for BP-xxxx-xxxx anywhere).
         if (isPairLink(currentUrl)) return;
+        // The global community's link (utils/global-link.ts): routed to a door by +native-intent.ts. Not an invite. One that
+        // carries an invite is not this, and goes on below as an invite.
+        if (isGlobalLink(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).

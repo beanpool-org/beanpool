@@ -361,6 +361,9 @@ try {
         && schedule.nextAttemptDelay(3, null, 0) === DAY && schedule.nextAttemptDelay(9, null, 0) === DAY);
     check('…never past a third of what a held certificate has left, nor under an hour', schedule.nextAttemptDelay(3, 30 * HOUR, 0) === 10 * HOUR
         && schedule.nextAttemptDelay(3, 2 * HOUR, 0) === HOUR && schedule.nextAttemptDelay(3, -HOUR, 0) === HOUR && schedule.nextAttemptDelay(2, 30 * DAY, 0) === 4 * HOUR);
+    const alertsSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'services', 'alerts.ts'), 'utf8');
+    check('the owners\' tls.fallback alert promises what the back-off does: tried again within a day',
+        Math.max(...schedule.BACKOFF_MS) <= DAY && /self-signed one\. It is tried again within a day\."/.test(alertsSource) && !/retried every 2 hours/.test(alertsSource));
 
     console.log('\n5. A self-check failure sends nothing to the CA');
     now = Date.now(); // the name renewed above is fresh again

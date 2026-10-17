@@ -245,6 +245,11 @@
                     tokenRow.style.display = '';
                     document.getElementById('pubaddr-token').value = d.tunnelToken;
                 }
+            } else if (d.status === 'pending' && d.reason === 'provisioning') {
+                // An auto name the address service has not finished making: nobody's approval is needed, and this server asks again.
+                display.innerHTML = `⏳ <strong style="color:#fbbf24;">Setting up</strong> <strong>${esc(d.name || '')}.beanpool.org</strong> `
+                    + `<span style="color:#94a3b8;">— the address service is still making it; this usually takes under a minute.</span>`;
+                offlineBtn.style.display = '';
             } else if (d.status === 'pending') {
                 display.innerHTML = `⏳ <strong style="color:#fbbf24;">Awaiting approval</strong> for <strong>${esc(d.name || '')}.beanpool.org</strong>`;
                 offlineBtn.style.display = '';
@@ -359,6 +364,9 @@
                     } else {
                         showStatus('pubaddr-status', '🟢 Address Live & Verified!', 'success');
                     }
+                    loadPublicAddress();
+                } else if (res.ok && d.reason === 'provisioning') {
+                    showStatus('pubaddr-status', '⏳ Claimed — the address service is still setting it up; this usually takes under a minute', 'success');
                     loadPublicAddress();
                 } else if (res.ok) {
                     showStatus('pubaddr-status', '⏳ Claimed — awaiting approval', 'success');

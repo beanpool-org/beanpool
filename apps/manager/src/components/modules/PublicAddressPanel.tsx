@@ -561,6 +561,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     const rawStatus = typeof statusData?.status === 'string' ? statusData.status : '';
     const isLive = rawStatus === 'live';
     const isPending = rawStatus === 'pending';
+    // An auto name the address service is still making (registrar S1): nobody's approval is needed; the node asks again.
+    const isProvisioning = isPending && statusData?.reason === 'provisioning';
     const isPaused = rawStatus === 'paused';
     const pausedReason = typeof statusData?.reason === 'string' ? statusData.reason : null;
     const isNone = rawStatus === 'none' || !statusData;
@@ -768,13 +770,15 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2 text-xs text-amber-400 font-bold">
                                 <span>⏳</span>
-                                <span>Awaiting registrar approval for</span>
+                                <span>{isProvisioning ? 'Setting up' : 'Awaiting registrar approval for'}</span>
                                 <span className="font-mono underline text-white break-all">
                                     {statusData?.name || 'subdomain'}.beanpool.org
                                 </span>
                             </div>
                             <p className="text-xs text-nature-400 m-0">
-                                Your registration request was signed and submitted. Once reviewed, Cloudflare DNS and edge tunnels will provision automatically.
+                                {isProvisioning
+                                    ? 'The address service is still making it; this usually takes under a minute, and this server asks again by itself.'
+                                    : 'Your registration request was signed and submitted. Once reviewed, Cloudflare DNS and edge tunnels will provision automatically.'}
                             </p>
                         </div>
                     ) : isPaused ? (

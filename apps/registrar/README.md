@@ -17,7 +17,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `approve | pause | resume | block | release | forget` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below) · `POST /api/local/admin/registrar/forget {"names": [...]}` (forget in bulk, at most
   5 a request — inside D1's per-invocation query budget on Workers Free; /admin sends them in batches — answers
-  `{removed, refused}`). `forget` is /admin's "Remove from the list": a `released` row nobody
+  `{removed, refused}`, and `already` for names removed before: neither counted nor told). `forget` is /admin's
+  "Remove from the list" (a repeat answers `already: true`, and changes nothing): a `released` row nobody
   holds any more and no key can take back as its own (freed at once, or `admin-held-all` past its hold) becomes
   `abandoned`, leaves the list and stays free to anyone, as it was: who may claim it does not change. Any other row is
   refused with a 409: live, pending, paused, blocked, a release still inside its hold, and an `owner` or `admin-held`

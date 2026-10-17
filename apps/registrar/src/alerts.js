@@ -77,7 +77,7 @@ export const routingPaused = (env, name, reason, count) => ({
 // A5: what the admin did, as the Worker answered it (a resume whose re-attest failed says so: the name stays paused).
 const DID = { approve: 'approved', pause: 'paused', resume: 'resumed', block: 'blocked', revoke: 'blocked', release: 'released' };
 export function adminDid(env, name, action, out) {
-    if (action === 'forget') return adminRemoved(env, [name]);
+    if (action === 'forget') return out.already ? null : adminRemoved(env, [name]);   // removed before: nothing to tell
     const verb = DID[action] || action;
     const h = host(env, name);
     const body = action === 'resume' && out.status !== 'live'

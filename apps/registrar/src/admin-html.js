@@ -458,6 +458,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const secret = secretInput.value.trim();
             const removed = [];
             const refused = [];
+            const already = [];
             try {
                 for (let i = 0; i < names.length; i += FORGET_BATCH) {
                     const batch = names.slice(i, i + FORGET_BATCH);
@@ -469,11 +470,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     if (!res.ok) { refused.push({ name: batch.join(', '), error: data.error || String(res.status) }); continue; }
                     removed.push.apply(removed, data.removed || []);
                     refused.push.apply(refused, data.refused || []);
+                    already.push.apply(already, data.already || []);
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);
             }
-            alert('Removed ' + removed.length + ' from the list.' + (refused.length ? '\\n\\nNot removed:\\n' + refused.map(function(r) { return r.name + ': ' + (r.error || r.status); }).join('\\n') : ''));
+            // Removed by another tab (or an earlier click) is not counted as removed by this one.
+            alert('Removed ' + removed.length + ' from the list.' + (already.length ? '\\n\\nAlready removed: ' + already.join(', ') : '') + (refused.length ? '\\n\\nNot removed:\\n' + refused.map(function(r) { return r.name + ': ' + (r.error || r.status); }).join('\\n') : ''));
             loadRegistrarData();
         }
 

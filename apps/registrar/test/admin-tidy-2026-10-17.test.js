@@ -212,8 +212,8 @@ test('forget of a release nobody holds: abandoned, an event, gone from the list 
             assert.equal(ev.length, 1);
             assert.match(ev[0].detail, /^removed from the list by the admin \(was released\/(admin|owner), free since \d{4}-\d\d-\d\dT[^)]+\): abandoned, free to anyone as it was$/);
         }
-        // Again: nothing more to do, and no second event.
-        assert.deepEqual(await forget(w, 'cairnstest'), { status: 200, body: { status: 'abandoned', name: 'cairnstest' } });
+        // Again: nothing more to do, it says so (already), and no second event.
+        assert.deepEqual(await forget(w, 'cairnstest'), { status: 200, body: { status: 'abandoned', name: 'cairnstest', already: true } });
         assert.equal(removedEvents(w, 'cairnstest').length, 1);
 
         // Claimed again: by a new key, and by the old one (a new claimant now: its row was abandoned).
@@ -274,6 +274,39 @@ test('Remove all released: the bulk form removes only the releases nobody holds;
             assert.equal(bad.status, 400, JSON.stringify(body));
         }
         assert.equal((await w.row('livename')).status, 'live');
+    } finally { w.restore(); }
+});
+
+// Review r4302742478: a forget of a name already removed did nothing, but both routes took its 200 as "removed": the
+// phone was told again, and the bulk counted it. A double click, or Remove all released in two tabs, told the admin of
+// removals that never happened.
+test('a forget of a name already removed says so (already): no second event, no alert, not counted as removed', async () => {
+    const w = await world();
+    try {
+        for (const n of ['twice', 'tabone', 'tabtwo']) await freed(w, n);
+        const told = () => w.sqlite.prepare("SELECT title FROM alert_outbox WHERE title LIKE 'You removed%' ORDER BY id").all().map((x) => x.title);
+
+        assert.deepEqual(await forget(w, 'twice'), { status: 200, body: { status: 'abandoned', name: 'twice' } });
+        assert.deepEqual(await forget(w, 'twice'), { status: 200, body: { status: 'abandoned', name: 'twice', already: true } });
+        assert.deepEqual(await forgetMany(w, { names: ['twice'] }), { status: 200, body: { removed: [], refused: [], already: ['twice'] } });
+        assert.equal(removedEvents(w, 'twice').length, 1);
+        assert.deepEqual(told(), ['You removed twice from the list']);
+
+        // Two tabs, the same batch: the second removes nothing, and says which were removed already.
+        assert.deepEqual((await forgetMany(w, { names: ['tabone', 'tabtwo'] })).body, { removed: ['tabone', 'tabtwo'], refused: [] });
+        assert.deepEqual((await forgetMany(w, { names: ['tabone', 'tabtwo'] })).body, { removed: [], refused: [], already: ['tabone', 'tabtwo'] });
+        assert.deepEqual(told(), ['You removed twice from the list', 'You removed 2 released names from the list']);
+        for (const n of ['tabone', 'tabtwo']) assert.equal(removedEvents(w, n).length, 1);
+
+        // The page counts only what this click removed, and names what was removed already.
+        const p = await page(w);
+        p.ctx.renderActive([row('tabone', 'released', { pause_reason: 'admin', released_at: 1 }), row('fresh', 'released', { pause_reason: 'admin', released_at: 1 })]);
+        p.ctx.fetch = async (url, init = {}) => {
+            p.sent.push({ url, init });
+            return { ok: true, status: 200, json: async () => ({ removed: ['fresh'], refused: [], already: ['tabone'], allocations: [], events: [] }) };
+        };
+        await p.click({ 'data-forget-all': '1' });
+        assert.equal(p.alerts.at(-1), 'Removed 1 from the list.\n\nAlready removed: tabone');
     } finally { w.restore(); }
 });
 

@@ -126,9 +126,10 @@ async function logEvent(env, name, event, detail) {
 }
 
 // The admin's phone hears of it too (src/alerts.js, design §2.2): `make` builds the message — a name, its community
-// name and counts, never its contact. Like logEvent, it never undoes what it reports.
+// name and counts, never its contact — or null when there is nothing to tell. Like logEvent, it never undoes what it
+// reports.
 async function tell(env, make) {
-    try { await alerts.notify(env, await make()); }
+    try { const ev = await make(); if (ev) await alerts.notify(env, ev); }
     catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
@@ -1381,7 +1382,8 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
 // row and is owed (teardown), the tunnel too, so the sweep retries it and a later claim of the name deletes it as its own.
 async function forgetRow(env, a, now) {
     const name = a.name;
-    if (a.status === 'abandoned') return json({ status: 'abandoned', name });
+    // Removed already (a double click, another tab): nothing done, and it says so — no event, no alert, not counted.
+    if (a.status === 'abandoned') return json({ status: 'abandoned', name, already: true });
     if (a.status !== 'released')
         return json({ error: `${name} is ${a.status}: only a released name nobody holds can be removed from the list`, status: a.status }, 409);
     if (holdsName(env, a, now)) {
@@ -1403,8 +1405,8 @@ async function forgetRow(env, a, now) {
 }
 
 // The bulk form: the names the admin's list showed as removable, each decided as its own forget is (onFreshRow), at
-// most FORGET_MAX a request (the page sends them in batches). Answers which were removed and which were refused, and
-// why; the admin's phone hears of it once. FORGET_MAX keeps one request inside D1's smallest per-invocation budget
+// most FORGET_MAX a request (the page sends them in batches). Answers which were removed, which were refused and why,
+// and (`already`, only when there are any) which were removed before; the admin's phone hears of the removed once. FORGET_MAX keeps one request inside D1's smallest per-invocation budget
 // (50 queries on Workers Free): a forget is about 6 queries, its one alert about 10.
 const FORGET_MAX = 5;
 async function handleForgetMany(env, bodyText) {
@@ -1414,13 +1416,15 @@ async function handleForgetMany(env, bodyText) {
         return json({ error: `names must be 1 to ${FORGET_MAX} names` }, 400);
     const removed = [];
     const refused = [];
+    const already = [];
     for (const name of names) {
         const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? forgetRow(env, a, nowS()) : json({ error: 'unknown name' }, 404)));
-        if (res.status === 200) removed.push(name);
-        else refused.push({ name, ...(await res.json()) });
+        const out = await res.json();
+        if (res.status !== 200) refused.push({ name, ...out });
+        else (out.already ? already : removed).push(name);
     }
     if (removed.length) await tell(env, () => alerts.adminRemoved(env, removed));
-    return json({ removed, refused });
+    return json({ removed, refused, ...(already.length ? { already } : {}) });
 }
 
 // --- Switchboard (Invite resolution / trampoline) ---

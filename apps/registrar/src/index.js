@@ -1369,13 +1369,16 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
 }
 
 // --- Remove from the list ---
-// A released name nobody holds any more (holdsName: freed at once, or past its hold) becomes 'abandoned': it leaves the
-// admin's list (db.listActive) and stays free to anyone, as it already was. Removing changes nothing about who may
-// claim the name — only what the list shows; its history stays in name_events. Refused (409) for every other row: a
-// name someone holds (live, pending, paused, blocked) and a release still inside its hold ("Free now" first, which
-// says what it frees). Whatever the row still records at Cloudflare — a delete Cloudflare refused at the release —
-// goes first, row first as every take-down's does (stopRouting): what Cloudflare refuses again stays on the row and is
-// owed (teardown), the tunnel too, so the sweep retries it and a later claim of the name deletes it as its own.
+// A released name nobody holds any more (holdsName) and no key can take back as its own (isOwnRow) — freed at once, or
+// the admin's release from every key past its hold — becomes 'abandoned': it leaves the admin's list (db.listActive)
+// and stays free to anyone, as it already was. Removing changes nothing about who may claim the name — only what the
+// list shows; its history stays in name_events. Refused (409) for every other row: a name someone holds (live,
+// pending, paused, blocked), a release still inside its hold, and an owner's or 'admin-held' release past its hold,
+// which its old key still takes back as its own (live again without the admin's approval, outside the new-name
+// budget: abandoned, that key would be a new claimant — r4302742456). "Free now" first, which says what it frees and
+// ends that take-back on purpose. Whatever the row still records at Cloudflare — a delete Cloudflare refused at the
+// release — goes first, row first as every take-down's does (stopRouting): what Cloudflare refuses again stays on the
+// row and is owed (teardown), the tunnel too, so the sweep retries it and a later claim of the name deletes it as its own.
 async function forgetRow(env, a, now) {
     const name = a.name;
     if (a.status === 'abandoned') return json({ status: 'abandoned', name });
@@ -1385,6 +1388,8 @@ async function forgetRow(env, a, now) {
         const until = (a.released_at || 0) + releaseCooloffS(env);
         return json({ error: `${name} is still held (${a.pause_reason || 'released'}) until ${new Date(until * 1000).toISOString()}: free it now first`, status: a.status, held_until: until }, 409);
     }
+    if (isOwnRow(a, a.node_pubkey))
+        return json({ error: `${name} can still be taken back by the key that released it (${a.pause_reason || 'released'}): free it now first`, status: a.status, takes_back: true }, 409);
     const had = [a.tunnel_id && 'tunnel', a.dns_record_id && 'DNS record'].filter(Boolean);
     if (!(await stopRouting(env, a, { status: 'abandoned' }))) return null;
     const after = await db.getAllocation(env, name);
@@ -1810,14 +1815,16 @@ export default {
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
                 return await handleRelease(request, env, bodyText);
 
-            // Each row says whether it holds its name now (holdsName) and, for a release still held, until when: what the
-            // admin's list offers ("Free now" while held, "Remove from the list" once nobody holds it) is the Worker's rule.
+            // Each row says whether it holds its name now (holdsName) and, for a release still held, until when; a release
+            // says too whether its old key can still take it back (isOwnRow, past the hold too). What the admin's list
+            // offers ("Free now" while either is so, "Remove from the list" once neither is) is the Worker's rule (forgetRow).
             if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 const now = nowS();
                 return json({ allocations: (await db.listActive(env)).map((a) => {
                     const holds = holdsName(env, a, now);
-                    return { ...a, holds, ...(holds && a.status === 'released' ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
+                    if (a.status !== 'released') return { ...a, holds };
+                    return { ...a, holds, takes_back: isOwnRow(a, a.node_pubkey), ...(holds ? { held_until: (a.released_at || 0) + releaseCooloffS(env) } : {}) };
                 }) });
             }
             // Remove from the list, in bulk: { "names": [...] } (handleForgetMany). One name's is /:name/forget below.

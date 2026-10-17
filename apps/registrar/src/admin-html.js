@@ -178,7 +178,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names held now (live, paused, blocked)</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included. Released names are under "Released" below; one nobody holds any more can be removed from the list (it stays free to anyone).</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included. Released names are under "Released" below; one nobody holds any more can be removed from the list (it stays free to anyone). Past its 30 days, a name its key released (or you released without "free now") is free to others, but that key can still take it back as its own: "Free now" ends that, then it can be removed.</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
         </div>
 
@@ -259,8 +259,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             pause: function(n) { return 'Pause ' + n + '.beanpool.org?\\n\\nRouting stops (DNS removed); the name and tunnel stay with its owner. Only Resume lifts it — the node cannot.'; },
             resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back only when nobody but its owner can be answering: at once on a fresh tunnel, otherwise after an edge re-attest signed by its key. A tunnel kept by a block, or by a pause you did not make, is deleted first. If the re-attest fails, your hold is lifted and the name stays paused until its node heals it.'; },
             block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume. Release holds it 30 days from every key, this one included, then frees it (at once with "free now").'; },
-            // fromAll: a name you blocked or paused — its release holds it from its own key too.
-            release: function(n, freeNow, fromAll) {
+            // fromAll: a name you blocked or paused — its release holds it from its own key too. takesBack: a release past
+            // its hold that its old key can still take back as its own (Free now ends that).
+            release: function(n, freeNow, fromAll, takesBack) {
+                if (freeNow && takesBack) return '⚠️ FREE ' + n + '.beanpool.org NOW?\\n\\nIt is free to others already, but the key that released it can still take it back as its own — on a gated name without your approval. Free now ends that: that key becomes a new claimant, like anyone. Then it can be removed from the list.';
                 if (freeNow) return '⚠️ RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted and the name is FREE AT ONCE, to any key.';
                 return fromAll
                     ? 'RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name is held 30 days from EVERY key, this one included: its node cannot take it back. Then it is free to anyone, this key too. To keep this key off it, leave it blocked; to free it now for someone new, tick "free now".'
@@ -376,17 +378,22 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const wasOpen = !!(before && before.open);
             const held = active.filter(function(a) { return a.status !== 'released'; });
             const released = active.filter(function(a) { return a.status === 'released'; });
-            // A release the Worker says still holds (holds, held_until) keeps "Free now"; one nobody holds can be removed.
-            // A row that doesn't say is treated as held: nothing is offered for removal that the Worker didn't call free.
-            removable = released.filter(function(a) { return a.holds === false; }).map(function(a) { return a.name; });
+            // A release the Worker says still holds (holds, held_until) keeps "Free now", as does one past its hold that its
+            // old key can still take back (takes_back); one neither can be removed. A row that doesn't say whether it holds
+            // is treated as held: nothing is offered for removal that the Worker didn't call free. (The Worker refuses the
+            // rest anyway: forgetRow.)
+            const takesBack = function(a) { return a.holds === false && !!a.takes_back; };
+            removable = released.filter(function(a) { return a.holds === false && !a.takes_back; }).map(function(a) { return a.name; });
+            const back = released.filter(takesBack).length;
 
             let html = held.length ? namesTable(held) : '<p style="color: var(--text-muted); font-size: 0.85rem;">No names held now.</p>';
             if (released.length) {
-                const stay = released.length - removable.length;
+                const stay = released.length - removable.length - back;
                 html += '<div class="released-head">' +
                     (removable.length ? '<button data-forget-all="1" class="btn-revoke">Remove all released (' + removable.length + ')</button>' : '') +
                     '<span>' + (removable.length ? 'Removes the released names nobody holds: each stays free to anyone.' : '') +
-                        (stay ? ' ' + stay + ' still held ' + (stay === 1 ? 'stays until its hold ends' : 'stay until their hold ends') + ' (or "Free now").' : '') + '</span></div>';
+                        (stay ? ' ' + stay + ' still held ' + (stay === 1 ? 'stays until its hold ends' : 'stay until their hold ends') + ' (or "Free now").' : '') +
+                        (back ? ' ' + back + (back === 1 ? ' stays while the key that released it can take it back' : ' stay while the keys that released them can take them back') + ' ("Free now" ends that).' : '') + '</span></div>';
                 html += '<details class="released"' + (wasOpen ? ' open' : '') + '><summary>Released (' + released.length + ')</summary>' + releasedTable(released) + '</details>';
             }
             container.innerHTML = html;
@@ -422,13 +429,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             let html = namesHead('Released');
             rows.forEach(function(alloc) {
                 const free = alloc.holds === false;
-                const hold = free ? 'free to anyone'
+                const back = free && !!alloc.takes_back;
+                const hold = back ? 'free to others; its key can take it back'
+                    : free ? 'free to anyone'
                     : alloc.held_until ? (alloc.pause_reason === 'admin-held-all' ? 'held from every key until ' : 'held for its key until ') + when(alloc.held_until)
                     : 'held';
-                // A held release: "Free now" frees it at once. One nobody holds: "Remove from the list".
-                const act = free
+                // A held release: "Free now" frees it at once; one its key can still take back: "Free now" ends that. One
+                // nobody holds or can take back: "Remove from the list".
+                const act = free && !back
                     ? '<button data-name="' + esc(alloc.name) + '" data-action="forget" class="btn-revoke" title="Nobody holds it: it leaves this list and stays free to anyone">Remove from the list</button>'
-                    : '<button data-name="' + esc(alloc.name) + '" data-action="release" data-free-now="1" class="btn-revoke">Free now</button>';
+                    : '<button data-name="' + esc(alloc.name) + '" data-action="release" data-free-now="1"' + (back ? ' data-takes-back="1"' : '') + ' class="btn-revoke">Free now</button>';
                 html += '<tr id="row-' + esc(alloc.name) + '">' +
                     nameCell(alloc, LOOK.released[1]) + communityCell(alloc) + keyCell(alloc) +
                     '<td data-label="Released"><span class="mono" style="font-size: 0.75rem;">' + LOOK.released[0] + ' ' + esc(alloc.pause_reason || 'released') + '</span>' +
@@ -473,7 +483,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const box = document.querySelector('input[data-free-now-for="' + name + '"]');
             const freeNow = action === 'release' && ((!!target && target.getAttribute('data-free-now') === '1') || (!!box && box.checked));
             const fromAll = !!target && target.getAttribute('data-held-from-all') === '1';
-            if (!CONFIRM[action] || !confirm(CONFIRM[action](name, freeNow, fromAll))) return;
+            const takesBack = !!target && target.getAttribute('data-takes-back') === '1';
+            if (!CONFIRM[action] || !confirm(CONFIRM[action](name, freeNow, fromAll, takesBack))) return;
 
             try {
                 const init = { method: 'POST', headers: { 'x-admin-secret': secret } };

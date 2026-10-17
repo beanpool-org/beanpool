@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import worker, { holdsName, attestSweep } from '../src/index.js';
+import worker, { holdsName, isOwnRow, attestSweep } from '../src/index.js';
 import { world, makeKey, liveName, nowS, routing } from './harness.js';
 
 const DAY = 86400;
@@ -99,9 +99,81 @@ test('forget refuses a release still inside its hold (the owner\'s, the admin\'s
         // Freed now, nobody holds it: then it can be removed.
         assert.equal((await w.admin('adminrel', 'release', FREE_NOW)).status, 200);
         assert.deepEqual(await forget(w, 'adminrel'), { status: 200, body: { status: 'abandoned', name: 'adminrel' } });
-        // Past its hold, the owner's release holds nothing either.
+        // Past its hold, the owner's release keeps nobody else off the name, but its key can still take it back: forget
+        // refuses it (r4302742456, the test below), and removes it once Free now has ended that. The admin's release of
+        // the blocked name, past its hold, is free to that key too, but only as a new claimant: removed as it is.
         await w.backdate('ownerrel', { released_at: nowS() - COOLOFF - 60 });
+        assert.equal((await forget(w, 'ownerrel')).status, 409);
+        assert.equal((await w.admin('ownerrel', 'release', FREE_NOW)).status, 200);
         assert.equal((await forget(w, 'ownerrel')).status, 200);
+        await w.backdate('blockrel', { released_at: nowS() - COOLOFF - 60 });
+        assert.deepEqual(await forget(w, 'blockrel'), { status: 200, body: { status: 'abandoned', name: 'blockrel' } });
+    } finally { w.restore(); }
+});
+
+// Review r4302742456: past its hold an owner's release, or the admin's default one, holds the name from nobody else, but
+// its old key still takes it back as its own (isOwnRow): live without the admin's approval on a gated name, outside the
+// new-name budget on an auto one. Abandoning the row would end that, so forget refuses it too: "Free now" first, which
+// ends it on purpose.
+test('forget refuses a release its old key can still take back, past the hold too: the take-back stays; Free now ends it', async () => {
+    const w = await world();
+    try {
+        const [a, b, c, d] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+        // A gated name, approved, released by its owner; an auto one released by its owner; one the admin released with
+        // its default hold — each past its hold. And a gated one, approved and released, that the admin then frees now.
+        for (const n of ['gatedrel', 'gatedfreed']) w.sqlite.prepare("INSERT INTO name_policy (pattern, tier) VALUES (?, 'gated')").run(n);
+        for (const [name, key] of [['gatedrel', a], ['gatedfreed', d]]) {
+            assert.equal((await w.claim(key, { name })).body.status, 'pending');
+            assert.equal((await w.admin(name, 'approve')).body.status, 'live');
+            assert.equal((await w.release(key)).body.status, 'released');
+        }
+        await liveName(w, 'autorel', b);
+        assert.equal((await w.release(b)).body.status, 'released');
+        await liveName(w, 'adminheld', c);
+        assert.equal((await w.admin('adminheld', 'release')).body.status, 'released');
+        for (const n of ['gatedrel', 'gatedfreed', 'autorel', 'adminheld']) await w.backdate(n, { released_at: nowS() - COOLOFF - 60 });
+
+        for (const [name, by] of [['gatedrel', 'owner'], ['autorel', 'owner'], ['adminheld', 'admin-held']]) {
+            const before = await w.row(name);
+            assert.equal(holdsName(w.env, before), false, `${name}: past its hold, nobody else is kept off it`);
+            const r = await forget(w, name);
+            assert.equal(r.status, 409, `${name}: ${JSON.stringify(r.body)}`);
+            assert.deepEqual(r.body, { status: 'released', takes_back: true, error: `${name} can still be taken back by the key that released it (${by}): free it now first` });
+            assert.deepEqual(await w.row(name), before, `${name}: untouched`);
+            assert.deepEqual(removedEvents(w, name), []);
+            const shown = (await listed(w)).find((x) => x.name === name);
+            assert.deepEqual([shown.holds, shown.takes_back], [false, true], `${name}: /pending says its key can take it back`);
+        }
+        // The bulk form refuses it the same way, and its phone hears of nothing.
+        const bulk = await forgetMany(w, { names: ['gatedrel', 'autorel'] });
+        assert.deepEqual(bulk.body, { removed: [], refused: [
+            { name: 'gatedrel', status: 'released', takes_back: true, error: 'gatedrel can still be taken back by the key that released it (owner): free it now first' },
+            { name: 'autorel', status: 'released', takes_back: true, error: 'autorel can still be taken back by the key that released it (owner): free it now first' },
+        ] });
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM alert_outbox WHERE title LIKE 'You removed%'").get().n, 0);
+
+        // The take-back is what it was: the gated name goes live again with no approval, and the auto one comes back
+        // with the new-name budget spent (an own name is outside it).
+        const back = await w.claim(a, { name: 'gatedrel' });
+        assert.equal(back.status, 200, JSON.stringify(back.body));
+        assert.equal(back.body.status, 'live');
+        w.env.NEW_NAMES_PER_HOUR = '1';
+        assert.equal((await w.claim(await makeKey(), { name: 'someother' })).status, 429, 'the budget is spent');
+        const auto = await w.claim(b, { name: 'autorel' });
+        assert.equal(auto.status, 200, JSON.stringify(auto.body));
+        assert.equal(auto.body.status, 'live');
+        delete w.env.NEW_NAMES_PER_HOUR;
+
+        // Free now ends the take-back, on purpose: then nobody holds it, it can be removed, and its old key is a new
+        // claimant — on a gated name, one that waits for the admin's approval again.
+        assert.equal((await w.admin('gatedfreed', 'release', FREE_NOW)).status, 200);
+        const freedRow = await w.row('gatedfreed');
+        assert.equal(isOwnRow(freedRow, d.pubHex), false);
+        assert.equal((await listed(w)).find((x) => x.name === 'gatedfreed').takes_back, false);
+        assert.deepEqual(await forget(w, 'gatedfreed'), { status: 200, body: { status: 'abandoned', name: 'gatedfreed' } });
+        const again = await w.claim(d, { name: 'gatedfreed' });
+        assert.equal(again.status, 200, JSON.stringify(again.body));
+        assert.equal(again.body.status, 'pending');
     } finally { w.restore(); }
 });
 
@@ -110,10 +182,13 @@ test('forget of a release nobody holds: abandoned, an event, gone from the list 
     try {
         const [owner, stranger] = await Promise.all([makeKey(), makeKey()]);
         await freed(w, 'cairnstest');
-        // The owner's own release past its hold (a July test name): free, and its old key could take it back.
+        // The owner's own release past its hold (a July test name): free to others, but its old key could still take it
+        // back, which forget would end — so it is refused (the test above) until the admin frees it now, as /admin offers.
         await liveName(w, 'wow', owner);
         await w.release(owner);
         await w.backdate('wow', { released_at: nowS() - COOLOFF - 60 });
+        assert.equal((await forget(w, 'wow')).status, 409);
+        assert.equal((await w.admin('wow', 'release', FREE_NOW)).status, 200);
 
         for (const name of ['cairnstest', 'wow']) {
             const before = await w.row(name);
@@ -308,6 +383,11 @@ test('/pending tells the page which rows hold their name now (holdsName), and un
         assert.deepEqual(Object.fromEntries(Object.entries(rows).map(([n, x]) => [n, [x.holds, x.held_until ?? null]])), {
             livename: [true, null], heldrel: [true, rows.heldrel.released_at + COOLOFF], oldrel: [false, null], freedname: [false, null],
         });
+        // A release says too whether its old key can still take it back (isOwnRow): past the hold too (r4302742456).
+        for (const [name, row] of Object.entries(rows)) if (row.status === 'released') assert.equal(row.takes_back, isOwnRow(await w.row(name), row.node_pubkey), name);
+        assert.deepEqual(Object.fromEntries(Object.entries(rows).map(([n, x]) => [n, x.takes_back ?? null])), {
+            livename: null, heldrel: true, oldrel: true, freedname: false,
+        });
     } finally { w.restore(); }
 });
 
@@ -432,6 +512,39 @@ test('the page: Remove from the list posts forget for that name; Remove all rele
         assert.deepEqual(names, free.map((f) => f.name), 'every free name once, and only those');
         assert.equal(bulk.every((s) => s.init.method === 'POST' && s.init.headers['content-type'] === 'application/json'), true);
         assert.match(p.alerts.at(-1), /^Removed 12 from the list\.$/);
+    } finally { w.restore(); }
+});
+
+test('the page: a release its key can still take back keeps Free now, says so, and is left out of Remove all released', async () => {
+    const w = await world();
+    try {
+        const p = await page(w);
+        p.ctx.renderActive([
+            row('heldrel', 'released', { pause_reason: 'owner', released_at: 1, holds: true, takes_back: true, held_until: 1790000000 }),
+            row('oldrel', 'released', { pause_reason: 'owner', released_at: 1, takes_back: true }),
+            row('oldadmin', 'released', { pause_reason: 'admin-held', released_at: 1, takes_back: true }),
+            row('cairns', 'released', { pause_reason: 'admin', released_at: 1, takes_back: false }),
+        ]);
+        const html = p.els.activeTableContainer.innerHTML;
+        assert.match(html, /<button data-forget-all="1"[^>]*>Remove all released \(1\)<\/button>/);
+        assert.match(html, / 1 still held stays until its hold ends \(or "Free now"\)\. 2 stay while the keys that released them can take them back \("Free now" ends that\)\./);
+        for (const n of ['oldrel', 'oldadmin']) {
+            assert.match(html, new RegExp(`data-name="${n}" data-action="release" data-free-now="1" data-takes-back="1"[^>]*>Free now<`));
+            assert.doesNotMatch(html, new RegExp(`data-name="${n}" data-action="forget"`));
+        }
+        assert.match(html, /free to others; its key can take it back/);
+        assert.match(html, /data-name="heldrel" data-action="release" data-free-now="1" class/, 'a held release: Free now, as before');
+        assert.match(html, /data-name="cairns" data-action="forget"[^>]*>Remove from the list</);
+
+        // Its Free now says what it ends, and sends a release that frees it now.
+        await p.click({ 'data-name': 'oldrel', 'data-action': 'release', 'data-free-now': '1', 'data-takes-back': '1' });
+        assert.match(p.confirms.at(-1), /^⚠️ FREE oldrel\.beanpool\.org NOW\?\n\nIt is free to others already, but the key that released it can still take it back as its own/);
+        const sent = p.sent.filter((s) => s.url === '/api/local/admin/registrar/oldrel/release');
+        assert.deepEqual(sent.map((s) => s.init.body), [JSON.stringify({ free_now: true })]);
+        // Remove all released sends only the one nobody can take back.
+        await p.click({ 'data-forget-all': '1' });
+        const bulk = p.sent.filter((s) => s.url === '/api/local/admin/registrar/forget');
+        assert.deepEqual(bulk.map((s) => JSON.parse(s.init.body).names), [['cairns']]);
     } finally { w.restore(); }
 });
 

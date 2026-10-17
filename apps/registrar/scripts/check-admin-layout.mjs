@@ -31,9 +31,12 @@ const rows = [
     })),
     { name: 'heldone', status: 'released', pause_reason: 'owner', released_at: now - 2 * DAY, mode: 'tunnel', community_name: 'Held' },
 ].map((r, i) => {
-    // As /pending sends them (index.js holdsName): a release holds unless freed at once or past its 30 days.
+    // As /pending sends them (index.js holdsName, isOwnRow): a release holds unless freed at once or past its 30 days,
+    // and its old key can take it back unless freed at once (or released by the admin from every key).
     const holds = r.status !== 'released' || (!['admin', 'withdrawn'].includes(r.pause_reason) && now - r.released_at < 30 * DAY);
-    return { node_pubkey: key(i + 1), requested_at: now - (120 - i) * DAY, ...r, holds, ...(holds && r.status === 'released' ? { held_until: r.released_at + 30 * DAY } : {}) };
+    const released = r.status === 'released';
+    const takesBack = released && !['admin', 'withdrawn', 'admin-held-all'].includes(r.pause_reason);
+    return { node_pubkey: key(i + 1), requested_at: now - (120 - i) * DAY, ...r, holds, ...(released ? { takes_back: takesBack } : {}), ...(holds && released ? { held_until: r.released_at + 30 * DAY } : {}) };
 });
 
 // How far anything drawn in each card reaches past the card's inner edge (px), and how far the page scrolls sideways.

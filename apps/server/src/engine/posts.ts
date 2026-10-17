@@ -21,6 +21,7 @@ import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_I
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
+import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -96,12 +97,20 @@ function forActor(post: MarketplacePost, actorPubkey: string | undefined): Marke
  * the formats the strip knows: a HEIC labelled image/jpeg would otherwise be stored and served with its GPS.
  * Checked before the first put, so a refused edit writes nothing. Both apps send JPEGs.
  */
-function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
+function storedPhotoColumns(postId: string, photos: string[], authorPublicKey?: string): PhotoColumns[] {
     const refusal = photosRefusal(photos);
     if (refusal) throw photoRefusalError(refusal, POST_PHOTO_FORMAT_ERROR);
+    const incomingBytes = authorPublicKey ? incomingPhotosBytes(photos) : 0;
+    if (authorPublicKey && incomingBytes > 0) {
+        assertMayStorePhotoBytes(authorPublicKey, incomingBytes);
+    }
     const store = getImageStore();
-    return photos.map((p, idx) =>
+    const columns = photos.map((p, idx) =>
         storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
+    if (authorPublicKey && incomingBytes > 0) {
+        recordStoredPhotoBytes(authorPublicKey, incomingBytes);
+    }
+    return columns;
 }
 
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
@@ -697,7 +706,7 @@ export function createPost(
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos.
-    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5));
+    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), authorPublicKey);
 
     db.transaction(() => {
         if (type === 'poll') {
@@ -1308,7 +1317,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     // Outside the transaction, like the create path: see storedPhotoColumns.
     const nextPhotoColumns = (updates.photos !== undefined && Array.isArray(updates.photos))
-        ? storedPhotoColumns(id, updates.photos.slice(0, 5))
+        ? storedPhotoColumns(id, updates.photos.slice(0, 5), authorPublicKey)
         : null;
 
     let openedLine: EventThreadMessage | null = null;

@@ -7,6 +7,7 @@ import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-columns.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import {
     getMember,
     getConversation,
@@ -502,6 +503,8 @@ export function sendMessage(
         // `removedAt` and `accountDeleted` would pose its line as one (#1407 review: a phone read it as a deleted account).
         metadata = withoutTombstoneKeys(metadata);
     }
+    const attBytes = (!opts.nodeAuthored && attachment?.data) ? incomingPhotoBytes(attachment.data) : 0;
+    if (attBytes > 0) assertMayStorePhotoBytes(authorPubkey, attBytes);
     opts.beforeStore?.({ ciphertext, metadata });
 
     const participantKeys = participants.map(p => p.public_key as string);
@@ -521,6 +524,7 @@ export function sendMessage(
             timestamp: new Date().toISOString()
         };
         storeWithheldLine(withheld, attachment);
+        if (attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
         cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: withheld, participants: participantKeys }, [authorPubkey]);
         // The work a stored line's push does after its answer (the recipient's preferences, tokens, badge count over all
         // their chats, the signed notice), done all the same and dropped before it is kept or sent: the load on the node
@@ -579,6 +583,7 @@ export function sendMessage(
         const cols = key ? storeAttachmentColumns(getImageStore(), key, attachment.data) : { data: attachment.data, storage_key: null };
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
             .run(msg.id, cols.data, attachment.nonce, attachment.mime || 'image/jpeg', cols.storage_key);
+        if (attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
     }
 
     // Only the conversation's participants — the people GET /api/messages/:id lets read it.

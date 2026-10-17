@@ -1377,6 +1377,7 @@ router.post('/api/profile/update', async (ctx) => {
     try {
         profile = updateProfile(activeKey, { avatar, bio, contact, callsign, archetype });
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;
             ctx.body = { error: 'callsign_taken', message: 'That name is already taken on this community. Try another.' };

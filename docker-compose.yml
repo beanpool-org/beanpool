@@ -98,6 +98,12 @@ services:
       - IMAGE_S3_REGION=${IMAGE_S3_REGION:-}
       - IMAGE_S3_ACCESS_KEY_ID=${IMAGE_S3_ACCESS_KEY_ID:-}
       - IMAGE_S3_SECRET_ACCESS_KEY=${IMAGE_S3_SECRET_ACCESS_KEY:-}
+      # Daily budget of photo bytes stored across chat attachments, listing photos, avatars and group pictures
+      # (apps/server/src/engine/photo-upload-budget.ts). EMPTY = 100 MB (104857600 bytes); 0 = off.
+      - PHOTO_BYTES_PER_MEMBER_PER_DAY=${PHOTO_BYTES_PER_MEMBER_PER_DAY:-}
+      # Free-disk floor in MB for the disk image store (IMAGE_STORE not s3). Below it every photo upload is
+      # refused. EMPTY = 2048 MB. Owners and admins are not exempt.
+      - PHOTO_MIN_FREE_DISK_MB=${PHOTO_MIN_FREE_DISK_MB:-}
       # Backups off the server (optional): up to two S3-compatible destinations for the main server's LOCKED backups.
       # EMPTY = none, as every node starts; more can be added in Settings. None is BeanPool's and none is needed. From
       # .env only: never stored in node_config, never put in a backup, never logged. See .env.example and

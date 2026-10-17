@@ -1,0 +1,364 @@
+/**
+ * Tests for the PHOTO UPLOAD BUDGET and FREE-DISK FLOOR (storage design row P7):
+ *   - Under budget passes.
+ *   - The upload that crosses budget is refused (HTTP 429, Retry-After header,
+ *     "You've shared a lot of photos today. Try again tomorrow.") across:
+ *       1. Chat attachments (POST /api/messages/send)
+ *       2. Listing photos (POST /api/marketplace/posts and PATCH /api/marketplace/posts/:id)
+ *       3. Avatars (POST /api/profile/update)
+ *       4. Group pictures (POST /api/groups and PATCH /api/groups/:id)
+ *   - A day later it passes.
+ *   - Setting PHOTO_BYTES_PER_MEMBER_PER_DAY=0 turns it off.
+ *   - The free-disk floor (PHOTO_MIN_FREE_DISK_MB) refuses on the disk store with HTTP 507
+ *     ("This community's storage is nearly full. Tell its owner.") and owners/admins are not exempt.
+ *   - The free-disk floor is skipped when IMAGE_STORE=s3.
+ *
+ * Modelled on apps/server/src/test-photo-pixel-cap-attachment-read.ts.
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-photo-upload-budget.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH', 'ENFORCE_LEDGER_AUTH', 'NODE_PROFILE', 'PRIVATE_PREVIEW']) delete process.env[k];
+if (process.env.READ_AUTH === 'off') process.env.ENFORCE_READ_AUTH = 'false';
+process.env.DISABLE_UPDATE_CHECK = 'true';
+
+import crypto from 'node:crypto';
+import sharp from 'sharp';
+import { setMemberPhoto } from '@beanpool/engine';
+
+let run = 0, passed = 0;
+const fails: string[] = [];
+function check(id: string, cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ [${id}] ${msg}`); } else { fails.push(id); console.error(`✗ [${id}] ${msg}`); }
+}
+let BASE = '';
+const DAY = 86400_000;
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
+type Id = { pk: string; privateKey: crypto.KeyObject };
+function newId(): Id {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
+}
+function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
+    const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
+    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    return { 'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+}
+let beforeCall: () => void = () => {};
+async function req(method: string, p: string, id?: Id, body?: any): Promise<{ status: number; headers: Headers; body: any }> {
+    beforeCall();
+    const s = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = id ? signedHeaders(method, p, s, id) : {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const res = await fetch(`${BASE}${p}`, { method, headers, body: body === undefined ? undefined : s });
+    const t = await res.text(); let json: any; try { json = JSON.parse(t); } catch { json = t; }
+    return { status: res.status, headers: res.headers, body: json };
+}
+
+const noiseJpeg = async (w: number, h: number) =>
+    sharp(crypto.randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+const du = (mime: string, b: Buffer) => `data:${mime};base64,${b.toString('base64')}`;
+const errorOf = (r: { body: any }) => String(r.body?.message ?? r.body?.error ?? '');
+
+const BUDGET_SENTENCE = "You've shared a lot of photos today. Try again tomorrow.";
+const FULL_SENTENCE = "This community's storage is nearly full. Tell its owner.";
+
+async function main(): Promise<void> {
+    const { initTls } = await import('./services/tls.js');
+    const se = await import('./state-engine.js');
+    const { startHttpsServer } = await import('./https-server.js');
+    const { db } = await import('./db/db.js');
+    const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+    const { resetChatRateLimit } = await import('./chat-rate-limit.js');
+    const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
+    const { lockedDm } = await import('./dm-test-payload.js');
+    const {
+        resetPhotoBudgetForTests,
+        advancePhotoBudgetForTests,
+        setSimulatedFreeDiskBytesForTests,
+    } = await import('./engine/photo-upload-budget.js');
+
+    beforeCall = () => { resetGatewayRateLimit(); resetChatRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
+    await initTls(); se.initStateEngine();
+    BASE = `https://localhost:${await startHttpsServer(0)}`;
+    console.log(`read auth ${process.env.ENFORCE_READ_AUTH === 'false' ? 'OFF' : 'ON'}`);
+
+    const member = (callsign: string): Id => {
+        const id = newId();
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`).run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pk, TINY_PNG);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        return id;
+    };
+
+    const makeOwner = (id: Id): void => {
+        db.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')`).run(id.pk);
+    };
+
+    const smallImg = du('image/jpeg', await noiseJpeg(30, 30)); // ~1.5 KB
+    const bigImg = du('image/jpeg', await noiseJpeg(150, 150)); // ~21 KB
+
+    // ── 1. Under budget passes ──
+    {
+        resetPhotoBudgetForTests();
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '50000'; // 50 KB budget
+
+        const alice = member('BudAlice');
+        const bob = member('BudBob');
+        const conv = se.createConversation('dm', [alice.pk, bob.pk], alice.pk)!;
+
+        // Small attachment (~10 KB) is well under 50 KB
+        const ph = lockedDm(10_000);
+        const s = await req('POST', '/api/messages/send', alice, {
+            conversationId: conv.id,
+            authorPubkey: alice.pk,
+            ...lockedDm(),
+            type: 'image',
+            attachment: { data: ph.ciphertext, nonce: ph.nonce }
+        });
+        check('under-budget', s.status === 200, `chat attachment under budget → 200 (got ${s.status})`);
+    }
+
+    // ── 2. The upload that crosses budget is refused (each kind: chat, listing, avatar, group) ──
+    {
+        // 2a. Chat attachment
+        {
+            resetPhotoBudgetForTests();
+            process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '30000'; // 30 KB budget
+            const alice = member('BudAlice2');
+            const bob = member('BudBob2');
+            const conv = se.createConversation('dm', [alice.pk, bob.pk], alice.pk)!;
+
+            // Spend 20 KB
+            const ph1 = lockedDm(20_000);
+            const s1 = await req('POST', '/api/messages/send', alice, {
+                conversationId: conv.id,
+                authorPubkey: alice.pk,
+                ...lockedDm(),
+                type: 'image',
+                attachment: { data: ph1.ciphertext, nonce: ph1.nonce }
+            });
+            check('chat-first-pass', s1.status === 200, `first attachment passes → 200 (got ${s1.status})`);
+
+            // Try another 20 KB (total 40 KB > 30 KB budget)
+            const ph2 = lockedDm(20_000);
+            const s2 = await req('POST', '/api/messages/send', alice, {
+                conversationId: conv.id,
+                authorPubkey: alice.pk,
+                ...lockedDm(),
+                type: 'image',
+                attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
+            });
+            check('chat-crossing-refused', s2.status === 429, `chat attachment crossing budget → 429 (got ${s2.status})`);
+            check('chat-retry-after', Boolean(s2.headers.get('retry-after')), `has Retry-After header (got ${s2.headers.get('retry-after')})`);
+            check('chat-sentence', errorOf(s2) === BUDGET_SENTENCE, `plain sentence returned (got "${errorOf(s2)}")`);
+            check('chat-code', s2.body?.code === 'photo_budget', `code is photo_budget (got ${s2.body?.code})`);
+        }
+
+        // 2b. Listing photo (POST /api/marketplace/posts and PATCH /api/marketplace/posts/:id)
+        {
+            resetPhotoBudgetForTests();
+            process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '10000'; // 10 KB budget
+            const carol = member('BudCarol');
+
+            // bigImg is ~21 KB > 10 KB budget
+            const s = await req('POST', '/api/marketplace/posts', carol, {
+                type: 'offer',
+                title: 'Fresh apples from orchard',
+                description: 'Crisp and juicy seasonal apples for trade',
+                category: 'food',
+                authorPublicKey: carol.pk,
+                credits: 5,
+                photos: [bigImg]
+            });
+            check('listing-crossing-refused', s.status === 429, `listing photo crossing budget → 429 (got ${s.status})`);
+            check('listing-sentence', errorOf(s) === BUDGET_SENTENCE, `listing plain sentence (got "${errorOf(s)}")`);
+            check('listing-retry-after', Boolean(s.headers.get('retry-after')), `listing has Retry-After header`);
+
+            // Edit listing photo crossing budget
+            // First create a post with smallImg (under budget: ~1.5 KB < 10 KB)
+            const sOk = await req('POST', '/api/marketplace/posts', carol, {
+                type: 'offer',
+                title: 'Fresh apples from orchard',
+                description: 'Crisp and juicy seasonal apples for trade',
+                category: 'food',
+                authorPublicKey: carol.pk,
+                credits: 5,
+                photos: [smallImg]
+            });
+            const postId = sOk.body?.post?.id;
+            check('listing-edit-setup', sOk.status === 200 && Boolean(postId), `listing created under budget → 200`);
+
+            // Now edit with bigImg, which crosses the 10 KB budget
+            const sEdit = await req('POST', '/api/marketplace/posts/update', carol, {
+                id: postId,
+                authorPublicKey: carol.pk,
+                photos: [bigImg]
+            });
+            check('listing-edit-crossing-refused', sEdit.status === 429, `listing edit photo crossing budget → 429 (got ${sEdit.status})`);
+            check('listing-edit-sentence', errorOf(sEdit) === BUDGET_SENTENCE, `listing edit plain sentence`);
+        }
+
+        // 2c. Avatar (POST /api/profile/update)
+        {
+            resetPhotoBudgetForTests();
+            process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '10000'; // 10 KB budget
+            const dave = member('BudDave');
+
+            const s = await req('POST', '/api/profile/update', dave, {
+                avatar: bigImg
+            });
+            check('avatar-crossing-refused', s.status === 429, `avatar crossing budget → 429 (got ${s.status})`);
+            check('avatar-sentence', errorOf(s) === BUDGET_SENTENCE, `avatar plain sentence (got "${errorOf(s)}")`);
+            check('avatar-retry-after', Boolean(s.headers.get('retry-after')), `avatar has Retry-After header`);
+        }
+
+        // 2d. Group picture (POST /api/groups and PATCH /api/groups/:id)
+        {
+            resetPhotoBudgetForTests();
+            process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '10000'; // 10 KB budget
+            const erin = member('BudErin');
+
+            const s = await req('POST', '/api/groups', erin, {
+                name: 'Photo Club',
+                description: 'Group for photography enthusiasts',
+                avatarUrl: bigImg
+            });
+            check('group-crossing-refused', s.status === 429, `group picture crossing budget → 429 (got ${s.status})`);
+            check('group-sentence', errorOf(s) === BUDGET_SENTENCE, `group plain sentence (got "${errorOf(s)}")`);
+            check('group-retry-after', Boolean(s.headers.get('retry-after')), `group has Retry-After header`);
+
+            // Edit group picture crossing budget
+            const sOk = await req('POST', '/api/groups', erin, {
+                name: 'Photo Club Two',
+                description: 'Second group',
+                avatarUrl: smallImg
+            });
+            const groupId = sOk.body?.id;
+            check('group-edit-setup', sOk.status === 201 && Boolean(groupId), `group created under budget → 201`);
+
+            const sEdit = await req('PATCH', `/api/groups/${groupId}`, erin, {
+                avatarUrl: bigImg
+            });
+            check('group-edit-crossing-refused', sEdit.status === 429, `group edit picture crossing budget → 429 (got ${sEdit.status})`);
+            check('group-edit-sentence', errorOf(sEdit) === BUDGET_SENTENCE, `group edit plain sentence`);
+        }
+    }
+
+    // ── 3. A day later it passes ──
+    {
+        resetPhotoBudgetForTests();
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '30000'; // 30 KB budget
+        const frank = member('BudFrank');
+        const grace = member('BudGrace');
+        const conv = se.createConversation('dm', [frank.pk, grace.pk], frank.pk)!;
+
+        // Use up budget
+        const ph1 = lockedDm(25_000);
+        const s1 = await req('POST', '/api/messages/send', frank, {
+            conversationId: conv.id,
+            authorPubkey: frank.pk,
+            ...lockedDm(),
+            type: 'image',
+            attachment: { data: ph1.ciphertext, nonce: ph1.nonce }
+        });
+        check('day-later-setup', s1.status === 200, `first attachment passes → 200`);
+
+        // Second attachment blocked
+        const ph2 = lockedDm(15_000);
+        const s2 = await req('POST', '/api/messages/send', frank, {
+            conversationId: conv.id,
+            authorPubkey: frank.pk,
+            ...lockedDm(),
+            type: 'image',
+            attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
+        });
+        check('day-later-blocked', s2.status === 429, `second attachment blocked today → 429 (got ${s2.status} ${JSON.stringify(s2.body)})`);
+
+        // Advance a day later (24 hours + 10 seconds)
+        advancePhotoBudgetForTests(DAY + 10_000);
+
+        // Now it passes!
+        const s3 = await req('POST', '/api/messages/send', frank, {
+            conversationId: conv.id,
+            authorPubkey: frank.pk,
+            ...lockedDm(),
+            type: 'image',
+            attachment: { data: ph2.ciphertext, nonce: ph2.nonce }
+        });
+        check('day-later-passes', s3.status === 200, `same attachment a day later passes → 200 (got ${s3.status})`);
+    }
+
+    // ── 4. Setting 0 turns it off ──
+    {
+        resetPhotoBudgetForTests();
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '0'; // 0 = off
+
+        const heidi = member('BudHeidi');
+        const ivan = member('BudIvan');
+        const conv = se.createConversation('dm', [heidi.pk, ivan.pk], heidi.pk)!;
+
+        // Big attachment (~80 KB)
+        const ph = lockedDm(80_000);
+        const s = await req('POST', '/api/messages/send', heidi, {
+            conversationId: conv.id,
+            authorPubkey: heidi.pk,
+            ...lockedDm(),
+            type: 'image',
+            attachment: { data: ph.ciphertext, nonce: ph.nonce }
+        });
+        check('zero-turns-off', s.status === 200, `0 turns off budget check → 200 (got ${s.status})`);
+    }
+
+    // ── 5. Free-disk floor refuses on disk store (HTTP 507), owners/admins not exempt ──
+    {
+        resetPhotoBudgetForTests();
+        delete process.env.IMAGE_STORE; // disk store
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = '100000000'; // 100 MB budget
+        process.env.PHOTO_MIN_FREE_DISK_MB = '2048'; // 2048 MB floor
+
+        const judy = member('BudJudy');
+        const owner = member('BudOwner');
+        makeOwner(owner);
+
+        // Simulate free disk space below 2048 MB (e.g. 500 MB)
+        setSimulatedFreeDiskBytesForTests(500 * 1024 * 1024);
+
+        // Judy tries to update avatar
+        const s1 = await req('POST', '/api/profile/update', judy, { avatar: smallImg });
+        check('floor-refuses-disk', s1.status === 507, `disk floor refusal → 507 (got ${s1.status})`);
+        check('floor-sentence', errorOf(s1) === FULL_SENTENCE, `disk floor plain sentence (got "${errorOf(s1)}")`);
+        check('floor-code', s1.body?.code === 'storage_nearly_full', `disk floor code is storage_nearly_full`);
+
+        // Owner is NOT exempt from floor
+        const s2 = await req('POST', '/api/profile/update', owner, { avatar: smallImg });
+        check('floor-owner-not-exempt', s2.status === 507 && errorOf(s2) === FULL_SENTENCE, `owner is not exempt from disk floor → 507 (got ${s2.status})`);
+    }
+
+    // ── 6. Free-disk floor is skipped on S3 ──
+    {
+        // Set IMAGE_STORE=s3
+        process.env.IMAGE_STORE = 's3';
+        // Still simulated low disk space
+        setSimulatedFreeDiskBytesForTests(500 * 1024 * 1024);
+
+        const mallory = member('BudMallory');
+        const s = await req('POST', '/api/profile/update', mallory, { avatar: smallImg });
+        check('floor-skipped-on-s3', s.status === 200, `disk floor skipped when IMAGE_STORE=s3 → 200 (got ${s.status})`);
+
+        // Cleanup
+        delete process.env.IMAGE_STORE;
+        setSimulatedFreeDiskBytesForTests(null);
+    }
+
+    console.log(`\n${passed}/${run} passed.`);
+    if (fails.length > 0) {
+        console.error(`FAILS: ${fails.join(', ')}`);
+    }
+    process.exit(fails.length ? 1 : 0);
+}
+
+main().catch((e) => {
+    console.error('Test threw unexpected error:', e);
+    process.exit(1);
+});

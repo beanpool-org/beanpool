@@ -59,6 +59,7 @@ These stop one account filling your server, and its standby copies, with rows. E
 - **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 3 posts, 5 photos and 10 new people a day, until it is 3 days old and 3 of its posts have stayed up. One made with 12 words and no sign-in is held to 2 posts, 4 photos and 3 new people a day, for 7 days and until 3 of its posts have stayed up. They are told "While your account is new you can …".
 - **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.
 - **A message's words**: a direct message up to about 48 KB of words (64 KB as stored); a line in a group, event or enterprise chat up to 2,000 characters. Photos are attachments and don't count.
+- **Photos**: 100 MB of photo bytes stored a day per member across chat attachments, listing photos, avatars and group pictures (`PHOTO_BYTES_PER_MEMBER_PER_DAY`, default 100 MB; 0 = off). Refused with "You've shared a lot of photos today. Try again tomorrow." (HTTP 429). For the disk image store, a free-disk floor of 2048 MB (`PHOTO_MIN_FREE_DISK_MB`, default 2048 MB) refuses every photo upload below it with "This community's storage is nearly full. Tell its owner." (HTTP 507). Owners and admins are not exempt.
 - **Looking up people nearby**: on the global community, a member can ask for the people nearest a place 100 times a day. A restart starts the count again. A local community has no such limit.
 
 ## Payments and deals
@@ -116,6 +117,8 @@ The message says which:
 - "Too many new codes" or "Too many sign-ins waiting on this node right now": new sign-in codes for a computer.
 - "While your account is new you can …": a new account's limits on the global community.
 - "You have sent a lot of reports recently": reports, 10 an hour.
+- "You've shared a lot of photos today. Try again tomorrow.": photo upload day budget exceeded (HTTP 429).
+- "This community's storage is nearly full. Tell its owner.": free-disk floor reached on the disk image store (HTTP 507).
 - "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the password brake.
 
 The gateway, the day's changes and the password brake also write a line in the logs.

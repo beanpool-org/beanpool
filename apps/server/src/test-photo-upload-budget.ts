@@ -83,6 +83,7 @@ async function main(): Promise<void> {
         resetPhotoBudgetForTests,
         advancePhotoBudgetForTests,
         setSimulatedFreeDiskBytesForTests,
+        getMemberPhotoUsageForTests,
     } = await import('./engine/photo-upload-budget.js');
 
     beforeCall = () => { resetGatewayRateLimit(); resetChatRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -204,6 +205,36 @@ async function main(): Promise<void> {
             });
             check('listing-edit-crossing-refused', sEdit.status === 429, `listing edit photo crossing budget → 429 (got ${sEdit.status})`);
             check('listing-edit-sentence', errorOf(sEdit) === BUDGET_SENTENCE, `listing edit plain sentence`);
+
+            // 2b-2. Listing edit sending back existing photo URLs records 0 B
+            const fiona = member('BudFiona');
+            const createRes = await req('POST', '/api/marketplace/posts', fiona, {
+                type: 'offer',
+                title: 'Handmade pottery bowl',
+                description: 'Ceramic bowl',
+                category: 'art',
+                authorPublicKey: fiona.pk,
+                credits: 10,
+                photos: [smallImg]
+            });
+            const pId = createRes.body?.post?.id;
+            const u1Post = getMemberPhotoUsageForTests(fiona.pk).usedBytes;
+            check('listing-urls-edit-setup', createRes.status === 200 && u1Post > 0, `listing created with photo, recorded ${u1Post} B`);
+
+            const readRes = await req('GET', '/api/marketplace/posts?limit=50', fiona);
+            const postsList: any[] = Array.isArray(readRes.body) ? readRes.body : (readRes.body?.posts ?? []);
+            const myPost = postsList.find((p: any) => p.id === pId);
+            const photoUrls: string[] = Array.isArray(myPost?.photos) ? myPost.photos : JSON.parse(myPost?.photos ?? '[]');
+            check('listing-urls-edit-got-urls', photoUrls.length === 1 && photoUrls[0].includes('/photos/'), 'read back listing has photo URL');
+
+            const editRes = await req('POST', '/api/marketplace/posts/update', fiona, {
+                id: pId,
+                authorPublicKey: fiona.pk,
+                title: 'Handmade pottery bowl (typo fix)',
+                photos: photoUrls
+            });
+            const u2Post = getMemberPhotoUsageForTests(fiona.pk).usedBytes;
+            check('listing-edit-same-urls-zero-bytes', u2Post - u1Post === 0, `text-only edit that sends photo URLs back records 0 B (got +${u2Post - u1Post} B)`);
         }
 
         // 2c. Avatar (POST /api/profile/update)
@@ -218,6 +249,20 @@ async function main(): Promise<void> {
             check('avatar-crossing-refused', s.status === 429, `avatar crossing budget → 429 (got ${s.status})`);
             check('avatar-sentence', errorOf(s) === BUDGET_SENTENCE, `avatar plain sentence (got "${errorOf(s)}")`);
             check('avatar-retry-after', Boolean(s.headers.get('retry-after')), `avatar has Retry-After header`);
+
+            // 2c-2. PWA-style profile save with avatar as read records 0 B
+            const greg = member('BudGreg');
+            const setRes = await req('POST', '/api/profile/update', greg, { avatar: smallImg });
+            const u1Prof = getMemberPhotoUsageForTests(greg.pk).usedBytes;
+            check('profile-save-setup', setRes.status === 200 && u1Prof > 0, `avatar set, recorded ${u1Prof} B`);
+
+            const profRes = await req('GET', `/api/profile/${greg.pk}`, greg);
+            const av = profRes.body?.avatar ?? profRes.body?.profile?.avatar ?? profRes.body?.avatarUrl ?? profRes.body?.profile?.avatarUrl;
+            check('profile-save-got-avatar', typeof av === 'string' && av.startsWith('data:'), 'profile read back has data URL avatar');
+
+            const saveRes = await req('POST', '/api/profile/update', greg, { avatar: av, bio: 'Updated bio' });
+            const u2Prof = getMemberPhotoUsageForTests(greg.pk).usedBytes;
+            check('profile-save-same-avatar-zero-bytes', u2Prof - u1Prof === 0, `PWA-style profile save with avatar as read records 0 B (got +${u2Prof - u1Prof} B)`);
         }
 
         // 2d. Group picture (POST /api/groups and PATCH /api/groups/:id)

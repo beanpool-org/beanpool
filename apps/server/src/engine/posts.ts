@@ -97,10 +97,10 @@ function forActor(post: MarketplacePost, actorPubkey: string | undefined): Marke
  * the formats the strip knows: a HEIC labelled image/jpeg would otherwise be stored and served with its GPS.
  * Checked before the first put, so a refused edit writes nothing. Both apps send JPEGs.
  */
-function storedPhotoColumns(postId: string, photos: string[], authorPublicKey?: string): PhotoColumns[] {
+function storedPhotoColumns(postId: string, photos: string[], authorPublicKey?: string, photoUploadBytes?: number): PhotoColumns[] {
     const refusal = photosRefusal(photos);
     if (refusal) throw photoRefusalError(refusal, POST_PHOTO_FORMAT_ERROR);
-    const incomingBytes = authorPublicKey ? incomingPhotosBytes(photos) : 0;
+    const incomingBytes = authorPublicKey ? (photoUploadBytes !== undefined ? photoUploadBytes : incomingPhotosBytes(photos)) : 0;
     if (authorPublicKey && incomingBytes > 0) {
         assertMayStorePhotoBytes(authorPublicKey, incomingBytes);
     }
@@ -1200,7 +1200,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     assertPriceNotFrozen(id, existingPost, updates);
 
+    let uploadPhotoBytes: number | undefined;
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
+        uploadPhotoBytes = incomingPhotosBytes(updates.photos.slice(0, 5));
         // A client that is not changing a photo sends back the URL it was given, and this turns it into the
         // photo again. Once the row is evacuated the bytes come from the store — `photoDataOf` rebuilds the
         // exact data URL the row used to hold, so an unchanged photo re-stores as the same object under the
@@ -1317,7 +1319,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     // Outside the transaction, like the create path: see storedPhotoColumns.
     const nextPhotoColumns = (updates.photos !== undefined && Array.isArray(updates.photos))
-        ? storedPhotoColumns(id, updates.photos.slice(0, 5), authorPublicKey)
+        ? storedPhotoColumns(id, updates.photos.slice(0, 5), authorPublicKey, uploadPhotoBytes)
         : null;
 
     let openedLine: EventThreadMessage | null = null;

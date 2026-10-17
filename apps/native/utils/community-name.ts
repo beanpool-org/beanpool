@@ -24,3 +24,25 @@ function hostOf(url: string): string {
 export function communityName(c: { url?: string | null; nodeName?: unknown; alias?: string | null }): string {
     return realName(c.nodeName) ?? realName(c.alias) ?? (c.url ? hostOf(c.url) : 'BeanPool');
 }
+
+const NAME_TIMEOUT_MS = 8_000;
+
+/**
+ * The community's own name, as it answers it (`GET /api/community/health`, public and unsigned, as the BeanPool sheet asks
+ * it of every saved community), or null when it doesn't answer or names none: the door screen and the not-recognised
+ * screen name an open-door community by it (app/join-open-door.tsx). Never a name a link carried.
+ */
+export async function askCommunityName(url: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NAME_TIMEOUT_MS);
+    try {
+        const res = await fetchImpl(`${url}/api/community/health`, { method: 'GET', signal: controller.signal });
+        if (!res.ok) return null;
+        const health = await res.json().catch(() => null) as { nodeName?: unknown; name?: unknown } | null;
+        return realName(health?.nodeName) ?? realName(health?.name);
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}

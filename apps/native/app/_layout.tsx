@@ -661,8 +661,8 @@ function RootLayoutNav() {
         // network, and never waived for a guest mark: a closed account isn't a visit. The same guards as 'stranger' below,
         // and one more: Settings stays, because its Delete account is the one request the community still takes from a
         // closed key, the only way left to erase the profile a removal keeps (utils/mismatch-plan.ts notRecognisedStays).
-        // Nor is anyone diverted off the global community's door (join-global): the not-recognised screen's own Join with
-        // this account opens it, for a key that is a stranger, or closed, where the phone is now (§C.1).
+        // Nor is anyone diverted off a community's open door (join-global, join-open-door): the not-recognised screen's own
+        // Join with this account opens it, for a key that is a stranger, or closed, where the phone is now (§C.1).
         if (recognition === 'closed') {
             if (!notRecognisedStays('closed', segments as string[])) {
                 router.replace('/node-mismatch');
@@ -849,6 +849,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="join-open-door" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />

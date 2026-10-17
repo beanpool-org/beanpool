@@ -245,12 +245,14 @@ describe('the phone\'s community address is written only after the plain-address
         // The full-screen "Update required"'s "Use another community": a saved community (only plain ones are offered;
         // this is the write's own check).
         'utils/update-block-escape.ts switchFromUpdateBlock': /assertPlainNodeAddress\(url\);[\s\S]*deps\.storage\.setItem\(ANCHOR_STORE_KEY, url\)/,
+        // The door from an account the phone already has, once it is in (app/join-open-door.tsx): the community whose door
+        // it is, the global community's (enterGlobalCommunity passes GLOBAL_NODE_URL) or any other's (slice P5). The door's
+        // address came through utils/open-door.ts doorNodeAt; this is the write's own check.
+        'utils/global-join-existing.ts enterOpenDoorCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {
         'app/welcome.tsx finishGlobalJoin': 'GLOBAL_NODE_URL',
-        // The same door from an account the phone already has, once it is in (join-global.tsx).
-        'utils/global-join-existing.ts enterGlobalCommunity': 'GLOBAL_NODE_URL',
     };
 
     it('finds the writes it is meant to police', () => {

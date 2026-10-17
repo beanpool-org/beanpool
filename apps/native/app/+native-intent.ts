@@ -6,6 +6,7 @@ import { isAuthReturnLink } from '../utils/auth-return';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
+import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
 
 /**
  * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
@@ -46,6 +47,22 @@ export async function routeGlobalLink(
         return initial ? '/' : null;
     }
     return globalLinkRoute(phone, initial, nowMs());
+}
+
+/**
+ * A link to a door screen (utils/open-door.ts): the global community's as its own link; another community's door for an
+ * account, with its work held for the member's tap. Read as {@link routeGlobalLink} reads the phone.
+ */
+export async function routeDoorLink(
+    link: DoorLink, initial: boolean, readPhone: () => Promise<PhoneAtLink> = phoneAtLink, nowMs: () => number = Date.now,
+): Promise<string | null> {
+    let phone: PhoneAtLink;
+    try {
+        phone = await readPhone();
+    } catch {
+        return initial ? '/' : null;
+    }
+    return doorLinkRoute(link, phone, initial, nowMs());
 }
 
 /**
@@ -93,6 +110,12 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
         if (!isGlobalLink(path)) return initial ? '/' : null;
         return routeGlobalLink(initial);
     }
+
+    // A link straight to the door screen, `beanpool://join-open-door[?node=…]` (utils/open-door.ts): it only opens the screen.
+    // With no node, or the global community's, it goes as the global link does; another community's opens its door for an
+    // account with the signed work held until the member taps (`from=link`), never with any other param a link carried.
+    const doorLink = doorLinkFromSystemPath(path);
+    if (doorLink) return routeDoorLink(doorLink, initial);
 
     const isAuthCallback =
         path.includes('auth/facebook') ||

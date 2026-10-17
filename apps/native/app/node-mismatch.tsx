@@ -29,7 +29,8 @@ import { isGlobalCommunity } from '../utils/global-join-existing';
 import { doorStateFromCheck, type GlobalDoorState } from '../utils/global-entry';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { globalEntryLine } from '../utils/global-entry-line';
-import { communityName } from '../utils/community-name';
+import { askCommunityName, communityName } from '../utils/community-name';
+import { doorNodeAt, openDoorHref } from '../utils/open-door';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
@@ -117,12 +118,21 @@ export default function NodeMismatchScreen() {
         recognition: asked ? asked.answer : recognition === 'closed' ? 'closed' : 'stranger',
         profile: asked ? asked.profile : here.profile,
         reachable: asked ? asked.reachable : here.reachable,
-        // The door screen (join-global.tsx) is the global community's alone until slice P5.
-        doorScreenTakes: pageIsGlobal,
+        // The door screen takes any open-door community's address, ours or a self-hoster's (app/join-open-door.tsx, P5).
+        doorScreenTakes: doorNodeAt(pageUrl) !== null,
     });
+    // An open-door community the page is about, named by its own answer (`/api/community/health`, as the BeanPool sheet asks
+    // it), so Join says whose door it opens. Not the global community: it has its own words.
+    const [ownNames, setOwnNames] = useState<Record<string, string>>({});
+    useEffect(() => {
+        if (plan.page !== 'open' || pageIsGlobal || !pageUrl || ownNames[pageUrl]) return;
+        let alive = true;
+        askCommunityName(pageUrl).then((name) => { if (alive && name) setOwnNames((m) => ({ ...m, [pageUrl]: name })); });
+        return () => { alive = false; };
+    }, [plan.page, pageIsGlobal, pageUrl]);
     const nameOf = (url: string | null) => {
         const saved = savedNodes.find((n) => n.url === url);
-        return communityName({ url, alias: saved?.alias });
+        return communityName({ url, nodeName: url ? ownNames[url] : null, alias: saved?.alias });
     };
     const pageName = pageIsGlobal ? t('the global community') : nameOf(pageUrl);
 
@@ -313,6 +323,8 @@ export default function NodeMismatchScreen() {
         : asked ? t("Your account is fine, but that community doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.")
         : t("Your account is fine, but the community you're connected to doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.");
     const emoji = plan.page === 'open' ? '🌍' : plan.page === 'closed' ? '🔒' : '🧭';
+    // Another open-door community's Join says whose door it is (§A row 13: "Join {their name} with this account").
+    const joinLabel = pageIsGlobal ? t('Join with this account') : t('Join {name} with this account', { name: pageName });
 
     // The global community's row (§B.3's words, the BeanPool sheet's too), on the invite, preview and closed pages.
     const globalLine = globalEntryLine(globalEntry, { host: GLOBAL_NODE_URL.replace(/^https?:\/\//, ''), wordsDoor: globalDoor.wordsDoor });
@@ -343,15 +355,17 @@ export default function NodeMismatchScreen() {
                             </View>
                         ) : null}
 
-                        {plan.page === 'open' && (
+                        {/* THIS community's door, the one the page is about (the community in use, or the one a
+                            Reconnect asked): the join lands there, as the account on this phone. */}
+                        {plan.page === 'open' && !!pageUrl && (
                             <Pressable
                                 style={styles.primaryBtn}
-                                onPress={() => router.push('/join-global')}
+                                onPress={() => router.push(openDoorHref(pageUrl))}
                                 disabled={busy}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Join with this account')}
+                                accessibilityLabel={joinLabel}
                             >
-                                <Text style={styles.primaryBtnText}>{t('Join with this account')}</Text>
+                                <Text style={styles.primaryBtnText}>{joinLabel}</Text>
                             </Pressable>
                         )}
 

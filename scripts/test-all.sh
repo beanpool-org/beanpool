@@ -321,6 +321,9 @@ run_website_colours() {
 }
 run_check "website_colours" run_website_colours
 run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node scripts/website-contrast.mjs'
+# beanpool.org/global, the link to the global community: every link on it is https and ours, the Play referrer reads
+# global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
+run_check "website_global_link" node --test scripts/website-global-link.test.mjs
 
 # setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
 # prints the primary's words and the way out. Instant.

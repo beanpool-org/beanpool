@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The global community — BeanPool</title>
+    <meta name="description" content="Open BeanPool's global community in the app on your phone, or in your browser.">
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.8">
+    <!-- beanpool.org/global: the website's link to the global community (the global-entry design, decision 3, Marty
+         17 Oct 2026). On a phone it opens the BeanPool app, or the store when the app isn't there; on a computer it goes
+         straight to the global community in the browser; the browser is always one tap away. Every link below works
+         with no script: the script only puts the right one first. No tracking and nothing from another site: the page
+         loads only the site's own files. Checked by scripts/website-global-link.test.mjs. -->
+    <style>
+        .global-door { max-width: 34rem; margin: 120px auto 60px; padding: 2.5rem; border-radius: var(--radius-lg); overflow-wrap: anywhere; }
+        .global-door [hidden] { display: none; }
+        .global-door h1 { font-family: var(--font-header); font-size: clamp(1.9rem, 4vw, 2.4rem); font-weight: 900; line-height: 1.15; color: var(--text-heading); margin-bottom: 0.75rem; }
+        .global-door .lede { font-size: 1.05rem; line-height: 1.6; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .global-door .global-note { font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); margin: 1.1rem 0 0; }
+        .global-door .global-note strong { color: var(--text-primary); }
+        .global-door .global-browser { text-align: center; margin: 0.6rem 0 0; }
+        /* the browser line is a link people tap on a phone: a 48px row, underlined so it reads as one */
+        .global-door .global-browser a { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+        @media (max-width: 768px) {
+            .global-door { margin: 100px 16px 40px; padding: 1.75rem 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-inner">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="help.html">Help</a>
+                <a href="getting-started.html" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="global-door glass-panel">
+        <h1>The global community</h1>
+        <p class="lede">People from everywhere, in one BeanPool community.</p>
+
+        <div class="hero-doors">
+            <!-- Android, with the script: the app by its own link, https://beanpool.org/global (the app claims it from
+                 slice P4 of the design), or Google Play when the app doesn't take it. -->
+            <div class="hero-door" id="door-app" hidden>
+                <a class="btn btn-primary" id="open-app" href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;referrer=global%3D1">Open in the BeanPool app</a>
+                <p>Not on this phone yet? Google Play opens so you can get it.</p>
+            </div>
+            <!-- The referrer reaches the app on its first start after an install from this link (Google's Install
+                 Referrer): global=1, which tells it the person came for the global community. It names no one. -->
+            <div class="hero-door" id="door-play">
+                <a class="btn btn-primary" id="play" href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;referrer=global%3D1">Get BeanPool on Google Play</a>
+                <p>For Android phones.</p>
+            </div>
+            <div class="hero-door" id="door-ios">
+                <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">Get BeanPool on the App Store</a>
+                <p>For iPhone and iPad.</p>
+            </div>
+        </div>
+
+        <p class="global-note">New to the app? On its first screen, tap <strong>Explore BeanPool worldwide</strong>.</p>
+        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">or open the global community in your browser</a></p>
+    </main>
+
+    <script>
+    // Puts the right door first for the device in hand, and on beanpool.org takes the first step for the visitor.
+    (function () {
+        function byId(id) { return document.getElementById(id); }
+        function swap(el, from, to) { el.classList.remove(from); el.classList.add(to); }
+
+        var ua = navigator.userAgent || '';
+        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+        var isAndroid = !isIOS && /android/i.test(ua);
+        // An app's own web view (Facebook's, a chat app's) may not know Chrome's intent links and would show an error
+        // page in place of this one: there Google Play is the way to the app.
+        var isWebView = /; wv\)/.test(ua);
+        var play = byId('play').href;
+        var appStore = byId('app-store').href;
+        var browser = byId('browser').href;
+
+        // Only on beanpool.org itself does the page move on without a tap. A copy anywhere else (the site's checks on
+        // this machine, a Cloudflare Pages preview) shows the doors and leaves the choice to whoever opened it.
+        var live = location.hostname === 'beanpool.org' || location.hostname === 'www.beanpool.org';
+        // And only on arrival: back from the store or the app, or a reload, shows the doors instead of leaving again.
+        var arrived = (function () {
+            try {
+                var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+                if (nav) return nav.type === 'navigate';
+                return performance.navigation.type === 0;
+            } catch (e) { return false; }
+        })();
+
+        if (isAndroid && !isWebView) {
+            // Chrome's intent link: the app when it takes https://beanpool.org/global, else Google Play with the referrer.
+            // An app from before P4 takes no such link, so its phone lands in Google Play (Open), never on a screen the
+            // app doesn't have.
+            var app = 'intent://beanpool.org/global#Intent;scheme=https;package=org.beanpool.pillar;S.browser_fallback_url=' + encodeURIComponent(play) + ';end';
+            byId('open-app').href = app;
+            byId('door-app').hidden = false;
+            byId('door-ios').hidden = true;
+            swap(byId('play'), 'btn-primary', 'btn-ghost');
+            if (live && arrived) location.href = app;
+        } else if (isAndroid) {
+            byId('door-ios').hidden = true;
+            if (live && arrived) location.href = play;
+        } else if (isIOS) {
+            byId('door-play').hidden = true;
+            swap(byId('app-store'), 'btn-ghost', 'btn-primary');
+            if (live && arrived) location.href = appStore;
+        } else if (live) {
+            // A computer: the global community in the browser, with this page out of the history so Back goes home.
+            location.replace(browser);
+        }
+    })();
+    </script>
+</body>
+</html>

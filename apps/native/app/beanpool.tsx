@@ -188,8 +188,9 @@ export default function BeanPoolSheet() {
                 disabled={!globalTap || communities.switching}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isCurrent, disabled: !globalTap }}
-                accessibilityLabel={t('Global community, {state}', { state: globalLine })}
-                accessibilityHint={globalHint}
+                // The saved row is read by the name it shows, as the saved rows beside it; a switch to the one in use does nothing.
+                accessibilityLabel={saved ? `${saved.name}, ${globalLine}` : t('Global community, {state}', { state: globalLine })}
+                accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
             >
                 {globalEntry === 'member' && saved

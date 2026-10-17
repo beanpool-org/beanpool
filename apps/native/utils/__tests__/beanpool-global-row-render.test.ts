@@ -399,6 +399,24 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(line()).toBe('Join with this account: a sign-in');
     });
 
+    it('in use as a member: no hint of a switch the tap doesn\'t do, and TalkBack reads the name it shows', async () => {
+        list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+        list.active = GLOBAL;
+        scene.standing = 'member';
+        await open();
+        expect(row().getAttribute('aria-selected')).toBe('true');
+        expect(row().getAttribute('data-hint')).toBeNull();
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, global.beanpool.org');
+    });
+
+    it('not in use, a member: the hint stays, and the label is the shown name, as the rows beside it', async () => {
+        list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+        scene.standing = 'member';
+        await open();
+        expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press to remove it.');
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, global.beanpool.org');
+    });
+
     it('the row keeps its node when the sheet draws again (a press, a long press or TalkBack\'s focus on it survives)', async () => {
         list.rows = [RIVERSIDE, SAVED];
         await open();

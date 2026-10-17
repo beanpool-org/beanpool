@@ -181,3 +181,47 @@ describe('Android app links: everything else goes to the browser', () => {
         }
     });
 });
+
+// The global community's smart link (utils/global-link.ts, slice P4): https://beanpool.org/global, which the website's
+// global page hands out (apps/website/global.html, #2101). On Android its button is Chrome's intent link naming this app,
+// with Google Play as the fallback; the app has to claim the path, verified like /auth/ on the same host
+// (beanpool.org/.well-known/assetlinks.json), or the button goes to Google Play even with the app installed.
+describe('Android app links: the global community\'s link opens the app', () => {
+    it('https://beanpool.org/global is claimed by a verified filter, as the website\'s intent link names it', () => {
+        const html = fs.readFileSync(path.resolve(__dirname, '../../../website/global.html'), 'utf8');
+        const intent = /'intent:\/\/([^#']+)#Intent;scheme=(https);package=org\.beanpool\.pillar;/.exec(html);
+        expect(intent).not.toBeNull();
+        const url = `${intent![2]}://${intent![1]}`;
+        expect(url).toBe('https://beanpool.org/global');
+        expect(claimedVerified(url)).toBe(true);
+        expect(claimedVerified('https://beanpool.org/global?utm_source=x')).toBe(true);
+        expect(claimedVerified('https://beanpool.org/global/')).toBe(true);
+    });
+
+    it('every path the filter claims on beanpool.org is one the router opens the door for: none lands on Unmatched Route', async () => {
+        const { isGlobalLink } = await import('../global-link');
+        for (const url of ['https://beanpool.org/global', 'https://beanpool.org/global/', 'https://beanpool.org/global.html',
+            'https://beanpool.org/globalx', 'https://beanpool.org/global/more']) {
+            expect(claimed(url), url).toBe(true);
+            expect(isGlobalLink(url), url).toBe(true);
+        }
+    });
+
+    it('it widens nothing else: the website\'s other pages and the root still open in the browser', () => {
+        for (const url of ['https://beanpool.org/', 'https://beanpool.org/help.html', 'https://beanpool.org/getting-started.html',
+            'https://beanpool.org/glob', 'https://beanpool.org/Global', 'https://www.beanpool.org/global']) {
+            expect(claimedVerified(url), url).toBe(false);
+        }
+        // A community's own host keeps its "/" rule only.
+        expect(claimed('https://mullum.beanpool.org/global')).toBe(false);
+        expect(claimed('https://global.beanpool.org/global')).toBe(false);
+    });
+
+    it('iOS: beanpool.org is an associated domain already (the site\'s association file lists /global), the invite and /auth/ paths unchanged', () => {
+        expect(appJson.expo.ios.associatedDomains).toContain('applinks:beanpool.org');
+        const aasa = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../website/.well-known/apple-app-site-association'), 'utf8'));
+        const paths = aasa.applinks.details.flatMap((d: { components: Array<{ '/': string }> }) => d.components.map((c) => c['/']));
+        expect(paths).toContain('/global');
+        expect(claimed('https://beanpool.org/auth/google?code=x')).toBe(true);
+    });
+});

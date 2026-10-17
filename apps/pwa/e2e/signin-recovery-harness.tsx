@@ -4,10 +4,12 @@
  * inside the Settings page's own column (SettingsPage.tsx: p-4, max-w-3xl, space-y-2.5), connected with one sign-in,
  * with the longest list of names, and not connected. No node: the line takes the node's answer as a prop. With the
  * words, the longest the sentence gets (a browser without them drops its last sentence); and without them, connected
- * and not, as a browser restored from a sign-in copy that carried none reads it.
+ * and not, as a browser restored from a sign-in copy that carried none reads it. And connected at global.beanpool.org,
+ * with the two lines on putting the same account on a phone (W1, lib/global-entry.ts phoneLaterLines).
  */
 import { createRoot } from 'react-dom/client';
 import { SignInRecoveryLine } from '../src/components/SignInRecoveryLine';
+import { phoneLaterLines } from '../src/lib/global-entry';
 import '../src/index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -19,6 +21,10 @@ createRoot(document.getElementById('root')!).render(
                 <div data-testid="case-none"><SignInRecoveryLine enrolled={[]} hasWords /></div>
                 <div data-testid="case-one-nowords"><SignInRecoveryLine enrolled={['google']} hasWords={false} /></div>
                 <div data-testid="case-none-nowords"><SignInRecoveryLine enrolled={[]} hasWords={false} /></div>
+                <div data-testid="case-phone">
+                    <SignInRecoveryLine enrolled={['google']} hasWords
+                        phoneLater={phoneLaterLines({ where: 'settings', appsGlobal: true, host: 'global.beanpool.org', signIns: 'Google' })} />
+                </div>
             </div>
         </div>
     </div>,

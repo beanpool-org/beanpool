@@ -12,6 +12,9 @@
  * phrase yet" banner only with the words, View Recovery Phrase saying "Not saved in this browser" without them, and
  * the words screen without them saying so instead of asking to write down words it can't show. Photographed too.
  *
+ * Connected at global.beanpool.org, with the lines on putting the same account on a phone (W1): both lines, whole,
+ * inside the card, at 4.5:1 or more.
+ *
  * Nothing here touches a BeanPool node: the line takes the node's answer as a prop, and any /api or /ws request is
  * aborted and counted, so a stray fetch fails the run instead of escaping.
  *
@@ -79,7 +82,24 @@ const MEASURE = () => {
             contrast: Math.round(((Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05)) * 100) / 100,
         };
     }
-    return { overflow: out, pageScrollsSideways: document.documentElement.scrollWidth > vw, cases };
+    // The phone lines (W1), under a connected sign-in at global.beanpool.org.
+    const phoneCard = document.querySelector('[data-testid="case-phone"] [data-testid="signin-recovery"]');
+    const phoneLines = phoneCard?.querySelector('[data-testid="signin-recovery-phone-later"]');
+    let phone = null;
+    if (phoneCard && phoneLines) {
+        const pr = phoneLines.getBoundingClientRect();
+        const cr = phoneCard.getBoundingClientRect();
+        const fg = lum(rgb(getComputedStyle(phoneLines).color));
+        const bg = lum(rgb(getComputedStyle(phoneCard).backgroundColor));
+        phone = {
+            lines: phoneLines.querySelectorAll('p').length,
+            text: phoneLines.textContent,
+            insideCard: pr.left >= cr.left - 0.5 && pr.right <= cr.right + 0.5 && pr.bottom <= cr.bottom + 0.5,
+            clipped: phoneLines.scrollHeight > phoneLines.clientHeight + 1 || phoneLines.scrollWidth > phoneLines.clientWidth + 1,
+            contrast: Math.round(((Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05)) * 100) / 100,
+        };
+    }
+    return { overflow: out, pageScrollsSideways: document.documentElement.scrollWidth > vw, cases, phone };
 };
 
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 } });
@@ -138,13 +158,22 @@ try {
                 if (noWords && !/aren't saved in this browser/.test(k.wayBackText)) failures.push(`${shot}: without the words, "${k.wayBackText}" (${id})`);
                 if (noWords && /as your 12 words do|are the way back to this account/.test(k.wayBackText)) failures.push(`${shot}: promises words this browser hasn't got: "${k.wayBackText}" (${id})`);
             }
+            if (!m.phone) failures.push(`${shot}: no lines on putting the account on a phone (case-phone)`);
+            else {
+                if (m.phone.lines !== 2 || !/choose Global community/.test(m.phone.text) || !/Recover with Social/.test(m.phone.text)) {
+                    failures.push(`${shot}: the phone lines read "${m.phone.text}" (${m.phone.lines})`);
+                }
+                if (!m.phone.insideCard) failures.push(`${shot}: the phone lines reach outside their card`);
+                if (m.phone.clipped) failures.push(`${shot}: the phone lines are cut off`);
+                if (m.phone.contrast < 4.5) failures.push(`${shot}: the phone lines are too faint (${m.phone.contrast}:1, under 4.5:1)`);
+            }
             if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
             for (const o of m.overflow) failures.push(`${shot}: ${o}`);
             if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
             const one = m.cases['case-one'];
             console.log(`${shot}: sentence ${one.lines} lines at ${one.fontPx}px, contrast ${one.contrast}:1, `
                 + `line above ${one.wayBackContrast}:1 (without the words ${m.cases['case-one-nowords'].wayBackContrast}:1), `
-                + `${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
+                + `phone lines ${m.phone?.contrast ?? '-'}:1, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
             await context.close();
         }
     }

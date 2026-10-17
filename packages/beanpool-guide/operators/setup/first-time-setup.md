@@ -35,6 +35,8 @@ docker compose exec beanpool-node beanpool claim
 - Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.
 - It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up.
 
+To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself, go to **Find a community** (or **Start a community**), tap **Set up a new community server**, then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code.
+
 If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told.
 
 ## Open Settings

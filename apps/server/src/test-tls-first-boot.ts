@@ -16,8 +16,8 @@
  *   7. the boot never waits on an ACME order (design scratch/global-node/DESIGN-https-anywhere-fable.md S1): with the
  *      fleet's Cloudflare variables set (which made initTls order from Let's Encrypt, awaited, before the listeners) and
  *      a CA that never answers, initTls returns at once and asks it nothing; it serves the ACME certificates on disk
- *      that are still valid, moves the fleet's old le-cert.pem pair into data/tls/acme/, and serves self-signed when
- *      there are none.
+ *      that are still valid, copies the fleet's old le-cert.pem pair into data/tls/acme/ (the old files stay for one
+ *      release; a pair an older image renewed there is copied again), and serves self-signed when there are none.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -221,12 +221,32 @@ try {
         const servedNow = tlsMod.servedHosts().sort();
         check('the valid ones are served (the fleet\'s and beans.example.org), not the expired one or one for another name',
             JSON.stringify(servedNow) === JSON.stringify(['beans.example.org', 'fleet.example.org']), JSON.stringify(servedNow));
-        check('the fleet\'s old le-cert.pem pair moved into data/tls/acme/fleet.example.org/ (key 0600), the old files gone',
-            fs.readFileSync(path.join(tlsDir, 'acme', 'fleet.example.org', 'cert.pem'), 'utf-8') === fleet.cert
-            && (fs.statSync(path.join(tlsDir, 'acme', 'fleet.example.org', 'key.pem')).mode & 0o777) === 0o600
-            && !fs.existsSync(path.join(tlsDir, 'le-cert.pem')) && !fs.existsSync(path.join(tlsDir, 'le-key.pem')));
+        const fleetDir = path.join(tlsDir, 'acme', 'fleet.example.org');
+        const legacyIs = (pair: { cert: string; key: string }) => ['le-cert.pem', 'le-key.pem'].every((f) => fs.existsSync(path.join(tlsDir, f)))
+            && fs.readFileSync(path.join(tlsDir, 'le-cert.pem'), 'utf-8') === pair.cert && fs.readFileSync(path.join(tlsDir, 'le-key.pem'), 'utf-8') === pair.key;
+        check('the fleet\'s old le-cert.pem pair is copied into data/tls/acme/fleet.example.org/ (key 0600)',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === fleet.cert && fs.readFileSync(path.join(fleetDir, 'key.pem'), 'utf-8') === fleet.key
+            && (fs.statSync(path.join(fleetDir, 'key.pem')).mode & 0o777) === 0o600);
+        check('…and the old files stay, byte for byte (an older image, which reads only them, can still be rolled back to)', legacyIs(fleet));
         check('a CA certificate is in use, and the self-signed pair is still there behind it', tlsMod.isUsingLetsEncrypt()
             && pairParses(tlsMod.getServerCertPem(), tlsMod.getServerKeyPem()) === null && !tlsMod.tlsFellBackToSelfSigned());
+
+        // Rolled back: the older image renewed le-cert.pem. Rolled forward: the newer pair is the one copied and served.
+        const renewedByOld = leaf('fleet.example.org', -60_000, 89 * DAY);
+        fs.writeFileSync(path.join(tlsDir, 'le-cert.pem'), renewedByOld.cert);
+        fs.writeFileSync(path.join(tlsDir, 'le-key.pem'), renewedByOld.key, { mode: 0o600 });
+        await tlsMod.initTls();
+        check('le-cert.pem renewed by an older image (later notAfter): copied over the store\'s and served on the next boot',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === renewedByOld.cert
+            && tlsMod.servedCertificate('fleet.example.org')?.cert === renewedByOld.cert && legacyIs(renewedByOld));
+        // Renewed by this image (the store's is the newer): the older le-cert.pem is never copied back over it.
+        const renewedByNew = leaf('fleet.example.org', 0, 90 * DAY);
+        fs.writeFileSync(path.join(fleetDir, 'cert.pem'), renewedByNew.cert);
+        fs.writeFileSync(path.join(fleetDir, 'key.pem'), renewedByNew.key, { mode: 0o600 });
+        await tlsMod.initTls();
+        check('the store\'s certificate the newer one: left as it is and served, le-cert.pem untouched',
+            fs.readFileSync(path.join(fleetDir, 'cert.pem'), 'utf-8') === renewedByNew.cert
+            && tlsMod.servedCertificate('fleet.example.org')?.cert === renewedByNew.cert && legacyIs(renewedByOld));
     } finally {
         for (const k of ['ACME_DIRECTORY_URL', 'CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID']) delete process.env[k];
         silent.closeAllConnections();

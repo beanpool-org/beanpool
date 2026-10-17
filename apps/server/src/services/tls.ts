@@ -33,7 +33,7 @@ const CA_CERT_PATH = path.join(TLS_DIR, 'ca.pem');
 const CA_KEY_PATH = path.join(TLS_DIR, 'ca-key.pem');
 const SERVER_CERT_PATH = path.join(TLS_DIR, 'server.pem');
 const SERVER_KEY_PATH = path.join(TLS_DIR, 'server-key.pem');
-/** Where the fleet's Let's Encrypt pair lived before each identifier had a folder (adopted once, then removed). */
+/** Where the fleet's Let's Encrypt pair lived before each identifier had a folder (copied into it; kept for one release). */
 const LE_CERT_PATH = path.join(TLS_DIR, 'le-cert.pem');
 const LE_KEY_PATH = path.join(TLS_DIR, 'le-key.pem');
 
@@ -240,21 +240,29 @@ export async function initTls(): Promise<void> {
     else console.log('🔒 TLS: Self-signed (beanpool.local)');
 }
 
-/** The fleet's pair from before each identifier had a folder, moved into data/tls/acme/<CF_RECORD_NAME>/ once. */
+/**
+ * The fleet's pair from before each identifier had a folder (tls/le-*.pem), copied into data/tls/acme/<CF_RECORD_NAME>/
+ * when that has none, or an older one (an older image ran here after a rollback and renewed le-cert.pem).
+ *
+ * The old files are kept for one release: v1.2.29 and older read only them, and without them order from Let's Encrypt
+ * inside initTls, before the listeners are up, using one of the 5 certificates a week for the name. The release after
+ * the first one that ships this copy (v1.2.31, if it is v1.2.30) may delete them, and this function with them; the boot
+ * sweep keeps le-key.pem 0600 until then (boot-file-safety.ts).
+ */
 function adoptLegacyFleetCertificate(): void {
     const fleet = fleetIdentifier();
     if (!fleet) return;
     try {
-        if (readPair(DATA_DIR, fleet)) return;
         const cert = readOrError(LE_CERT_PATH);
         const key = readOrError(LE_KEY_PATH);
         if (cert instanceof Error || key instanceof Error) return;
         if (serverPairProblem(cert, key) || !certCovers(cert, fleet)) return;
+        const held = readPair(DATA_DIR, fleet);
+        if (held && (certTimes(held.cert)?.notAfter ?? 0) >= (certTimes(cert)?.notAfter ?? 0)) return;
         writePair(DATA_DIR, fleet, { cert, key });
-        for (const f of [LE_CERT_PATH, LE_KEY_PATH]) fs.rmSync(f, { force: true });
-        console.log(`🔐 TLS: the Let's Encrypt certificate for ${fleet} moved to data/tls/acme/`);
+        console.log(`🔐 TLS: the Let's Encrypt certificate for ${fleet} copied to data/tls/acme/ (tls/le-*.pem kept for a rollback)`);
     } catch (err) {
-        console.error(`❌ TLS: could not move the Let's Encrypt certificate for ${fleet}:`, (err as Error).message);
+        console.error(`❌ TLS: could not copy the Let's Encrypt certificate for ${fleet}:`, (err as Error).message);
     }
 }
 

@@ -8,7 +8,8 @@ import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
-import { membersOnlyHere } from '../../utils/members-only-listings';
+import { refusalHere, type Refusal } from '../../utils/members-only-listings';
+import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
 import { noAreaLineHere } from '../../utils/nearby-area';
 import { NoAreaLine } from '../../components/NoAreaLine';
 import { GLOBAL_NODE_URL, pollsInformal, showcaseMode } from '../../utils/node-profile';
@@ -552,11 +553,12 @@ export default function MarketScreen() {
     const [firstSyncDone, setFirstSyncDone] = useState(false);
     const [syncTimedOut, setSyncTimedOut] = useState(false);
     // The community refused this phone its listings: its key is no member there, and a local community's listings are
-    // its members' (2026-09-28; utils/members-only-listings.ts). Read again on each focus and after each sync.
-    const [membersOnly, setMembersOnly] = useState(false);
+    // its members' (2026-09-28); or it is in a private preview, or this account there was closed (utils/members-only-
+    // listings.ts). Read again on each focus and after each sync.
+    const [refusal, setRefusal] = useState<Refusal | null>(null);
     useFocusEffect(useCallback(() => {
         let live = true;
-        const read = () => { membersOnlyHere().then(v => { if (live) setMembersOnly(v); }); };
+        const read = () => { refusalHere().then(v => { if (live) setRefusal(v); }); };
         read();
         const refused = DeviceEventEmitter.addListener('members_only_listings', read);
         const ended = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, read);
@@ -1190,7 +1192,7 @@ export default function MarketScreen() {
     });
     // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
     // saved search's own sheet with it (or says why it can't: the same search there, five there, Home full).
-    const toSave = identity && !membersOnly ? marketSearchToSave(filterState, searchQuery) : null;
+    const toSave = identity && !refusal ? marketSearchToSave(filterState, searchQuery) : null;
     const clearAllFilters = () => {
         setSearchQuery('');
         setFilter('all');
@@ -1657,6 +1659,10 @@ export default function MarketScreen() {
         );
     };
 
+    // With no listing to show: a refusal is said as one, and "Having trouble connecting" only when no answer came.
+    const emptyState = marketEmptyState({ refusal, hasActiveFilters, firstSyncDone, syncTimedOut });
+    const refusedLines = emptyState.kind === 'refused' && emptyState.refusal.code !== 'members_only' ? refusalLines(emptyState.refusal) : null;
+
     return (
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
@@ -1691,7 +1697,7 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    membersOnly ? (
+                    emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
                         // Not a member of this community: its listings are its members'. Not "trouble connecting".
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>
@@ -1709,7 +1715,18 @@ export default function MarketScreen() {
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>🌍 Look around the global community</Text>
                             </Pressable>
                         </View>
-                    ) : (!hasActiveFilters && !firstSyncDone && !syncTimedOut) ? (
+                    ) : refusedLines && emptyState.kind === 'refused' ? (
+                        // A private preview's own sentence, or a closed account's: the community answered. Not "trouble connecting".
+                        <View style={{ padding: 32, alignItems: 'center' }} testID={`refused-${emptyState.refusal.code}`}>
+                            <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>
+                            <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text.body, marginBottom: 8, textAlign: 'center' }}>
+                                {refusedLines.title}
+                            </Text>
+                            {refusedLines.body ? (
+                                <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center' }}>{refusedLines.body}</Text>
+                            ) : null}
+                        </View>
+                    ) : emptyState.kind === 'loading' ? (
                         // First-run / initial sync — show a loader, not the empty state.
                         <View style={{ padding: 48, alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={colors.brand.primary} />
@@ -1720,8 +1737,8 @@ export default function MarketScreen() {
                                 Syncing with your community
                             </Text>
                         </View>
-                    ) : (!hasActiveFilters && !firstSyncDone && syncTimedOut) ? (
-                        // First sync hasn't landed — likely offline / node unreachable.
+                    ) : emptyState.kind === 'trouble_connecting' ? (
+                        // First sync hasn't landed and no answer came — offline / node unreachable.
                         <View style={{ padding: 40, alignItems: 'center' }}>
                             <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📡</Text>
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.body, marginBottom: 6 }}>
@@ -1738,7 +1755,7 @@ export default function MarketScreen() {
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>
                             </Pressable>
                         </View>
-                    ) : !hasActiveFilters ? (
+                    ) : emptyState.kind === 'feed' ? (
                         <View>
                             {showExamples && <ExampleListings />}
                             <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />

@@ -20,7 +20,7 @@ import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
-import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
+import { isMembersOnlyAnswer, noteRefusal, probeSaysNoMember, refusalOf } from '../utils/members-only-listings';
 import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFresh, noteMembersOnDemand, type NodeProfile } from '../utils/node-profile';
 import { readerFeaturesHeld, readerFeaturesKey, readsOwnWith } from '../utils/reads-own';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
@@ -259,6 +259,26 @@ const liveLog: Array<{ seq: number; dbName: string; change: LivePostChange }> = 
 function liveChangesSince(mark: number, dbName: string): { liveChanges?: LivePostChange[] } {
     const changes = liveLog.filter(e => e.seq > mark && e.dbName === dbName).map(e => e.change);
     return changes.length > 0 ? { liveChanges: changes } : {};
+}
+
+/**
+ * After a private preview refused the listings: whether the membership probe, signed with this phone's key, says the key
+ * is no member there (utils/members-only-listings.ts probeSaysNoMember). False without the key, with no answer, and for a
+ * member (whose read went unsigned). Loaded here, as the identity is: only a preview's refusal asks.
+ */
+async function previewRefusesThisKey(anchorUrl: string, signer: { publicKey: string; privateKey: string } | null): Promise<boolean> {
+    if (!signer) return false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const { fetchMembership } = await import('../utils/membership-probe');
+        const res = await fetchMembership(anchorUrl, signer, controller.signal);
+        return probeSaysNoMember(res.status, await res.json().catch(() => null));
+    } catch {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**
@@ -792,13 +812,18 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             }
             if (!postsRes.ok && postsRes.status !== 304) {
                 // A local community refuses its listings to a phone whose key is no member there (2026-09-28): noted for
-                // the Market, which says so with the way to the global community (utils/members-only-listings.ts).
-                const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
-                const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
+                // the Market, which says so with the way to the global community (utils/members-only-listings.ts). So are
+                // a private preview's refusal and a closed account's, each with its code: an answer, not a lost connection.
+                const answer = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
+                const membersOnly = isMembersOnlyAnswer(postsRes.status, answer);
+                const refusal = refusalOf(postsRes.status, answer);
                 // A 401 (an unsigned read) leaves the note as it was: it says nothing about membership, and the Market's
                 // members-only card must never show a member for it (PR #1286). A key-holding phone always signs, so a
-                // real non-member gets the 403.
-                if (postsRes.status !== 401) await noteMembersOnly(anchorUrl, membersOnly);
+                // real non-member gets the 403. A preview's 403 is the same for an unsigned read, so it is noted only once
+                // the membership probe, signed with this phone's key, says the key is no member here (probeSaysNoMember).
+                if (postsRes.status !== 401 && (refusal?.code !== 'private_preview' || await previewRefusesThisKey(anchorUrl, signer))) {
+                    await noteRefusal(anchorUrl, refusal);
+                }
                 // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
                 // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
                 // switch in flight), which says nothing about membership: the cache stays (PR #1286 review 4125870399).
@@ -825,7 +850,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 result.errorMessage = membersOnly ? 'members_only' : `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
             }
-            await noteMembersOnly(anchorUrl, false);
+            await noteRefusal(anchorUrl, null);
             // The visitors' view reaching a member (G9c, utils/posts-view.ts) goes the same way as a failed
             // fetch: nothing written, the cursor not moved, and the next sync asks again.
             const viewRefusal = await postsViewRefusal(postsRes, anchorUrl, pubKey);

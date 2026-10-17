@@ -5,7 +5,7 @@
  * Each tick, for each identifier (engine/own-addresses.ts tlsIdentifiers, plus the fleet's CF_RECORD_NAME on dns-01),
  * one at a time:
  *   - a certificate with more than a third of its life left (30 of 90 days for a name, ~53 of ~160 hours for an IP) is
- *     left alone;
+ *     left alone, unless it came from another ACME directory than ACME_DIRECTORY_URL names now (state.json records it);
  *   - otherwise, once `nextAttemptAt` has come, one order (order.ts), its self-check first. The old certificate serves
  *     until the new one is on disk; a failed order keeps it and sets the next try: 1 h, 4 h, then daily after failures in
  *     a row, but for an identifier with a certificate never later than a third of the time it has left (so the window an
@@ -139,7 +139,11 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
         if (pair && !serveCertificate(target.host, pair, now)) held = servedCertificate(target.host);
     }
     const state = readState(dataDir, target.host);
-    if (held) {
+    const directoryUrl = acmeDirectoryUrl();
+    // A certificate from another directory (staging before production, another CA) is due whatever its dates; a state
+    // that records none (the fleet's adopted pair, one written before this was recorded) counts as this directory's.
+    const otherDirectory = !!held && state.directoryUrl !== null && state.directoryUrl !== directoryUrl;
+    if (held && !otherDirectory) {
         const lifetime = held.notAfter - held.notBefore;
         if (held.notAfter - now > lifetime * RENEW_WHEN_LEFT) {
             if (state.validUntil !== held.notAfter) writeState(dataDir, { ...state, validUntil: held.notAfter, lifetimeMs: lifetime });
@@ -148,11 +152,12 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
     }
     if (now < state.nextAttemptAt) return 'waiting';
 
-    console.log(`🔐 ACME: ${held ? 'renewing' : 'ordering'} the certificate for ${target.host} (${target.challenge}) at ${acmeDirectoryUrl()}`);
+    console.log(`🔐 ACME: ${held ? 'renewing' : 'ordering'} the certificate for ${target.host} (${target.challenge}) at ${directoryUrl}`
+        + (otherDirectory ? `; the one held came from ${state.directoryUrl}` : ''));
     const attempt: AcmeState = { ...state, lastAttemptAt: now };
     try {
         const pair = await withTimeout(orderFn(target, {
-            directoryUrl: acmeDirectoryUrl(),
+            directoryUrl,
             accountKey: accountKey(),
             log: (line) => console.log(`   ACME: ${line}`),
         }));
@@ -162,7 +167,7 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
         const fresh = servedCertificate(target.host)!;
         writeState(dataDir, {
             ...attempt, validUntil: fresh.notAfter, lifetimeMs: fresh.notAfter - fresh.notBefore,
-            nextAttemptAt: 0, failures: 0, lastError: null, lastSuccessAt: clock(),
+            nextAttemptAt: 0, failures: 0, lastError: null, lastSuccessAt: clock(), directoryUrl,
         });
         console.log(`✅ ACME: certificate for ${target.host} until ${new Date(fresh.notAfter).toISOString()}`);
         return 'renewed';

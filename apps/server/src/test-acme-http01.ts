@@ -16,7 +16,9 @@
  *      delegation;
  *   7. keys are 0600 when written and after the boot sweep; a restart serves them from disk and asks the CA nothing;
  *   8. `.beanpool.org` names and private hosts are never ordered;
- *   9. a standby orders nothing.
+ *   9. a standby orders nothing;
+ *  10. a certificate from another ACME directory than the one configured (staging, then production) is ordered again at
+ *      once; a state that records no directory is left alone.
  * Plus: docker-compose.yml passes ACME_DIRECTORY_URL through.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
@@ -454,7 +456,39 @@ try {
     const t9b = await schedule.runAcmeTick();
     check('the same tick as the main server orders the new name', t9b.outcomes['fresh-name.example.org'] === 'renewed', JSON.stringify(t9b));
 
-    console.log('\n10. docker-compose.yml passes ACME_DIRECTORY_URL through');
+    console.log('\n10. A certificate from another ACME directory is ordered again at once (staging, then production)');
+    configure(['beans.example.org']);
+    const firstDirectory = schedule.acmeDirectoryUrl();
+    const held10 = await served('beans.example.org');
+    check('state.json records the directory the certificate came from', store.readState(dataDir, 'beans.example.org').directoryUrl === firstDirectory,
+        JSON.stringify(store.readState(dataDir, 'beans.example.org')));
+    // The fake CA answers whatever the query, so a second URL stands for a second directory (production after staging).
+    const secondDirectory = `${firstDirectory}?production`;
+    process.env.ACME_DIRECTORY_URL = secondDirectory;
+    try {
+        before = orderCount();
+        const t10a = await schedule.runAcmeTick();
+        const s10 = await served('beans.example.org');
+        const st10 = store.readState(dataDir, 'beans.example.org');
+        check('a fresh certificate from the old directory: one new order', t10a.outcomes['beans.example.org'] === 'renewed' && orderCount() === before + 1,
+            JSON.stringify(t10a));
+        check('…served from the next connection, and state.json records the new directory', s10.serial !== held10.serial && s10.authorized
+            && st10.directoryUrl === secondDirectory, JSON.stringify(st10));
+        before = orderCount();
+        const t10b = await schedule.runAcmeTick();
+        check('the next tick: fresh, nothing ordered', t10b.outcomes['beans.example.org'] === 'fresh' && orderCount() === before, JSON.stringify(t10b));
+        // The fleet's adopted pair, or a state written before the directory was recorded: no directory, left alone.
+        store.writeState(dataDir, { ...st10, directoryUrl: null });
+        process.env.ACME_DIRECTORY_URL = firstDirectory;
+        before = orderCount();
+        const t10c = await schedule.runAcmeTick();
+        check('a state with no directory recorded counts as this directory\'s: fresh, nothing ordered',
+            t10c.outcomes['beans.example.org'] === 'fresh' && orderCount() === before, JSON.stringify(t10c));
+    } finally {
+        process.env.ACME_DIRECTORY_URL = firstDirectory;
+    }
+
+    console.log('\n11. docker-compose.yml passes ACME_DIRECTORY_URL through');
     const compose = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../docker-compose.yml'), 'utf8');
     check('docker-compose.yml passes ACME_DIRECTORY_URL from the node\'s .env, empty by default', /^\s*- ACME_DIRECTORY_URL=\$\{ACME_DIRECTORY_URL:-\}\s*$/m.test(compose));
     check('an empty ACME_DIRECTORY_URL is Let\'s Encrypt production', (() => {

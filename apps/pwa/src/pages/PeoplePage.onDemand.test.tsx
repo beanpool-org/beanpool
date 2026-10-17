@@ -90,6 +90,17 @@ describe('People on a community with members on demand', () => {
         expect(whole).not.toHaveBeenCalled();
     });
 
+    it("a key the node says isn't a member (a private preview): the node's sentence, never 'set your area', no near read", async () => {
+        const PREVIEW = 'This community is in a private preview. Ask its owner for an invite.';
+        area.value = { code: 'private_preview', standing: 'not_member', isMember: false, sentence: PREVIEW, message: PREVIEW } as any;
+        openCommunity();
+        const failed = await screen.findByTestId('people-near-failed');
+        expect(failed).toHaveTextContent(PREVIEW);
+        expect(screen.queryByTestId('people-no-area')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(cards).not.toHaveBeenCalled();
+    });
+
     it("the nearest read's day budget spent (429, features.openMembership): the node's words, and the search still works", async () => {
         // DESIGN-global-member-privacy-fable.md §3: where anyone can join in a minute, a member may ask who is near a place
         // 100 times a day (READ_LIMITS.nearestPeoplePerDay on the server). Past it the page says so in the node's words

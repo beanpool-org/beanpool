@@ -248,7 +248,7 @@ export const claimedBefore = async (env, name, since) =>
 // Everything a claim of a new name is decided on, in one read: how many new names its source (`hash`) and its network
 // (`asn`) claimed since `hourAgo` and `dayAgo`, whether either is blocked now (the blocked_sources row's kind, or null),
 // the auto names that went live across all keys in the hour and the day (the new-name budget: autoNamesSince), and the
-// names that hold or will hold a DNS record (live and pending) against the zone's capacity.
+// names against the zone's capacity (namesOnZone).
 export const claimFacts = async (env, { hash, asn }, now, hourAgo, dayAgo) => {
     const a = asn === null || asn === undefined ? null : String(asn);
     const r = await env.DB.prepare(
@@ -259,7 +259,7 @@ export const claimFacts = async (env, { hash, asn }, now, hourAgo, dayAgo) => {
            (SELECT kind FROM blocked_sources WHERE until > ? AND ((kind = 'source' AND value = ?) OR (kind = 'asn' AND value = ?)) LIMIT 1) AS blocked,
            (SELECT COUNT(*) FROM name_allocations WHERE decided_by = 'auto' AND decided_at > ?) AS auto_hour,
            (SELECT COUNT(*) FROM name_allocations WHERE decided_by = 'auto' AND decided_at > ?) AS auto_day,
-           (SELECT COUNT(*) FROM name_allocations WHERE status IN ('live', 'pending')) AS names`
+           (SELECT COUNT(*) FROM name_allocations WHERE ${ON_ZONE}) AS names`
     ).bind(hash, hourAgo, hash, dayAgo, asn ?? null, dayAgo, now, hash, a, hourAgo, dayAgo).first();
     const n = (k) => Number(r?.[k]) || 0;
     return {
@@ -267,6 +267,12 @@ export const claimFacts = async (env, { hash, asn }, now, hourAgo, dayAgo) => {
         auto_hour: n('auto_hour'), auto_day: n('auto_day'), names: n('names'),
     };
 };
+
+// The names that hold a DNS record at the zone, or are about to: live, and pending but not held for approval (a claim
+// being made, or a gated one an approve would make). A held name makes nothing until the admin approves it: a bot's
+// held batch must not fill the capacity and hold every honest claim behind it.
+const ON_ZONE = "status = 'live' OR (status = 'pending' AND held_reason IS NULL)";
+export const namesOnZone = async (env) => Number((await env.DB.prepare(`SELECT COUNT(*) AS n FROM name_allocations WHERE ${ON_ZONE}`).first())?.n) || 0;
 
 // One new name's source, kept 24 h (pruneSources). Never the connecting address: its keyed hash only.
 export const recordSource = (env, r) =>

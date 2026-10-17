@@ -24,11 +24,11 @@ export const SETTINGS = {
     attest_fail_limit: { def: 2, min: 1, max: 1000, env: 'ATTEST_FAIL_LIMIT', words: 'Impostor answers in a row before a name\'s routing is paused' },
     swap_fail_limit: { def: 12, min: 1, max: 10000, env: 'SWAP_FAIL_LIMIT', words: 'Sweeps in a row of something other than its node answering before a name\'s routing is paused' },
     // The DNS zone's record cap (Cloudflare: 200 on a Free zone made after 1 Sep 2024, 1,000 before or on Pro), our own
-    // hand records included. Past `capacity_alert_at` names (live and pending) the admin is told, once a day; past
+    // hand records included. Past `capacity_alert_at` names on the zone (live, or being made) the admin is told, once a day; past
     // `capacity_hold_at` every new auto name is held: the last places are the admin's to give (§4.3.5).
     capacity: { def: 200, min: 1, max: 1000000, env: 'CAPACITY', words: 'DNS records the zone may hold (its Cloudflare plan\'s cap)' },
-    capacity_alert_at: { def: (s) => Math.floor(s.capacity * 0.6), min: 1, max: 1000000, words: 'Names (live and pending) past which you are told, once a day; default 60% of capacity' },
-    capacity_hold_at: { def: (s) => Math.floor(s.capacity * 0.8), min: 1, max: 1000000, words: 'Names (live and pending) past which every new auto name is held for your approval; default 80% of capacity' },
+    capacity_alert_at: { def: (s) => Math.floor(s.capacity * 0.6), min: 1, max: 1000000, words: 'Names on the zone (live, or being made) past which you are told, once a day; default 60% of capacity' },
+    capacity_hold_at: { def: (s) => Math.floor(s.capacity * 0.8), min: 1, max: 1000000, words: 'Names on the zone past which every new auto name is held for your approval; default 80% of capacity' },
 };
 
 // "Hold all new names" (§4.3.3): until this time (unix s) every new name waits for the admin's approval. Pressed, it
@@ -104,7 +104,8 @@ export function describe(env, s) {
     return Object.entries(SETTINGS).map(([key, d]) => {
         const row = s.rows.get(key);
         return {
-            key, value: s[key], default: defaults[key], min: d.min, max: d.max, words: d.words,
+            // A line that follows the capacity follows the capacity in force.
+            key, value: s[key], default: typeof d.def === 'function' ? d.def(s) : defaults[key], min: d.min, max: d.max, words: d.words,
             set: row ? { value: row.value, at: row.updated_at, by: row.updated_by || null } : null,
             ...(d.env && env?.[d.env] !== undefined ? { env: d.env } : {}),
         };

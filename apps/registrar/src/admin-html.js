@@ -818,7 +818,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<span style="font-size: 0.75rem; color: var(--text-muted);">Every new name then waits for your approval; names already held are untouched. It lets go by itself after 24 hours.</span></div>';
             if (!st.source_key_set) html += '<p style="color: #fbbf24; font-size: 0.8rem; margin-bottom: 0.5rem;">SOURCE_KEY is not set: claims have no source, so no per-source limit applies and nothing groups by source. Set it with <code>wrangler secret put SOURCE_KEY</code> (32 random bytes, hex).</p>';
             const cap = st.capacity || {};
-            html += '<p style="font-size: 0.8rem; color: ' + (cap.names >= cap.alert_at ? '#fbbf24' : 'var(--text-secondary)') + '; margin-bottom: 0.75rem;">Names live or pending: <b>' + esc(cap.names) + '</b> of the zone&#39;s ' + esc(cap.capacity) +
+            html += '<p style="font-size: 0.8rem; color: ' + (cap.names >= cap.alert_at ? '#fbbf24' : 'var(--text-secondary)') + '; margin-bottom: 0.75rem;">Names on the zone (live, or being made): <b>' + esc(cap.names) + '</b> of its ' + esc(cap.capacity) +
                 ' DNS records (you are told from ' + esc(cap.alert_at) + '; from ' + esc(cap.hold_at) + ' every new name waits for you). Our own hand records count too.</p>';
             const groups = st.groups || [];
             if (!groups.length) html += '<p style="color: var(--text-muted); font-size: 0.85rem;">No new names in the last 24 hours.</p>';

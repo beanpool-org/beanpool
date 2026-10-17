@@ -263,8 +263,14 @@ test('the DNS cap (CAPACITY 200): the 121st name alerts, and from the 161st ever
         assert.equal(r.body.status, 'pending');
         assert.equal(row(w, 'the-161st').held_reason, 'near-full');
         assert.equal((await w.admin('the-161st', 'approve')).body.status, 'live', 'the admin gives it');
+        // Held names make nothing at Cloudflare: a bot's held batch does not count against the zone.
+        const held = await claimFrom(w, { ip: '203.0.113.25', cf: {} }, await makeKey(), { name: 'held-one' });
+        assert.equal(held.body.status, 'pending');
+        assert.equal((await admin(w, 'sources')).body.capacity.names, 161, 'the 161 live; the held one not counted');
         // Raised to a Pro zone's 1,000 in /admin: the gate moves with it (80%), and so does the alert line (60%).
-        assert.equal((await admin(w, 'settings', { key: 'capacity', value: 1000 })).status, 200);
+        const pro = await admin(w, 'settings', { key: 'capacity', value: 1000 });
+        assert.equal(pro.status, 200);
+        assert.deepEqual(['capacity_alert_at', 'capacity_hold_at'].map((k) => pro.body.settings.find((x) => x.key === k)).map((x) => [x.value, x.default]), [[600, 600], [800, 800]]);
         assert.equal((await claimFrom(w, { ip: '203.0.113.24', cf: {} }, await makeKey(), { name: 'after-pro' })).body.status, 'live');
     } finally { w.restore(); }
 });
@@ -339,6 +345,7 @@ test('privacy: no address is stored — a keyed hash only, and none without SOUR
         assert.equal(sourceAddress('2001:db8:1:2::1'), '2001:db8:1:2::/64');
         assert.equal(sourceAddress('2001:0DB8:0001:0002:ffff:0:0:9'), '2001:db8:1:2::/64');
         assert.equal(sourceAddress('::ffff:198.51.100.7'), '198.51.100.7');
+        assert.equal(sourceAddress('2001:db8::198.51.100.7'), null, 'only a mapped IPv4 address is read as one');
         assert.equal(sourceAddress('not an address'), null);
         assert.equal(sourceAddress('1::2::3'), null);
         w.env.SOURCE_KEY = KEY;
@@ -440,7 +447,7 @@ test('/admin: the New names card shows the switch, the groups and their one-clic
         assert.match(card, /data-source-act="block" data-source="[0-9a-f]{64}" data-total="5"[^>]*>Block all \(5\)</);
         assert.match(card, /pg-3 \(held\)/);
         assert.match(card, /pg-0 \(probation\)/);
-        assert.match(card, /Names live or pending: <b>5<\/b> of the zone&#39;s 200 DNS records/);
+        assert.match(card, /Names on the zone \(live, or being made\): <b>3<\/b> of its 200 DNS records/);
         assert.match(card, /data-setting-save="source_per_hour"/);
         assert.ok(!card.includes(FROM.bot.ip), 'no address on the page');
         // Block all: confirmed, then the Worker's batches until it says no more, with one run id for the click.

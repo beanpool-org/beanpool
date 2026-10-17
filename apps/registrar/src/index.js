@@ -953,7 +953,7 @@ export function sourceAddress(raw) {
     const ip = String(raw || '').trim().toLowerCase();
     if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) return ip;
     if (!/^[0-9a-f:.]+$/.test(ip) || !ip.includes(':')) return null;
-    const v4 = ip.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/);   // ::ffff:192.0.2.1, an IPv4 client
+    const v4 = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);   // ::ffff:192.0.2.1, an IPv4 client
     if (v4) return v4[1];
     const halves = ip.split('::');
     if (halves.length > 2) return null;
@@ -994,7 +994,7 @@ const network = (src) => (src.asn ? ` (AS${src.asn}${src.as_org ? ` ${src.as_org
 // creating lots could lock out legit users", so no limit refuses a claim; past one, the name waits for the admin, who
 // approves the real ones and rejects a bot's batch in one click). In order: the admin's switch; its source past
 // source_per_hour or source_per_day; the new-name budget across all keys (SEC-REG-05) past new_names_per_hour or
-// _per_day; the names holding or about to hold a DNS record past capacity_hold_at (the last places are the admin's).
+// _per_day; the names on the zone (db.namesOnZone) past capacity_hold_at (the last places are the admin's).
 // `reason` is what the row records (held_reason); `told` keys its alert, once an hour each.
 function heldWhy(s, f, src, now) {
     if (settings.holding(s, now))
@@ -1649,7 +1649,7 @@ async function sourcesPanel(env) {
     const networks = groupOf(rows.filter((r) => r.asn), (r) => r.asn).map(([asn, list]) => ({
         asn: Number(asn), as_org: list[0].as_org ?? null, country: list[0].country ?? null, sources: new Set(list.map((r) => r.source_hash)).size, ...summary(list),
     })).sort((a, b) => b.names - a.names);
-    const names = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status IN ('live', 'pending')").first())?.n) || 0;
+    const names = await db.namesOnZone(env);
     return {
         schema: true, source_key_set: typeof env.SOURCE_KEY === 'string' && env.SOURCE_KEY.length > 0, since: now - SOURCE_KEEP_S,
         groups, networks, blocked: await db.listBlocked(env, now),

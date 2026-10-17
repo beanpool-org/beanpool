@@ -215,7 +215,8 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
 - **Held, never refused.** A new auto name is held for the admin's approval — `pending`, `held_reason` set, nothing
   made at Cloudflare, its node told `awaiting-approval` as for a gated claim — when its source passed its hourly or
   daily budget (`source`), when the new-name budget across all keys is spent (`budget`), while "Hold all new names" is
-  on (`hold-all`), or when the names live and pending reached the zone's hold line (`near-full`). The admin's phone
+  on (`hold-all`), or when the names on the zone — live, or being made; a held name makes nothing and counts for
+  nothing, so a bot's held batch never fills it — reached the zone's hold line (`near-full`). The admin's phone
   hears of it once an hour per reason, in counts and the network's name, never an address or a name. A network past its
   daily count is told once a day and nothing is held for that alone (a hosting network carries many honest nodes). The
   sweep never finishes a held name. Approve makes it live (decided by the admin, outside the auto budget).

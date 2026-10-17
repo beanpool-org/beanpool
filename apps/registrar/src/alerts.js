@@ -96,12 +96,12 @@ export const networkBusy = (env, { asn, as_org, country, names, limit, day }) =>
     once: `network:${asn}:${day}`,
     body: `Many new names from one network: ${names} in the last 24 hours from AS${asn}${as_org ? ` ${as_org}` : ''}${country ? ` (${country})` : ''} (told past ${limit}). Nothing is held for that alone; /admin groups them by source.`,
 });
-// The names holding or about to hold a DNS record passed capacity_alert_at (design: CAPACITY; Marty 2026-10-18: alert at
-// 120 of the Free zone's 200 records, then move beanpool.org to Pro). Once a day while it lasts.
+// The names on the zone (live, or being made: db.namesOnZone) passed capacity_alert_at (design: CAPACITY; Marty
+// 2026-10-18: alert at 120 of the Free zone's 200 records, then move beanpool.org to Pro). Once a day while it lasts.
 export const capacityNear = (env, { names, capacity, alert_at, hold_at, day }) => ({
     category: 'health', priority: PRIORITY.high, tag: TAG.warning, name: null, title: `Names near the DNS cap: ${names} of ${capacity}`,
     once: `capacity:${day}`,
-    body: `Names near the DNS cap: ${names} live or pending, of the zone's ${capacity} records (told from ${alert_at}; from ${hold_at} every new name is held for your approval). Our own hand records count too. Move the zone to a plan with more records, then raise capacity in /admin.`,
+    body: `Names near the DNS cap: ${names} on the zone (live, or being made), of its ${capacity} records (told from ${alert_at}; from ${hold_at} every new name is held for your approval). Our own hand records count too. Move the zone to a plan with more records, then raise capacity in /admin.`,
 });
 // A3: the sweep paused a name's routing: another node's key answered, or something that is no node at all.
 export const routingPaused = (env, name, reason, count) => ({

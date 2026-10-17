@@ -1,7 +1,7 @@
 ---
 slug: showcase
 title: Showing what a local community does
-summary: The showcase switch: whether the apps show a switched-off feature from an example community or hide it. On for a global community, off for a local one, and yours to change. Where Start a community leads.
+summary: The showcase switch: whether the apps show a switched-off feature from an example community or hide it. On for a global community, off for a local one, and yours to change. Where Start a community and the Global community link lead.
 related: members-and-invites, private-preview, rate-limits, first-time-setup
 ---
 
@@ -56,3 +56,11 @@ The sheet's **Start a community** leads to a page on how to run a community. Wit
 - It travels to your standby with the community's other settings, and is reported to the apps on /api/community/info.
 
 The web app and the phone app both link it from their Start a community screens.
+
+## Where the Global community link leads
+
+On a local community, the web app's Settings has a **Global community** row: a link to the worldwide community, where anyone can look around and join. With nothing set, that is https://global.beanpool.org. Your community doesn't need it, and your server never contacts it: it is only a link your members may follow.
+
+- To name another global community, set GLOBAL_COMMUNITY_URL in the server's .env to its address, such as GLOBAL_COMMUNITY_URL=https://global.example.org, and restart. It must start https:// and have no user name or password in it.
+- To show no link at all, set GLOBAL_COMMUNITY_URL=off. A value that isn't such an address shows no link either, never ours in its place.
+- It is reported to the apps on /api/community/info as globalCommunityUrl. A global community's own Settings shows no such row.

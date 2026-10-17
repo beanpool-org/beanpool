@@ -62,6 +62,7 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { featuresFor } from '../config/features-for.js';
 import { getStartCommunityUrl } from '../config/start-community.js';
+import { getGlobalCommunityUrl } from '../config/global-community.js';
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
@@ -835,6 +836,9 @@ router.get('/api/community/info', async (ctx) => {
         // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts): beanpool.org's page
         // unless an owner named their own.
         startCommunityUrl: getStartCommunityUrl(),
+        // The global community the web app's Settings links on a local community (config/global-community.ts): ours
+        // unless the operator names another, absent when they switched it off.
+        globalCommunityUrl: getGlobalCommunityUrl() ?? undefined,
     };
 });
 

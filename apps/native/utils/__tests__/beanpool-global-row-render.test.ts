@@ -314,6 +314,15 @@ describe('one row for the global community, whatever it answers (the phone does 
         ]);
     });
 
+    for (const door of ['shut', 'preview'] as const) {
+        it(`the door ${door} and the phone hasn't it saved: the probe is never sent`, async () => {
+            scene.door = door;
+            await open();
+            expect(globalRows()).toHaveLength(1);
+            expect(asked.some((u) => u.includes('/api/community/membership/'))).toBe(false);
+        });
+    }
+
     it('the row keeps its node as its state changes under the finger (can\'t reach it → Join)', async () => {
         scene.door = 'offline';
         await open();
@@ -416,6 +425,21 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press to remove it.');
         expect(row().getAttribute('aria-label')).toBe('BeanPool Global, global.beanpool.org');
     });
+
+    for (const door of ['shut', 'preview'] as const) {
+        it(`a member's own saved row with the door ${door}, nothing kept: its address, never the strangers' words`, async () => {
+            list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+            list.active = GLOBAL;
+            scene.door = door;
+            scene.standing = 'member';
+            await open();
+            // The sheet already asks every saved community the probe (use-communities.ts), so asking it here tells the
+            // global community nothing new.
+            expect(asked).toContain(`${GLOBAL}/api/community/membership/${KEY}`);
+            expect(line()).toBe('global.beanpool.org');
+            expect(row().querySelector('i[data-icon="earth"]')).toBeNull();
+        });
+    }
 
     it('the row keeps its node when the sheet draws again (a press, a long press or TalkBack\'s focus on it survives)', async () => {
         list.rows = [RIVERSIDE, SAVED];

@@ -127,9 +127,9 @@ export default function BeanPoolSheet() {
     // preview; this account closed there). No-domain-lock-in: every state but member and join is "the global community
     // isn't available from here right now", and nothing else on the sheet waits on it.
     const { identity } = useIdentity();
-    const globalDoor = useGlobalDoor(!!identity);
-    const globalEntry = useGlobalEntry(!!identity, globalDoor.state);
     const globalSaved = communities.rows.find(r => isGlobalCommunity(r.url)) ?? null;
+    const globalDoor = useGlobalDoor(!!identity);
+    const globalEntry = useGlobalEntry(!!identity, globalDoor.state, !!globalSaved);
     const globalUrl = globalSaved?.url ?? GLOBAL_NODE_URL;
     const globalHost = globalUrl.replace(/^https?:\/\//, '');
     const globalLine = globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved })

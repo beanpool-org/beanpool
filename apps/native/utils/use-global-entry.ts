@@ -22,13 +22,18 @@ import {
  *
  * `door` overrides the door's answer where a screen has asked it itself: the not-recognised screen's fresh checkGlobalDoor,
  * and the BeanPool sheet, which draws the door's own answer (its 12-words way, Try again) beside the state.
+ *
+ * `saved`: the screen already sends the global community the probe whatever its door says (the BeanPool sheet asks every
+ * saved community, use-communities.ts), so asking here too tells it nothing new, and a member's own row says member with
+ * the door shut or in a preview, not the strangers' words. It decides only whether to ask, never the answer.
  */
-export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): GlobalEntryState {
+export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState, saved = false): GlobalEntryState {
     const { identity } = useIdentity();
     const publicKey = identity?.publicKey ?? null;
     const on = enabled && !!identity;
     const session = useGlobalDoor(on && door === undefined);
     const doorState: GlobalDoorState = door ?? session.state;
+    const ask = doorState === 'open' || saved;
     const [standing, setStanding] = useState<GlobalStanding>('unknown');
     const [closedHere, setClosedHere] = useState(false);
     const [asking, setAsking] = useState(false);
@@ -47,9 +52,9 @@ export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): Global
         return () => { cancelled = true; };
     }, [publicKey]);
 
-    // Asked each time the screen comes into view, once the door is open.
+    // Asked each time the screen comes into view, once the door is open (or at once, for a saved row).
     useFocusEffect(useCallback(() => {
-        if (!on || doorState !== 'open' || !identity?.privateKey) return;
+        if (!on || !ask || !identity?.privateKey) return;
         let cancelled = false;
         setAsking(true);
         askGlobalStanding({ publicKey: identity.publicKey, privateKey: identity.privateKey })
@@ -64,7 +69,7 @@ export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): Global
             .catch(() => {})
             .finally(() => { if (!cancelled) setAsking(false); });
         return () => { cancelled = true; setAsking(false); };
-    }, [on, doorState, identity?.publicKey, identity?.privateKey]));
+    }, [on, ask, identity?.publicKey, identity?.privateKey]));
 
-    return globalEntryState({ account: !!identity, standing, door: doorState, closedHere, saved: false, asking });
+    return globalEntryState({ account: !!identity, standing, door: doorState, closedHere, saved, asking });
 }

@@ -59,7 +59,7 @@ The contact email and phone are not sent unless you turn each on here: **Share E
 Your server sends the directory nothing while either of these is true. **Node Identity** says which, in a line under **Publish Now**, and so does the server's own settings page:
 
 - **The community has no name of its own**: its name is blank, or exactly "BeanPool Community". Type the community's name in **Community Name** and press **Save**. Your server tells the directory at once, with no restart. First-time setup asks for the name too, and won't go on without one.
-- **The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and restart the server. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts.
+- **The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and run docker compose up -d. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts.
 
 While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one.
 

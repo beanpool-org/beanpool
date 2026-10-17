@@ -8,10 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { world, liveName, makeKey, routing } from './harness.js';
+import { world, liveName, makeKey, routing, unreachable } from './harness.js';
 
 const HOST = 'ourthing.beanpool.org';
 const OURS = ['vault', 'auth', 'mullum1', 'mullum2', 'mullum3', 'test-mirror', 'p2p-mullum2'];
+// The alert channel set, at a topic that doesn't answer: what is told waits in the outbox.
+const NTFY_DOWN = { env: { NTFY_URL: 'https://ntfy.invalid/topic' }, serve: { 'ntfy.invalid': unreachable } };
 
 // A record and a tunnel of ours, made by hand at Cloudflare, outside the registrar.
 const handRecord = (w, name = HOST) => {
@@ -31,7 +33,7 @@ for (const [label, mode, body] of [
     ['T3b: a direct claim', 'direct', { public_ip: '198.51.100.9' }],
 ]) {
     test(`${label} at a label with a record the registrar did not make is refused (409); the record is untouched`, async () => {
-        const w = await world({ env: { NTFY_URL: 'https://ntfy.invalid/topic' } });
+        const w = await world(NTFY_DOWN);
         try {
             const stranger = await makeKey();
             const before = handRecord(w);
@@ -241,7 +243,7 @@ test('a claim where the last tenure\'s record stands beside a hand AAAA record i
 
 // NB6: the alert says how to reserve a name — a migration — not the Block action.
 test('the refusal alert reads "an A record" and points at a name_policy migration', async () => {
-    const w = await world({ env: { NTFY_URL: 'https://ntfy.invalid/topic' } });
+    const w = await world(NTFY_DOWN);
     try {
         handRecord(w);
         assert.equal((await w.claim(await makeKey(), { name: 'ourthing' })).status, 409);

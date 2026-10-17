@@ -198,7 +198,10 @@ export default function BeanPoolSheet() {
                     ? <View style={[styles.dot, { backgroundColor: dotFor(saved.status) }]} />
                     : <MaterialCommunityIcons name="earth" size={24} color={colors.brand.primary} />}
                 <View style={styles.rowText}>
-                    <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{saved?.name ?? t('Global community')}</Text>
+                    {/* One line in English; a longer language's name ("Pandaigdigang komunidad") takes a second rather than being cut. */}
+                    <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={2}>{saved?.name ?? t('Global community')}</Text>
+                    {/* Two lines at most, as the rows beside it; TalkBack reads all of it (the label), and a sentence the floor
+                        cuts (the preview's) is whole on the page the row opens. */}
                     <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={2}>{globalLine}</Text>
                 </View>
                 {isCurrent

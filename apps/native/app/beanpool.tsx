@@ -173,11 +173,14 @@ export default function BeanPoolSheet() {
     );
 
     // The global community's row: the saved row's shape when the phone has one, else its own (earth, chevron). Its second
-    // line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3).
-    const GlobalRow = ({ saved, first }: { saved: CommunityRow | null; first: boolean }) => {
+    // line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3). Called, not a component: this is the row that changes
+    // while the member looks at it (each ping, the door, the probe), and a component made in here would be a new one on each
+    // draw, so React would swap the Pressable under a press, a long press or TalkBack's focus.
+    const renderGlobalRow = (saved: CommunityRow | null, first: boolean) => {
         const isCurrent = !!saved && saved.url === communities.active;
         return (
             <Pressable
+                key={saved?.url ?? 'global'}
                 style={({ pressed }) => [styles.row, !first && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
                 onPress={globalTap}
                 onLongPress={saved ? () => communities.remove(saved) : undefined}
@@ -259,7 +262,7 @@ export default function BeanPoolSheet() {
                 <Text style={styles.sectionLabel}>YOUR COMMUNITIES</Text>
                 <View style={styles.group}>
                     {communities.rows.map((r, i) => {
-                        if (r === globalSaved) return <GlobalRow key={r.url} saved={r} first={i === 0} />;
+                        if (r === globalSaved) return renderGlobalRow(r, i === 0);
                         const isCurrent = r.url === communities.active;
                         return (
                             <Pressable
@@ -285,7 +288,7 @@ export default function BeanPoolSheet() {
                             </Pressable>
                         );
                     })}
-                    {!globalSaved && <GlobalRow saved={null} first={communities.rows.length === 0} />}
+                    {!globalSaved && renderGlobalRow(null, communities.rows.length === 0)}
                     <Pressable
                         style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
                         onPress={connect}

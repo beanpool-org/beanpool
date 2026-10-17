@@ -314,6 +314,16 @@ describe('one row for the global community, whatever it answers (the phone does 
         ]);
     });
 
+    it('the row keeps its node as its state changes under the finger (can\'t reach it → Join)', async () => {
+        scene.door = 'offline';
+        await open();
+        const before = row();
+        scene.door = 'open';
+        await tap();
+        expect(line()).toBe('Join with this account: a sign-in');
+        expect(row()).toBe(before);
+    });
+
     it('with no saved community at all, it is still there, first', async () => {
         list.rows = [];
         list.active = null;
@@ -387,6 +397,17 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         await settle();
         expect(title()).toBe('Global community');
         expect(line()).toBe('Join with this account: a sign-in');
+    });
+
+    it('the row keeps its node when the sheet draws again (a press, a long press or TalkBack\'s focus on it survives)', async () => {
+        list.rows = [RIVERSIDE, SAVED];
+        await open();
+        const riverside = host.querySelector('[aria-label^="Riverside"]');
+        const before = row();
+        await act(async () => { root.render(createElement(BeanPoolSheet) as any); });
+        await settle();
+        expect(host.querySelector('[aria-label^="Riverside"]')).toBe(riverside);
+        expect(row()).toBe(before);
     });
 });
 

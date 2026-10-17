@@ -226,6 +226,37 @@ describe('the Commons on the worldwide community, its profile on the phone', () 
         expect(section?.textContent).toContain(SAMPLE_COMMUNITY.decisions[0].question);
         expect(host.querySelector('[data-testid="voice-credits-card"]')?.textContent).toContain('582');
     });
+
+    it('on the global node the Decide tab has no enterprise preview card and its first content is the Decide screen\'s own; the Groups tab still has it', async () => {
+        rememberProfile('global', WORLDWIDE);
+        await render(createElement(ProjectsScreen));
+        expect(host.querySelector('[data-testid="commons-preview"]')).not.toBeNull();
+        expect(host.querySelectorAll('[data-testid="sample-enterprise-card"]')).toHaveLength(2);
+        const bakery = SAMPLE_COMMUNITY.enterprises[0];
+        expect(text()).toContain(bakery.name);
+
+        const decideTab = host.querySelector('[aria-label="Decide Section"]') as HTMLElement | null;
+        expect(decideTab).not.toBeNull();
+        await act(async () => { decideTab!.click(); });
+        await settle();
+
+        expect(host.querySelector('[data-testid="commons-preview"]')).toBeNull();
+        expect(host.querySelectorAll('[data-testid="sample-enterprise-card"]')).toHaveLength(0);
+        expect(text()).not.toContain(bakery.name);
+
+        const decideSection = host.querySelector('[data-testid="decide-section"]');
+        expect(decideSection).not.toBeNull();
+        expect(decideSection?.getAttribute('data-preview')).toBe('true');
+
+        const groupsTab = host.querySelector('[aria-label="Groups Section"]') as HTMLElement | null;
+        expect(groupsTab).not.toBeNull();
+        await act(async () => { groupsTab!.click(); });
+        await settle();
+
+        expect(host.querySelector('[data-testid="commons-preview"]')).not.toBeNull();
+        expect(host.querySelectorAll('[data-testid="sample-enterprise-card"]')).toHaveLength(2);
+        expect(text()).toContain(bakery.name);
+    });
 });
 
 describe("a phone that has never heard the worldwide community's profile", () => {

@@ -67,10 +67,15 @@ export function doorKeeperWords(place: DoorPlace, copiesAt: 'vault' | 'community
         };
     }
     const name = place.name;
-    const keeper = copiesAt === 'vault'
-        ? t('If {name} works with the BeanPool key vault, the sign-in also becomes a way back into your account: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.', { name })
-        : t('The sign-in also becomes a way back into your account if you lose this phone: {name} keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.', { name });
-    return { choose: keeper, signIn: `${t('To keep out fake accounts, sign in once with an account you already have.')} ${keeper}` };
+    return copiesAt === 'vault'
+        ? {
+            choose: t('If {name} works with the BeanPool key vault, the sign-in also becomes a way back into your account: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.', { name }),
+            signIn: t('To keep out fake accounts, sign in once with an account you already have. If {name} works with the BeanPool key vault, that sign-in also becomes a way back into your account: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.', { name }),
+        }
+        : {
+            choose: t('The sign-in also becomes a way back into your account if you lose this phone: {name} keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.', { name }),
+            signIn: t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: {name} keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.', { name }),
+        };
 }
 
 /** Why the door can't be used now, from its check (node-profile.ts checkGlobalDoor). */

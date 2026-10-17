@@ -56,7 +56,7 @@ import {
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
 } from '../open-door-words';
-import { DOOR_MESSAGES, nameCheckMessage, type DoorAnswer } from '../global-join';
+import { DOOR_MESSAGES, nameCheckMessage, type DoorAnswer, type NameCheck } from '../global-join';
 import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, joinedGlobalNotice } from '../global-join-existing';
 import { GLOBAL_DOOR_MESSAGES } from '../node-profile';
 import { GLOBAL_NODE_URL } from '../global-node-url';
@@ -221,7 +221,8 @@ describe('what the door says', () => {
             { kind: 'unreachable', message: DOOR_MESSAGES.unreachable },
         ];
         for (const a of answers) expect(doorAnswerWords(a, GLOBAL)).toBe(accountDoorMessage(a));
-        for (const check of [{ kind: 'timed_out' } as const, { kind: 'taken', suggestions: ['Wren2'], suggestionsTimedOut: false } as const]) {
+        const checks: NameCheck[] = [{ kind: 'timed_out' }, { kind: 'taken', suggestions: ['Wren2'], suggestionsTimedOut: false }];
+        for (const check of checks) {
             expect(doorNameCheckWords('Wren', check, GLOBAL)).toBe(nameCheckMessage('Wren', check));
         }
         expect(doorKeeperWords(GLOBAL, 'community').choose).toBe('The global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');

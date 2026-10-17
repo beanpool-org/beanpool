@@ -18,6 +18,7 @@ import * as db from './db.js';
 import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
+import * as settings from './settings.js';
 import { accessMode, accessIdentity } from './access.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
 
@@ -113,10 +114,17 @@ export function holdsName(env, row, now = nowS()) {
 export const isOwnRow = (row, pubkey) =>
     !!row && row.node_pubkey === pubkey && row.status !== 'abandoned' && !freedAtOnce(row) && !heldFromAll(row);
 
-// A claim still waiting for the admin: pending, on a name that is not auto-approved. (A pending auto name is one
-// whose provisioning has not finished — Cloudflare failed, or its Worker was cut off — and nobody's approval is awaited:
-// its next claim or heal finishes it, and so does the sweep, finishOrphans.)
-const awaitingApproval = async (env, a) => a.status === 'pending' && (await db.policyTier(env, a.name)) !== 'auto';
+// A claim still waiting for the admin: pending, on a name that is not auto-approved, or held for approval although it is
+// (held_reason: over a limit, the admin's hold switch, the DNS zone near full — claimGate). (Any other pending auto name
+// is one whose provisioning has not finished — Cloudflare failed, or its Worker was cut off — and nobody's approval is
+// awaited: its next claim or heal finishes it, and so does the sweep, finishOrphans.)
+const awaitingApproval = async (env, a) => a.status === 'pending' && (!!a.held_reason || (await db.policyTier(env, a.name)) !== 'auto');
+
+// On probation (migration 0011, design §4.3.2): a live name that has not yet answered as its own node in enough sweeps in
+// a row, for long enough (settings probation_sweeps, probation_s). Routed, but off the switchboard (/i/), its node told
+// `probation: true` (its directory listing waits), and its "New community" alert waits for its verification (applyVerdict).
+// Only NULL is probation: a row read from a database without the column (undefined) is never held back by it.
+const onProbation = (a) => !!a && a.verified_at === null;
 
 // Why a row is in its state, as its node is told: a pause's or release's reason, and for a pending row whether it waits
 // for the admin ('awaiting-approval') or is an auto name still being made ('provisioning': the node asks again, never
@@ -625,9 +633,9 @@ const DIRECT_NEEDS_IP = 'direct mode needs public_ip (the server\'s public IPv4 
 // keeps one key to three Cloudflare tunnels: the account's ~1,000 would take hundreds of keys, not one script with one
 // key (claims from many keys are for a per-IP budget at Cloudflare, not this). Only a new name counts against it: a
 // name its key holds is healed and taken back whatever the count, and a key over the limit keeps every name it has.
-export function claimLimit(env) {
-    const n = parseInt(env.CLAIM_LIMIT_PER_KEY, 10);
-    return Number.isFinite(n) && n >= 1 ? n : 3;
+// The live number is a setting (src/settings.js claim_limit_per_key): `s`, the settings this request read, or the env's.
+export function claimLimit(env, s = settings.resolve(env)) {
+    return s.claim_limit_per_key;
 }
 const overLimit = (held, limit) => json({
     error: `this node key already holds ${held} name${held === 1 ? '' : 's'}, and one key may hold ${limit}: release one first (a release counts until its hold ends)`,
@@ -673,7 +681,10 @@ async function heal(env, cur, b, now, tries = 3) {
     const a = { ...cur, ...fields };
     // The address this heal routes to: the body's, or the one the row already has.
     if (a.mode === 'direct' && !a.public_ip) return badField(DIRECT_NEEDS_IP);
-    const reply = (extra) => ({ name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra });
+    const reply = (extra) => ({
+        name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra,
+        ...(extra.status === 'live' && onProbation(cur) ? { probation: true } : {}),
+    });
     // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
     let ids = NOTHING;
@@ -729,7 +740,6 @@ async function heal(env, cur, b, now, tries = 3) {
         // An auto name whose first provisioning failed: this is that claim, finished.
         if (!(await db.updateIfUnchanged(env, cur.name, res, { ...LIVE, decided_at: now, decided_by: 'auto' }, { withIds: true }))) return missed();
         await logEvent(env, cur.name, 'healed', `pending (provisioning had failed) → live: ${ids.changed.join(', ') || 'nothing'} made`);
-        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
     const was = `paused (${cur.pause_reason || 'no reason'})`;
@@ -750,19 +760,26 @@ async function heal(env, cur, b, now, tries = 3) {
 // admin released, or an abandoned one, is not the old key's any more (isOwnRow): that key waits like anyone.
 // A take-back is routed as a heal from a pause is (routeIfOnlyOwner): until then its row is paused for its key
 // ('unverified'), so one whose provisioning fails is finished by its next claim — a heal — never unchecked.
-async function takeName(env, existing, pubkey, b, now) {
+// `gate`: what claimGate decided of a new name's claim (the settings read, its source, why it is held), or for a key's own
+// release taken back only the settings ({ s }).
+async function takeName(env, existing, pubkey, b, now, gate = null) {
     const name = String(b.name).toLowerCase();
     const mode = b.mode === 'direct' ? 'direct' : 'tunnel';
     // A new tenure keeps no address of the old one (public_ip below is the body's only), so the body must carry it.
     if (mode === 'direct' && !bodyFields(b).public_ip) return badField(DIRECT_NEEDS_IP);
     const tier = await db.policyTier(env, name);
     const sameKey = isOwnRow(existing, pubkey);
-    const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
+    const s = gate?.s ?? settings.resolve(env);
+    // An auto name held for the admin's approval (claimGate: over a limit, the hold switch, the zone near full) waits as a
+    // gated one does: nothing is made at Cloudflare until the admin approves it (D6 = hold, never refuse). A key's own
+    // name is never held.
+    const held = tier === 'auto' && !sameKey ? (gate?.held ?? null) : null;
+    const approved = (tier === 'auto' && !held) || (sameKey && !!existing.decided_at);
     const takeBack = sameKey && approved;
     const decided = { decided_at: now, decided_by: tier === 'auto' ? 'auto' : (existing?.decided_by || 'admin') };
     // A new name for this key counts against its limit (claimLimit). Its own release taken back inside the hold is
     // already counted; one past the hold isn't (it was free to anyone), so it counts as a new name does.
-    const limit = claimLimit(env);
+    const limit = claimLimit(env, s);
     const since = now - releaseCooloffS(env);
     const counted = sameKey && holdsName(env, existing, now);
     if (!counted) {
@@ -794,6 +811,9 @@ async function takeName(env, existing, pubkey, b, now) {
         released_at: null, warned_at: null, last_contact_at: now,
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
+        // Migration 0011's columns, where the database has them: why it is held, and a new key's tenure on probation (its
+        // own release taken back keeps the verification it had).
+        ...(s.schema ? { held_reason: held, ...(sameKey ? {} : { verified_at: null, ok_sweeps: null }) } : {}),
     };
     // Another claim by the same key may have landed between the count and this write: counted again once the name is
     // won, and over the limit, this claim gives it back before it reaches Cloudflare (so racing claims may all be
@@ -835,8 +855,13 @@ async function takeName(env, existing, pubkey, b, now) {
             : `claimed by key ${key16(pubkey)}; it was ${existing.status}, last held by ${key16(existing.node_pubkey)}`);
     }
 
+    // Where a new name came from, kept a day (claim_sources): the per-source budgets count it, /admin groups it.
+    if (gate?.src && !sameKey) await recordSource(env, { at: now, name, node_pubkey: pubkey, ...gate.src, held_reason: held });
+
     if (!approved) {
-        await tell(env, async () => alerts.nameRequest(env, { name, ...fields }, await db.countAwaitingApproval(env)));
+        await tell(env, async () => (held
+            ? alerts.namesHeld(env, { reason: held, told: gate.why.told, words: gate.why.words, waiting: await db.countAwaitingApproval(env), bucket: Math.floor(now / 3600) })
+            : alerts.nameRequest(env, { name, ...fields }, await db.countAwaitingApproval(env))));
         return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
     }
     const a = { name, ...fields };
@@ -848,6 +873,8 @@ async function takeName(env, existing, pubkey, b, now) {
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
+    // A new tenure is on probation (its "New community" alert, its directory listing and the switchboard wait for it).
+    if (onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at })) out.probation = true;
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
         const res = { ...a, ...made };
@@ -862,8 +889,6 @@ async function takeName(env, existing, pubkey, b, now) {
         if (g.attest) out.attest = g.attest;
     } else if (!(await db.updateIfUnchanged(env, name, a, { ...made, status: 'live', ...decided }, { withIds: true }))) {
         return missed();
-    } else {
-        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
     }
     const token = await tunnelTokenOrNothing(env, { ...a, ...made });
     if (token !== undefined) out.tunnelToken = token;
@@ -904,7 +929,7 @@ async function handleClaim(request, env, bodyText) {
     // after the claim; only the admin's block stops it — and the admin's release of it, through its hold.
     if (isOwnRow(existing, pubkey)) {
         if (existing.status === 'blocked') return json({ error: 'name blocked' }, 403);
-        if (existing.status === 'released' || existing.status === 'revoked') return takeName(env, existing, pubkey, { ...b, name }, now);
+        if (existing.status === 'released' || existing.status === 'revoked') return takeName(env, existing, pubkey, { ...b, name }, now, { s: await settings.read(env) });
         return claimReply(env, await heal(env, existing, b, now));
     }
     if (blockedOut(env, existing, pubkey, now)) return json({ error: 'name blocked' }, 403);
@@ -912,34 +937,129 @@ async function handleClaim(request, env, bodyText) {
     const tier = await db.policyTier(env, name);
     if (tier === 'blocked') return json({ error: 'name reserved' }, 403);
     if (holdsName(env, existing, now)) return json({ error: 'name taken', owner: 'other' }, 409);
-    if (tier === 'auto') { const spent = await newNameBudgetSpent(env, now); if (spent) return spent; }
-    return takeName(env, existing, pubkey, { ...b, name }, now);
+    const gate = await claimGate(request, env, name, tier, now);
+    if (gate instanceof Response) return gate;
+    return takeName(env, existing, pubkey, { ...b, name }, now, gate);
+}
+
+// --- Where new names come from, and when they wait (scratch/global-node/DESIGN-registrar-trust-fable.md §4, slice S3) ---
+// What Cloudflare's edge says of a claim's client, on every request (design D5): its address (CF-Connecting-IP, which the
+// edge sets and no client can), its network (request.cf.asn, asOrganization) and its country. The address is kept only as
+// HMAC-SHA-256 under the Worker secret SOURCE_KEY: never stored, logged or sent — and without the secret not even hashed
+// (an unkeyed hash of an IPv4 address is a lookup away from it), so a claim then has no source and no per-source budget
+// applies. An IPv6 address counts by its /64, the block one host is given.
+const hex = (buf) => [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+export function sourceAddress(raw) {
+    const ip = String(raw || '').trim().toLowerCase();
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) return ip;
+    if (!/^[0-9a-f:.]+$/.test(ip) || !ip.includes(':')) return null;
+    const v4 = ip.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/);   // ::ffff:192.0.2.1, an IPv4 client
+    if (v4) return v4[1];
+    const halves = ip.split('::');
+    if (halves.length > 2) return null;
+    const head = halves[0] ? halves[0].split(':') : [];
+    const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+    if (halves.length === 2 && head.length + tail.length > 7) return null;
+    const groups = halves.length === 2 ? [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail] : head;
+    if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+    return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(':')}::/64`;
+}
+async function sourceOf(request, env) {
+    const cfp = request.cf || {};
+    const key = typeof env.SOURCE_KEY === 'string' ? env.SOURCE_KEY : '';
+    const addr = sourceAddress(request.headers.get('cf-connecting-ip'));
+    let source_hash = null;
+    if (key && addr) {
+        const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        source_hash = hex(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(addr)));
+    }
+    const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\p{Cc}/gu, '').slice(0, max) : null);
+    return {
+        source_hash,
+        asn: Number.isSafeInteger(cfp.asn) && cfp.asn > 0 ? cfp.asn : null,
+        as_org: text(cfp.asOrganization, 100),
+        country: typeof cfp.country === 'string' && /^[A-Z]{2}$/.test(cfp.country) ? cfp.country : null,
+    };
+}
+const SOURCE_KEEP_S = 86400;
+async function recordSource(env, r) {
+    try {
+        await db.pruneSources(env, r.at - SOURCE_KEEP_S);   // a day, no longer (the sweep deletes them too: pruneSources)
+        await db.recordSource(env, r);
+    } catch (e) { console.error('[CLAIM_SOURCE]', r.name, e.message || e); }
+}
+const network = (src) => (src.asn ? ` (AS${src.asn}${src.as_org ? ` ${src.as_org}` : ''}${src.country ? `, ${src.country}` : ''})` : '');
+
+// Why a new auto name is held for the admin's approval, or null (D6 = hold, never refuse: Marty 2026-10-18 — "bots
+// creating lots could lock out legit users", so no limit refuses a claim; past one, the name waits for the admin, who
+// approves the real ones and rejects a bot's batch in one click). In order: the admin's switch; its source past
+// source_per_hour or source_per_day; the new-name budget across all keys (SEC-REG-05) past new_names_per_hour or
+// _per_day; the names holding or about to hold a DNS record past capacity_hold_at (the last places are the admin's).
+// `reason` is what the row records (held_reason); `told` keys its alert, once an hour each.
+function heldWhy(s, f, src, now) {
+    if (settings.holding(s, now))
+        return { reason: 'hold-all', told: 'hold-all', words: `Hold all new names is on, until ${new Date(s.hold_until * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC` };
+    if (src.source_hash && f.source_hour >= s.source_per_hour)
+        return { reason: 'source', told: 'source', words: `more than ${s.source_per_hour} new names from one source in an hour${network(src)}` };
+    if (src.source_hash && f.source_day >= s.source_per_day)
+        return { reason: 'source', told: 'source', words: `more than ${s.source_per_day} new names from one source in 24 hours${network(src)}` };
+    if (f.auto_hour >= s.new_names_per_hour)
+        return { reason: 'budget', told: 'budget-hour', words: `${f.auto_hour} new names across all nodes in the last hour (budget ${s.new_names_per_hour})` };
+    if (f.auto_day >= s.new_names_per_day)
+        return { reason: 'budget', told: 'budget-day', words: `${f.auto_day} new names across all nodes in the last 24 hours (budget ${s.new_names_per_day})` };
+    if (f.names >= s.capacity_hold_at)
+        return { reason: 'near-full', told: 'near-full', words: `the DNS zone is near full: ${f.names} names of ${s.capacity}, holding from ${s.capacity_hold_at}` };
+    return null;
+}
+
+// A claim of a new name (nobody's, or freed by another key): refused 403 when its source or its network is blocked
+// (blocked_sources: the admin's "Block all", or a network the admin blocked), before anything is written; else what
+// takeName needs — the settings read, its source, and why it is held (heldWhy; an auto name only: a gated one waits
+// anyway). Told: a network past asn_per_day new names in a day, once a day (nothing is held for it alone: a hosting
+// network carries many honest nodes); the names past capacity_alert_at, once a day. One D1 read decides it all
+// (db.claimFacts). Without migration 0011 (no settings table) nothing can be held or recorded: the new-name budget
+// refuses with a 429, as it did before it.
+async function claimGate(request, env, name, tier, now) {
+    const s = await settings.read(env);
+    if (!s.schema) {
+        if (tier === 'auto') { const spent = await newNameBudgetSpent(env, now, s); if (spent) return spent; }
+        return { s, src: null, held: null };
+    }
+    const src = await sourceOf(request, env);
+    const f = await db.claimFacts(env, { hash: src.source_hash, asn: src.asn }, now, now - 3600, now - SOURCE_KEEP_S);
+    if (f.blocked) {
+        console.warn('[SOURCE_BLOCKED]', name, `claim refused: its ${f.blocked === 'asn' ? `network AS${src.asn}` : 'source'} is blocked`);
+        return json({ error: 'new names from your network are blocked for now; if this is a mistake, write to the BeanPool project' }, 403);
+    }
+    const day = Math.floor(now / 86400);
+    if (src.asn && f.asn_day + 1 > s.asn_per_day)
+        await tell(env, () => alerts.networkBusy(env, { asn: src.asn, as_org: src.as_org, country: src.country, names: f.asn_day + 1, limit: s.asn_per_day, day }));
+    if (f.names >= s.capacity_alert_at)
+        await tell(env, () => alerts.capacityNear(env, { names: f.names + 1, capacity: s.capacity, alert_at: s.capacity_alert_at, hold_at: s.capacity_hold_at, day }));
+    const why = heldWhy(s, f, src, now);
+    return { s, src, held: tier === 'auto' && why ? why.reason : null, why };
 }
 
 // --- New names across all keys (SEC-REG-05, verified 2026-10-16) ---
 // Keys are free, so the per-key limit (claimLimit) does not stop many keys: each new auto name makes a tunnel and a DNS
 // record at Cloudflare, whose caps (~1,000 tunnels per account; 200 or 1,000 records per zone, our own hand records
-// included) one script could fill. So new auto names, across all keys, are budgeted per hour and per day:
-// NEW_NAMES_PER_HOUR (20 unless set) and NEW_NAMES_PER_DAY (50 unless set). Past either, a claim of a new auto name is a
-// 429 and the admin's phone is told once per hour (or day) — in counts, never a name or a key. Untouched: a gated claim
-// (it makes nothing at Cloudflare until the admin approves), and a key's own names (heals, take-backs). The count is
-// read, not reserved, so claims racing at the edge may pass it by a few.
-const NEW_NAME_DEFAULTS = { hour: 20, day: 50 };
+// included) one script could fill. So new auto names, across all keys, are budgeted per hour and per day (the settings
+// new_names_per_hour and new_names_per_day). Past either, a new auto name is held for the admin's approval (heldWhy:
+// D6, hold, never refuse), and the admin's phone is told once an hour — in counts, never a name or a key. Untouched: a
+// gated claim (it makes nothing at Cloudflare until the admin approves), and a key's own names (heals, take-backs). The
+// count is read, not reserved, so claims racing at the edge may pass it by a few.
 const NEW_NAME_WINDOWS = [
     { key: 'hour', env: 'NEW_NAMES_PER_HOUR', s: 3600, words: 'the last hour' },
     { key: 'day', env: 'NEW_NAMES_PER_DAY', s: 86400, words: 'the last 24 hours' },
 ];
-export function newNameBudget(env) {
-    const out = {};
-    for (const w of NEW_NAME_WINDOWS) {
-        const n = parseInt(env[w.env], 10);
-        out[w.key] = Number.isFinite(n) && n >= 1 ? n : NEW_NAME_DEFAULTS[w.key];
-    }
-    return out;
+// The live numbers are settings (src/settings.js new_names_per_hour, _per_day): `s`, or the env's.
+export function newNameBudget(env, s = settings.resolve(env)) {
+    return { hour: s.new_names_per_hour, day: s.new_names_per_day };
 }
-// A 429 when a window's budget is spent, else null.
-async function newNameBudgetSpent(env, now) {
-    const budget = newNameBudget(env);
+// A 429 when a window's budget is spent, else null: on a database without migration 0011 only (claimGate), where a name
+// past the budget can't be held for approval. With it, the name is held instead (heldWhy).
+async function newNameBudgetSpent(env, now, s) {
+    const budget = newNameBudget(env, s);
     for (const w of NEW_NAME_WINDOWS) {
         const made = await db.autoNamesSince(env, now - w.s);
         if (made < budget[w.key]) continue;
@@ -1084,6 +1204,8 @@ async function handleStatus(request, env) {
     if (a.status === 'live') {
         const token = await tunnelTokenOrNothing(env, a);
         if (token !== undefined) out.tunnelToken = token;
+        // Routed, but not yet listed: the node's directory push waits until this is gone (onProbation).
+        if (onProbation(a)) out.probation = true;
     }
     return json(out);
 }
@@ -1322,7 +1444,7 @@ async function adminResume(env, a, was, now, actor) {
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
-    const live = { ...recorded(ids, a), ...LIVE, ...extra };
+    const live = { ...recorded(ids, a), ...LIVE, ...extra, ...(a.held_reason ? { held_reason: null } : {}) };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
     return json({ status: 'live', name: a.name, changed: ids.changed });
@@ -1494,8 +1616,9 @@ async function handleForgetMany(env, bodyText, who = null) {
 
 // --- Switchboard (Invite resolution / trampoline) ---
 // A paused community still exists (the app shows it unreachable, which is true), so its invites still resolve;
-// a released, abandoned or blocked name's do not.
-const routesInvites = (alloc) => !!alloc && (alloc.status === 'live' || alloc.status === 'paused');
+// a released, abandoned or blocked name's do not. Nor do a name's on probation (onProbation): beanpool.org vouches for
+// a new name only once it has answered as its own node for a while (design §4.3.2).
+const routesInvites = (alloc) => !!alloc && (alloc.status === 'live' || alloc.status === 'paused') && !onProbation(alloc);
 
 // `?n=` names the node to join, as a label or a hostname. Only a name this registrar holds live is answered, and only
 // at its own hostname; anything else is refused (null), never sent on: beanpool.org must not vouch for a host it doesn't
@@ -1506,7 +1629,7 @@ async function liveHostname(env, queryN) {
     if (!NAME_RE.test(label) || !env.DB) return null;
     try {
         const alloc = await db.getAllocation(env, label);
-        return alloc?.status === 'live' && alloc.hostname === `${label}${base}` ? alloc.hostname : null;
+        return alloc?.status === 'live' && !onProbation(alloc) && alloc.hostname === `${label}${base}` ? alloc.hostname : null;
     } catch { return null; }
 }
 
@@ -1643,8 +1766,7 @@ async function sight(env, a) {
 // How many sweeps in a row of foreign answers pause a name for a content swap: SWAP_FAIL_LIMIT, 12 unless set (design
 // D2 = b, Marty 2026-09-24: about an hour of sweeps every 5 minutes).
 export function swapFailLimit(env) {
-    const n = parseInt(env.SWAP_FAIL_LIMIT, 10);
-    return Number.isFinite(n) && n >= 1 ? n : 12;
+    return settings.resolve(env).swap_fail_limit;   // the live number is a setting (src/settings.js); the sweep reads it from D1
 }
 
 // Is this sweep's picture of the world believable? (design §2.4) If not, the registrar assumes it is the one at
@@ -1691,17 +1813,32 @@ const verifiedSweep = (env, s) => s.action === 'applied' && (env.CANARY_NAME ? t
 // connector running on a leaked token dies with the tunnel, and the owner's heal comes back on a fresh tunnel whose
 // token only its signed request receives — or, a direct name, only after an attest through the name under its key —
 // so nobody else can ride the resume.
-async function applyVerdict(env, r, limits, verified) {
+// Probation (design §4.3.2) is counted here too: a name on it (onProbation) counts its ok sweeps in a row (ok_sweeps), and
+// is verified on the ok that makes them limits.probation_sweeps once it has been live limits.probation_s — written only
+// while the row is still the tenure the sweep read, and pushed onto `verifiedNow` for the sweep's one "New community"
+// alert. Anything but an ok in an applied sweep starts the count again; a suspended sweep neither counts nor ends it.
+async function applyVerdict(env, r, limits, verified, verifiedNow = []) {
     const { a, verdict, why } = r;
     const swap = !!r.swap;
     if (swap && !verified) return;                                     // not counted, and no run ended
-    if (verdict === 'unverifiable' && !swap && !runOpen(a)) return;   // no run to end: no read, no write
+    // No run to end, and no probation count to start again: no read, no write.
+    if (verdict === 'unverifiable' && !swap && !runOpen(a) && !(onProbation(a) && a.ok_sweeps)) return;
     const cur = await db.getAllocation(env, a.name);
     if (!cur || cur.status !== 'live' || cur.node_pubkey !== a.node_pubkey || cur.requested_at !== a.requested_at) return;
-    const ended = { ...(cur.attest_fails ? { attest_fails: 0 } : {}), ...(cur.swap_fails ? { swap_fails: 0 } : {}) };
+    const ended = {
+        ...(cur.attest_fails ? { attest_fails: 0 } : {}), ...(cur.swap_fails ? { swap_fails: 0 } : {}),
+        ...(onProbation(cur) && cur.ok_sweeps ? { ok_sweeps: 0 } : {}),
+    };
     if (verdict === 'ok') {
         const now = nowS();
-        await db.updateAllocation(env, a.name, { ...ended, attest_fails: 0, last_attest_at: now, last_ok_at: now });
+        const ok = { ...ended, attest_fails: 0, last_attest_at: now, last_ok_at: now };
+        if (!onProbation(cur)) { await db.updateAllocation(env, a.name, ok); return; }
+        const oks = (cur.ok_sweeps || 0) + 1;
+        const done = oks >= limits.probation_sweeps && now - (cur.decided_at || cur.requested_at || now) >= limits.probation_s;
+        if ((await db.updateIfUnchanged(env, a.name, cur, { ...ok, ok_sweeps: oks, ...(done ? { verified_at: now } : {}) })) && done) {
+            await logEvent(env, a.name, 'verified', `probation over: ${oks} ok sweeps in a row, live since ${new Date((cur.decided_at || cur.requested_at) * 1000).toISOString()}; listed on the switchboard, and its node's directory listing goes ahead`);
+            verifiedNow.push(cur);
+        }
         return;
     }
     if (!foreign(r)) {
@@ -1712,7 +1849,7 @@ async function applyVerdict(env, r, limits, verified) {
     const swaps = (cur.swap_fails || 0) + 1;
     const reason = verdict === 'impostor' && fails >= limits.impostor ? 'impostor' : (swaps >= limits.swap ? 'content-swap' : null);
     if (!reason) {
-        await db.updateAllocation(env, a.name, { attest_fails: fails, swap_fails: swaps });
+        await db.updateAllocation(env, a.name, { attest_fails: fails, swap_fails: swaps, ...(ended.ok_sweeps === 0 ? { ok_sweeps: 0 } : {}) });
         return;
     }
     // Row first (stopRouting): an owner's heal that read it live meanwhile then misses its write, and undoes.
@@ -1732,9 +1869,11 @@ async function applyVerdict(env, r, limits, verified) {
 export async function attestSweep(invocationEnv) {
     const d1 = d1Meter(invocationEnv);
     const env = d1.env;
+    const s = await settings.read(env);                         // the live limits (src/settings.js), in one read
     const limits = {
-        impostor: parseInt(env.ATTEST_FAIL_LIMIT || '2', 10),   // consecutive IMPOSTOR verdicts before a pause
-        swap: swapFailLimit(env),                               // consecutive sweeps of foreign answers before a pause
+        impostor: s.attest_fail_limit,                          // consecutive IMPOSTOR verdicts before a pause
+        swap: s.swap_fail_limit,                                // consecutive sweeps of foreign answers before a pause
+        probation_sweeps: s.probation_sweeps, probation_s: s.probation_s,
     };
     const live = await db.listByStatus(env, 'live');
     const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
@@ -1743,26 +1882,34 @@ export async function attestSweep(invocationEnv) {
         results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await sight(env, a)) }))));
     }
 
-    const s = judgeSweep(env, results);
-    try { await db.insertSweepLog(env, s, nowS()); } catch (e) { console.error('[SWEEP_LOG]', e.message || e); }
-    const line = `[ATTEST_SWEEP] ${s.action} live=${s.live} ok=${s.ok} unverifiable=${s.unverifiable} impostor=${s.impostor} content_swap=${s.content_swap}`;
-    if (s.action !== 'applied') {
+    const j = judgeSweep(env, results);
+    try { await db.insertSweepLog(env, j, nowS()); } catch (e) { console.error('[SWEEP_LOG]', e.message || e); }
+    const line = `[ATTEST_SWEEP] ${j.action} live=${j.live} ok=${j.ok} unverifiable=${j.unverifiable} impostor=${j.impostor} content_swap=${j.content_swap}`;
+    if (j.action !== 'applied') {
         const seen = results.filter((r) => r.verdict !== 'ok').slice(0, 50).map((r) => `${r.a.name}:${r.verdict}(${r.why})`);
         console.error(`${line} — acting on NO verdict; the registrar assumes it is at fault. ${seen.join(' ')}`);
     } else {
         console.log(line);
-        const verified = verifiedSweep(env, s);
+        const verified = verifiedSweep(env, j);
+        const verifiedNow = [];
         for (let i = 0; i < results.length; i += BATCH) {
-            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r, limits, verified)));
+            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r, limits, verified, verifiedNow)));
+        }
+        // The "New community" alert, at verification rather than at the claim (design §4.3.2): one for the sweep however
+        // many it verified, so a bot's burst never rings the phone once a name. Sent with the sweep's one send.
+        if (verifiedNow.length) {
+            try { await alerts.queue(env, alerts.newCommunities(env, verifiedNow, await db.countLive(env))); }
+            catch (e) { console.error('[ALERT]', e.message || e); }
         }
     }
     await upkeep(env, results, BATCH);
-    await alertConditions(env, s);
-    await finishOrphans(d1);
-    // One send for the sweep, last: what alertConditions told, the orphans' New community alerts, and whatever still
+    await alertConditions(env, j, s);
+    await finishOrphans(d1, s);
+    await pruneSources(d1, s);
+    // One send for the sweep, last: what alertConditions told, the New community alert of names it verified, and whatever still
     // waits from a failed send (a try every 5 minutes, with the cron). Under waitUntil: the sweep never waits for ntfy.
     await alerts.sendWaiting(env);
-    return s;
+    return j;
 }
 
 // D1 runs at most D1_QUERIES queries an invocation on Workers Free (1000 on Paid); past them every one fails ("Exceeded
@@ -1798,10 +1945,12 @@ function d1Meter(env) {
 // (urgent: the registrar distrusts itself), deletions Cloudflare has refused for over a day, the nonce table missing.
 // Each is told when it starts, every 24 h while it lasts, and when it ends, by the sweep's send after its orphans
 // (attestSweep): what is told here is in the outbox before them, so they never starve it.
-async function alertConditions(env, s) {
+// `settings`: the sweep's read of them. A database with the settings table (migration 0011) has the nonce table (0006)
+// too, so it is not asked again: the sweep's D1 queries are counted (d1Meter).
+async function alertConditions(env, s, settingsRead = null) {
     try {
         const now = nowS();
-        const conditions = [alerts.sweepCondition(env, s), alerts.nonceCondition(!(await nonceTableExists(env)))];
+        const conditions = [alerts.sweepCondition(env, s), alerts.nonceCondition(!(settingsRead?.schema || await nonceTableExists(env)))];
         try {
             const owed = await db.owedSince(env, now - 86400);
             conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
@@ -1851,12 +2000,13 @@ async function upkeep(env, results, batch) {
 const ORPHAN_AFTER_S = 120;
 const ORPHANS_PER_SWEEP = 3;
 const ORPHAN_D1 = 15;   // the most one takes (measured: 10; 12 with a leftover tunnel; 3 more with the outbox full)
-async function finishOrphans(d1) {
+async function finishOrphans(d1, s) {
     const env = d1.env;
     try {
         if (d1.left() < 1 + sendD1(env)) return;   // not even the list's read
         const now = nowS();
-        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP)) {
+        // A name held for the admin's approval is never an orphan (s.schema: the database has held_reason).
+        for (const a of await db.listOrphans(env, now - ORPHAN_AFTER_S, now - releaseCooloffS(env), ORPHANS_PER_SWEEP, s?.schema !== false)) {
             if (d1.left() < ORPHAN_D1 + sendD1(env)) {
                 console.warn('[ORPHAN_WAIT]', a.name, `pending: ${d1.left()} of D1's ${D1_QUERIES} queries left this sweep; finishing it takes up to ${ORPHAN_D1}, and the sweep's send ${sendD1(env)}`);
                 break;
@@ -1864,6 +2014,14 @@ async function finishOrphans(d1) {
             try { await finishOrphan(env, a, now); } catch (e) { console.error('[ORPHAN]', a.name, e.message || e); }
         }
     } catch (e) { console.error('[ORPHAN]', e.message || e); }
+}
+
+// Where new names came from is kept a day, no longer (migration 0011): the sweep deletes older rows last, with a query it
+// has to spare (d1Meter) — never one the orphans or its send need. A sweep with none left (orphans took them) leaves it
+// to the next; every new name's claim deletes them too (recordSource), so the table never outgrows a day of claims.
+async function pruneSources(d1, s) {
+    if (!s?.schema || d1.left() < 1 + sendD1(d1.env)) return;
+    try { await db.pruneSources(d1.env, nowS() - SOURCE_KEEP_S); } catch (e) { console.error('[SOURCE_PRUNE]', e.message || e); }
 }
 
 async function finishOrphan(env, a, now) {
@@ -1883,8 +2041,7 @@ async function finishOrphan(env, a, now) {
     }
     console.warn('[ORPHAN_FINISHED]', a.name, `pending → live: ${ids.changed.join(', ') || 'nothing'} made by the sweep`);
     await logEvent(env, a.name, 'healed', `finished by the sweep (its claim's answer never reached its node): pending → live, ${ids.changed.join(', ') || 'nothing'} made`);
-    try { await alerts.queue(env, alerts.newCommunity(env, a, await db.countLive(env))); }   // sent with the sweep's send
-    catch (e) { console.error('[ALERT]', e.message || e); }
+    // Its "New community" alert waits for its probation to end (applyVerdict).
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?

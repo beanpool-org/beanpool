@@ -67,6 +67,42 @@ export const newCommunity = (env, { name, community_name }, live) => ({
     category: 'names', priority: PRIORITY.default, tag: TAG.growth, name, title: `New community: ${name}`,
     body: `New community: ${host(env, name)} — ${quoted(community_name)} is live (tier auto). ${plural(live, 'name')} live.`,
 });
+// A2 since probation (design §4.3.2, index.js applyVerdict): the names one sweep verified — each answered as its own node
+// for a while, so it is listed now. One message for the sweep: a bot's burst never rings the phone once a name.
+export function newCommunities(env, rows, live) {
+    if (rows.length === 1) {
+        const ev = newCommunity(env, rows[0], live);
+        return { ...ev, body: `New community: ${host(env, rows[0].name)} — ${quoted(rows[0].community_name)} is live and verified (its probation is over). ${plural(live, 'name')} live.` };
+    }
+    const shown = rows.slice(0, 10).map((r) => `${r.name}${r.community_name ? ` (${quoted(r.community_name)})` : ''}`).join(', ');
+    return {
+        category: 'names', priority: PRIORITY.default, tag: TAG.growth, name: null, title: `New communities: ${rows.length} verified`,
+        body: `New communities: ${rows.length} names verified this sweep (their probation is over): ${shown}${rows.length > 10 ? `, and ${rows.length - 10} more` : ''}. ${plural(live, 'name')} live.`,
+    };
+}
+// New names held for the admin's approval (index.js heldWhy, D6 = hold, never refuse): told once an hour for each reason,
+// however many are held — counts and the reason, never a name, a key or an address. `words`: why, as heldWhy says it
+// (a source's network by its ASN and organisation: never its address).
+const HELD = { source: 'many from one source', budget: 'the new-name budget', 'hold-all': 'Hold all new names', 'near-full': 'the DNS zone near full' };
+export const namesHeld = (env, { reason, told = reason, words, waiting, bucket }) => ({
+    category: 'names', priority: PRIORITY.high, tag: TAG.warning, name: null, title: `New names held: ${HELD[reason] || reason}`,
+    once: `held:${told}:${bucket}`,
+    body: `New names are held for your approval: ${words}. ${waiting} waiting. Nothing was refused: approve the real ones in /admin, or Block all from a source there. Told once an hour.`,
+});
+// One network (ASN) past asn_per_day new names in a day: told, nothing held for it alone (a hosting network carries many
+// honest nodes). Once a day per network. Its ASN, organisation and country; never an address.
+export const networkBusy = (env, { asn, as_org, country, names, limit, day }) => ({
+    category: 'names', priority: PRIORITY.default, tag: TAG.warning, name: null, title: `Many new names from AS${asn}`,
+    once: `network:${asn}:${day}`,
+    body: `Many new names from one network: ${names} in the last 24 hours from AS${asn}${as_org ? ` ${as_org}` : ''}${country ? ` (${country})` : ''} (told past ${limit}). Nothing is held for that alone; /admin groups them by source.`,
+});
+// The names holding or about to hold a DNS record passed capacity_alert_at (design: CAPACITY; Marty 2026-10-18: alert at
+// 120 of the Free zone's 200 records, then move beanpool.org to Pro). Once a day while it lasts.
+export const capacityNear = (env, { names, capacity, alert_at, hold_at, day }) => ({
+    category: 'health', priority: PRIORITY.high, tag: TAG.warning, name: null, title: `Names near the DNS cap: ${names} of ${capacity}`,
+    once: `capacity:${day}`,
+    body: `Names near the DNS cap: ${names} live or pending, of the zone's ${capacity} records (told from ${alert_at}; from ${hold_at} every new name is held for your approval). Our own hand records count too. Move the zone to a plan with more records, then raise capacity in /admin.`,
+});
 // A3: the sweep paused a name's routing: another node's key answered, or something that is no node at all.
 export const routingPaused = (env, name, reason, count) => ({
     category: 'names', priority: PRIORITY.high, tag: TAG.warning, name, title: `Routing paused: ${name}`,

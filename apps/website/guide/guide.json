@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 138,
-  "hash": "238f64f53498fe52e995c1cd4cc9197c39478dbabb585fdb70fccfa1e0667d0e",
+  "version": 139,
+  "hash": "cfac332f6fcd875455617efb1473b3fdf95944881ad2e6ef64110bf5035f3f1d",
   "sections": [
     {
       "id": "about",
@@ -2368,12 +2368,12 @@
         },
         {
           "type": "p",
-          "text": "The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it only when the global community is open."
+          "text": "The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it when the global community is open and hasn't told the app that this account is already a member there."
         },
         {
           "type": "ul",
           "items": [
-            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words).",
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
             "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
             "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See \"Joining BeanPool\"."
@@ -6956,7 +6956,24 @@
         },
         {
           "type": "p",
-          "text": "The app shows **This community doesn't recognise you** when the community the phone is set to does not have you as a member, most often because the address is wrong. If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. Tapping **Delete this account from this phone** first asks your other communities. It deletes only when none of them still has you."
+          "text": "When the community the phone is set to does not have you as a member, the app asks that community what kind it is and shows one of these:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**You're not a member here yet**, on the global community, which anyone can join. Your account is fine: tap **Join with this account** to join it with the key and 12 words you already have, or switch to one of your communities. To try a different community, tap **Not this community? Enter another address**.",
+            "**This community doesn't recognise you**, on a community that joins people by invite. Usually the address is wrong, or you haven't joined it yet. Switch to one of your communities, enter another address and tap **Reconnect**, or tap **Paste an invite** and **Join with this invite** if you have one. The global community is offered too, with a line saying whether you can join it now.",
+            "On a community in a private preview, its own sentence, **This community is in a private preview. Ask its owner for an invite.**, with a place for an invite from its owner or an admin.",
+            "**Your account in** (the community's name) **was closed**, when you deleted it there or the community removed it. Your other communities are not affected: switch to one of them or, where the app offers it, join the global community. If the community removed you, it still keeps your profile: tap **Delete my account at** (its name) to erase it. That opens **Settings** at **Permanently Delete Account**, the steps above. Settings is the one place the app still opens for this community; any other screen brings you back to this page."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Reconnect**, and picking one of your communities, ask that community first. The phone moves only if it has you as a member (or you chose to visit it as a guest). If it doesn't, nothing changes: the phone stays on the community it was on, your list of communities stays as it was, and the app shows that community's page, saying your phone is still where it was and nothing was changed."
+        },
+        {
+          "type": "p",
+          "text": "If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. Tapping **Delete this account from this phone** first asks your other communities. It deletes only when none of them still has you."
         },
         {
           "type": "h3",
@@ -6964,7 +6981,7 @@
         },
         {
           "type": "p",
-          "text": "When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:"
+          "text": "When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account. In the phone app, the page that says your account there was closed has **Delete my account at** (the community's name), which opens **Permanently Delete Account** in **Settings**: the steps above. Then:"
         },
         {
           "type": "ul",

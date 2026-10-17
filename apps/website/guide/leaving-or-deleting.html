@@ -120,9 +120,17 @@
         </ul>
         <p>The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under <strong>Advanced / Subsystem</strong>, and the community whose web address it is still has you, the key stays and the web app goes back to that community. If the phone app put a copy of your key in BeanPool's key vault, deleting in the web app does not remove it: remove it in the phone app first, with <strong>Disconnect</strong> in <strong>Account Protection</strong>.</p>
         <h3>If a community does not recognise you</h3>
-        <p>The app shows <strong>This community doesn't recognise you</strong> when the community the phone is set to does not have you as a member, most often because the address is wrong. If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. Tapping <strong>Delete this account from this phone</strong> first asks your other communities. It deletes only when none of them still has you.</p>
+        <p>When the community the phone is set to does not have you as a member, the app asks that community what kind it is and shows one of these:</p>
+        <ul>
+            <li><strong>You're not a member here yet</strong>, on the global community, which anyone can join. Your account is fine: tap <strong>Join with this account</strong> to join it with the key and 12 words you already have, or switch to one of your communities. To try a different community, tap <strong>Not this community? Enter another address</strong>.</li>
+            <li><strong>This community doesn't recognise you</strong>, on a community that joins people by invite. Usually the address is wrong, or you haven't joined it yet. Switch to one of your communities, enter another address and tap <strong>Reconnect</strong>, or tap <strong>Paste an invite</strong> and <strong>Join with this invite</strong> if you have one. The global community is offered too, with a line saying whether you can join it now.</li>
+            <li>On a community in a private preview, its own sentence, <strong>This community is in a private preview. Ask its owner for an invite.</strong>, with a place for an invite from its owner or an admin.</li>
+            <li><strong>Your account in</strong> (the community's name) <strong>was closed</strong>, when you deleted it there or the community removed it. Your other communities are not affected: switch to one of them or, where the app offers it, join the global community. If the community removed you, it still keeps your profile: tap <strong>Delete my account at</strong> (its name) to erase it. That opens <strong>Settings</strong> at <strong>Permanently Delete Account</strong>, the steps above. Settings is the one place the app still opens for this community; any other screen brings you back to this page.</li>
+        </ul>
+        <p><strong>Reconnect</strong>, and picking one of your communities, ask that community first. The phone moves only if it has you as a member (or you chose to visit it as a guest). If it doesn't, nothing changes: the phone stays on the community it was on, your list of communities stays as it was, and the app shows that community's page, saying your phone is still where it was and nothing was changed.</p>
+        <p>If another community on this phone still has you, or can't be reached, the app lists it to switch to and keeps your key. Tapping <strong>Delete this account from this phone</strong> first asks your other communities. It deletes only when none of them still has you.</p>
         <h3>If your community removed you</h3>
-        <p>When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account:</p>
+        <p>When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account. In the phone app, the page that says your account there was closed has <strong>Delete my account at</strong> (the community's name), which opens <strong>Permanently Delete Account</strong> in <strong>Settings</strong>: the steps above. Then:</p>
         <ul>
             <li>Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.</li>
             <li>Every message you wrote reads <strong>This message was deleted</strong>, and the photos you sent are deleted.</li>
@@ -136,7 +144,7 @@
             <li><a href="holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
             <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, how to keep them safe, and adding a sign-in as a second way back.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 138.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 139.</p>
     </main>
 </body>
 </html>

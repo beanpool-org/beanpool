@@ -219,8 +219,8 @@ describe('the phone\'s community address is written only after the plain-address
     const CHECKED: Record<string, RegExp> = {
         // The deep link's "Switch Nodes?": the address comes from deepLinkNodeOrigin, which refuses one that isn't plain.
         'app/_layout.tsx RootLayoutNav': /deepLinkNodeOrigin\(/,
-        // A typed address, or one from a saved-node pick.
-        'app/node-mismatch.tsx switchToNode': /assertPlainNodeAddress\(url\)/,
+        // The not-recognised screen's Reconnect, or a saved-node pick, once the community has let the key in (utils/reconnect.ts).
+        'utils/reconnect.ts switchPhoneTo': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // The invite join: looksLikeNodeAddress, which requires isPlainNodeAddress (utils/node-url.ts).
         'app/welcome.tsx handleCreate': /looksLikeNodeAddress\(nodeUrl\)/,
         'app/(tabs)/settings.tsx handleSwitchNode': /isPlainNodeAddress\(targetUrl\)/,

@@ -36,7 +36,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadIdentity } from './identity';
-import { getSavedNodes, isGuestNode } from './nodes';
 import { GLOBAL_NODE_URL } from './node-profile';
 import { doorMessage, joinedUnderNodeName, type DoorAnswer, type JoinKey } from './global-join';
 import { signInCopiesAt } from './vault-config';
@@ -60,43 +59,17 @@ export function isGlobalCommunity(url: string | null | undefined): boolean {
     return !!url && url.trim().replace(/\/+$/, '').toLowerCase() === GLOBAL_NODE_URL;
 }
 
-/**
- * What the phone knows of its own standing in the global community: not in its list (`none`), a guest there
- * (`guest`), a member (`member`), or it can't say yet (`unknown`: still asking, or no answer).
- */
-export type GlobalStanding = 'none' | 'guest' | 'member' | 'unknown';
-
-/**
- * Whether an existing account is offered the door: only once the global community has said, this app start, that its
- * door is open (utils/global-door-offer.ts, the check that shows "Explore BeanPool worldwide"), and only to a phone
- * with an account that isn't known to be a member there. Unknown standing offers nothing yet, so a member never sees
- * the offer flash up while the phone asks. A member the phone took for a guest who taps it anyway is told so by the
- * door (`already_member`), and simply lands in the global community. A key global has answered `account_closed` for
- * ({@link rememberAccountClosed}) is never offered it again: the answer can't change from the phone.
- */
-export function doorOfferedToAccount(input: { doorOpen: boolean; hasAccount: boolean; standing: GlobalStanding; accountClosed?: boolean }): boolean {
-    return input.doorOpen && input.hasAccount && !input.accountClosed && (input.standing === 'none' || input.standing === 'guest');
-}
-
-/**
- * The phone's standing in the global community from what it keeps, with no network: `none` when neither its list nor
- * the community in use is the global one, `guest` when the phone marked it a guest visit (Settings' Add & Connect, which
- * asks the node), else `member`. For a screen that has no live answer of its own (Settings); the BeanPool sheet asks
- * each community and reads its rows instead.
- */
-export async function globalStandingOnPhone(): Promise<GlobalStanding> {
-    try {
-        const [nodes, anchor] = await Promise.all([getSavedNodes(), AsyncStorage.getItem('beanpool_anchor_url')]);
-        if (!nodes.some(n => isGlobalCommunity(n.url)) && !isGlobalCommunity(anchor)) return 'none';
-        return (await isGuestNode(GLOBAL_NODE_URL)) ? 'guest' : 'member';
-    } catch {
-        return 'unknown';
-    }
-}
+// Whether an account is offered the door, and the phone's standing in the global community, are utils/global-entry.ts's
+// one rule: from what the global community itself last answered about this key, never from the saved list (the old
+// `globalStandingOnPhone` read "in the list, not marked a guest" as "member", which hid every door after a Reconnect
+// that global had refused: DESIGN-global-entry-fable.md §1).
 
 const CLOSED_KEYS = 'beanpool_global_account_closed';
 
-/** Remember, per node and key, that global answered `account_closed`, so the door is no longer offered to this key. */
+/**
+ * Remember, per node and key, that global answered `account_closed`, so the door is no longer offered to this key, until
+ * global answers it otherwise ({@link forgetAccountClosed}).
+ */
 export async function rememberAccountClosed(publicKey: string): Promise<void> {
     try {
         const list = await closedList();
@@ -105,7 +78,19 @@ export async function rememberAccountClosed(publicKey: string): Promise<void> {
     } catch { /* the door's own answer still says it */ }
 }
 
-/** Whether global has said `account_closed` for this key on this phone. A read that fails says no. */
+/**
+ * Forget it again: global has since answered this key as anything but closed. A vote can bring a removed member back
+ * (server `reinstate_member`), after which the key signs again (PR #2098 review).
+ */
+export async function forgetAccountClosed(publicKey: string): Promise<void> {
+    try {
+        const list = await closedList();
+        const entry = `${GLOBAL_NODE_URL}|${publicKey}`;
+        if (list.includes(entry)) await AsyncStorage.setItem(CLOSED_KEYS, JSON.stringify(list.filter((e) => e !== entry)));
+    } catch { /* asked again the next time the screen opens */ }
+}
+
+/** Whether global's last definite answer about this key on this phone was `account_closed`. A read that fails says no. */
 export async function accountClosedAtGlobal(publicKey: string | null | undefined): Promise<boolean> {
     if (!publicKey) return false;
     return (await closedList()).includes(`${GLOBAL_NODE_URL}|${publicKey}`);

@@ -72,9 +72,10 @@ import { addSavedNode, clearGuestNode, getSavedNodes, isGuestNode, markGuestNode
 import { askGlobalDoorOffer, forgetGlobalDoorOffer } from '../global-door-offer';
 import { checkNameAtDoor, nextStepFor, signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn } from '../global-join';
 import {
-    ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, doorOfferedToAccount, finishJoinFromAccount, rememberAccountClosed, accountClosedAtGlobal,
-    globalStandingOnPhone, isGlobalCommunity, type EnterDeps,
+    ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed, accountClosedAtGlobal,
+    isGlobalCommunity, type EnterDeps,
 } from '../global-join-existing';
+import { globalEntryState, readGlobalStanding } from '../global-entry';
 import { boundSignatureValid } from './server-signature-check';
 import { COMMUNITY, GLOBAL, VAULT, installNetwork, noVault, useVault, type Network, type SentRequest } from './fake-vault';
 
@@ -166,18 +167,17 @@ afterEach(() => {
 });
 
 describe('where an account the phone already has is offered the door', () => {
-    it('a guest of the global community, once it says its door is open; never a member there, never before it has said', async () => {
+    it('a key global calls a stranger, once it says its door is open; never a member there, never before it has said', async () => {
         await seedPhone();
         globalAnswers();
-        expect(await globalStandingOnPhone()).toBe('guest');
-        expect(doorOfferedToAccount({ doorOpen: false, hasAccount: true, standing: 'guest' })).toBe(false);
+        const input = { account: true, standing: 'stranger' as const, closedHere: false, saved: true };
+        expect(globalEntryState({ ...input, door: 'unknown' })).toBe('checking');
         expect(await askGlobalDoorOffer()).toBe(true);
-        expect(doorOfferedToAccount({ doorOpen: true, hasAccount: true, standing: 'guest' })).toBe(true);
-        // In its list as a member, or not known yet: nothing offered. Not in the list at all: offered (the sheet, Settings).
-        expect(doorOfferedToAccount({ doorOpen: true, hasAccount: true, standing: 'member' })).toBe(false);
-        expect(doorOfferedToAccount({ doorOpen: true, hasAccount: true, standing: 'unknown' })).toBe(false);
-        expect(doorOfferedToAccount({ doorOpen: true, hasAccount: true, standing: 'none' })).toBe(true);
-        expect(doorOfferedToAccount({ doorOpen: true, hasAccount: false, standing: 'none' })).toBe(false);
+        expect(globalEntryState({ ...input, door: 'open' })).toBe('join');
+        // A member, or still being asked: nothing offered. No account: the first screen's door, not this one.
+        expect(globalEntryState({ ...input, door: 'open', standing: 'member' })).toBe('member');
+        expect(globalEntryState({ ...input, door: 'open', standing: 'unknown', asking: true })).toBe('checking');
+        expect(globalEntryState({ ...input, door: 'open', account: false })).toBe('noAccount');
     });
 
     it('a door the global community says is shut offers nothing', async () => {
@@ -186,15 +186,15 @@ describe('where an account the phone already has is offered the door', () => {
         expect(await askGlobalDoorOffer()).toBe(false);
     });
 
-    it('the phone\'s standing from what it keeps: not in its list, a guest, a member', async () => {
+    it('the saved list says nothing about standing: global in it, marked a guest or not, is still unknown until global answers', async () => {
         account = await createIdentity('Sam');
         await addSavedNode(COMMUNITY, 'Mullum');
         mem.async.set(ANCHOR, COMMUNITY);
-        expect(await globalStandingOnPhone()).toBe('none');
+        expect(await readGlobalStanding(account.publicKey)).toBe('unknown');
         await addSavedNode(GLOBAL, 'Global community');
-        expect(await globalStandingOnPhone()).toBe('member');
+        expect(await readGlobalStanding(account.publicKey)).toBe('unknown');
         await markGuestNode(GLOBAL);
-        expect(await globalStandingOnPhone()).toBe('guest');
+        expect(await readGlobalStanding(account.publicKey)).toBe('unknown');
         expect(isGlobalCommunity('https://global.beanpool.org/')).toBe(true);
         expect(isGlobalCommunity(COMMUNITY)).toBe(false);
         expect(net.sent).toHaveLength(0);
@@ -329,16 +329,16 @@ describe('through the door with the key on the phone', () => {
         if (answer.kind === 'joined') throw new Error('expected a refusal');
         expect(accountDoorMessage(answer)).toBe("This account's place in the global community was closed, so it can't join again.");
 
-        const input = { doorOpen: true, hasAccount: true, standing: 'none' as const };
-        expect(doorOfferedToAccount(input)).toBe(true);
+        const input = { account: true, standing: 'stranger' as const, door: 'open' as const, saved: false };
+        expect(globalEntryState({ ...input, closedHere: await accountClosedAtGlobal(account.publicKey) })).toBe('join');
         expect(await accountClosedAtGlobal(account.publicKey)).toBe(false);
         await rememberAccountClosed(account.publicKey);
         await rememberAccountClosed(account.publicKey);
         expect(await accountClosedAtGlobal(account.publicKey)).toBe(true);
         expect(await accountClosedAtGlobal('another-key')).toBe(false);
         expect(JSON.parse(mem.async.get('beanpool_global_account_closed')!)).toHaveLength(1);
-        expect(doorOfferedToAccount({ ...input, accountClosed: true })).toBe(false);
-        expect(doorOfferedToAccount({ ...input, standing: 'guest', accountClosed: true })).toBe(false);
+        expect(globalEntryState({ ...input, closedHere: true })).toBe('closedAccount');
+        expect(globalEntryState({ ...input, standing: 'unknown', closedHere: true })).toBe('closedAccount');
         await accountUntouched();
     });
 

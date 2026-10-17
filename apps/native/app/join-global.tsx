@@ -6,6 +6,7 @@ import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'exp
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
+import { useNodeStatus } from './NodeStatusContext';
 import { GoogleButton, AppleButton, FacebookButton } from '../components/SsoButton';
 import { authenticateUser } from '../utils/LocalAuth';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, checkGlobalDoor, wordsDoorOn } from '../utils/node-profile';
@@ -36,6 +37,7 @@ export { ErrorBoundary };
 export default function JoinGlobalScreen() {
     const { then: thenParam } = useLocalSearchParams<{ then?: string }>();
     const { colors } = useTheme();
+    const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -326,6 +328,10 @@ export default function JoinGlobalScreen() {
                 return;
             }
             if (!joined) return;
+            // The phone is on the global community now, as a member: the root layout's recognition is asked again, so the
+            // answer of the community it left (a stranger, when the door was opened from the not-recognised screen) can't
+            // send the member back there on the way to the profile step.
+            await recheck().catch(() => 'unknown');
             Alert.alert(joined.title, joined.body, [{
                 text: 'Next',
                 // As after any second community: the name and photo for this one, then home.

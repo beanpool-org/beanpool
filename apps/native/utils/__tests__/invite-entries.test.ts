@@ -195,14 +195,15 @@ describe('People → Invites goes through the helpers (source check)', () => {
         expect(guestNoInvitesText(false)).toBe(GUEST_NO_INVITES_TEXT);
         expect(GUEST_NO_INVITES_TEXT).toBe('This community doesn’t use invite codes, and it isn’t taking new members from the app.');
         expect(GUEST_NO_INVITES_TEXT).not.toMatch(/connection|try again/i);
-        expect(src).toContain('guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)');
+        expect(src).toContain('guestNoInvitesText(guestAtGlobalWaiting)');
+        expect(src).toContain("const guestAtGlobalWaiting = guestAtGlobal && (globalEntry === 'checking' || globalEntry === 'unreachable');");
     });
 
     it("a guest of the global community, once its door is open: the door, with the account on this phone, in place of the sentence", () => {
-        // Only at the global community (the door is its alone), asked only there, and offered as global-join-existing.ts says.
+        // Only at the global community (the door is its alone), asked only there, and offered as global-entry.ts says.
         expect(src).toMatch(/const guestAtGlobal = guestNoInvites && isGlobalCommunity\(anchorUrl\);/);
-        expect(src).toMatch(/const globalDoorOpen = useGlobalDoorOpen\(guestAtGlobal\);/);
-        expect(src).toMatch(/const guestDoor = guestAtGlobal && doorOfferedToAccount\(\{ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed \}\);/);
+        expect(src).toMatch(/const globalEntry = useGlobalEntry\(guestAtGlobal\);/);
+        expect(src).toMatch(/const guestDoor = guestAtGlobal && globalEntry === 'join';/);
         // The door's words before the no-invites sentence, which is left for where no door is offered.
         const banner = src.slice(src.indexOf('⚠️ Guest Connection Mode'), src.indexOf('{!guestNoInvites && ('));
         expect(banner.indexOf('guestDoor')).toBeGreaterThan(0);

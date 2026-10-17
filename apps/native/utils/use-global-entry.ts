@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
-import { useGlobalDoorOpen } from './use-global-door-open';
+import { useGlobalDoor } from './use-global-door-open';
 import { accountClosedAtGlobal } from './global-join-existing';
 import {
     askGlobalStanding, globalEntryState, readGlobalStanding, type GlobalDoorState, type GlobalEntryState, type GlobalStanding,
@@ -12,22 +12,23 @@ import {
  * People's guest banner, the BeanPool sheet, the not-recognised screen.
  *
  * Drawn at once from what the phone kept (the last answer about this key, under a day old; the door's answer this app
- * start), then asked each time the screen comes into view: the door first (use-global-door-open.ts, free once answered),
- * and, once the door is open, the key's standing (the membership probe, signed by the key). The probe goes to the global
- * community only then: a phone whose global door is shut or unreachable never tells it which screen it opened.
+ * start), then asked each time the screen comes into view: the door first (use-global-door-open.ts, free once answered;
+ * no answer reads `unreachable`, a shut door `closed`, a preview `preview`), and, once the door is open, the key's standing
+ * (the membership probe, signed by the key). The probe goes to the global community only then: a phone whose global door
+ * is shut or unreachable never tells it which screen it opened.
  *
  * The last definite answer wins: one from the probe this time replaces what was kept, a kept `account_closed` included
  * (a vote can bring a removed member back), and a kept answer read after it never overrides it.
  *
- * `door` overrides the door's answer where a screen has asked it fresh (the not-recognised screen's checkGlobalDoor):
- * the session answer above only knows "open" or "not yet".
+ * `door` overrides the door's answer where a screen has asked it itself: the not-recognised screen's fresh checkGlobalDoor,
+ * and the BeanPool sheet, which draws the door's own answer (its 12-words way, Try again) beside the state.
  */
 export function useGlobalEntry(enabled: boolean, door?: GlobalDoorState): GlobalEntryState {
     const { identity } = useIdentity();
     const publicKey = identity?.publicKey ?? null;
     const on = enabled && !!identity;
-    const sessionOpen = useGlobalDoorOpen(on && door === undefined);
-    const doorState: GlobalDoorState = door ?? (sessionOpen ? 'open' : 'unknown');
+    const session = useGlobalDoor(on && door === undefined);
+    const doorState: GlobalDoorState = door ?? session.state;
     const [standing, setStanding] = useState<GlobalStanding>('unknown');
     const [closedHere, setClosedHere] = useState(false);
     const [asking, setAsking] = useState(false);

@@ -10,6 +10,7 @@ import { useNodeStatus } from './NodeStatusContext';
 import { GoogleButton, AppleButton, FacebookButton } from '../components/SsoButton';
 import { authenticateUser } from '../utils/LocalAuth';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, checkGlobalDoor, wordsDoorOn } from '../utils/node-profile';
+import { rememberGlobalDoor } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, checkNameAtDoor, doorMessage, doorWaysOut, nameCheckMessage, nextStepFor, signInAtDoor, submitJoin, submitWordsJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
@@ -113,6 +114,8 @@ export default function JoinGlobalScreen() {
         let cancelled = false;
         checkGlobalDoor()
             .then(check => {
+                // What the door said is what the BeanPool sheet's row reads when the member goes back (global-door-offer.ts).
+                rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (check.ok) {
                     // Two ways in where the door has the 12-words one; the sign-in alone where it doesn't, as before.
@@ -125,6 +128,7 @@ export default function JoinGlobalScreen() {
                 setPhase('unavailable');
             })
             .catch(() => {
+                rememberGlobalDoor(null);
                 if (cancelled) return;
                 setMessage(GLOBAL_DOOR_MESSAGES.unreachable);
                 setPhase('unavailable');

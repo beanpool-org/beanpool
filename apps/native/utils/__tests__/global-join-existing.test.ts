@@ -172,7 +172,7 @@ describe('where an account the phone already has is offered the door', () => {
         globalAnswers();
         const input = { account: true, standing: 'stranger' as const, closedHere: false, saved: true };
         expect(globalEntryState({ ...input, door: 'unknown' })).toBe('checking');
-        expect(await askGlobalDoorOffer()).toBe(true);
+        expect((await askGlobalDoorOffer()).state).toBe('open');
         expect(globalEntryState({ ...input, door: 'open' })).toBe('join');
         // A member, or still being asked: nothing offered. No account: the first screen's door, not this one.
         expect(globalEntryState({ ...input, door: 'open', standing: 'member' })).toBe('member');
@@ -183,7 +183,7 @@ describe('where an account the phone already has is offered the door', () => {
     it('a door the global community says is shut offers nothing', async () => {
         await seedPhone();
         globalAnswers({ open: false });
-        expect(await askGlobalDoorOffer()).toBe(false);
+        expect((await askGlobalDoorOffer()).state).toBe('closed');
     });
 
     it('the saved list says nothing about standing: global in it, marked a guest or not, is still unknown until global answers', async () => {

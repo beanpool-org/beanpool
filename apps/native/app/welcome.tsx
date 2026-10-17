@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState, Animated } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError } from '../utils/identity';
@@ -18,7 +18,9 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
-import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
+import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
+import type { GlobalDoorState } from '../utils/global-entry';
+import { WelcomeDoors } from '../components/WelcomeDoors';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
@@ -357,16 +359,16 @@ export default function WelcomeScreen() {
     /** From Next's tap on "Your Name" until it ends: that step is not left mid-join (utils/invite-next.ts `runNext`). */
     const nextOutRef = useRef(false);
 
-    // Whether home offers the door at all (utils/global-door-offer.ts): only once the node has said, this app start,
-    // that it is the global community with its door open. Drawn from what is already known and asked after drawing,
-    // never before. Asked again when home comes back into view or the app to the front: free once there is an answer
-    // (it is kept for the session), a new ask after a failure. Once shown it stays; the door itself asks again anyway.
-    const [globalOffer, setGlobalOffer] = useState(globalDoorOffered);
+    // What the global community's door said this app start (utils/global-door-offer.ts): only the line under home's
+    // "Explore BeanPool worldwide", which is always drawn (components/WelcomeDoors.tsx). Drawn from what is already known
+    // and asked after drawing, never before. Asked again when home comes back into view or the app to the front: free
+    // once there is an answer (it is kept for the session), a new ask after none. The door itself asks again anyway.
+    const [globalDoor, setGlobalDoor] = useState<GlobalDoorState>(() => globalDoorOffer().state);
     useFocusEffect(useCallback(() => {
         if (mode !== 'home') return;
         let cancelled = false;
         const ask = () => {
-            askGlobalDoorOffer().then(open => { if (!cancelled && open) setGlobalOffer(true); });
+            askGlobalDoorOffer().then(offer => { if (!cancelled) setGlobalDoor(offer.state); });
         };
         ask();
         const sub = AppState.addEventListener('change', (state) => {
@@ -374,15 +376,6 @@ export default function WelcomeScreen() {
         });
         return () => { cancelled = true; sub.remove(); };
     }, [mode]));
-    /** Where home's content was drawn, centred, while there was no offer: an offer that arrives later keeps it there. */
-    const [homeTop, setHomeTop] = useState<number | null>(null);
-    useEffect(() => { if (mode !== 'home') setHomeTop(null); }, [mode]);
-    /** The offer fades in the first time it is drawn. */
-    const offerFade = useRef(new Animated.Value(0)).current;
-    useEffect(() => {
-        if (mode !== 'home' || !globalOffer) return;
-        Animated.timing(offerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-    }, [mode, globalOffer, offerFade]);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -792,6 +785,8 @@ export default function WelcomeScreen() {
         let cancelled = false;
         checkGlobalDoor()
             .then(check => {
+                // What the door said is what home's line reads when the member goes back (global-door-offer.ts).
+                rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (!check.ok) {
                     setGlobalMessage(GLOBAL_DOOR_MESSAGES[check.reason]);
@@ -805,6 +800,7 @@ export default function WelcomeScreen() {
                 setGlobalPhase(words ? 'choose' : 'signIn');
             })
             .catch(() => {
+                rememberGlobalDoor(null);
                 if (cancelled) return;
                 setGlobalMessage(GLOBAL_DOOR_MESSAGES.unreachable);
                 setGlobalPhase('unavailable');
@@ -3389,38 +3385,25 @@ export default function WelcomeScreen() {
 
 
     // --- MAIN WELCOME SCREEN ---
-    // Centred as it always was. The door's offer goes below everything else, and only once the node has said it is
-    // open; nothing is kept for it, so a shut door leaves no gap. When it arrives after home is drawn (the usual case:
-    // the ask starts once home is on screen), the content is pinned where it was drawn (`homeTop`) and the offer fades
-    // in underneath, so nothing on screen moves under a thumb. On a small phone that is below the fold.
-    const pinnedTop = globalOffer ? homeTop : null;
+    // Centred as it always was, top first once it is taller than the phone. Nearly every first launch is a new user, so
+    // the two doors come right under the title (components/WelcomeDoors.tsx, DESIGN-global-entry §B.3): Join with an
+    // invite first and primary, Explore BeanPool worldwide under it, always drawn, so at 320 dp with text at 1.3× both
+    // are above the fold (the long sentence about BeanPool comes after them: above them it pushed Explore under the fold).
+    // Restoring an account on a new phone is the rare case and lives as a quiet link below.
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
-            {/* Scrolls: at 320dp and 1.3x text, the button, the hint and the paste offer are taller than a small phone. */}
-            <ScrollView contentContainerStyle={pinnedTop !== null ? [styles.homeContent, { paddingTop: pinnedTop }] : [styles.homeContent, styles.homeCentred]}>
-                <View style={styles.homeMain} onLayout={(e) => { if (!globalOffer) setHomeTop(e.nativeEvent.layout.y); }}>
+            {/* Scrolls: at 320dp and 1.3x text, the sentence about BeanPool and the paste offer are taller than a small phone. */}
+            <ScrollView contentContainerStyle={[styles.homeContent, styles.homeCentred]}>
+                <View style={styles.homeMain}>
                     {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
-                    <Text style={styles.headerSubtitle}>
+
+                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={openGlobalDoor} styles={styles} />
+
+                    <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
-                    </Text>
-
-                    {/* Nearly every first launch is a new user, so joining is THE primary action. Restoring an account on
-                        a new phone is the rare case and lives as a quiet link below. One line in English at 320dp and 1.3x
-                        text, shrinking rather than wrapping; a longer language (ru, fr, ar, the pseudo-locale) may take a
-                        second line rather than shrink past 0.6 (utils/__tests__/language-switch-render.test.ts). The hint
-                        reads true with or without the offer below it. */}
-                    <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel={t('Join with an invite')}>
-                        <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🎟️ Join with an invite')}</Text>
-                    </Pressable>
-
-                    <Text style={styles.inviteOnlyHint}>
-                        <Sentence
-                            text={t('You join a local community with an invite from one of its members.\nNo invite yet? Ask a friend on BeanPool, or find a community near you at {link}.')}
-                            parts={{ link: <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text> }}
-                        />
                     </Text>
 
                     {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
@@ -3451,16 +3434,6 @@ export default function WelcomeScreen() {
                         <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
                     </Pressable>
                 </View>
-
-                {/* The door's offer (utils/global-door-offer.ts). The door asks the node again when it is tapped. */}
-                {globalOffer && (
-                    <Animated.View style={[styles.homeOffer, { opacity: offerFade }]}>
-                        <Text style={styles.inviteOnlyHint}>{t('No invite? Explore BeanPool worldwide and find a community near you.')}</Text>
-                        <Pressable style={[styles.memberBtn, styles.homeOfferBtn]} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel={t('Explore BeanPool worldwide')}>
-                            <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
-                        </Pressable>
-                    </Animated.View>
-                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -3472,11 +3445,13 @@ const styles = StyleSheet.create({
     homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
     homeCentred: { justifyContent: 'center' },
     homeMain: { width: '100%', alignItems: 'center' },
-    homeOffer: { width: '100%', alignItems: 'center', marginTop: 28 },
-    homeOfferBtn: { marginTop: 12 },
+    // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
+    homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
+    doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
+    // The sentence about BeanPool, under the doors (it was the subtitle above them).
+    homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
-    headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },

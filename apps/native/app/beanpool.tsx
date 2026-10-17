@@ -11,11 +11,14 @@ import {
     type GuidePage,
 } from '../utils/guide';
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
-import { useCommunities, type CommunityStatus } from '../utils/use-communities';
+import { useCommunities, type CommunityRow, type CommunityStatus } from '../utils/use-communities';
 import { useGlobalEntry } from '../utils/use-global-entry';
+import { useGlobalDoor } from '../utils/use-global-door-open';
+import { isGlobalCommunity } from '../utils/global-join-existing';
+import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
-import { FEEDBACK_LIVE } from '@beanpool/core';
+import { FEEDBACK_LIVE, t } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -114,12 +117,42 @@ export default function BeanPoolSheet() {
     };
     const connect = () => router.navigate({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
 
-    // The global community's door, for the account on this phone (utils/global-join-existing.ts): offered when the one rule
-    // says `join` (utils/global-entry.ts): the door open, and the global community itself not saying this key is a member.
-    // Not from the rows (a row in the list is no answer about the key); not while its standing is still being asked, so a
-    // member never sees it flash up. The always-present row is P2's (DESIGN-global-entry §B.3).
+    // The global community's row (DESIGN-global-entry §B.3, decisions 1 and 8): under YOUR COMMUNITIES there is always
+    // exactly one, never hidden, never hideable. Its shape comes from the list: the saved row where the phone has one (its
+    // dot, "in use", long press to remove it from the list, after which this row is the Join row), else a row of its own
+    // after the others. What it says and does comes from the one rule (utils/global-entry.ts), read from what the global
+    // community itself answered about this key, never from the list: a member's row switches to it; otherwise its second
+    // line says where the door stands (Join with this account; checking; can't reach it; not taking members; a private
+    // preview; this account closed there). No-domain-lock-in: every state but member and join is "the global community
+    // isn't available from here right now", and nothing else on the sheet waits on it.
     const { identity } = useIdentity();
-    const offerGlobal = useGlobalEntry(!!identity) === 'join';
+    const globalDoor = useGlobalDoor(!!identity);
+    const globalEntry = useGlobalEntry(!!identity, globalDoor.state);
+    const globalSaved = communities.rows.find(r => isGlobalCommunity(r.url)) ?? null;
+    const globalUrl = globalSaved?.url ?? GLOBAL_NODE_URL;
+    const globalHost = globalUrl.replace(/^https?:\/\//, '');
+    const globalLine = globalEntry === 'member' ? globalHost
+        : globalEntry === 'join' ? (globalDoor.wordsDoor ? t('Join with this account: 12 words or a sign-in') : t('Join with this account: a sign-in'))
+        : globalEntry === 'checking' ? t('Checking…')
+        : globalEntry === 'unreachable' ? (globalSaved ? t("Can't reach it right now") : t("Can't reach it right now. Tap to try again."))
+        : globalEntry === 'closed' ? t('Not taking new members right now.')
+        : globalEntry === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
+        : globalEntry === 'closedAccount' ? t('Your account there was closed.')
+        : t('Explore BeanPool worldwide');
+    // A member's row switches to it, and where the door is open the row is Join (what its line says), saved or not. A
+    // saved row otherwise keeps what any saved row does (switch to it); an unsaved one opens the door screen's own page for
+    // a door that can't be used (it asks again, with Try again), asks again itself when nothing answered, and otherwise
+    // waits.
+    const switchToGlobal = () => communities.switchTo(globalUrl);
+    const openDoor = () => router.push('/join-global');
+    const globalTap: (() => void) | undefined = globalEntry === 'member' ? switchToGlobal
+        : globalEntry === 'join' ? openDoor
+        : globalEntry === 'noAccount' ? () => router.navigate('/welcome')
+        : globalSaved ? switchToGlobal
+        : globalEntry === 'unreachable' ? globalDoor.retry
+        : globalEntry === 'closed' || globalEntry === 'preview' ? openDoor
+        : undefined;
+    const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press to remove it.') : undefined;
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 
@@ -143,6 +176,39 @@ export default function BeanPoolSheet() {
             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
         </Pressable>
     );
+
+    // The global community's row: the saved row's shape when the phone has one, else its own (earth, chevron). Title one
+    // line, its second line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3).
+    const GlobalRow = ({ saved, first }: { saved: CommunityRow | null; first: boolean }) => {
+        const isCurrent = !!saved && saved.url === communities.active;
+        return (
+            <Pressable
+                style={({ pressed }) => [styles.row, !first && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
+                onPress={globalTap}
+                onLongPress={saved ? () => communities.remove(saved) : undefined}
+                delayLongPress={500}
+                disabled={!globalTap || communities.switching}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isCurrent, disabled: !globalTap }}
+                accessibilityLabel={t('Global community, {state}', { state: globalLine })}
+                accessibilityHint={globalHint}
+                testID="global-community-row"
+            >
+                {globalEntry === 'member' && saved
+                    ? <View style={[styles.dot, { backgroundColor: dotFor(saved.status) }]} />
+                    : <MaterialCommunityIcons name="earth" size={24} color={colors.brand.primary} />}
+                <View style={styles.rowText}>
+                    <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{saved?.name ?? t('Global community')}</Text>
+                    <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={2}>{globalLine}</Text>
+                </View>
+                {isCurrent
+                    ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
+                    : saved?.status === 'guest' ? <Text style={styles.guestTag}>{t('Guest')}</Text>
+                    : globalTap && !saved ? <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
+                    : null}
+            </Pressable>
+        );
+    };
 
     const GuideRow = ({ p, icon, first }: { p: GuidePage | null; icon: IconName; first?: boolean }) =>
         p ? <Row icon={icon} title={p.title} sub={p.summary} first={first} onPress={() => openGuide(p.slug)} /> : null;
@@ -195,6 +261,7 @@ export default function BeanPoolSheet() {
                 <Text style={styles.sectionLabel}>YOUR COMMUNITIES</Text>
                 <View style={styles.group}>
                     {communities.rows.map((r, i) => {
+                        if (r === globalSaved) return <GlobalRow key={r.url} saved={r} first={i === 0} />;
                         const isCurrent = r.url === communities.active;
                         return (
                             <Pressable
@@ -220,24 +287,9 @@ export default function BeanPoolSheet() {
                             </Pressable>
                         );
                     })}
-                    {offerGlobal && (
-                        <Pressable
-                            style={({ pressed }) => [styles.row, communities.rows.length > 0 && styles.rowDivider, pressed && styles.rowPressed]}
-                            onPress={() => router.push('/join-global')}
-                            accessibilityRole="button"
-                            accessibilityLabel="Join the global community"
-                            accessibilityHint="Sign in once to join it as the account on this phone"
-                        >
-                            <MaterialCommunityIcons name="earth" size={24} color={colors.brand.primary} />
-                            <View style={styles.rowText}>
-                                <Text style={styles.rowTitle}>Join the global community</Text>
-                                <Text style={styles.rowSub} numberOfLines={2}>Sign in once, as the account on this phone</Text>
-                            </View>
-                            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
-                        </Pressable>
-                    )}
+                    {!globalSaved && <GlobalRow saved={null} first={communities.rows.length === 0} />}
                     <Pressable
-                        style={({ pressed }) => [styles.row, (communities.rows.length > 0 || offerGlobal) && styles.rowDivider, pressed && styles.rowPressed]}
+                        style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
                         onPress={connect}
                         accessibilityRole="button"
                         accessibilityLabel="Add a community"

@@ -684,7 +684,7 @@ test('the page: "Free all and remove (N)" counts every released name; its confir
         assert.match(html, /<button data-forget-all="1"[^>]*>Remove all released \(1\)<\/button>/, 'Remove all released is still there, for the free ones');
 
         await p.click({ 'data-free-all': '1' });
-        assert.equal(p.confirms.at(-1), 'Free and remove 6 released names? Their old servers can no longer take them back.');
+        assert.equal(p.confirms.at(-1), 'Free and remove 6 released names? Their old servers can no longer take them back.\n\n1 is still inside its hold: it is freed at once, to any key.');
         const bulk = p.sent.filter((s) => s.url === '/api/local/admin/registrar/forget').map((s) => ({ headers: s.init.headers, body: JSON.parse(s.init.body) }));
         assert.deepEqual(bulk.map((b) => b.body.names), [['july0', 'july1'], ['july2', 'july3'], ['heldrel', 'cairns']], 'every released name once, and only those');
         assert.ok(bulk.every((b) => b.body.free_now === true && b.body.total === 6 && b.headers['x-bp-admin'] === '1'));
@@ -702,5 +702,45 @@ test('the page: "Free all and remove (N)" counts every released name; its confir
         // No released names: no button.
         p.ctx.renderActive([row('livename', 'live')]);
         assert.doesNotMatch(p.els.activeTableContainer.innerHTML, /data-free-all/);
+    } finally { w.restore(); }
+});
+
+test('the page: "Free all and remove" says how many are still inside their hold, and warns of one held from a key the admin stopped (the Worker\'s own /pending)', async () => {
+    const w = await world();
+    try {
+        await julyRows(w);
+        // The list as the Worker gives it: old1 and old2 (past the hold, their key can take them back), adminfree (free),
+        // recent (inside its key's hold) and heldall (blocked, then released: held from every key, its own included).
+        const pending = await call(w, new Request(`https://beanpool.org${ADMIN_API}/pending`, { headers: SECRET }));
+        assert.equal(pending.status, 200);
+        const heldall = pending.body.allocations.find((a) => a.name === 'heldall');
+        assert.deepEqual([heldall.status, heldall.holds, heldall.pause_reason], ['released', true, 'admin-held-all']);
+        const p = await page(w, (url) => (url.endsWith('/forget') ? [200, { removed: [], refused: [], already: [] }] : [200, { allocations: [], events: [] }]));
+        p.ctx.confirm = (text) => { p.confirms.push(text); return false; };
+        p.ctx.renderActive(pending.body.allocations);
+        const before = p.sent.length;
+        await p.click({ 'data-free-all': '1' });
+        assert.equal(p.confirms.at(-1), 'Free and remove 5 released names? Their old servers can no longer take them back.\n\n' +
+            '2 are still inside their hold: they are freed at once, to any key. ⚠️ 1 of those is held from the key you blocked or paused: ' +
+            'that key can claim it again at once. Cancel to keep that key off it until its hold ends.');
+        assert.equal(p.sent.length, before, 'cancelled: nothing sent');
+
+        // Two held from stopped keys; one held from every key but past its hold (free to anyone already) is not counted; a
+        // row that doesn't say whether it holds counts as held, as everywhere on the page.
+        p.ctx.renderActive([
+            row('a', 'released', { holds: true, pause_reason: 'admin-held-all', held_until: 1790000000 }),
+            row('b', 'released', { holds: true, pause_reason: 'admin-held-all', held_until: 1790000000 }),
+            row('c', 'released', { holds: false, pause_reason: 'admin-held-all' }),
+            row('d', 'released', { holds: undefined, pause_reason: 'owner' }),
+        ]);
+        await p.click({ 'data-free-all': '1' });
+        assert.equal(p.confirms.at(-1), 'Free and remove 4 released names? Their old servers can no longer take them back.\n\n' +
+            '3 are still inside their hold: they are freed at once, to any key. ⚠️ 2 of those are held from the keys you blocked or paused: ' +
+            'those keys can claim them again at once. Cancel to keep those keys off them until their holds end.');
+        // None held: the confirm says only what it said before.
+        p.ctx.renderActive([row('e', 'released', { pause_reason: 'owner' })]);
+        await p.click({ 'data-free-all': '1' });
+        assert.equal(p.confirms.at(-1), 'Free and remove 1 released name? Their old servers can no longer take them back.');
+        assert.equal(p.sent.length, before, 'each cancelled: nothing sent');
     } finally { w.restore(); }
 });

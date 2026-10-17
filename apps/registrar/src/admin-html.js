@@ -402,9 +402,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             blocked: [['resume', 'Resume'], ['release', 'Release']],
         };
         // The released names nobody holds, as last drawn: what "Remove all released" removes. Every released name, as
-        // last drawn: what "Free all and remove" frees and removes.
+        // last drawn: what "Free all and remove" frees and removes; of those, how many are still inside their hold, and how
+        // many of those are held from the key the admin had blocked or paused ('admin-held-all'), which that key can claim
+        // again once freed. Its confirm says both.
         let removable = [];
         let releasedNames = [];
+        let releasedHeld = 0;
+        let releasedHeldFromAll = 0;
 
         function renderActive(active) {
             const container = document.getElementById('activeTableContainer');
@@ -419,6 +423,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const takesBack = function(a) { return a.holds === false && !!a.takes_back; };
             removable = released.filter(function(a) { return a.holds === false && !a.takes_back; }).map(function(a) { return a.name; });
             releasedNames = released.map(function(a) { return a.name; });
+            const stillHeld = released.filter(function(a) { return a.holds !== false; });
+            releasedHeld = stillHeld.length;
+            releasedHeldFromAll = stillHeld.filter(function(a) { return a.pause_reason === 'admin-held-all'; }).length;
             const back = released.filter(takesBack).length;
 
             let html = held.length ? namesTable(held) : '<p style="color: var(--text-muted); font-size: 0.85rem;">No names held now.</p>';
@@ -522,7 +529,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         async function freeAllAndRemove() {
             const names = releasedNames.slice();
             if (!names.length) return;
-            if (!confirm('Free and remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + '? Their old servers can no longer take them back.')) return;
+            // A name still inside its hold is freed at once, to any key; one held from the key the admin had stopped
+            // ('admin-held-all') goes back to that key too, as its own "Free now" says ("FREE AT ONCE, to any key").
+            const held = releasedHeld;
+            const fromAll = releasedHeldFromAll;
+            const holdNote = held ? '\\n\\n' + (held === 1 ? '1 is still inside its hold: it is freed at once, to any key.' : held + ' are still inside their hold: they are freed at once, to any key.') : '';
+            const fromAllNote = fromAll ? ' ⚠️ ' + (fromAll === 1
+                ? '1 of those is held from the key you blocked or paused: that key can claim it again at once. Cancel to keep that key off it until its hold ends.'
+                : fromAll + ' of those are held from the keys you blocked or paused: those keys can claim them again at once. Cancel to keep those keys off them until their holds end.') : '';
+            if (!confirm('Free and remove ' + names.length + ' released name' + (names.length === 1 ? '' : 's') + '? Their old servers can no longer take them back.' + holdNote + fromAllNote)) return;
             // One id for this click: the Worker tells your phone of it once, not of every batch.
             const run = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
             const removed = [];

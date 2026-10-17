@@ -1874,6 +1874,9 @@ const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
 // runtime keeps only work under waitUntil alive past that (up to 30 s): anything else can be cancelled half way, leaving
 // a pending row with nothing made. Under waitUntil the work lands whoever is still listening (F2 of
 // scratch/global-node/DESIGN-registrar-trust-fable.md §5.2); the sweep finishes what even that missed (finishOrphans).
+// A rotate and a release are Cloudflare work too, written to the row first (review of #2125): a rotate cut off there
+// leaves a live row on no tunnel, its old one deleted and its fresh one recorded nowhere; a release, a released name
+// still routed by a record nothing owes.
 const finishing = (env, p) => {
     if (typeof env.waitUntil === 'function') env.waitUntil(p.catch(() => {}));
     return p;
@@ -1925,13 +1928,13 @@ export default {
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await finishing(env, handleClaim(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/heal') return await finishing(env, handleHeal(request, env, bodyText));
-            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, bodyText);
+            if (method === 'POST' && p === '/api/registrar/rotate') return await finishing(env, handleRotate(request, env, bodyText));
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
             if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, bodyText);
             if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, bodyText);
             // `/offline` is release's old name; today's nodes still call it (keep it for at least one release).
             if (method === 'POST' && (p === '/api/registrar/release' || p === '/api/registrar/offline'))
-                return await handleRelease(request, env, bodyText);
+                return await finishing(env, handleRelease(request, env, bodyText));
 
             // The control room's API. Every route here answers only its admin (adminIdentity): Cloudflare Access's signed
             // token, or — with no ACCESS_* var set — the ADMIN_SECRET header. Unknown paths too: a 401 before a 404.

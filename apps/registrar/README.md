@@ -70,9 +70,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   finished, at most 3 a sweep: nothing the registrar did not make may be in the way, then tunnel and record are made and
   the row goes `live` (event `healed`: finished by the sweep; the New community alert; the token reaches the node
   through `/status`).
-- **The work of a claim, heal or approve runs under `ctx.waitUntil`:** a node that stops waiting (it gives a claim or
-  heal 25 s) never cuts it off half way; the runtime keeps it up to 30 s past the disconnect, and the sweep finishes
-  what even that missed.
+- **The work of a claim, heal, rotate, release or approve runs under `ctx.waitUntil`:** a node that stops waiting (it
+  gives each of its four 25 s) never cuts it off half way; the runtime keeps it up to 30 s past the disconnect, and the
+  sweep finishes what even that missed.
 
 A tunnel or record the registrar lets go of that Cloudflare refuses to delete is recorded in `teardown`, never
 dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or

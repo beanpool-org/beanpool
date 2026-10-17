@@ -5,7 +5,8 @@
 // your approval". The Worker's side of slice S1:
 //   F1 a pending auto row is 'provisioning' (status, claim, heal), /pending says awaiting_approval per row, and /admin
 //      lists it under "Setting up" (Finish now, Reject), apart from the gated claims;
-//   F2 claim, heal and approve run under waitUntil, so a node that hangs up never cuts the work off;
+//   F2 claim, heal and approve run under waitUntil, so a node that hangs up never cuts the work off (and, from the review
+//      of #2125, rotate and release: Cloudflare work written to the row first);
 //   F3 the sweep finishes a pending auto row over 2 minutes old (at most 3 a sweep), never a gated one.
 // Every test here but one fails on origin/main 583a6cb0: /status answers 'awaiting-approval', /pending carries no
 // awaiting_approval and the page one list, a claim cut off mid-way stays pending, and the sweep never looks at a pending
@@ -15,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep } from '../src/index.js';
-import { world, makeKey, attestsAs, routing } from './harness.js';
+import { world, makeKey, attestsAs, routing, liveName } from './harness.js';
 
 const SECRET = { 'x-admin-secret': 'test-admin-secret' };
 const listed = async (w) => (await (await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/pending', { headers: SECRET }), w.env)).json()).allocations;
@@ -210,6 +211,33 @@ test('F2: an approve, its admin\'s page closed mid-way, still makes the name liv
         assert.equal((await w.claim(key, { name: 'sydney' })).body.status, 'pending');
         assert.ok(await w.cutAt(MID_ENSURE, w.adminRequest('sydney', 'approve')));
         routedLive(w, 'sydney', await w.row('sydney'));
+    } finally { w.restore(); }
+});
+
+test('F2: a rotate whose node hangs up mid-way still lands: the old tunnel gone, the fresh one routed and its token in /status', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        await liveName(w, 'temp', key);
+        const old = (await w.row('temp')).tunnel_id;
+        assert.ok(await w.cutAt(MID_ENSURE, await w.signed('POST', '/api/registrar/rotate', key, { name: 'temp' })), 'the node hung up mid-ensure');
+        const row = await w.row('temp');
+        routedLive(w, 'temp', row);
+        assert.notEqual(row.tunnel_id, old, 'on a fresh tunnel');
+        assert.equal(w.cf.liveTunnel(old), null, 'the old one deleted');
+        assert.equal((await w.status(key)).body.tunnelToken, `token-${row.tunnel_id}`, 'its node gets the new token from /status');
+    } finally { w.restore(); }
+});
+
+test('F2: a release whose node hangs up mid-way still takes the name down: no record, no tunnel', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        await liveName(w, 'temp', key);
+        assert.ok(await w.cutAt(/^DELETE \/zones\/zone\/dns_records\//, await w.signed('POST', '/api/registrar/release', key, { name: 'temp' })), 'the node hung up at the record\'s delete');
+        const row = await w.row('temp');
+        assert.deepEqual([row.status, row.tunnel_id, row.dns_record_id], ['released', null, null], JSON.stringify(row));
+        assert.deepEqual(routing(w, 'temp'), { dns: null, tunnels: [] }, 'nothing at Cloudflare routes a released name');
     } finally { w.restore(); }
 });
 

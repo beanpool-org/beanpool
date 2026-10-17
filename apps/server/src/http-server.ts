@@ -7,7 +7,7 @@
  * Endpoints:
  *   GET /.well-known/acme-challenge/:token — the http-01 answer (services/acme/challenge.ts), before everything else
  *   GET /         — Redirect to HTTPS landing page (public) or trust bootstrap (LAN)
- *   GET /trust    — Downloads the Root CA certificate (.pem)  [LAN only]
+ *   GET /trust    — Downloads the Root CA certificate (.pem); a redirect to HTTPS for a host with a CA certificate here
  *   /ws, /ws/logs — WebSocket upgrades, handed to the HTTPS server's handler (same auth)
  */
 
@@ -15,7 +15,7 @@ import Koa from 'koa';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Router from '@koa/router';
-import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
+import { getCaCertPem, servesCaCertificateFor } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { acmeChallengeMiddleware } from './services/acme/challenge.js';
@@ -187,9 +187,10 @@ export async function startHttpServer(port: number): Promise<number> {
 </html>`;
     });
 
-    // Trust endpoint — CA cert download (only useful for LAN/self-signed mode)
+    // Trust endpoint — CA cert download, decided per request: a host with a CA certificate here goes to HTTPS, which a
+    // browser trusts there; beanpool.local and a LAN address get the CA, also on a node that is public as well.
     router.get('/trust', async (ctx) => {
-        if (isUsingLetsEncrypt()) {
+        if (servesCaCertificateFor(ctx.hostname)) {
             const hostname = process.env.CF_RECORD_NAME ?? ctx.hostname;
             ctx.redirect(`https://${hostname}/`);
             return;

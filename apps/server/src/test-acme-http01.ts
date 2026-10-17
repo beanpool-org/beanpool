@@ -18,7 +18,10 @@
  *   8. `.beanpool.org` names and private hosts are never ordered;
  *   9. a standby orders nothing;
  *  10. a certificate from another ACME directory than the one configured (staging, then production) is ordered again at
- *      once; a state that records no directory is left alone.
+ *      once; a state that records no directory is left alone; a wait after a failure under another directory is not
+ *      this one's;
+ *  11. /trust hands out the self-signed CA to a request that named a host with no CA certificate here (beanpool.local, a
+ *      LAN address), on both listeners, whenever they started; a host with one is redirected (plain) or 404 (HTTPS).
  * Plus: docker-compose.yml passes ACME_DIRECTORY_URL through.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
@@ -27,6 +30,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import https from 'node:https';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -497,11 +501,85 @@ try {
         const t10c = await schedule.runAcmeTick();
         check('a state with no directory recorded counts as this directory\'s: fresh, nothing ordered',
             t10c.outcomes['beans.example.org'] === 'fresh' && orderCount() === before, JSON.stringify(t10c));
+
+        // No certificate held: the wait and the count a failure earns belong to its directory. Port 80 shut under the first
+        // (staging), then opened and the second (production) configured: tried at once, from the first back-off step.
+        const switched = 'switch.example.org';
+        configure([switched]);
+        originFor[switched] = closedPort;
+        const t10d = await schedule.runAcmeTick();
+        now += HOUR + 60_000;
+        const t10e = await schedule.runAcmeTick();
+        const st10e = store.readState(dataDir, switched);
+        check('no certificate, port 80 shut: two failures under the first directory, the next try in 4 hours',
+            t10d.outcomes[switched] === 'failed' && t10e.outcomes[switched] === 'failed' && st10e.failures === 2
+            && st10e.nextAttemptAt === now + 4 * HOUR && st10e.attemptDirectoryUrl === firstDirectory, JSON.stringify(st10e));
+        now += 5 * 60_000;
+        const t10f = await schedule.runAcmeTick();
+        check('…5 minutes later under the same directory: waiting', t10f.outcomes[switched] === 'waiting', JSON.stringify(t10f));
+        process.env.ACME_DIRECTORY_URL = secondDirectory;
+        store.writeState(dataDir, { ...st10e, attemptDirectoryUrl: null });
+        const t10g = await schedule.runAcmeTick();
+        check('a wait that records no directory counts as this directory\'s: still waiting after the switch', t10g.outcomes[switched] === 'waiting',
+            JSON.stringify(t10g));
+        store.writeState(dataDir, st10e);
+        const t10h = await schedule.runAcmeTick();
+        const st10h = store.readState(dataDir, switched);
+        check('the second directory configured: tried at once, and its first failure waits an hour, not 4 hours or a day',
+            t10h.outcomes[switched] === 'failed' && st10h.failures === 1 && st10h.nextAttemptAt === now + HOUR
+            && st10h.attemptDirectoryUrl === secondDirectory, JSON.stringify(st10h));
+        delete originFor[switched];
+        now += HOUR + 60_000;
+        before = orderCount();
+        const t10i = await schedule.runAcmeTick();
+        const st10i = store.readState(dataDir, switched);
+        check('port 80 opened, after that hour: one order, from the second directory, recorded with the certificate',
+            t10i.outcomes[switched] === 'renewed' && orderCount() === before + 1 && st10i.directoryUrl === secondDirectory && st10i.failures === 0,
+            JSON.stringify(st10i));
     } finally {
         process.env.ACME_DIRECTORY_URL = firstDirectory;
     }
 
-    console.log('\n11. docker-compose.yml passes ACME_DIRECTORY_URL through');
+    console.log('\n11. /trust hands out the CA unless the request named a host with a CA certificate here');
+    configure(['beans.example.org']);
+    const t11 = await schedule.runAcmeTick();
+    check('precondition: a CA certificate is served for beans.example.org', t11.outcomes['beans.example.org'] === 'fresh'
+        && tlsMod.servedHosts().includes('beans.example.org'), JSON.stringify(t11));
+    /** GET /trust on a listener, as a request that named `host` (its Host header). */
+    const trust = (port: number, host: string, secure = false) => new Promise<{ status: number; type: string; location: string; body: string }>((resolve, reject) => {
+        const req = (secure ? https : http).request({ host: '127.0.0.1', port, path: '/trust', headers: { host }, rejectUnauthorized: false }, (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (c) => { body += c; });
+            res.on('end', () => resolve({ status: res.statusCode ?? 0, type: res.headers['content-type'] ?? '', location: res.headers.location ?? '', body }));
+        });
+        req.on('error', reject);
+        req.end();
+    });
+    const handsOutCa = (r: { status: number; type: string; body: string }) => r.status === 200 && /x-pem-file/.test(r.type) && r.body === tlsMod.getCaCertPem();
+    const caPemNow = tlsMod.getCaCertPem();
+    check('precondition: the self-signed CA is there to hand out', /BEGIN CERTIFICATE/.test(caPemNow));
+    for (const host of ['beanpool.local', '192.168.1.5', 'other.example.org']) {
+        const r = await trust(httpPort, host);
+        check(`plain listener, Host ${host} (no CA certificate here): the CA`, handsOutCa(r), `${r.status} ${r.type} ${r.location}`);
+    }
+    const toName = await trust(httpPort, 'beans.example.org');
+    check('plain listener, Host beans.example.org (its certificate is served): redirected to https://beans.example.org/',
+        toName.status === 302 && toName.location === 'https://beans.example.org/', `${toName.status} ${toName.location}`);
+    const upper = await trust(httpPort, 'BEANS.Example.org.');
+    check('…the same host in capitals and with a final dot: redirected, not the CA', upper.status === 302, `${upper.status} ${upper.type}`);
+    const httpsLocal = await trust(httpsPort, 'beanpool.local', true);
+    check('HTTPS listener, Host beanpool.local: the CA', handsOutCa(httpsLocal), `${httpsLocal.status} ${httpsLocal.type}`);
+    const httpsName = await trust(httpsPort, 'beans.example.org', true);
+    check('HTTPS listener, Host beans.example.org: no CA (answered as if there were no /trust)', httpsName.status === 404 && !httpsName.body.includes('BEGIN CERTIFICATE'),
+        `${httpsName.status} ${httpsName.type}`);
+    // The usual state after the first week: the HTTPS listener starts with a CA certificate already served.
+    const httpsPortLater = await startHttpsServer(0);
+    const laterLocal = await trust(httpsPortLater, 'beanpool.local', true);
+    check('an HTTPS listener started with a CA certificate already served: Host beanpool.local still gets the CA', handsOutCa(laterLocal),
+        `${laterLocal.status} ${laterLocal.type}`);
+
+    console.log('\n12. docker-compose.yml passes ACME_DIRECTORY_URL through');
     const compose = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../docker-compose.yml'), 'utf8');
     check('docker-compose.yml passes ACME_DIRECTORY_URL from the node\'s .env, empty by default', /^\s*- ACME_DIRECTORY_URL=\$\{ACME_DIRECTORY_URL:-\}\s*$/m.test(compose));
     check('an empty ACME_DIRECTORY_URL is Let\'s Encrypt production', (() => {

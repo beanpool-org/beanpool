@@ -70,6 +70,19 @@ export function getServerKeyPem(): string { return serverKeyPem; }
 /** Whether this server serves a certificate a CA issued, for any of its identifiers. */
 export function isUsingLetsEncrypt(): boolean { return served.size > 0; }
 
+/** A host as SNI or a Host header names it, as `served` keys it: lower case, no final dot. */
+function hostKey(name: string): string { return name.toLowerCase().replace(/\.+$/, ''); }
+
+/**
+ * Whether a request that named `host` (its Host header's hostname) came by an identifier this server serves a valid CA
+ * certificate for, so a browser there needs no self-signed CA. /trust on both listeners asks this per request: on a node
+ * that is public and used on its LAN, beanpool.local and a LAN address still get the CA.
+ */
+export function servesCaCertificateFor(host: string, now = Date.now()): boolean {
+    const s = served.get(hostKey(host));
+    return !!s && s.notAfter > now;
+}
+
 /** CF_RECORD_NAME as signatures carry it, when our fleet's dns-01 path is set up (all three CF variables); else null. */
 export function fleetIdentifier(): string | null {
     const name = (process.env.CF_RECORD_NAME ?? '').trim();
@@ -172,7 +185,7 @@ export function httpsCertOptions(): Pick<tls.TlsOptions, 'cert' | 'key' | 'SNICa
         cert: pair.cert,
         key: pair.key,
         SNICallback: (servername, cb) => {
-            const name = servername.toLowerCase().replace(/\.+$/, '');
+            const name = hostKey(servername);
             const s = served.get(name);
             if (s && s.notAfter > Date.now()) return cb(null, s.context);
             // An IP address sent as SNI (RFC 6066 forbids it; some clients do) is a connection with no name. Any other

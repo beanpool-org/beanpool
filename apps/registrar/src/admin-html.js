@@ -438,7 +438,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             return html + '</tbody></table>';
         }
 
-        // Remove all released: the names nobody holds, as last drawn, in batches the Worker takes (50 a request).
+        // Remove all released: the names nobody holds, as last drawn, in batches the Worker takes (5 a request).
+        const FORGET_BATCH = 5;
         async function forgetAllReleased() {
             const names = removable.slice();
             if (!names.length) return;
@@ -447,13 +448,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const removed = [];
             const refused = [];
             try {
-                for (let i = 0; i < names.length; i += 50) {
+                for (let i = 0; i < names.length; i += FORGET_BATCH) {
+                    const batch = names.slice(i, i + FORGET_BATCH);
                     const res = await fetch('/api/local/admin/registrar/forget', {
                         method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' },
-                        body: JSON.stringify({ names: names.slice(i, i + 50) }),
+                        body: JSON.stringify({ names: batch }),
                     });
                     const data = await res.json();
-                    if (!res.ok) { refused.push({ name: names.slice(i, i + 50).join(', '), error: data.error || String(res.status) }); continue; }
+                    if (!res.ok) { refused.push({ name: batch.join(', '), error: data.error || String(res.status) }); continue; }
                     removed.push.apply(removed, data.removed || []);
                     refused.push.apply(refused, data.refused || []);
                 }

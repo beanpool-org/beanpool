@@ -1399,8 +1399,9 @@ async function forgetRow(env, a, now) {
 
 // The bulk form: the names the admin's list showed as removable, each decided as its own forget is (onFreshRow), at
 // most FORGET_MAX a request (the page sends them in batches). Answers which were removed and which were refused, and
-// why; the admin's phone hears of it once.
-const FORGET_MAX = 50;
+// why; the admin's phone hears of it once. FORGET_MAX keeps one request inside D1's smallest per-invocation budget
+// (50 queries on Workers Free): a forget is about 6 queries, its one alert about 10.
+const FORGET_MAX = 5;
 async function handleForgetMany(env, bodyText) {
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
     const names = Array.isArray(b?.names) ? [...new Set(b.names.map((n) => String(n).toLowerCase()))] : null;

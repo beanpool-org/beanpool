@@ -168,16 +168,19 @@ test('Remove all released: the bulk form removes only the releases nobody holds;
         await w.admin('number1', 'pause');
         const before = Object.fromEntries(await Promise.all(['heldrel', 'livename', 'number1'].map(async (n) => [n, await w.row(n)])));
 
-        const r = await forgetMany(w, { names: ['tst1', 'TST2', 'heldrel', 'livename', 'number1', 'nosuchname', 'tst1'] });
+        const r = await forgetMany(w, { names: ['tst1', 'TST2', 'heldrel', 'livename', 'tst1'] });
         assert.equal(r.status, 200, JSON.stringify(r.body));
         assert.deepEqual(r.body.removed, ['tst1', 'tst2']);
         const until = before.heldrel.released_at + COOLOFF;
         assert.deepEqual(r.body.refused, [
             { name: 'heldrel', status: 'released', held_until: until, error: `heldrel is still held (owner) until ${new Date(until * 1000).toISOString()}: free it now first` },
             { name: 'livename', status: 'live', error: 'livename is live: only a released name nobody holds can be removed from the list' },
+        ]);
+        const r2 = await forgetMany(w, { names: ['number1', 'nosuchname'] });
+        assert.deepEqual(r2, { status: 200, body: { removed: [], refused: [
             { name: 'number1', status: 'paused', error: 'number1 is paused: only a released name nobody holds can be removed from the list' },
             { name: 'nosuchname', error: 'unknown name' },
-        ]);
+        ] } });
         for (const n of ['tst1', 'tst2']) {
             assert.equal((await w.row(n)).status, 'abandoned');
             assert.equal(removedEvents(w, n).length, 1);
@@ -186,16 +189,33 @@ test('Remove all released: the bulk form removes only the releases nobody holds;
             assert.deepEqual(await w.row(n), before[n], `${n}: untouched`);
             assert.deepEqual(removedEvents(w, n), []);
         }
-        // The admin's phone hears of it once, in a count.
+        // The admin's phone hears of it once, in a count — and not at all of a request that removed nothing.
         const told = w.sqlite.prepare("SELECT title, body, name FROM alert_outbox WHERE title LIKE 'You removed%'").all().map((x) => ({ ...x }));
         assert.deepEqual(told, [{ title: 'You removed 2 released names from the list', body: 'You removed 2 released names from the list: free to anyone, as they were.', name: null }]);
 
-        // Bodies it refuses whole, touching nothing.
-        for (const body of [{}, { names: [] }, { names: 'tst1' }, { names: ['Not A Name!'] }, { names: Array.from({ length: 51 }, (_, i) => `name${i}`) }, '{not json']) {
+        // Bodies it refuses whole, touching nothing: more than 5 names (after folding case and repeats) among them.
+        for (const body of [{}, { names: [] }, { names: 'tst1' }, { names: ['Not A Name!'] }, { names: Array.from({ length: 6 }, (_, i) => `name${i}`) }, '{not json']) {
             const bad = await forgetMany(w, body);
             assert.equal(bad.status, 400, JSON.stringify(body));
         }
         assert.equal((await w.row('livename')).status, 'live');
+    } finally { w.restore(); }
+});
+
+test('one bulk request of 5 names stays inside D1\'s smallest per-invocation budget (50 queries), its alert sent in it too', async () => {
+    // The alert channel set: the alert's send runs in the same invocation (waitUntil), and fails here (no network),
+    // which is its costliest path.
+    const w = await world({ env: { NTFY_URL: 'https://ntfy.example/beanpool-admin' } });
+    try {
+        const names = ['bulk1', 'bulk2', 'bulk3', 'bulk4', 'bulk5'];
+        for (const n of names) await freed(w, n);
+        const real = w.env.DB;
+        let queries = 0;
+        w.env.DB = { prepare: (sql) => { queries++; return real.prepare(sql); } };
+        const r = await forgetMany(w, { names });
+        w.env.DB = real;
+        assert.deepEqual(r.body.removed, names);
+        assert.ok(queries <= 50, `${queries} D1 queries`);
     } finally { w.restore(); }
 });
 
@@ -392,11 +412,11 @@ test('the page: held names first; released ones in a collapsed "Released (N)", e
     } finally { w.restore(); }
 });
 
-test('the page: Remove from the list posts forget for that name; Remove all released sends only the free names, 50 a request', async () => {
+test('the page: Remove from the list posts forget for that name; Remove all released sends only the free names, 5 a request', async () => {
     const w = await world();
     try {
         const p = await page(w);
-        const free = Array.from({ length: 120 }, (_, i) => row(`test${i}`, 'released', { pause_reason: 'admin', released_at: 1 }));
+        const free = Array.from({ length: 12 }, (_, i) => row(`test${i}`, 'released', { pause_reason: 'admin', released_at: 1 }));
         p.ctx.renderActive([row('livename', 'live'), row('heldrel', 'released', { pause_reason: 'owner', released_at: 1, holds: true }), ...free]);
 
         await p.click({ 'data-name': 'test7', 'data-action': 'forget' });
@@ -405,13 +425,13 @@ test('the page: Remove from the list posts forget for that name; Remove all rele
         assert.deepEqual(one.map((s) => [s.url, s.init.method, s.init.body]), [['/api/local/admin/registrar/test7/forget', 'POST', undefined]]);
 
         await p.click({ 'data-forget-all': '1' });
-        assert.match(p.confirms.at(-1), /^Remove 120 released names nobody holds from the list\?/);
+        assert.match(p.confirms.at(-1), /^Remove 12 released names nobody holds from the list\?/);
         const bulk = p.sent.filter((s) => s.url === '/api/local/admin/registrar/forget');
-        assert.deepEqual(bulk.map((s) => JSON.parse(s.init.body).names.length), [50, 50, 20]);
+        assert.deepEqual(bulk.map((s) => JSON.parse(s.init.body).names.length), [5, 5, 2]);
         const names = bulk.flatMap((s) => JSON.parse(s.init.body).names);
         assert.deepEqual(names, free.map((f) => f.name), 'every free name once, and only those');
         assert.equal(bulk.every((s) => s.init.method === 'POST' && s.init.headers['content-type'] === 'application/json'), true);
-        assert.match(p.alerts.at(-1), /^Removed 120 from the list\.$/);
+        assert.match(p.alerts.at(-1), /^Removed 12 from the list\.$/);
     } finally { w.restore(); }
 });
 

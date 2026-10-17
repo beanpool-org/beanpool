@@ -15,7 +15,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release | forget` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below) · `POST /api/local/admin/registrar/forget {"names": [...]}` (forget in bulk, at most
-  50 a request; answers `{removed, refused}`). `forget` is /admin's "Remove from the list": a `released` row nobody
+  5 a request — inside D1's per-invocation query budget on Workers Free; /admin sends them in batches — answers
+  `{removed, refused}`). `forget` is /admin's "Remove from the list": a `released` row nobody
   holds any more (freed at once, or past its hold) becomes `abandoned`, leaves the list and stays free to anyone, as
   it was. Any other row — live, pending, paused, blocked, or a release still inside its hold — is refused with a 409.
   A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is

@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import { avatarUrlOf } from '@beanpool/core';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -43,7 +44,7 @@ export interface AverageRatingResult {
 }
 
 export function getRatings(db: Db, targetPubkey: string): any[] {
-    const rows = db.prepare(`
+    const rows = prepared(db, `
         SELECT r.*, m.callsign as rater_callsign, m.avatar_ref as rater_avatar
         FROM ratings r
         LEFT JOIN members m ON r.rater_pubkey = m.public_key
@@ -66,7 +67,7 @@ export function getRatings(db: Db, targetPubkey: string): any[] {
 }
 
 export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
-    const rows = db.prepare(`
+    const rows = prepared(db, `
         SELECT r.id, r.target_pubkey, r.rater_pubkey, r.stars, r.comment, r.role, r.transaction_id, r.created_at,
                m.callsign as target_callsign, m.avatar_ref as target_avatar
         FROM ratings r
@@ -90,9 +91,9 @@ export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
 }
 
 export function getAverageRating(db: Db, targetPubkey: string): AverageRatingResult {
-    const all = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt, COUNT(DISTINCT rater_pubkey) as raters FROM ratings WHERE target_pubkey=?").get(targetPubkey) as any;
-    const prov = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='provider'").get(targetPubkey) as any;
-    const recv = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='receiver'").get(targetPubkey) as any;
+    const all = prepared(db, "SELECT AVG(stars) as avg, COUNT(*) as cnt, COUNT(DISTINCT rater_pubkey) as raters FROM ratings WHERE target_pubkey=?").get(targetPubkey) as any;
+    const prov = prepared(db, "SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='provider'").get(targetPubkey) as any;
+    const recv = prepared(db, "SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='receiver'").get(targetPubkey) as any;
 
     const round = (val: number) => Math.round((val || 0) * 10) / 10;
     return {
@@ -159,7 +160,7 @@ export function ratingsForReader(rows: any[], reader: string, targetPubkey: stri
 }
 
 export function getFriends(db: Db, pubkey: string): FriendEntry[] {
-    const rows = db.prepare(`
+    const rows = prepared(db, `
         SELECT f.friend_pubkey, m.callsign, f.added_at, m.avatar_ref
         FROM friends f 
         JOIN members m ON f.friend_pubkey = m.public_key 

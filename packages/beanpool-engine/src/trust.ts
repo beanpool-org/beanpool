@@ -822,7 +822,7 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
     const cached = cache.get(enterprisePubkey);
     if (cached) return cached;
 
-    const memberRow = db.prepare(
+    const memberRow = prepared(db,
         "SELECT COALESCE(credit_frozen, 0) as credit_frozen, legacy_credit_floor FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
 
@@ -830,7 +830,7 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 
     let derivedAllowance = 0;
     try {
-        const pledgeRow = db.prepare(`
+        const pledgeRow = prepared(db, `
             SELECT COALESCE(SUM(p.amount), 0) as total
             FROM enterprise_pledges p
             JOIN members m ON m.public_key = p.keeper

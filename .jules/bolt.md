@@ -266,3 +266,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-15 - O(1) User Group Lookups in Native Market Screen Filter Summary
 **Learning:** In `apps/native/app/(tabs)/market.tsx`, evaluating `filterSummary` invoked `groupName: id => userGroups.find(g => g.id === id)?.name`, resulting in linear $O(G)$ array scans on render cycles.
 **Action:** Pre-computed `userGroupsById` Map indexed by `g.id` via `React.useMemo` at component scope, converting group name resolution in active filter summaries to constant-time $O(1)$ retrievals.
+
+## 2026-10-18 - Statement Caching for Core Engine Queries
+**Learning:** In `@beanpool/engine` (`social.ts`, `trust.ts`, `escrow.ts`), `getRatings`, `getRatingsGiven`, `getAverageRating`, `getFriends`, `getEnterpriseFloor`, and `getMarketplaceTransaction` executed uncached `db.prepare(sql)` calls on every query execution. SQLite statement compilation overhead adds CPU latency when these core engine functions are called repeatedly across feed, profile, and rating reads.
+**Action:** Replaced direct `db.prepare(sql)` calls with `prepared(db, sql)` cached statement compilation across `social.ts`, `trust.ts`, and `escrow.ts`, reusing pre-compiled statements per database handle.

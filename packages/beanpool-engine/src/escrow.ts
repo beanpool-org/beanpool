@@ -4,6 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -42,7 +43,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 }
 
 export function getMarketplaceTransaction(db: Db, transactionId: string): MarketplaceTransaction | null {
-    const r = db.prepare(`
+    const r = prepared(db, `
         SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, p.author_pubkey as postAuthor,
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
@@ -59,7 +60,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
     // (the escrow broadcasts), and a reader's own list is getMarketplaceTransactions: so a listing taken off, or gone,
     // has no cover here, as the photo route answers its photo to neither party's app.
     const coverImageRow = r.postLive
-        ? db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any
+        ? prepared(db, `SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any
         : undefined;
     const coverImage = coverImageRow
         ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)

@@ -9,6 +9,8 @@ related: home, the-bean, your-12-words, joining, messages, reporting
 
 Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.
 
+Use one account on both. Joined in a browser? Put that same account on your phone: see "Putting your web account on a phone", below. Joined on your phone? Bring it to the browser: see "Using your phone account on a computer". Joining again makes a second account, and two accounts can never be joined into one.
+
 ## Joining global.beanpool.org in a browser
 
 The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app.

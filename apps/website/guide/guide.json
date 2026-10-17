@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 142,
-  "hash": "d46c15e79693c1495e4dd092a815b564510e9f4e2bf404068c4112512b5ba12b",
+  "version": 143,
+  "hash": "3075e68e7df47f30d78ab7088a2a5706a379862a45bca33d881e1dbd8bf7bc54",
   "sections": [
     {
       "id": "about",
@@ -1237,7 +1237,11 @@
         },
         {
           "type": "p",
-          "text": "With 12 words, your phone also does a moment of work to set up the account. It starts as soon as the two ways show, while you read and type your name, so most people never wait for it. If you tap **Join** before it is done, the app says **Setting up your account…** with a bar, and **← Back** still works. When a lot of people are joining from your network, the app says so, with how long it will take on your phone, and you can sign in instead to join at once. A sign-in join is asked for this work only on a very busy network, and the app does it by itself. **Choose another way** stops the waiting and takes you back to the two ways. If you sign in instead, the 12-words setting up stops to save your battery, and **Choose another way** starts it again."
+          "text": "**From the website, on a phone.** On beanpool.org/global, **Open in the BeanPool app** opens the app right at this way in: the two ways above on a phone with no account yet, or **Join the global community** with the account the phone already has (see \"Already have an account?\" below). If that account is already a member there, it opens the **BeanPool** sheet instead, where **Global community** under **Your communities** switches to it. If the global community closed that account, the app just opens. On Android, if the app isn't installed, Google Play opens; after installing, the first time you open BeanPool it goes straight to this way in. On an iPhone, the App Store opens; after installing, tap **Explore BeanPool worldwide**. The link only opens a screen: nobody joins until you tap. When it opens the **BeanPool** sheet, the sheet checks, as it always does, whether this phone's account is a member of each community it lists. An invite comes first: if you were sent one, the app opens the invite instead, and if you were halfway through joining, it carries on with that."
+        },
+        {
+          "type": "p",
+          "text": "With 12 words, your phone also does a moment of work to set up the account. It starts as soon as the two ways show (when the website's link opened them, as soon as you tap one), while you read and type your name, so most people never wait for it. If you tap **Join** before it is done, the app says **Setting up your account…** with a bar, and **← Back** still works. When a lot of people are joining from your network, the app says so, with how long it will take on your phone, and you can sign in instead to join at once. A sign-in join is asked for this work only on a very busy network, and the app does it by itself. **Choose another way** stops the waiting and takes you back to the two ways. If you sign in instead, the 12-words setting up stops to save your battery, and **Choose another way** starts it again."
         },
         {
           "type": "p",
@@ -2296,6 +2300,7 @@
           "items": [
             "**About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.",
             "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
+            "**No community yet:** join the global community and ask there: people from everywhere, and a way to find a community near you. On a phone, beanpool.org/global opens the BeanPool app right at its way in, or your app store first if you don't have the app. See \"Joining BeanPool\".",
             "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.",
             "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual: running your community** in the side bar.",
             "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds."
@@ -2522,7 +2527,7 @@
         },
         {
           "type": "p",
-          "text": "On a phone's browser, that card offers **Open in the BeanPool app** first. It opens the BeanPool app at the global community's way in, or your phone's app store if the app isn't installed yet, so your account is in the app from the start. Under it, **or join here in your browser** joins right here, as below. On a computer the card shows **Join**."
+          "text": "On a phone's browser, that card offers **Open in the BeanPool app** first. It opens the BeanPool app at the global community's way in, or your phone's app store if the app isn't installed yet, so your account is in the app from the start. If the app already has an account, it opens **Join the global community** with that one, or the **BeanPool** sheet if that account is already a member there. See \"Joining BeanPool\". Under it, **or join here in your browser** joins right here, as below. On a computer the card shows **Join**."
         },
         {
           "type": "p",
@@ -2701,7 +2706,7 @@
           "items": [
             "Install the BeanPool app and open it.",
             "Tap **Already a Member? Restore Account**, then **Recover with 12 Words**.",
-            "Choose **Global community** and type your 12 words. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.",
+            "Type your 12 words, then under **Which community?** tap **Global community**. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.",
             "If you joined with a sign-in, **Recover with Social** works too, with that same sign-in. See \"Getting your account back\"."
           ]
         },
@@ -7061,7 +7066,7 @@
           "type": "ul",
           "items": [
             "Type the 12 words in order, or tap **Paste**.",
-            "Type your community's name or address.",
+            "Under **Which community?**, tap **Global community**, or one of the communities this phone has had. For any other, tap **another address** and type your community's name or address.",
             "Tap **Recover Identity**. Your name and photo come back from your community."
           ]
         },

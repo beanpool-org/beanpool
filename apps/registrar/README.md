@@ -22,7 +22,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is
   logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
-  `GET …/servers` (the outside checks of our servers)
+  `GET …/servers` (the outside checks of our servers). The page's tables fit their card at every width: the
+  registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
+  browser at 320–1280 px (by hand: CI's test job has no browser)
 - **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
   `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
   anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)

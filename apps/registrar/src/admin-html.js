@@ -91,11 +91,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             .admin-table.stack, .admin-table.stack tbody, .admin-table.stack tr, .admin-table.stack td { display: block; width: 100%; }
             .admin-table.stack tr { border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 0.6rem 0; }
             .admin-table.stack td { border: none; padding: 0.2rem 0; }
+            /* A stacked cell: its label in a narrow column, its value (and the line under it) beside it. */
+            .admin-table.stack td[data-label] { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: baseline; }
             .admin-table.stack td[data-label]::before {
-                content: attr(data-label); display: inline-block; min-width: 5.5rem; color: var(--text-muted); font-family: var(--font-header);
+                content: attr(data-label); grid-column: 1; color: var(--text-muted); font-family: var(--font-header);
                 text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;
             }
-            .admin-table.stack td[data-label] .sub { margin-left: 5.5rem; }
+            .admin-table.stack td[data-label] > * { grid-column: 2; }
             .admin-table.stack .acts { justify-content: flex-start; padding-top: 0.35rem; }
         }
         @media (max-width: 480px) {

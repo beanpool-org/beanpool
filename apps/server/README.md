@@ -105,12 +105,12 @@ services:
       # - "4001:4001"
       # - "4002:4002"
     environment:
-      - PUBLIC_IP=${PUBLIC_IP}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - PUBLIC_IP=${PUBLIC_IP:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - BEANPOOL_DATA_DIR=/data
-      - CF_API_TOKEN=${CF_API_TOKEN}
-      - CF_ZONE_ID=${CF_ZONE_ID}
-      - CF_RECORD_NAME=${CF_RECORD_NAME}
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      - CF_RECORD_NAME=${CF_RECORD_NAME:-}
     volumes:
       - ./data:/data
     restart: unless-stopped

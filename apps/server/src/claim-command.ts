@@ -235,9 +235,11 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     if (!address && held && view.address?.status === 'live' && view.address.hostname) address = `https://${view.address.hostname}`;
     // A name that is not live yet (awaiting approval, or still asked for by the node): a later QR can carry it.
     let coming: string | null = !address && held ? held : null;
+    // Once per address: none at all (the phone then asks, and refuses a public http:// one), or one the phone refuses. An
+    // address it takes (http://192.168.…, https) is never warned about, however the command got to it.
     const warnedFor = new Set<string>();
     const warnPhones = (to: string | null) => {
-        if (warnedFor.has(to ?? '')) return;
+        if ((to && !shouldBlockCleartextNodeUrl(to)) || warnedFor.has(to ?? '')) return;
         warnedFor.add(to ?? '');
         io.out('');
         for (const line of phoneAddressWarning(to, coming)) io.out(line);
@@ -246,7 +248,7 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
         if (name === undefined && io.ask) {
             const typed = (await io.ask("Name for your community's address (<label>.beanpool.org), or Enter to skip: ")).toLowerCase();
             name = typed || undefined;
-            if (name === undefined) warnPhones(null);
+            if (name === undefined) warnPhones(direct);
         }
         while (name !== undefined) {
             if (!isAddressLabel(name)) {
@@ -267,7 +269,7 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
             }
             const again = (await io.ask("Another name (<label>.beanpool.org), or Enter to skip: ")).toLowerCase();
             name = again || undefined;
-            if (name === undefined) warnPhones(null);
+            if (name === undefined) warnPhones(direct);
         }
     }
     if (!address && !direct && io.ask) {
@@ -276,8 +278,8 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
         if (typed && !direct) io.err('That is not an http(s)://<ip>:<port> address; the phone will ask for it.');
     }
     address = address || direct;
-    // Before the QR: an address the phone refuses, or none at all (the phone then asks, and refuses a public http:// one).
-    if (!address || shouldBlockCleartextNodeUrl(address)) warnPhones(address);
+    // Before the QR.
+    warnPhones(address);
 
     const link = `beanpool://claim?${address ? `node=${encodeURIComponent(address)}&` : ''}id=${view.claim.id}&code=${view.claim.code}`;
     io.out('');

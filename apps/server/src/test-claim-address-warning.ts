@@ -10,7 +10,8 @@
  *   2. A home-network address, or an https one: no warning.
  *   3. The warning follows the phone's own rule (@beanpool/core shouldBlockCleartextNodeUrl) on a table of addresses.
  *   4. Enter at the name question, on a server with no https address: the warning at once, before the next question;
- *      once, not again before the QR; a public http:// address typed next still gets its own.
+ *      once, not again before the QR; a public http:// address typed next still gets its own. With --direct given, Enter
+ *      warns only where that address is refused, as --no-name does.
  *   5. --no-name with no address at all, off a terminal: the warning before the QR.
  *   6. A name that is not live yet: the way out is to run the claim again once it is, not to ask for another name.
  *
@@ -122,6 +123,24 @@ async function main(): Promise<void> {
         && typed.at(l => l === typed.warnings[1]) < typed.qr, 'a public http:// address typed next gets its own, before the QR');
     const lanTyped = await claim([], ['', 'http://192.168.1.20:8080']);
     check(lanTyped.warnings.length === 1, 'a home-network address typed next: only the one said at Enter');
+    // --direct already on the command line: Enter decides nothing about the address, so the outcome is --no-name's.
+    const lanDirect = await claim(['--direct', 'http://192.168.1.20:8080'], ['']);
+    check(lanDirect.code === 0 && lanDirect.warnings.length === 0 && lanDirect.text.includes('Address: http://192.168.1.20:8080\n'),
+        `--direct http://192.168.1.20:8080, Enter: none (${lanDirect.warnings.length})`);
+    const httpsDirectEnter = await claim(['--direct', 'https://203.0.113.7:8443'], ['']);
+    check(httpsDirectEnter.warnings.length === 0, `--direct https://203.0.113.7:8443, Enter: none (${httpsDirectEnter.warnings.length})`);
+    const pubDirect = await claim(['--direct', `${PUBLIC}:80`], ['']);
+    const pdw = pubDirect.at(l => l.startsWith('WARNING:'));
+    check(pubDirect.warnings.length === 1 && pubDirect.warnings[0].includes(`phones will not connect to ${PUBLIC}.`)
+        && pdw > pubDirect.at(l => l.startsWith('? Name for your community')) && pdw < pubDirect.qr,
+        `--direct ${PUBLIC}:80, Enter: the one warning, naming the address (${pubDirect.warnings.length})`);
+    // Enter at "Another name" (after a name that can't be one) is the same skip.
+    const lanAgain = await claim(['--direct', 'http://192.168.1.20:8080'], ['x', '']);
+    check(lanAgain.at(l => l.startsWith('? Another name')) >= 0 && lanAgain.warnings.length === 0,
+        `--direct http://192.168.1.20:8080, Enter at "Another name": none (${lanAgain.warnings.length})`);
+    const noneAgain = await claim([], ['x', '', '']);
+    check(noneAgain.warnings.length === 1 && noneAgain.at(l => l.startsWith('WARNING:')) < noneAgain.at(l => l.startsWith("? This server's direct address")),
+        `no --direct, Enter at "Another name": the warning at once (${noneAgain.warnings.length})`);
 
     console.log('\n5. --no-name with no address, off a terminal');
     const none = await claim(['--no-name']);

@@ -18,6 +18,7 @@ lookups/counts → O(1)" fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
+- 2026-10-18 #2114: engine one-shot queries stay `db.prepare`; `prepared()` is for per-row statements only (statements.ts). Measure first.
 
 ### 2026-10-16 — "Map for user groups in the native Market" (#2011) — merged in error; rule 11 stands (#1968). No more Map-for-find swaps without a profile.
 

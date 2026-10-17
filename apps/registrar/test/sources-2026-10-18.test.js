@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep, sourceAddress } from '../src/index.js';
 import { world, makeKey, attestsAs, nowS } from './harness.js';
+import { dailyLine } from '../src/watch.js';
 
 const KEY = 'a-test-source-key-not-a-real-one';
 const sourceWorld = (env = {}) => world({ env: { SOURCE_KEY: KEY, ...env } });
@@ -459,5 +460,22 @@ test('/admin: the New names card shows the switch, the groups and their one-clic
         const awaiting = p.els.pendingTableContainer.innerHTML;
         assert.match(awaiting, /held: many from one source · AS64500 Example Hosting \(NL\) · source [0-9a-f]{8}/);
         assert.ok(!awaiting.includes(FROM.bot.ip));
+    } finally { w.restore(); }
+});
+
+test('the daily line says while "Hold all new names" is on', async () => {
+    const w = await sourceWorld();
+    try {
+        const at = Math.floor(Date.UTC(2026, 9, 18, 22, 30) / 1000);   // 08:30 in Brisbane: the daily line's hour
+        w.setting('hold_new_names_until', at + 3600);
+        assert.equal(await dailyLine(w.env, [], at), true);
+        const line = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary'").get().body;
+        assert.match(line, /Hold all new names is on, until 2026-10-18 23:30 UTC: every new name waits for your approval\./);
+        // Off (or past its 24 h): not said.
+        w.setting('hold_new_names_until', 0);
+        w.sqlite.prepare('DELETE FROM watch_marks').run();
+        await dailyLine(w.env, [], at + 86400);
+        const next = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary' ORDER BY id DESC").get().body;
+        assert.doesNotMatch(next, /Hold all new names/);
     } finally { w.restore(); }
 });

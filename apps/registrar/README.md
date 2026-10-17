@@ -37,12 +37,17 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   A tunnel or record the row still records is deleted at Cloudflare first (or owed, `teardown`). Every action is
   logged in `name_events`. Alerts (below):
   `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
-  `GET …/servers` (the outside checks of our servers). The page's tables fit their card at every width: the
+  `GET …/servers` (the outside checks of our servers). New names (below, "New names: where they come from"):
+  `GET …/sources` · `POST …/sources {source, block?, run?, total?}` or `{asn}` (Reject all held / Block all) ·
+  `POST …/blocked {kind, value, days?, remove?}` · `POST …/settings {key, value}` or `{hold}`. Every pending row of
+  `/pending` also says `held_reason` (held for approval although its name is auto) and its `source` (network,
+  country, the source's keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the
   registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
   browser at 320–1280 px (by hand: CI's test job has no browser)
-- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
-  `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
-  anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
+- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only, and never one still on
+  probation (below). `?n=<name>` (or `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name
+  this registrar holds **live** and verified; anything else is the "not found" page, never a link to another host
+  (before 2026-10-01 any host was linked)
 - **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
   (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
@@ -53,8 +58,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   one tunnel share its visitors, and the owner's answer must not hide the other one. This holds only for a wrong key or a page: a second connector that answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, never opens a run, and is not detected (New tunnel key cuts it off). Phase 2 runs only if the sweep
   is believable: a configured `CANARY_NAME` attested `ok`, impostors and content swaps together ≤ max(2, 10% of
   live) and not every live name, unverifiable ≤ half of live. Otherwise it acts on no row and logs
-  `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: `ATTEST_FAIL_LIMIT` (2)
-  impostor verdicts, or `SWAP_FAIL_LIMIT` (12, about an hour; design D2 = b) sweeps of foreign answers (an
+  `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: impostor verdicts (the setting
+  `attest_fail_limit`), or sweeps of foreign answers (`swap_fail_limit`, design D2 = b) (an
   impostor or a content swap; a swap counts only in a sweep that saw the verifier work: the canary `ok`, or with
   no canary some name `ok`), **pause** the name, `pause_reason` `impostor` or `content-swap` (tunnel and DNS
   deleted, the name kept for its key, its node's heal resumes it). An `ok` (three, while a run is open) or any
@@ -66,14 +71,16 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   token reaches the node through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
   requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
   anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried, and stale request nonces
-  dropped. Then the alert conditions are updated. Last, a claim of an auto name whose provisioning never finished
+  dropped. A name on probation counts its ok sweeps in a row, and is verified on the one that ends it (below). Then the alert conditions are updated. Last, a claim of an auto name whose provisioning never finished
   (still `pending` over 2 minutes after its claim, its key not blocked by the admin) is finished, at most 3 a sweep and
   only while the sweep's D1 queries allow (below): nothing the registrar did not make may be in the way, then tunnel
   and record are made and the row goes `live` (event `healed`: finished by the sweep; the New community alert; the
   token reaches the node through `/status`). One the budget leaves (`[ORPHAN_WAIT]` in the log) waits for the next
-  sweep, its node's claim or heal, or the admin's "Finish now". The sweep sends its alerts once, at its end.
+  sweep, its node's claim or heal, or the admin's "Finish now"; a name held for approval is never one. Then, with a D1
+  query to spare, claim sources older than a day are deleted. The sweep sends its alerts once, at its end.
 - **The sweep counts its D1 queries:** D1 allows 50 an invocation on Workers Free and refuses every one past them. The
-  sweep spends about 11, and 2 a live name, before its orphans; each orphan is finished only while up to 15 more and
+  sweep spends about 11 (its settings read among them; with the settings table there, the nonce table is not asked
+  for), and 2 a live name, before its orphans — a few more in a sweep that verifies a name (its one alert); each orphan is finished only while up to 15 more and
   the sweep's send (up to 16 with `NTFY_URL` set, none without) are left, and a send still running beside it (a
   pause's alert) is kept 16 too. Measured: with alerts on, one orphan a sweep up to 4 live names and none from 5;
   without, 3 up to 2, 2 up to 6, 1 up to 12. From about 18 live names with alerts on, the sweep's own send no
@@ -193,18 +200,71 @@ look and its last day. These reproduce the Mac vault watcher (`apps/vault/src/cu
 after a week of the two agreeing (design §2.5, Marty 2026-10-10). With `WATCH_TARGETS` unset nothing is watched and no
 daily line is sent, so nothing the digest holds is sent either: `/admin` says so beside the digest toggles.
 
+## New names: where they come from, held rather than refused, probation (slice S3)
+
+Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §4, decided by Marty on 2026-10-18 (D6 = hold, never
+refuse; "open code, private settings"; the DNS cap). Migration 0011.
+
+- **Where a claim comes from.** Each claim of a new name (a new tenure, auto or gated, held or not; never a heal, a
+  status or a key's own name) is recorded in `claim_sources` for 24 hours: its source — the connecting address as
+  Cloudflare's edge gives it (`CF-Connecting-IP`), kept only as HMAC-SHA-256 under the Worker secret `SOURCE_KEY`, an
+  IPv6 address by its /64 — its network (`request.cf.asn`, `asOrganization`) and its country. The address itself is
+  never stored, logged, shown or sent; without `SOURCE_KEY` nothing of it is kept (an unkeyed hash of an IPv4 address
+  is a lookup away from it) and no per-source budget applies. Rows older than a day are deleted by the sweep (with a
+  query it has to spare) and by every new claim.
+- **Held, never refused.** A new auto name is held for the admin's approval — `pending`, `held_reason` set, nothing
+  made at Cloudflare, its node told `awaiting-approval` as for a gated claim — when its source passed its hourly or
+  daily budget (`source`), when the new-name budget across all keys is spent (`budget`), while "Hold all new names" is
+  on (`hold-all`), or when the names live and pending reached the zone's hold line (`near-full`). The admin's phone
+  hears of it once an hour per reason, in counts and the network's name, never an address or a name. A network past its
+  daily count is told once a day and nothing is held for that alone (a hosting network carries many honest nodes). The
+  sweep never finishes a held name. Approve makes it live (decided by the admin, outside the auto budget).
+- **Blocked sources.** "Block all" on a source's group in /admin rejects its held names (free again), blocks its live
+  and paused ones (as Block does, one event each) and puts the source on `blocked_sources` for 7 days: its next claim of
+  a new name is refused **403** before anything is written. A network (ASN) can be blocked by hand, honest nodes on it
+  included; any block can be lifted. "Reject all held" frees a group's held names and blocks nothing. Both run in
+  batches of 3 names a request (measured: at most 37 of D1's 50 queries, alerts on and Cloudflare refusing every
+  delete), the page asking again until the Worker says no more; the phone hears of the click once.
+- **"Hold all new names".** One switch on /admin (the `settings` row `hold_new_names_until`): every new name waits for
+  approval for 24 hours, then it lets go by itself unless pressed again. Names already held are untouched. Pressing it
+  is told; the daily line says while it is on.
+- **The DNS cap.** The zone's record cap (`capacity`; Cloudflare's Free plan gives a zone made after 1 Sep 2024 200
+  records, our own hand records included) has two lines: past the alert line the admin is told once a day ("Names near
+  the DNS cap"), past the hold line every new auto name is held — the last places are the admin's to give. Both lines
+  follow the capacity unless set (60% and 80% of it).
+- **Probation.** A new tenure (another key's claim; a key's own release taken back keeps what it had) is live but on
+  probation (`verified_at` NULL) until it has attested `ok` in enough sweeps in a row and been live long enough. Until
+  then the switchboard answers "not found" for it, its node is told `probation: true` by `/status` (and the claim and
+  heal answers) and its directory listing waits, and the "New community" alert waits: it is sent at verification —
+  one message for every name a sweep verifies — never at the claim, so a bot's burst never rings the phone once a
+  name. Any answer but its own node's in an applied sweep starts the count again; a suspended sweep neither counts nor
+  ends it. Every name that existed before migration 0011 was set verified by it.
+- **The live numbers are private.** The code is public; so are its safe defaults (`src/settings.js`). The numbers a
+  registrar runs with are rows in the D1 `settings` table, edited in /admin ("New names, last 24 h" → Limits): the
+  per-source, per-network and global budgets of new names, names per key, probation, the sweep's strikes and the DNS
+  capacity and its two lines. Each is read once a request that needs it: a valid D1 row, else the Worker var a
+  self-hoster may set (`CLAIM_LIMIT_PER_KEY`, `NEW_NAMES_PER_HOUR`, `NEW_NAMES_PER_DAY`, `ATTEST_FAIL_LIMIT`,
+  `SWAP_FAIL_LIMIT`, `CAPACITY`), else the default. Every change is told to the admin's phone, with its value. This
+  README and `wrangler.toml` say what each limit is for, never the live number.
+- **A node never needs any of this** (no lock-in): a name is a convenience; a node keeps serving on its own address
+  whatever the registrar holds or decides.
+- **Deploy:** migration 0011 before the Worker (the deploy workflow applies `migrations/` first; an older Worker
+  ignores all of it, and this one without it records and holds nothing: past the budget it refuses with a 429, as
+  before). Set `SOURCE_KEY` first (`wrangler secret put SOURCE_KEY`, 32 random bytes, hex). By hand, as a burst brake
+  only: Cloudflare's one Free rate-limit rule on `/api/registrar/claim` (design §7).
+
 ## Limits on what a key may do (the 2026-10-01 review)
 
-- **Names per key:** one node key holds at most `CLAIM_LIMIT_PER_KEY` names (`wrangler.toml`, default 3; a value
-  that isn't a whole number ≥ 1 means 3). Counted: every name held under the key — live, pending, paused, blocked —
+- **Names per key:** one node key holds at most so many names (the setting `claim_limit_per_key`, a whole number ≥ 1;
+  a self-hoster may set `CLAIM_LIMIT_PER_KEY` instead). Counted: every name held under the key — live, pending, paused, blocked —
   and its own releases (the owner's, or the admin's default one) still inside their hold. Not counted: a release that
   freed the name at once, one past its hold, and the admin's release of a name it took from the key (held from that
   key too). A claim of a **new** name past the limit gets `403 { error, limit, held }` and writes nothing; a name the
   key already holds is healed and taken back whatever the count, so a key over the limit when it was set or lowered
-  keeps everything it has. Three, because a node uses one name and a rename leaves the old one held for it 30 days:
-  two renames in a month fit, and one key can hold at most three Cloudflare tunnels (the account has ~1,000). Keys
-  are free to make, so this stops one script with one key, not many keys: a per-IP budget (a Cloudflare rate-limit
-  rule on `POST /api/registrar/claim`) is the next step and is not built. Two claims by one key that race past the
+  keeps everything it has. A node uses one name and a rename leaves the old one held for it 30 days, so the limit
+  allows a rename or two in a month while keeping one key to a few Cloudflare tunnels (the account has ~1,000). Keys
+  are free to make, so this stops one script with one key, not many keys: the per-source budgets (above) are for
+  those. Two claims by one key that race past the
   count are both counted again once written, and the one over the limit gives its name back before it reaches
   Cloudflare.
 - **Fields:** `community_name` (or `communityName`) at most 120 characters, `contact` at most 254, both text in any
@@ -557,13 +617,16 @@ its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix 
 `FUZZ_CASE='…'` replays one case and prints its trace. `test/review-2026-10-01.test.js` covers the 2026-10-01 review's
 fixes: the switchboard's `?n=`, the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
 v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder. `test/m3-2026-10-02.test.js`
-covers its M3: a content swap paused after 12 applied sweeps in a row and not before, what ends a run and what a
+covers its M3: a content swap paused after its limit of applied sweeps in a row and not before, what ends a run and what a
 suspended sweep leaves alone, the mass breaker counting swaps, two connectors on one tunnel (another key, or a page,
 every other answer), a direct name's address passed to a stranger, and rotate (its refusals, Cloudflare refusing or
 failing it, and the admin's pause landing during it). `test/alerts.test.js` covers the control room's alerts against
 a fake ntfy and a stepped clock: the headers, the words (never the contact), raised / still at 24 h / cleared, a 503
 retried in one message, the hourly cap, no channel set, the category toggles, `/admin#<name>`, and no secret in any
-log line.
+log line. `test/sources-2026-10-18.test.js` covers S3: a source past its limit held (never refused) and approved, Block
+all and Reject all held, a network blocked by hand, probation (the switchboard, `/status`, the alert at verification,
+a burst told once), the hold switch, the DNS cap's alert and hold, the settings beating the env and the defaults, no
+address stored anywhere, and one Block all request inside D1's budget.
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

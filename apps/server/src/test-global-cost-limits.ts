@@ -23,7 +23,8 @@
  *  4. Crash-safe, bounded, main server only, the operator's. A listing whose transaction fails keeps everything and the
  *     rest go; the next run takes it. A batch of 1 says more are due. A standby archives nothing. LISTING_ARCHIVE_DAYS=120
  *     keeps a 100-day listing and takes a 130-day one; 7 is out of range and keeps 90. The override retention = false on
- *     global archives nothing.
+ *     global archives nothing. docker-compose.yml passes the four settings from a node's .env (it passes only what it
+ *     names), empty by default.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-global-cost-limits.ts
  */
@@ -373,6 +374,12 @@ async function main() {
     setSwitchOverride('retention', true);
     assert(se.archiveStaleListings().archived === 1 && isArchived(hundred), 'back on, it does');
     delete process.env.NODE_PROFILE;
+
+    // The settings reach a docker node: docker-compose.yml passes only the variables it names from the node's .env.
+    const compose = fs.readFileSync(new URL('../../../docker-compose.yml', import.meta.url), 'utf8');
+    const settings = ['LISTING_ARCHIVE_DAYS', 'PLACE_WATCHES_MAX', 'NEARBY_LISTINGS_MAX', 'NEARBY_LISTINGS_RADIUS_KM'];
+    const missing = settings.filter(k => !new RegExp(`^\\s*- ${k}=\\$\\{${k}:-\\}\\s*$`, 'm').test(compose));
+    assert(missing.length === 0, `docker-compose.yml passes the four settings from the node's .env, empty by default (missing: ${missing.join(', ') || 'none'})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

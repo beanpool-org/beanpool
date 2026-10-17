@@ -13,7 +13,7 @@ import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
 import { noAreaLineHere } from '../../utils/nearby-area';
 import { NoAreaLine } from '../../components/NoAreaLine';
 import { GLOBAL_NODE_URL, pollsInformal, showcaseMode } from '../../utils/node-profile';
-import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
+import { requestSync, isPillarSyncActive, syncLandedOnThisCopy, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
@@ -786,9 +786,23 @@ export default function MarketScreen() {
     }, []);
     useEffect(() => {
         armSyncWait();
-        // The boot sync may have ended before this screen was listening, its pillar_sync_done missed with nothing in the
-        // copy to show: one sync of the Market's own, unless one is queued or running already.
-        if (!firstSyncDoneRef.current && !isPillarSyncActive()) requestSync();
+        // The boot sync may have ended before this screen was listening, its pillar_sync_done missed. Landed on this copy:
+        // what it wrote is read, as pillar_sync_done would have, and nothing more is asked of the node (the healthy start,
+        // which the phone's data pays for). Otherwise one sync of the Market's own, unless one is queued or running already.
+        let live = true;
+        syncLandedOnThisCopy().then((landed) => {
+            if (!live || firstSyncDoneRef.current) return;
+            if (!landed) {
+                if (!isPillarSyncActive()) requestSync();
+                return;
+            }
+            loadPosts().then((ok) => {
+                if (ok && live) {
+                    setSyncTimedOut(false);
+                    setFirstSyncDone(true);
+                }
+            });
+        });
         const endedSub = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, (e?: { success?: boolean }) => {
             if (e?.success || firstSyncDoneRef.current) return;
             if (!syncWaitRetriedRef.current) {
@@ -799,6 +813,7 @@ export default function MarketScreen() {
             }
         });
         return () => {
+            live = false;
             endedSub.remove();
             if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
         };

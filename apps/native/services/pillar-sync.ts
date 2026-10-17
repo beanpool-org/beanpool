@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, t, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyForRead, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
@@ -434,6 +434,25 @@ export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMes
  */
 export function isPillarSyncActive(): boolean {
     return isSyncing || syncPromise !== null || debounceTimeoutId !== null || trailingTimeoutId !== null;
+}
+
+// The copy the last cycle that landed (pillar_sync_done) wrote: its node's file and the copy generation (copyForRead).
+let landedCopy: { dbName: string; generation: number } | null = null;
+
+/**
+ * Whether a sync cycle has landed on the copy this phone holds now: not one cleared since (copyGeneration), nor another
+ * community's. The Market asks as it mounts. The boot sync can end before it listens, and once it landed the Market reads
+ * what it wrote, instead of asking the node for a whole sync more over the phone's data each time it mounts (review of PR
+ * #2127). In memory: false at each start, until a cycle lands.
+ */
+export async function syncLandedOnThisCopy(): Promise<boolean> {
+    if (!landedCopy) return false;
+    try {
+        const now = await copyForRead();
+        return now.dbName === landedCopy.dbName && now.generation === landedCopy.generation;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -1442,6 +1461,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             const { DeviceEventEmitter } = require('react-native');
             DeviceEventEmitter.emit('pillar_sync_done');
         } catch (e) {}
+        // Not when its posts went unwritten (the member switched community) or the copy was cleared under it.
+        if (!postsUnwritten && sameCopy()) landedCopy = { dbName: expectedDbName, generation: copyGen };
 
         result.success = true;
         result.deltaCount = (delta.posts?.length || 0) + (delta.accounts?.length || 0);

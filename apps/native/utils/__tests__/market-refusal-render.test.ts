@@ -22,7 +22,8 @@ import { createRoot, type Root } from 'react-dom/client';
  * isPillarSyncActive is true from a request until its cycle ends, through that cooldown too (the
  * pillar-sync-trailing-active.test.ts measure of the real engine). Each cycle takes the next of `queued` and ends after its
  * `ms` with pillar_sync_done when it landed, then PILLAR_SYNC_ENDED; with none queued it runs nothing, and nothing
- * reports back. `requests` counts the Market's requests, never the engine's own trailing one.
+ * reports back. `requests` counts the Market's requests, never the engine's own trailing one. `landed`: a cycle landed on
+ * this copy before the Market mounted (syncLandedOnThisCopy).
  */
 const sync = vi.hoisted(() => {
     const listeners = new Map<string, Set<(e?: unknown) => void>>();
@@ -46,6 +47,7 @@ const sync = vi.hoisted(() => {
     };
     const state = {
         requests: 0,
+        landed: false,
         queued: [] as Cycle[],
         listeners,
         emit,
@@ -55,6 +57,7 @@ const sync = vi.hoisted(() => {
             holding = again = false;
             debounce = cooldown = null;
             state.requests = 0;
+            state.landed = false;
             state.queued = [];
         },
         request() { state.requests++; queue(); },
@@ -142,6 +145,7 @@ vi.mock('expo-location', () => ({
 vi.mock('../../services/pillar-sync', () => ({
     requestSync: async () => { sync.request(); },
     isPillarSyncActive: () => sync.active,
+    syncLandedOnThisCopy: async () => sync.landed,
     PILLAR_SYNC_ENDED: 'pillar_sync_ended',
 }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -312,7 +316,8 @@ describe('a first sync that fails', () => {
         expect(sync.requests).toBe(1);
     });
 
-    it('the boot sync ended before the Market listened: it asks for one of its own, and one more once that fails', async () => {
+    // No sync has landed on this copy yet (the boot sync failed before the Market listened, or never ran) and none runs.
+    it('nothing landed on this copy and nothing runs as the Market mounts: it asks for one of its own, and one more once that fails', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         sync.queued = [{ success: false, ms: 20_000 }];
         await render();
@@ -328,6 +333,19 @@ describe('a first sync that fails', () => {
         expect(text()).not.toContain(TROUBLE);
         await pass(3_150);
         expect(shown('market-feed')).toBe(true);
+    });
+
+    // The healthy start: the boot sync landed before the Market listened, its pillar_sync_done missed. The Market asked for a
+    // whole sync more over the phone's data each time it mounted (review of PR #2127).
+    it('the boot sync landed on this copy before the Market listened: the market, and no sync of its own', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        sync.landed = true;
+        await render();
+        expect(sync.requests).toBe(0);
+        expect(shown('market-feed')).toBe(true);
+        await pass(30_000);
+        expect(sync.requests).toBe(0);
+        expect(text()).not.toContain(TROUBLE);
     });
 
     it('Retry starts a new wait with its own second try', async () => {

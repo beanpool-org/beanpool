@@ -10,6 +10,8 @@
  *   4. A member signs in and reads as usual; recovery by a sign-in still reaches its routes.
  *   5. A visitor (unsigned, or signed by a non-member key) is refused every read but the listed open routes, and its
  *      /ws upgrade is refused 403; a member's socket opens.
+ *   5b. The membership probe: a key may ask whether it is a member (self-signed 200; member true, stranger false);
+ *      unsigned 401; another key 403 not_your_key; a closed account's key 403 account_closed.
  *   6. With the setting off again, the same node answers as before: no privatePreview in the info, the door's own
  *      answer to a join, the guest view to a visitor.
  */
@@ -301,6 +303,43 @@ async function main() {
     assert(wsStranger === 403, `visitor /ws, signed by a non-member: refused 403 (got ${wsStranger})`);
     const wsMember = await trySocket(`${WS_BASE}/ws?${signedWsQuery(damo)}`);
     assert(wsMember === 'open', `a member's /ws opens (got ${wsMember})`);
+
+    // ── 5b. the membership probe: a key may ask whether it is a member (S1) ──
+    // (a) a non-member's self-signed probe answers 200 isMember: false
+    const probeStranger = await call('GET', stranger, `/api/community/membership/${stranger.pk}`);
+    assert(probeStranger.status === 200 && probeStranger.body?.isMember === false,
+        `a non-member's self-signed probe: 200 isMember: false (${show(probeStranger)})`);
+
+    // (b) a member's self-signed probe answers isMember: true
+    const probeMember = await call('GET', damo, `/api/community/membership/${damo.pk}`);
+    assert(probeMember.status === 200 && probeMember.body?.isMember === true && probeMember.body?.callsign === 'Damo',
+        `a member's self-signed probe: 200 isMember: true (${show(probeMember)})`);
+
+    // (c) a probe signed by key A about key B is 403 not_your_key
+    const probeOther = await call('GET', damo, `/api/community/membership/${stranger.pk}`);
+    assert(probeOther.status === 403 && probeOther.body?.code === 'not_your_key',
+        `probe signed by key A about key B: 403 not_your_key (${show(probeOther)})`);
+    const probeStrangerOther = await call('GET', stranger, `/api/community/membership/${damo.pk}`);
+    assert(probeStrangerOther.status === 403 && probeStrangerOther.body?.code === 'not_your_key',
+        `probe signed by stranger about member: 403 not_your_key (${show(probeStrangerOther)})`);
+
+    // (d) an unsigned probe is 401 (not 200, and no body naming membership)
+    const probeUnsigned = await call('GET', null, `/api/community/membership/${damo.pk}`);
+    assert(probeUnsigned.status === 401 && probeUnsigned.body?.code === 'signature_required' && !('isMember' in (probeUnsigned.body ?? {})),
+        `unsigned probe: 401 signature_required, no membership body (${show(probeUnsigned)})`);
+    const probeUnsignedStranger = await call('GET', null, `/api/community/membership/${stranger.pk}`);
+    assert(probeUnsignedStranger.status === 401 && probeUnsignedStranger.body?.code === 'signature_required' && !('isMember' in (probeUnsignedStranger.body ?? {})),
+        `unsigned probe for stranger: 401 signature_required, no membership body (${show(probeUnsignedStranger)})`);
+
+    // Closed account: a closed key (status pruned) probing itself in a preview gets 403 account_closed from signature middleware, not private_preview
+    const closed = newId();
+    const closedInvite = await call('POST', marty, '/api/invite/generate', { publicKey: marty.pk });
+    const closedIn = await redeem(closed, closedInvite.body?.invite?.code, 'Closed');
+    assert(closedIn.status === 200 && closedIn.body?.success === true, 'closed user joins before pruning');
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(closed.pk);
+    const probeClosed = await call('GET', closed, `/api/community/membership/${closed.pk}`);
+    assert(probeClosed.status === 403 && probeClosed.body?.code === 'account_closed',
+        `a closed account's key probing itself in preview: 403 account_closed, not private_preview (${show(probeClosed)})`);
 
     // ── 6. the setting off: as before ──
     process.env.PRIVATE_PREVIEW = '';

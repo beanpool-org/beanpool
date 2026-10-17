@@ -599,6 +599,16 @@ async function main(): Promise<void> {
             });
             check('crowdfund-update-over-budget-status', p4.status === 429, `POST /api/crowdfund/projects/update over budget → 429 (got ${p4.status})`);
             check('crowdfund-update-over-budget-sentence', errorOf(p4) === BUDGET_SENTENCE, `POST /api/crowdfund/projects/update refusal has budget sentence`);
+
+            // 8.4-2 Crowdfund with self URL first + photo crossing budget (N2 / M11)
+            const cfMember3 = member('BudCrowdMulti');
+            const p5 = await req('POST', '/api/crowdfund/projects', cfMember3, {
+                title: 'Multi Photo Project',
+                description: 'Several photos in project',
+                goalAmount: 200,
+                photos: [`/api/avatar/${cfMember3.pk}`, hugeImg],
+            });
+            check('crowdfund-multi-photos-over-budget', p5.status === 429, `POST /api/crowdfund/projects with self URL first + photo crossing budget → 429 (got ${p5.status})`);
         }
     }
 

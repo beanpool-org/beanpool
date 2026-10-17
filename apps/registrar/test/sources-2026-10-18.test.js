@@ -4,6 +4,7 @@
 // Every test here fails on origin/main (7f4e9b08 and after, before migration 0011).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import worker, { attestSweep, sourceAddress } from '../src/index.js';
 import { world, makeKey, attestsAs, nowS } from './harness.js';
 
@@ -388,4 +389,75 @@ test('one Block all request stays inside D1\'s 50 queries, with alerts on and Cl
         assert.ok(most <= 45, `a Block all request ran ${most} D1 queries`);
         for (let i = 0; i < 6; i++) assert.ok(['blocked', 'released'].includes(row(w, `q-${i}`).status), `q-${i}: ${row(w, `q-${i}`).status}`);
     } finally { globalThis.fetch = inner; w.restore(); }
+});
+
+// The served page against a stub document: what the New names card draws, and what its buttons send.
+async function adminPage(w, answers = {}) {
+    const html = await (await worker.fetch(new Request('https://beanpool.org/admin'), w.env)).text();
+    const script = html.split('<script>')[1].split('</script>')[0];
+    const els = {};
+    const sent = [];
+    const confirms = [];
+    const clicks = [];
+    const el = (id) => (els[id] ??= { id, innerHTML: '', value: '', textContent: '', style: {}, addEventListener() {}, querySelector: () => null });
+    const ctx = {
+        console,
+        document: { getElementById: el, addEventListener: (type, fn) => { if (type === 'click') clicks.push(fn); }, querySelector: () => null },
+        sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+        confirm: (text) => { confirms.push(text); return true; },
+        alert() {},
+        fetch: async (url, init = {}) => {
+            sent.push({ url, init });
+            const body = (answers[url] || (() => ({ allocations: [], events: [] })))(init);
+            return { ok: true, status: 200, json: async () => body };
+        },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(script, ctx);
+    const click = async (attrs) => {
+        const target = { closest: (sel) => { const m = /^\[([a-z-]+)\]$/.exec(sel); return m && attrs[m[1]] !== undefined ? { getAttribute: (k) => attrs[k] ?? null } : null; } };
+        for (const fn of clicks) await fn({ target });
+        for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    };
+    return { html, ctx, els, sent, confirms, click };
+}
+
+test('/admin: the New names card shows the switch, the groups and their one-click actions; held names say why and from where', async () => {
+    const w = await sourceWorld();
+    try {
+        for (let i = 0; i < 5; i++) await claimFrom(w, FROM.bot, await makeKey(), { name: `pg-${i}` });
+        const panel = (await admin(w, 'sources')).body;
+        let rounds = 0;
+        const p = await adminPage(w, { '/api/local/admin/registrar/sources': (init) => (init.method === 'POST'
+            ? { rejected: ['pg-3'], blocked: ['pg-0'], refused: [], more: ++rounds < 2 } : panel) });
+        assert.match(p.html, /🧭 New names, last 24 h</);
+        p.ctx.renderSources(panel);
+        const card = p.els.sourcesContainer.innerHTML;
+        assert.match(card, /data-hold="1"[^>]*>⏸️ Hold all new names \(24 h\)</);
+        assert.match(card, /AS64500 Example Hosting \(NL\)/);
+        assert.match(card, /data-source-act="reject" data-source="[0-9a-f]{64}" data-total="2"[^>]*>Reject all held \(2\)</);
+        assert.match(card, /data-source-act="block" data-source="[0-9a-f]{64}" data-total="5"[^>]*>Block all \(5\)</);
+        assert.match(card, /pg-3 \(held\)/);
+        assert.match(card, /pg-0 \(probation\)/);
+        assert.match(card, /Names live or pending: <b>5<\/b> of the zone&#39;s 200 DNS records/);
+        assert.match(card, /data-setting-save="source_per_hour"/);
+        assert.ok(!card.includes(FROM.bot.ip), 'no address on the page');
+        // Block all: confirmed, then the Worker's batches until it says no more, with one run id for the click.
+        await p.click({ 'data-source-act': 'block', 'data-source': panel.groups[0].source, 'data-total': '5' });
+        assert.match(p.confirms.at(-1), /^⛔ BLOCK ALL from this source \(5 names\)\?/);
+        const posts = p.sent.filter((x) => x.url === '/api/local/admin/registrar/sources' && x.init.method === 'POST').map((x) => JSON.parse(x.init.body));
+        assert.equal(posts.length, 2, 'asked again while more');
+        assert.deepEqual(posts.map((b) => [b.source, b.block, b.total]), [[panel.groups[0].source, true, 5], [panel.groups[0].source, true, 5]]);
+        assert.equal(posts[0].run, posts[1].run);
+        // The switch.
+        await p.click({ 'data-hold': '1' });
+        assert.deepEqual(JSON.parse(p.sent.at(-1).init.body), { hold: true });
+        assert.equal(p.sent.at(-1).url, '/api/local/admin/registrar/settings');
+        // A held name in the Awaiting card: why it waits and where it came from, never its address.
+        const pending = (await admin(w, 'pending')).body.allocations.filter((a) => a.status === 'pending');
+        p.ctx.renderPending(pending);
+        const awaiting = p.els.pendingTableContainer.innerHTML;
+        assert.match(awaiting, /held: many from one source · AS64500 Example Hosting \(NL\) · source [0-9a-f]{8}/);
+        assert.ok(!awaiting.includes(FROM.bot.ip));
+    } finally { w.restore(); }
 });

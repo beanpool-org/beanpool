@@ -70,6 +70,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         .admin-table th.act { text-align: right; }
         .w-name { width: 25%; } .w-comm { width: 22%; } .w-key { width: 12%; } .w-state { width: 17%; } .w-act { width: 24%; }
         .w-when { width: 20%; } .w-ev-name { width: 15%; } .w-event { width: 15%; } .w-detail { width: 50%; }
+        .w-src { width: 26%; } .w-net { width: 20%; } .w-cnt { width: 20%; } .w-seen { width: 14%; } .w-sact { width: 20%; }
+        .w-setting { width: 45%; } .w-now { width: 20%; } .w-change { width: 35%; }
         .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; align-items: center; }
         .acts > * { white-space: nowrap; }
         .acts label { font-size: 0.75rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem; }
@@ -173,7 +175,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #fbbf24;">⏳ Awaiting your approval</h2>
                 <button id="refreshBtn" class="btn" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">🔄 Refresh</button>
             </div>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Claims of names held back for approval (big cities). Nothing is made at Cloudflare until you approve one.</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Claims of names held back for approval (big cities), and new names held over a limit (many from one source, the new-name budget, Hold all new names, the DNS zone near full: each says which, and where it came from). Nothing is made at Cloudflare until you approve one.</p>
             <div id="pendingTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p></div>
         </div>
 
@@ -181,6 +183,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #38bdf8; margin-bottom: 0.5rem;">⚙️ Setting up</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">New names that need nobody's approval, whose making at Cloudflare has not finished yet (Cloudflare was slow or failed, or the claim was cut off). Their node asks again, and the sweep finishes any older than two minutes, a few each time. Finish now makes it at once; Reject frees the name.</p>
             <div id="setupTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f472b6; margin-bottom: 0.5rem;">🧭 New names, last 24 h</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Where each new name came from: its source (one connecting address, kept only as a keyed hash, never the address) and its network. No limit refuses a claim: past one, a new name waits above for your approval. Approve the real ones; Reject all held frees a group's held names; Block all also blocks its live ones and refuses that source's new claims for 7 days. Kept 24 hours.</p>
+            <div id="sourcesContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading new names...</p></div>
         </div>
 
         <div class="admin-card">
@@ -231,7 +239,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
 
         function notSignedIn(why) {
-            ['pendingTableContainer', 'setupTableContainer', 'activeTableContainer', 'alertsContainer', 'serversContainer'].forEach(function(id) {
+            ['pendingTableContainer', 'setupTableContainer', 'sourcesContainer', 'activeTableContainer', 'alertsContainer', 'serversContainer'].forEach(function(id) {
                 document.getElementById(id).innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">' + esc(why) + '</p>';
             });
         }
@@ -344,6 +352,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 renderPending(pending);
                 renderActive(active);
                 showFragment();
+                loadSources();
                 loadEvents();
                 loadAlerts();
                 loadServers();
@@ -358,7 +367,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         // Pending rows, in two lists by the Worker's word (awaiting_approval): a gated claim waits for you; an auto name
         // whose making did not finish waits for nobody ("Setting up"). A row that doesn't say is shown as awaiting you.
         function renderPending(pending) {
-            renderClaims('pendingTableContainer', pending.filter(function(a) { return a.awaiting_approval !== false; }),
+            // Held names from one source side by side: what "New names, last 24 h" below can reject or block in one click.
+            const bySource = function(a, b) {
+                const x = (a.source && a.source.id) || '', y = (b.source && b.source.id) || '';
+                return x === y ? 0 : x < y ? -1 : 1;
+            };
+            renderClaims('pendingTableContainer', pending.filter(function(a) { return a.awaiting_approval !== false; }).sort(bySource),
                 'No name claims awaiting your approval.', '#fbbf24', ['approve', 'Approve']);
             renderClaims('setupTableContainer', pending.filter(function(a) { return a.awaiting_approval === false; }),
                 'No names being set up.', '#38bdf8', ['finish', 'Finish now']);
@@ -377,7 +391,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
                 html += '<tr id="row-' + esc(claim.name) + '">' +
                     nameCell(claim, colour) + communityCell(claim) + keyCell(claim) +
-                    '<td data-label="Requested" class="mono" style="font-size: 0.75rem;">' + date + '</td>' +
+                    '<td data-label="Requested" class="mono" style="font-size: 0.75rem;">' + date + heldLine(claim) + '</td>' +
                     '<td><div class="acts">' +
                         '<button data-name="' + esc(claim.name) + '" data-action="' + act[0] + '" class="btn-approve">' + act[1] + '</button>' +
                         '<button data-name="' + esc(claim.name) + '" data-action="release" data-free-now="1" class="btn-revoke" title="Rejects the claim; the name is free again">Reject</button>' +
@@ -391,6 +405,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         // The head and cells every names table shares (pending, held, released): state names its fourth column. The
         // domain may break before ".beanpool.org"; a key is shown short, in full on hover.
+        // Why a held name waits, and where it came from (its network; its source shown short, never an address).
+        function heldLine(a) {
+            const src = a.source || null;
+            const from = src ? (src.asn ? 'AS' + esc(src.asn) + (src.as_org ? ' ' + esc(src.as_org) : '') + (src.country ? ' (' + esc(src.country) + ')' : '') : '') + (src.id ? ' · source ' + esc(String(src.id).slice(0, 8)) : '') : '';
+            if (!a.held_reason && !from) return '';
+            return '<span class="sub">' + (a.held_reason ? 'held: ' + esc(HELD_WORDS[a.held_reason] || a.held_reason) : '') + (a.held_reason && from ? ' · ' : '') + from + '</span>';
+        }
+
         function namesHead(state) {
             return '<table class="admin-table stack"><thead><tr><th class="w-name">Name</th><th class="w-comm">Community / Operator</th>' +
                 '<th class="w-key">Key</th><th class="w-state">' + state + '</th><th class="w-act act">Action</th></tr></thead><tbody>';
@@ -472,7 +494,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 html += '<tr id="row-' + esc(alloc.name) + '">' +
                     nameCell(alloc, look[1]) + communityCell(alloc) + keyCell(alloc) +
                     '<td data-label="Status"><span class="mono" style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' +
-                        (since ? '<span class="sub">since ' + when(since) + '</span>' : '') + '</td>' +
+                        (since ? '<span class="sub">since ' + when(since) + '</span>' : '') +
+                        (alloc.probation ? '<span class="sub">on probation: not yet on the switchboard or the directory</span>' : '') + '</td>' +
                     '<td><div class="acts">' + acts.map(function(a) {
                         const button = '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '"' + (a[0] === 'release' && fromAll ? ' data-held-from-all="1"' : '') +
                             ' class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn-revoke') + '">' + a[1] + '</button>';
@@ -769,6 +792,166 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading servers.</p>';
             }
         }
+
+        // New names, last 24 h (GET /sources): the hold switch, the names against the DNS capacity, the groups by source
+        // (Reject all held, Block all), the networks, the blocks, and the live settings. Never an address: a source is
+        // its keyed hash, shown short.
+        const HELD_WORDS = { source: 'many from one source', budget: 'the new-name budget', 'hold-all': 'Hold all new names', 'near-full': 'the DNS zone near full' };
+        const shortId = function(id) { return id ? String(id).slice(0, 8) : ''; };
+        const networkWords = function(g) {
+            return g.asn ? 'AS' + esc(g.asn) + (g.as_org ? ' ' + esc(g.as_org) : '') + (g.country ? ' (' + esc(g.country) + ')' : '') : 'network unknown';
+        };
+        const STATUS_ICON = { pending: '⏳', live: '🟢', paused: '⏸️', blocked: '⛔', released: '↩️', abandoned: '·', gone: '·' };
+
+        function renderSources(st) {
+            const container = document.getElementById('sourcesContainer');
+            if (!st || st.schema === false) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">' + esc((st && st.error) || 'Could not load new names.') + '</p>';
+                return;
+            }
+            let html = '';
+            const hold = st.hold || {};
+            html += hold.on
+                ? '<div class="row-wrap" style="margin-bottom: 0.75rem;"><span style="color: #fbbf24; font-weight: 700; font-size: 0.85rem;">⏸️ Hold all new names is ON until ' + esc(when(hold.until)) + ': every new name waits for your approval.</span>' +
+                    '<button data-hold="0" class="btn-approve">Let go now</button></div>'
+                : '<div class="row-wrap" style="margin-bottom: 0.75rem;"><button data-hold="1" class="btn-revoke">⏸️ Hold all new names (24 h)</button>' +
+                    '<span style="font-size: 0.75rem; color: var(--text-muted);">Every new name then waits for your approval; names already held are untouched. It lets go by itself after 24 hours.</span></div>';
+            if (!st.source_key_set) html += '<p style="color: #fbbf24; font-size: 0.8rem; margin-bottom: 0.5rem;">SOURCE_KEY is not set: claims have no source, so no per-source limit applies and nothing groups by source. Set it with <code>wrangler secret put SOURCE_KEY</code> (32 random bytes, hex).</p>';
+            const cap = st.capacity || {};
+            html += '<p style="font-size: 0.8rem; color: ' + (cap.names >= cap.alert_at ? '#fbbf24' : 'var(--text-secondary)') + '; margin-bottom: 0.75rem;">Names live or pending: <b>' + esc(cap.names) + '</b> of the zone&#39;s ' + esc(cap.capacity) +
+                ' DNS records (you are told from ' + esc(cap.alert_at) + '; from ' + esc(cap.hold_at) + ' every new name waits for you). Our own hand records count too.</p>';
+            const groups = st.groups || [];
+            if (!groups.length) html += '<p style="color: var(--text-muted); font-size: 0.85rem;">No new names in the last 24 hours.</p>';
+            else {
+                html += '<table class="admin-table stack"><thead><tr><th class="w-src">Source</th><th class="w-net">Network</th><th class="w-cnt">Names</th><th class="w-seen">When</th><th class="w-sact act">Action</th></tr></thead><tbody>';
+                groups.forEach(function(g) {
+                    const names = (g.rows || []).slice(0, 12).map(function(r) {
+                        return (STATUS_ICON[r.status] || '·') + ' ' + esc(r.name) + (r.held_reason ? ' (held)' : '') + (r.probation ? ' (probation)' : '');
+                    }).join(', ') + ((g.rows || []).length > 12 ? ', …' : '');
+                    let acts = '';
+                    if (g.held && (g.source || g.asn)) acts += '<button data-source-act="reject"' + (g.source ? ' data-source="' + esc(g.source) + '"' : ' data-asn="' + esc(g.asn) + '"') + ' data-total="' + esc(g.held) + '" class="btn-approve" title="Each held name from it is rejected: free again">Reject all held (' + esc(g.held) + ')</button>';
+                    if (g.source) acts += '<button data-source-act="block" data-source="' + esc(g.source) + '" data-total="' + esc(g.names) + '" class="btn-revoke" title="Held ones rejected, live ones blocked, its new claims refused for 7 days">Block all (' + esc(g.names) + ')</button>';
+                    html += '<tr>' +
+                        '<td data-label="Source"><span class="mono" style="color: #fff;">' + (g.source ? esc(shortId(g.source)) : 'no source') + '</span><span class="sub">' + names + '</span></td>' +
+                        '<td data-label="Network" style="font-size: 0.8rem;"><span>' + networkWords(g) + '</span></td>' +
+                        '<td data-label="Names" style="font-size: 0.8rem;"><span>' + esc(g.names) + (g.held ? ' · <b style="color: #fbbf24;">' + esc(g.held) + ' held</b>' : '') + ' · ' + esc(g.live) + ' live (' + esc(g.verified) + ' verified) · ' + esc(g.keys) + ' key' + (g.keys === 1 ? '' : 's') + '</span></td>' +
+                        '<td data-label="When" class="mono" style="font-size: 0.7rem;">' + esc(when(g.first)) + (g.last !== g.first ? '<span class="sub">to ' + esc(when(g.last)) + '</span>' : '') + '</td>' +
+                        '<td><div class="acts">' + acts + '</div></td></tr>';
+                });
+                html += '</tbody></table>';
+            }
+            const networks = (st.networks || []).slice(0, 10);
+            if (networks.length) html += '<p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">By network: ' + networks.map(function(n) {
+                return networkWords(n) + ': ' + esc(n.names) + ' from ' + esc(n.sources) + ' source' + (n.sources === 1 ? '' : 's');
+            }).join(' · ') + '</p>';
+            const blocked = st.blocked || [];
+            html += '<p style="font-size: 0.85rem; color: #f87171; margin-top: 1rem;">Blocked now' + (blocked.length ? '' : ': none') + '</p>';
+            if (blocked.length) html += '<ul style="font-size: 0.8rem; margin-left: 1.25rem;">' + blocked.map(function(b) {
+                return '<li>' + (b.kind === 'asn' ? 'network AS' + esc(b.value) : 'source <span class="mono">' + esc(shortId(b.value)) + '</span>') + (b.label ? ' — ' + esc(b.label) : '') +
+                    ' · until ' + esc(when(b.until)) + (b.by ? ' · by ' + esc(b.by) : '') + ' <button data-unblock-kind="' + esc(b.kind) + '" data-unblock-value="' + esc(b.value) + '" class="btn-approve">Lift</button></li>';
+            }).join('') + '</ul>';
+            html += '<div class="row-wrap" style="margin-top: 0.5rem;"><input id="blockAsnInput" class="admin-input" inputmode="numeric" placeholder="ASN, e.g. 14061" autocomplete="off">' +
+                '<button data-block-asn="1" class="btn-revoke" title="Every new name from that network is refused, honest ones too">Block a network (7 days)</button></div>';
+            const rows = st.settings || [];
+            if (rows.length) {
+                html += '<details class="released" style="margin-top: 1rem;"><summary>Limits (live settings: kept here, never in the public code)</summary>' +
+                    '<table class="admin-table stack"><thead><tr><th class="w-setting">Setting</th><th class="w-now">Now</th><th class="w-change act">Change</th></tr></thead><tbody>' + rows.map(function(r) {
+                        return '<tr><td data-label="Setting"><span class="mono" style="color: #fff;">' + esc(r.key) + '</span><span class="sub">' + esc(r.words) + '</span></td>' +
+                            '<td data-label="Now" class="mono">' + esc(r.value) + '<span class="sub">' + (r.set ? 'set ' + esc(when(r.set.at)) + (r.set.by ? ' by ' + esc(r.set.by) : '') : 'default') + ' · default ' + esc(r.default) + '</span></td>' +
+                            '<td><div class="acts"><input id="set-' + esc(r.key) + '" class="admin-input" style="width: 7rem; flex: 0 0 auto;" inputmode="numeric" placeholder="' + esc(r.min) + '–' + esc(r.max) + '" autocomplete="off">' +
+                            '<button data-setting-save="' + esc(r.key) + '" class="btn-approve">Save</button>' +
+                            (r.set ? '<button data-setting-default="' + esc(r.key) + '" class="btn-revoke">Default</button>' : '') + '</div></td></tr>';
+                    }).join('') + '</tbody></table></details>';
+            }
+            container.innerHTML = html;
+        }
+
+        async function loadSources() {
+            const container = document.getElementById('sourcesContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/sources', { headers: authHeaders() });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load new names.</p>'; return; }
+                renderSources(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading new names.</p>';
+            }
+        }
+
+        async function postAdmin(path, body) {
+            const res = await fetch('/api/local/admin/registrar/' + path, { method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify(body) });
+            return { ok: res.ok, status: res.status, data: await res.json() };
+        }
+
+        // Reject all held, or Block all, on a group: in the Worker's batches (3 names a request) until it says no more,
+        // or a batch did nothing. One run id: your phone hears of the click once.
+        async function sourceAction(act, source, asn, total) {
+            const block = act === 'block';
+            const n = total + ' name' + (total === 1 ? '' : 's');
+            const text = block
+                ? '⛔ BLOCK ALL from this source (' + n + ')?\\n\\nEach held name is rejected (free again), each live one is blocked (tunnel and DNS deleted, the name kept from every key; Resume undoes one), and its new claims are refused for 7 days.'
+                : 'Reject all held names from this group (' + n + ')?\\n\\nEach is freed again; its live names are left as they are.';
+            if (!confirm(text)) return;
+            const run = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+            const body = { run: run, total: total };
+            if (source) body.source = source; else body.asn = Number(asn);
+            if (block) body.block = true;
+            const done = { rejected: [], blocked: [], refused: [] };
+            try {
+                for (let i = 0; i < 100; i++) {
+                    const r = await postAdmin('sources', body);
+                    if (!r.ok) { done.refused.push({ name: '(the request)', error: r.data.error || String(r.status) }); break; }
+                    done.rejected.push.apply(done.rejected, r.data.rejected || []);
+                    done.blocked.push.apply(done.blocked, r.data.blocked || []);
+                    done.refused.push.apply(done.refused, r.data.refused || []);
+                    if (!r.data.more) break;
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+            alert((block ? 'Blocked ' + done.blocked.length + ', rejected ' + done.rejected.length + '.' : 'Rejected ' + done.rejected.length + '.') +
+                (done.refused.length ? '\\n\\nNot done:\\n' + done.refused.map(function(r) { return r.name + ': ' + (r.error || r.status); }).join('\\n') : ''));
+            loadRegistrarData();
+        }
+
+        async function sourcesClick(e) {
+            const hold = e.target.closest('[data-hold]');
+            if (hold) {
+                const on = hold.getAttribute('data-hold') === '1';
+                if (!confirm(on ? 'Hold all new names for 24 hours?\\n\\nEvery new name then waits for your approval; names already held are untouched. It lets go by itself after 24 hours.' : 'Let go of Hold all new names now?')) return;
+                const r = await postAdmin('settings', { hold: on });
+                if (r.ok) renderSources(r.data); else alert('Could not change it: ' + (r.data.error || r.status));
+                return;
+            }
+            const act = e.target.closest('[data-source-act]');
+            if (act) { await sourceAction(act.getAttribute('data-source-act'), act.getAttribute('data-source'), act.getAttribute('data-asn'), Number(act.getAttribute('data-total')) || 0); return; }
+            const lift = e.target.closest('[data-unblock-kind]');
+            if (lift) {
+                if (!confirm('Lift this block? Its new claims are taken again.')) return;
+                const r = await postAdmin('blocked', { kind: lift.getAttribute('data-unblock-kind'), value: lift.getAttribute('data-unblock-value'), remove: true });
+                if (!r.ok) alert('Could not lift it: ' + (r.data.error || r.status));
+                loadSources();
+                return;
+            }
+            if (e.target.closest('[data-block-asn]')) {
+                const asn = Number(String(document.getElementById('blockAsnInput').value || '').replace(/^AS/i, '').trim());
+                if (!(asn > 0)) { alert('Type the number of the network (its ASN), as the list above shows it.'); return; }
+                if (!confirm('Block every new name from network AS' + asn + ' for 7 days?\\n\\nHonest nodes on that network are refused too: a hosting network carries many. Names already held are untouched.')) return;
+                const r = await postAdmin('blocked', { kind: 'asn', value: asn, days: 7 });
+                if (!r.ok) alert('Could not block it: ' + (r.data.error || r.status));
+                loadSources();
+                return;
+            }
+            const save = e.target.closest('[data-setting-save]');
+            const reset = e.target.closest('[data-setting-default]');
+            if (save || reset) {
+                const key = (save || reset).getAttribute(save ? 'data-setting-save' : 'data-setting-default');
+                const value = save ? String(document.getElementById('set-' + key).value || '').trim() : null;
+                if (save && !value) return;
+                const r = await postAdmin('settings', { key: key, value: value === null ? null : Number(value) });
+                if (r.ok) renderSources(r.data); else alert('Not saved: ' + (r.data.error || r.status));
+            }
+        }
+        document.addEventListener('click', function(e) { sourcesClick(e); });
 
         document.addEventListener('click', function(e) {
             const mode = e.target.closest('[data-alert-mode]');

@@ -246,6 +246,26 @@ async function main() {
     assert(start.setStartCommunityUrl(null).ok && !db.prepare("SELECT 1 FROM node_config WHERE key = 'startCommunityUrl'").get()
         && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'null goes back to the default, and leaves no row');
 
+    // The global community the web app's Settings links (config/global-community.ts): BeanPool's own unless the
+    // operator names another, none when switched off or named badly. Read at every request.
+    const savedGlobal = process.env.GLOBAL_COMMUNITY_URL;
+    delete process.env.GLOBAL_COMMUNITY_URL;
+    assert((await getInfo()).body.globalCommunityUrl === 'https://global.beanpool.org', 'unset: the global community is BeanPool\'s own');
+    process.env.GLOBAL_COMMUNITY_URL = '  ';
+    assert((await getInfo()).body.globalCommunityUrl === 'https://global.beanpool.org', 'empty: the same');
+    process.env.GLOBAL_COMMUNITY_URL = 'https://global.example.org';
+    assert((await getInfo()).body.globalCommunityUrl === 'https://global.example.org', 'a self-hoster names their own global community, and /api/community/info says it');
+    for (const off of ['off', 'OFF', 'none', '0', 'false', 'no']) {
+        process.env.GLOBAL_COMMUNITY_URL = off;
+        const body = (await getInfo()).body;
+        assert(!('globalCommunityUrl' in body), `${off}: none, and the field is absent`);
+    }
+    for (const bad of ['javascript:alert(1)', 'http://global.example.org', 'https://user:pw@global.example.org', 'global.example.org', 'https://global.example.org/a b']) {
+        process.env.GLOBAL_COMMUNITY_URL = bad;
+        assert(!('globalCommunityUrl' in (await getInfo()).body), `${bad}: not an https address, so none (never BeanPool's in its place)`);
+    }
+    if (savedGlobal === undefined) delete process.env.GLOBAL_COMMUNITY_URL; else process.env.GLOBAL_COMMUNITY_URL = savedGlobal;
+
     // A backup restored at runtime replaces state.db, mirror included, and restarts. Before that restart, or if the
     // mirror is edited by hand, nothing reads it as the profile.
     db.prepare('UPDATE node_config SET value = ? WHERE key = ?').run('global', NODE_PROFILE_KEY);

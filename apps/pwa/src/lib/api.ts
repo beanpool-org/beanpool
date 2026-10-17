@@ -325,6 +325,11 @@ export interface CommunityInfo {
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
+    /**
+     * The worldwide community this node points its members to (the operator's GLOBAL_COMMUNITY_URL; Settings' "Global
+     * community" row, lib/global-entry.ts). Absent: none named (switched off, or a node from before it), and no row.
+     */
+    globalCommunityUrl?: string;
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**

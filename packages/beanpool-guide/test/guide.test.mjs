@@ -288,6 +288,28 @@ test('operator words: a standby is paired from its shell, never by a mirror conn
     }
 });
 
+// Review 4302869943: docker compose restart keeps the container's old environment, so a change to .env takes
+// docker compose up -d. A paragraph that changes .env (or the server's environment) never says to restart instead.
+test('operator words: a change to .env is applied with docker compose up -d, never a restart', () => {
+    const restartStep = /\brestart (the server|the standby|it|again)\b|\band restart\b|docker compose restart/i;
+    const said = [];
+    for (const f of fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))) {
+        for (const paragraph of fs.readFileSync(path.join(OPERATORS_DIR, String(f)), 'utf8').split('\n')) {
+            if (!/\.env\b|server's environment/.test(paragraph)) continue;
+            const m = restartStep.exec(paragraph.replace(/\*\*/g, ''));
+            if (m) said.push(`${f}: "${m[0]}"`);
+        }
+    }
+    assert.deepEqual(said, [], 'after a change to .env, say docker compose up -d: a restart keeps the old setting');
+    const { manual } = sourceGuides();
+    const page = manual.guides.find((g) => g.slug === 'showcase');
+    const words = page.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    for (const step of ['GLOBAL_COMMUNITY_URL=https://global.example.org, and run docker compose up -d',
+        'set GLOBAL_COMMUNITY_URL=off and run docker compose up -d']) {
+        assert.ok(words.includes(step), `showcase says: ${step}`);
+    }
+});
+
 test('the operator manual has no concept-guide section; the members\' guide still must', () => {
     const { manual } = sourceGuides();
     assert.ok(!manual.sections.some(s => s.id === 'about'));

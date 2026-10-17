@@ -46,3 +46,21 @@ export function webAppHost(): string | null {
     const url = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
     return url ? audienceOf(url) : null;
 }
+
+/**
+ * The address a member types elsewhere to reach this community (the phone's restore, lib/global-entry.ts
+ * phoneLaterLines): webAppHost, with the port it is served on when that isn't its scheme's own (443, or 80 for http).
+ * A signature names the host alone, so webAppHost drops the port; an address without it would reach port 443 of a
+ * community served only on 8443 (review 4302869884).
+ */
+export function webAppAddress(): string | null {
+    const url = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const host = url ? audienceOf(url) : null;
+    if (!host) return null;
+    let port = '';
+    try {
+        // URL gives '' for the scheme's own port. An address set without a scheme is read as https, as the phone does.
+        port = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`).port;
+    } catch { /* the host alone */ }
+    return port ? `${host}:${port}` : host;
+}

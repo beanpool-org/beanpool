@@ -46,7 +46,7 @@ export function restoreCommunityChoices(saved: readonly SavedNode[], globalUrl: 
         if (seen.has(key)) continue;
         seen.add(key);
         let host = node.url;
-        try { host = new URL(node.url).host; } catch {}
+        try { host = new URL(node.url).host; } catch { /* not a URL: shown as saved */ }
         choices.push({ kind: 'saved', url: node.url, fills: fieldTextFor(node.url), name: node.alias?.trim() || host });
     }
     return choices;

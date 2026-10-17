@@ -191,14 +191,22 @@ flowchart TD
     ```bash
     cd apps/registrar
     npx wrangler secret put CF_API_TOKEN     # Paste Token B from Step 2.1
-    npx wrangler secret put ADMIN_SECRET     # Generate with openssl rand -hex 24
+    npx wrangler secret put ADMIN_SECRET     # ONLY on a registrar without Access (ACCESS_* unset in wrangler.toml); openssl rand -hex 24
     npx wrangler secret put CF_ACCOUNT_ID    # 151a28c4fd1e6ee09768f4226be76b4d
     npx wrangler secret put CF_ZONE_ID       # 060a99ae34e53b26dcf3be6578722b31
     npx wrangler deploy
     ```
+    Our registrar has signed the admin in with Cloudflare Access since 2026-10-18 (`ACCESS_*` set in `wrangler.toml`):
+    `ADMIN_SECRET` opens nothing there, so skip that line — rotating it changes nothing. It applies only to a registrar
+    run without Access (apps/registrar/README.md "Admin sign-in").
 *   **How to verify:**
+    Open https://beanpool.org/admin and sign in through Access (email code + authenticator): the page says
+    *Signed in as &lt;email&gt;* and the names list loads. From that signed-in browser,
+    `https://beanpool.org/api/local/admin/registrar/whoami` answers `{"email": "<email>", "via": "cloudflare-access"}`.
+    A curl with `x-admin-secret` gets a sign-in page or a 401 here even when the rotation worked. On a registrar
+    without Access:
     ```bash
-    curl -s -H "x-admin-secret: <new_admin_secret>" https://beanpool.org/api/local/admin/registrar/pending | head -c 100
+    curl -s -H "x-admin-secret: <new_admin_secret>" https://<registrar>/api/local/admin/registrar/pending | head -c 100
     ```
 
 ---
@@ -257,7 +265,7 @@ Run these commands after completing the rotation sweep:
 | **Admin Authentication** | `curl -sk -H "x-admin-password: $NEW_PW" https://test.beanpool.org/api/local/admin/diagnostics` | HTTP 200 with node diagnostics payload (HTTP 401 with bad password) |
 | **Backup Pull Convergence** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 30 beanpool-test-mirror-beanpool-node-1"` | `[Backup] ⬇️ Pulled snapshot` (no 401 Unauthorized) |
 | **Cloudflare Tunnel Status** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 20 beanpool-test-cloudflared-1"` | `Registered tunnel connection` / 0 errors |
-| **Registrar Attestation** | `curl -sk -H "x-admin-secret: $NEW_ADMIN_SECRET" https://beanpool.org/api/local/admin/registrar/pending` | HTTP 200 list of pending leases |
+| **Registrar Admin** | Open `https://beanpool.org/admin`, sign in through Cloudflare Access (not a curl: `x-admin-secret` opens nothing under Access, and Access answers a request with no sign-in first) | *Signed in as &lt;email&gt;* and the names list loads; `…/api/local/admin/registrar/whoami` from that browser answers `"via": "cloudflare-access"` |
 | **CI Secrets Guard** | `bash scripts/test-all.sh` | Secrets guard check passes with 0 leaks |
 
 ---

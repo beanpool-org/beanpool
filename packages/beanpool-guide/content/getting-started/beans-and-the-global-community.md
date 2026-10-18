@@ -1,7 +1,7 @@
 ---
 slug: beans-and-the-global-community
 title: Beans and the global community
-summary: What you see on the global community: the 🏘️ Local community marker, the example community Example Valley, why Beans wait there, and how to start or find a local community.
+summary: What the global community is for, one community among many, and what you see there: the 🏘️ Local community marker, the example community Example Valley, why Beans wait there, and how to start or find a local community.
 related: finding-a-community, how-it-works, joining, communities, your-balance, decisions
 ---
 
@@ -10,6 +10,8 @@ related: finding-a-community, how-it-works, joining, communities, your-balance, 
 The global community is where most people first meet BeanPool. Anyone can join it, from anywhere, with 12 words or a sign-in.
 
 It is a place to see what BeanPool is, and then to start a local community near you, or to join one.
+
+The global community is one community among many. Your own community runs on its own server and never needs it. BeanPool runs the global community; every local community has its own server and its own owners, and would keep working in full if the global community went away. The global community keeps nothing of your community but what your community chose to show in the list of communities near you.
 
 ## Helping each other comes first
 

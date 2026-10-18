@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -339,5 +339,33 @@
   "Sunset {time}.": "Закат {time}.",
   "Look around ›": "Осмотреться ›",
   "Pick up the tour at step {step} ›": "Продолжить обзор с шага {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Это ваша Главная. Вы сами выбираете, что здесь будет. Перед началом уделите минуту обзору других вкладок."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Это ваша Главная. Вы сами выбираете, что здесь будет. Перед началом уделите минуту обзору других вкладок.",
+  "Save this search to Home": "Сохранить этот поиск на Главную",
+  "Save the search \"{q}\" to Home": "Сохранить поиск \"{q}\" на Главную",
+  "The 1 vote came from a new or 12-word account": "Единственный голос поступил от нового аккаунта или аккаунта с 12 словами",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Все {n} голос поступили от новых аккаунтов или аккаунтов с 12 словами",
+    "few": "Все {n} голоса поступили от новых аккаунтов или аккаунтов с 12 словами",
+    "many": "Все {n} голосов поступили от новых аккаунтов или аккаунтов с 12 словами",
+    "other": "Все {n} голоса поступили от новых аккаунтов или аккаунтов с 12 словами"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} из {total} голосов поступил от нового аккаунта или аккаунта с 12 словами",
+    "few": "{n} из {total} голосов поступили от новых аккаунтов или аккаунтов с 12 словами",
+    "many": "{n} из {total} голосов поступили от новых аккаунтов или аккаунтов с 12 словами",
+    "other": "{n} из {total} голосов поступили от новых аккаунтов или аккаунтов с 12 словами"
+  },
+  "This 1 from a new or 12-word account": "Этот 1 — от нового аккаунта или аккаунта с 12 словами",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Все {n} — от новых аккаунтов или аккаунтов с 12 словами",
+    "few": "Все {n} — от новых аккаунтов или аккаунтов с 12 словами",
+    "many": "Все {n} — от новых аккаунтов или аккаунтов с 12 словами",
+    "other": "Все {n} — от новых аккаунтов или аккаунтов с 12 словами"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} из этих {count} — от нового аккаунта или аккаунта с 12 словами",
+    "few": "{n} из этих {count} — от новых аккаунтов или аккаунтов с 12 словами",
+    "many": "{n} из этих {count} — от новых аккаунтов или аккаунтов с 12 словами",
+    "other": "{n} из этих {count} — от новых аккаунтов или аккаунтов с 12 словами"
+  }
 }

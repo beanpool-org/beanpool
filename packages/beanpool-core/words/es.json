@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "Atardecer {time}.",
   "Look around ›": "Echa un vistazo ›",
   "Pick up the tour at step {step} ›": "Retomar la guía en el paso {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Este es tu Inicio. Tú eliges qué va aquí. Antes de comenzar, echa un vistazo de un minuto a las demás pestañas."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Este es tu Inicio. Tú eliges qué va aquí. Antes de comenzar, echa un vistazo de un minuto a las demás pestañas.",
+  "Save this search to Home": "Guardar esta búsqueda en Inicio",
+  "Save the search \"{q}\" to Home": "Guardar la búsqueda \"{q}\" en Inicio",
+  "The 1 vote came from a new or 12-word account": "El único voto provino de una cuenta nueva o de 12 palabras",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "El {n} voto provino de una cuenta nueva o de 12 palabras",
+    "other": "Todos los {n} votos provinieron de cuentas nuevas o de 12 palabras"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} de {total} votos provino de una cuenta nueva o de 12 palabras",
+    "other": "{n} de {total} votos provinieron de cuentas nuevas o de 12 palabras"
+  },
+  "This 1 from a new or 12-word account": "Este único de una cuenta nueva o de 12 palabras",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "El {n} de cuentas nuevas o de 12 palabras",
+    "other": "Todos los {n} de cuentas nuevas o de 12 palabras"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} de estos {count} de una cuenta nueva o de 12 palabras",
+    "other": "{n} de estos {count} de cuentas nuevas o de 12 palabras"
+  }
 }

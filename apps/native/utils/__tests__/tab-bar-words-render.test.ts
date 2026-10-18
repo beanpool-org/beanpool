@@ -6,8 +6,9 @@
  *
  * In the pseudo-locale (`xx`: every sentence accented, padded ~35 % and bracketed) any label without the brackets
  * bypassed t(). At 320 dp with text at 1.3× (the label capped at 1.1×) six tabs share the strip; a longer word shrinks
- * to fit its tab (adjustsFontSizeToFit, down to 0.6) on its one line rather than being cut off. Widths are a model of
- * the styles' own numbers, as language-switch-render.test.ts measures the welcome screen's buttons.
+ * to fit its tab (adjustsFontSizeToFit, down to 0.6) on its one line rather than being cut off, but a translated tab
+ * word must fit at 0.8 (8.8 dp, still readable): the short `tab` word, never a full one that needs more shrink. Widths
+ * are a model of the styles' own numbers, as language-switch-render.test.ts measures the welcome screen's buttons.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -106,6 +107,17 @@ const FLOOR = 320;
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
 const glyphEm = (c: string) => (/\p{M}/u.test(c) ? 0 : /[\uFE0F\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
 const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
+/**
+ * The smallest a translated tab word may be drawn: 0.8 of the 1.1× label, 8.8 dp (deciding review of #2152). The layout's
+ * LABEL_MIN_SCALE (0.6) is only the safety net that keeps a label whole.
+ */
+const READABLE_SCALE = 0.8;
+/** The tab words in a catalog that fit their tab only below `scale`: each named with its tab. */
+const tooWide = (words: Record<string, unknown>, scale: number) => STRIP.flatMap(([, english]) => {
+    const translated = words[TAB_KEY(english)];
+    return typeof translated === 'string' && widthOf(translated, num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * scale) > FLOOR / STRIP.length
+        ? [`"${translated}" (the ${english} tab)`] : [];
+});
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -171,16 +183,19 @@ describe('the tab strip in the pseudo-locale at 320 dp with 1.3× text', () => {
         }
     });
 
-    it('a translated tab name, in any catalog that has one, fits its tab at the smallest scale', () => {
-        const size = num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * num('LABEL_MIN_SCALE');
-        const tabWidth = FLOOR / STRIP.length;
-        for (const lang of CATALOG_LANGS) {
-            const words = catalog(lang);
-            for (const [, english] of STRIP) {
-                const translated = words[TAB_KEY(english)];
-                if (typeof translated !== 'string') continue;
-                expect(widthOf(translated, size), `"${translated}" (${lang}, the ${english} tab)`).toBeLessThanOrEqual(tabWidth);
-            }
-        }
+    it('a translated tab name, in any catalog that has one, fits its tab at 8.8 dp (0.8), not only at the safety net', () => {
+        expect(READABLE_SCALE).toBeGreaterThan(num('LABEL_MIN_SCALE'));
+        expect(num('LABEL_SIZE') * num('LABEL_MAX_SCALE') * READABLE_SCALE).toBeCloseTo(8.8, 5);
+        for (const lang of CATALOG_LANGS) expect([lang, tooWide(catalog(lang), READABLE_SCALE)]).toEqual([lang, []]);
+    });
+
+    it('a full word that fits only by shrinking below 0.8 fails: the catalog must give the short `tab` word', () => {
+        // pt's full "Bens comuns" for Commons: 75 dp at 1.1×, so it would be drawn near 7.8 dp in a 53 dp tab.
+        const full = { [TAB_KEY('Commons')]: 'Bens comuns', [TAB_KEY('Market')]: 'Mercado' };
+        expect(tooWide(full, READABLE_SCALE)).toEqual(['"Bens comuns" (the Commons tab)']);
+        // The old check, at the safety net, let it through.
+        expect(tooWide(full, num('LABEL_MIN_SCALE'))).toEqual([]);
+        // The short word passes; so does a word in a context other than `tab` (the page's own title).
+        expect(tooWide({ [TAB_KEY('Commons')]: 'Comuns', 'Commons': 'Bens comuns' }, READABLE_SCALE)).toEqual([]);
     });
 });

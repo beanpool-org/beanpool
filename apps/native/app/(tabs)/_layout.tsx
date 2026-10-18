@@ -54,7 +54,9 @@ const LABEL_SIZE = 10;
 // the emulator at 320dp + 1.3x text as the largest scale that keeps it on one unclipped line.
 const LABEL_MAX_SCALE = 1.1;
 // A longer word in another language shrinks to fit its tab rather than being cut off, down to this (as the welcome
-// screen's two big buttons do); the label stays one line, as the strip's fixed height needs.
+// screen's two big buttons do); the label stays one line, as the strip's fixed height needs. 0.6 (6.6 dp) is only the
+// safety net that keeps a label whole: every catalog's tab word must fit at 0.8, 8.8 dp, so a translator gives the
+// short `tab` word, never a full one that needs more shrink (tab-bar-words-render.test.ts; deciding review of #2152).
 const LABEL_MIN_SCALE = 0.6;
 const UNDERLINE_HEIGHT = 3;
 const TAB_BUTTON_INSET = 5;

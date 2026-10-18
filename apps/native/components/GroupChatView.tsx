@@ -516,7 +516,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const removeMessage = async (item: ChatMessage) => {
         setActiveMessageActionsId(null);
         setActiveEmojiPickerId(null);
-        const author = item.authorName || (item.senderId || '').slice(0, 8);
+        const author = chatAuthorWords(item.authorName) || (item.senderId || '').slice(0, 8);
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
         Alert.alert(t('Remove this message?'), t('It will read "Removed by a convenor" to everyone in the chat.'), [
             { text: t('Keep it'), style: 'cancel' },
@@ -827,7 +827,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             {replyToMessage && !editingMessage && (
                 <ChatReplyBanner
                     styles={chat}
-                    author={me && replyToMessage.senderId === me ? t('You') : (replyToMessage.authorName || t('Someone'))}
+                    author={me && replyToMessage.senderId === me ? t('You') : (chatAuthorWords(replyToMessage.authorName) || t('Someone'))}
                     text={replyToMessage.text}
                     onCancel={() => setReplyToMessage(null)}
                 />

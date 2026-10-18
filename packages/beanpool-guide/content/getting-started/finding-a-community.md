@@ -16,7 +16,8 @@ No community near you yet? You can start one: see "Nothing near you", below.
 On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 - Tap **Communities near you** to see the whole list.
-- Communities are listed nearest first when the app knows where you are. Those at about the same distance from you come in a different order each time, so no one community is always at the top. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
+- Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
+- Communities at about the same distance from you are shuffled, so no one community is always at the top. The order changes from time to time (about once an hour), not every time you look.
 - Each one shows how far away it is and how many members it has, when the community has said.
 
 A community that hasn't published its address is listed, but it can't be asked from here yet.

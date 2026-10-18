@@ -48,7 +48,10 @@ alter table public.directory_nodes
 --
 --      promise:          body.promise is an object with exactly the five keys above and those values ? body.promise : null
 --      accepting_knocks: typeof body.acceptingKnocks === 'boolean' ? body.acceptingKnocks : null
---      closing_on:       /^\d{4}-\d{2}-\d{2}$/.test(body.closingOn) ? body.closingOn : null
+--      closing_on:       realDay(body.closingOn) ? body.closingOn : null, where realDay(v) is
+--                        typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v + 'T00:00:00Z'))
+--                        && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v
+--                        (2026-02-31 and 2026-99-99 fail; Postgres would refuse them for a date column)
 --
 --    Nothing else from the body. A value of the wrong shape is stored as null, never refused: refusing would cost the
 --    community its whole listing (the node then pushes again without the fields, but an older function must not depend

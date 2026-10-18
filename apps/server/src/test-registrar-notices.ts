@@ -14,6 +14,8 @@
  *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`.
  *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none.
  *  7. A burst is bounded as every server alert is: three told in the hour, the rest folded.
+ *  8. Kept on this server only: classified per-server, and never in a backup file's local config or the stager's copy
+ *     (each holds a live one-use reply link; #2151 review 4306271971).
  *
  * On origin/main a77b76d1 every section fails: /status sends no `seen`, nothing is kept and nothing told (no reg.notice).
  *
@@ -240,6 +242,23 @@ async function main(): Promise<void> {
             await sleep(200);
             assert(toldTimes() === 3 && told().length === 1, `three told in the hour (one line, ×3), the rest folded for the hour's line (${JSON.stringify(told())})`);
             assert(registrarNotices().length === 5, 'all five in Settings');
+        });
+
+        await section('8. kept on this server only: never copied, never in a backup file or the stager\'s copy', async () => {
+            const { LOCAL_CONFIG_FIELDS } = await import('./engine/replication-manifest.js');
+            assert(LOCAL_CONFIG_FIELDS.registrarNotices?.kind === 'per-server' && LOCAL_CONFIG_FIELDS.registrarNoticeSeen?.kind === 'per-server',
+                'both fields are per-server in the replication manifest');
+            fresh();
+            reg.notices = [notice(60, { link: `${base}/reply/${token('f')}` })];
+            await addressStatus('kestrel');
+            const kept = getLocalConfig();
+            assert(kept.registrarNotices?.[0]?.link && kept.registrarNoticeSeen === 60, 'a notice with its link is kept here');
+            const { redactLocalConfig } = await import('./config/local-config.js');
+            const redacted = redactLocalConfig(kept) as any;
+            assert(!('registrarNotices' in redacted) && !('registrarNoticeSeen' in redacted) && !JSON.stringify(redacted).includes('/reply/'),
+                'a backup file\'s local config leaves the notices and their links out');
+            const stager = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'services/stager.ts'), 'utf8');
+            assert(/CREDENTIALS_LEFT_OUT = \[[^\]]*'registrarNotices'[^\]]*'registrarNoticeSeen'/.test(stager), 'the stager\'s copy leaves them out');
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

@@ -635,6 +635,8 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
     endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
     turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
+    registrarNotices: { kind: 'per-server', reason: "the notices the address service sent this server (services/registrar-notices.ts); a standby takes none and sends no seen, so its main server's never overwrite its own; each holds a live one-use reply link, so never copied, never in a backup file or the stager's copy" },
+    registrarNoticeSeen: { kind: 'per-server', reason: "the highest notice id this server has had, sent back on its own /status as seen; per-server like registrarNotices; never copied" },
     backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
     backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
     replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },

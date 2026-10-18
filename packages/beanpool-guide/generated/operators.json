@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 139,
-  "hash": "b4f959cda81bee1a8da28118a1a9e6ac9cb19e94f788889c887468a2f9e978c2",
+  "version": 140,
+  "hash": "81b65bbc19056cc4e4d4f13b90caf48cd7aef24806811fae06130c472400e0af",
   "sections": [
     {
       "id": "setup",
@@ -3450,7 +3450,7 @@
             "the host watchdog restarted it after a freeze, or the watchdog has gone quiet;",
             "the standby needs attention;",
             "on a standby: it is not paired with a main server, or the server it copies from answers with a key that is not its main server's (see Which server a standby trusts, in Backups and replicas);",
-            "the Let's Encrypt certificate could not be renewed and browsers see a self-signed one."
+            "a certificate the server holds for one of its own addresses could not be renewed for a day after it was due (once a day while it lasts), has less than a day left (urgent), or expired before it was renewed, so apps and browsers see a self-signed one there and refuse it. Each names the address, so an owner with two knows which one. The first two also say when the certificate expires; the third says that it expired, or that there is none yet. The server keeps trying, at least once a day and more often near the end; once a new certificate arrives, the alert is resolved."
           ]
         },
         {
@@ -3529,7 +3529,7 @@
         },
         {
           "type": "p",
-          "text": "**What an alert says:** your community's name, what is wrong in plain words, since when, and counts. Never a member's name, key or address, nothing anyone wrote, and never a backup store's key or the channel's address."
+          "text": "**What an alert says:** your community's name, what is wrong in plain words, since when, and counts. Never a member's name, key or address, nothing anyone wrote, and never a backup store's key or the channel's address. The certificate alerts name the server's own address they are about (a name or an IP it publishes anyway), never a visitor's."
         },
         {
           "type": "h2",

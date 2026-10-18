@@ -2339,8 +2339,8 @@ async function pruneSources(d1, s) {
 
 // Contact retention and the notices' tidying (migration 0012, design §3.2), last, each only with queries to spare (d1Meter)
 // past the sweep's send. Every sweep: a contact is cleared once its name's hold is over, or the name is abandoned — one
-// statement (db.clearLapsedContacts). Once an hour (the first sweep of it): reply links past their time, and notices
-// NOTICE_KEEP_S past theirs with their recipients, go (three statements). Never throws.
+// statement (db.clearLapsedContacts). Once an hour (the first sweep of it): reply links never used past their time, and
+// notices NOTICE_KEEP_S past theirs with their recipients and links, go (three statements). Never throws.
 async function noticeUpkeep(d1) {
     const env = d1.env;
     const now = nowS();

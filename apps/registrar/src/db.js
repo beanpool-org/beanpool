@@ -437,9 +437,11 @@ export const noticeRecipients = async (env, noticeId, limit) => ((await env.DB.p
      FROM notice_recipients r WHERE r.notice_id = ? ORDER BY r.name LIMIT ?`
 ).bind(noticeId, limit).all()).results || []);
 
-// Reply links past their time go; notices more than `keep` past their time go, with their recipients.
+// Reply links never used go at their time; a used one is a reply /admin counts (listNotices, noticeRecipients), so it
+// goes only with its notice. Notices more than `keep` past their time go, with their recipients and links.
 export async function pruneNotices(env, now, keep) {
-    await env.DB.prepare('DELETE FROM reply_tokens WHERE expires_at < ?').bind(now).run();
+    await env.DB.prepare('DELETE FROM reply_tokens WHERE (used_at IS NULL AND expires_at < ?) OR notice_id IN (SELECT id FROM notices WHERE expires_at < ?)')
+        .bind(now, now - keep).run();
     await env.DB.prepare('DELETE FROM notice_recipients WHERE notice_id IN (SELECT id FROM notices WHERE expires_at < ?)').bind(now - keep).run();
     await env.DB.prepare('DELETE FROM notices WHERE expires_at < ?').bind(now - keep).run();
 }

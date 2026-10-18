@@ -273,7 +273,7 @@ test("a released name's contact is cleared once its hold is over (the sweep, one
     } finally { w.restore(); }
 });
 
-test('the sweep tidies once an hour: reply links past their time, notices a month past theirs with their recipients', async () => {
+test('the sweep tidies once an hour: reply links never used past their time, notices a month past theirs with their recipients and links', async () => {
     const w = await noticeWorld({ REPLY_URL });
     try {
         const key = await makeKey();
@@ -292,6 +292,25 @@ test('the sweep tidies once an hour: reply links past their time, notices a mont
         assert.deepEqual(tokens(w).map((t) => t.notice_id), [fresh], 'the expired link went');
         assert.deepEqual(w.sqlite.prepare('SELECT id FROM notices').all().map((r) => r.id), [fresh], 'the old notice went');
         assert.deepEqual(w.sqlite.prepare('SELECT notice_id FROM notice_recipients').all().map((r) => r.notice_id), [fresh], 'with its recipients');
+
+        // A used link is a reply /admin counts: it stays past its time, as long as its notice is listed; a link never
+        // used goes at its time (#2151 review 4306272130).
+        const link = (await status(w, key)).body.notices.find((n) => n.id === fresh).link;
+        assert.equal((await redeemReplyToken(w.env, tokenOf(link))).ok, true);
+        const unused = (await send(w, { to: { names: ['mu-node'] }, text: 'Later news.', reply: true })).body.id;
+        await status(w, key);
+        assert.deepEqual(tokens(w).map((t) => t.notice_id), [fresh, unused]);
+        w.sqlite.prepare('UPDATE reply_tokens SET expires_at = ?').run(nowS() - 1);
+        await withClock(hour + 3600 + 10, () => attestSweep(w.env));
+        assert.deepEqual(tokens(w).map((t) => t.notice_id), [fresh], 'the used link stays past its time; the unused one went');
+        const listed = (await admin(w, 'notices')).body.notices;
+        assert.deepEqual(listed.map((x) => [x.id, x.replies]), [[unused, 0], [fresh, 1]], 'still one reply to the listed notice');
+        assert.ok((await admin(w, `notices?id=${fresh}`)).body.recipients[0].replied_at, 'its recipient still shows the reply');
+        // Its notice a month past its time: the used link goes with it.
+        w.sqlite.prepare('UPDATE notices SET expires_at = ? WHERE id = ?').run(nowS() - 31 * 86400, fresh);
+        await withClock(hour + 7200 + 10, () => attestSweep(w.env));
+        assert.deepEqual(tokens(w), [], 'with its notice');
+        assert.deepEqual(w.sqlite.prepare('SELECT id FROM notices').all().map((r) => r.id), [unused]);
     } finally { w.restore(); }
 });
 

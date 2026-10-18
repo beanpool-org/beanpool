@@ -291,8 +291,9 @@ Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §3.2 (D4, decided
 - **Contact retention:** a name's optional `contact` (never checked, shown in /admin only, never in an alert or a log)
   is cleared by the sweep once the name's hold is over — a release past its 30 days, one that freed it at once, or the
   name abandoned — in one statement; Remove from the list clears it at once.
-- **Upkeep:** once an hour the sweep deletes reply links past their time and notices 30 days past theirs, with their
-  recipients — each only with D1 queries to spare.
+- **Upkeep:** once an hour the sweep deletes reply links never used past their time, and notices 30 days past theirs
+  with their recipients and links (a used link is a reply /admin counts, so it stays as long as its notice) — each only
+  with D1 queries to spare.
 - **Deploy:** migration 0012 before the Worker (the workflow applies `migrations/` first; this Worker without it carries
   no notices and answers everything else as before). The node release after the Worker (an older node ignores
   `notices`). Reply links: deploy apps/feedback (its README, "Reply links") after this Worker, then uncomment

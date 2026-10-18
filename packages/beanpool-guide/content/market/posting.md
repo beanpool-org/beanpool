@@ -72,4 +72,6 @@ Open your post. If no deal is under way on it:
 
 While someone is asking for your post, you can still change its words and photos, but not its price: the app says so. While beans are held on a post, you cannot edit it at all. The exception is a Repeatable post (it can have several deals at once): you can still change its words and photos, but not its price. To change the price, decline or cancel that deal first.
 
-Posts do not expire. Delete them when they are done.
+In a local community, posts do not expire. Delete them when they are done.
+
+On the global community, a listing is archived 90 days after it last changed: it comes off the Market and its photos are deleted. Saving it with **Edit Post** keeps it for another 90 days. See "The global community's limits".

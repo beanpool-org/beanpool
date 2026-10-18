@@ -89,14 +89,23 @@ test('a gated claim is one message: title, priority, tag, tap, token — the nam
         assert.equal(r.sent[1].headers.priority, '2');
         assert.equal(r.sent[1].body, 'You approved sydney.beanpool.org.');
 
-        // A new community on an auto name: one message, with the count of live names.
+        // A new community on an auto name: nothing at its claim — it is on probation (S3) — and one message when the sweep
+        // verifies it, with the count of live names. (sydney, approved above, is verified here so that the sweep's message
+        // is yarrabank's alone; probation takes one ok sweep and no time, so one sweep ends it.)
         const k2 = await makeKey();
         assert.equal((await r.w.claim(k2, { name: 'yarrabank', community_name: 'Yarra Bank LETS', contact: CONTACT })).body.status, 'live');
+        assert.equal(r.sent.length, 2, 'nothing at the claim');
+        await r.w.verify('sydney');
+        r.w.setting('probation_sweeps', 1);
+        r.w.setting('probation_s', 0);
+        r.w.nodes['sydney.beanpool.org'] = attestsAs(key);
+        r.w.nodes['yarrabank.beanpool.org'] = attestsAs(k2);
+        await attestSweep(r.w.env);
         assert.equal(r.sent.length, 3);
         assert.equal(r.sent[2].headers.title, 'New community: yarrabank');
         assert.equal(r.sent[2].headers.priority, '3');
         assert.equal(r.sent[2].headers.click, 'https://beanpool.org/admin#yarrabank');
-        assert.equal(r.sent[2].body, 'New community: yarrabank.beanpool.org — "Yarra Bank LETS" is live (tier auto). 2 names live.');
+        assert.equal(r.sent[2].body, 'New community: yarrabank.beanpool.org — "Yarra Bank LETS" is live and verified (its probation is over). 2 names live.');
 
         // The contact the claims carried is stored (the admin page shows it) but in no request.
         assert.equal((await r.w.row('yarrabank')).contact, CONTACT);
@@ -430,6 +439,9 @@ test('no NTFY_URL: nothing is sent, the events wait, and /admin and the test but
         await r.w.admin('sydney', 'approve');
         r.w.nodes['sydney.beanpool.org'] = attestsAs(k1);
         r.w.nodes['yarrabank.beanpool.org'] = attestsAs(k2);
+        // Probation over in one ok sweep (S3): both verified by it, in one "New communities" event.
+        r.w.setting('probation_sweeps', 1);
+        r.w.setting('probation_s', 0);
         await attestSweep(r.w.env);   // applied: both answer as themselves
         assert.equal(r.sent.length, 0, 'not one request to ntfy');
         const st = (await r.admin('alerts')).body;

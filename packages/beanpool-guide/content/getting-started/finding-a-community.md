@@ -9,11 +9,15 @@ related: joining, home, communities, beans-and-the-global-community, near-you, r
 
 The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. On the global community you can see how those work, in an example community marked **🏘️ Local community**, but nothing there earns or spends Beans. So a post there says in its description what the person would like in return: free, a swap, or ask them. See "Beans and the global community".
 
+The global community is one community among many. Your own community runs on its own server and never needs it: the global community only helps you find it.
+
 No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
 On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+
+Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
@@ -27,7 +31,7 @@ A community that hasn't published its address is listed, but it can't be asked f
 - Check your name, and write a few words about yourself, up to 280 characters: where you live, what you would like to share or learn.
 - Tap **Send**.
 
-Your request goes straight to that community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
+Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
 While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 

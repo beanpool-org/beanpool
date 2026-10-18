@@ -93,6 +93,7 @@ import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import {
     getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement, becomeMainServerInPlace,
+    isOwnPublicAddress,
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMainServer, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import { retireStandbyMain, STANDBY_MAIN_FILE } from './standby-main.js';
@@ -533,6 +534,7 @@ async function resolvePublicAddress(chosen: Candidate, bundle: TakeoverBundle, c
     const pa: any = bundle.publicAddress && typeof bundle.publicAddress === 'object' ? { ...(bundle.publicAddress as any) } : null;
     if (!pa) return { publicAddress: null, tunnel: { source: 'none', message: 'The main server had no web address from the BeanPool registrar, so there is no tunnel to bring back.' } };
     if (pa.mode === 'direct') return { publicAddress: pa, tunnel: { source: 'none', message: 'The web address points straight at a server (no tunnel), so there is no tunnel token to bring back.' } };
+    if (isOwnPublicAddress(pa)) return { publicAddress: pa, tunnel: { source: 'none', message: `The web address is the community's own (${pa.hostname}), not a tunnel, so there is no tunnel token to bring back.` } };
     if (tunnelTokenOf(pa)) return { publicAddress: pa, tunnel: { source: 'envelope', message: 'The tunnel token came with the keys.' } };
     // 967 follow-up #2: the newest lock may have been sealed while the registrar's answer lacked the token.
     for (const older of code === null ? [] : all.filter((c) => c.header.envelopeId !== chosen.header.envelopeId && c.receivedAt < chosen.receivedAt)) {

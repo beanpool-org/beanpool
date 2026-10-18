@@ -56,6 +56,15 @@ services:
       - NODE_PROFILE=${NODE_PROFILE:-}
       # EMPTY. Set to `global` for ONE start to turn a global node's database into the profile above on purpose.
       - NODE_PROFILE_ALLOW_CHANGE_FROM=${NODE_PROFILE_ALLOW_CHANGE_FROM:-}
+      # A global community's limits (apps/server/src/config/node-profile.ts profileLimits; the manual: "Limits on a global
+      # community"). EMPTY = the default. LISTING_ARCHIVE_DAYS: a listing unchanged this many days is archived with its
+      # photos, where retention is on (90; 30 to 3650). PLACE_WATCHES_MAX: places a member may watch, where there is the
+      # directory (3; 1 to 20). NEARBY_LISTINGS_MAX / NEARBY_LISTINGS_RADIUS_KM: a phone's nearby set, where it is on
+      # (500 within 250 km; each 1 to 2000). Out of range or not a whole number = the default. Same values on a standby.
+      - LISTING_ARCHIVE_DAYS=${LISTING_ARCHIVE_DAYS:-}
+      - PLACE_WATCHES_MAX=${PLACE_WATCHES_MAX:-}
+      - NEARBY_LISTINGS_MAX=${NEARBY_LISTINGS_MAX:-}
+      - NEARBY_LISTINGS_RADIUS_KM=${NEARBY_LISTINGS_RADIUS_KM:-}
       # The oldest app build this node works with; phones below it see a banner they can't dismiss, and from the build
       # with the full-screen update, once the grace date has passed, that screen at their next start. EMPTY = the
       # built-in floor, far below anything in the field (apps/server/src/app-store-versions.ts). _IOS / _ANDROID: one

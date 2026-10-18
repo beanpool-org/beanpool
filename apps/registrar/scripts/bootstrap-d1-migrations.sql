@@ -90,4 +90,13 @@ INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0010_reserve_our_hosts.sql'
 WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('vault', 'auth', 'mullum1', 'mullum2', 'mullum3', 'test-mirror', 'p2p-mullum2')) = 7;
 
+-- 0011: its three tables, three indexes and three columns.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0011_sources.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('claim_sources', 'blocked_sources', 'settings'))
+       OR (type = 'index' AND name IN ('idx_claim_sources_at', 'idx_claim_sources_source', 'idx_claim_sources_asn'))) = 6
+  AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%held_reason TEXT%'
+  AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%verified_at INTEGER%'
+  AND (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%ok_sweeps INTEGER%';
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

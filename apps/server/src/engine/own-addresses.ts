@@ -5,7 +5,8 @@
  *
  * The set is the union of, and ONLY of, config this node already trusts:
  *   1. the hostname of resolvePublicNodeUrl(): the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`,
- *      else CF_RECORD_NAME;
+ *      else CF_RECORD_NAME; and CF_RECORD_NAME as well while an own address (an IP, a domain) is stored there, so one
+ *      never hides the name the server is given, set before or after it (S2 review 4305409688);
  *   2. env BEANPOOL_ADDRESSES, a comma list (custom domains, a reverse proxy's names);
  *   3. the addresses an owner or admin confirmed in Settings (node_config `ownerAddresses`, carried in the take-over
  *      envelope beside `publicAddress`, so a promoted standby keeps them);
@@ -58,10 +59,13 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { audienceOf, isPublicIpv4 } from '@beanpool/core';
-import { getNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
+import { getNodeConfig, isOwnPublicAddress, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
+import { isBeanPoolName, isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
+
+// The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
+export { BEANPOOL_ZONE, isBeanPoolName, isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
 
 export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar';
 
@@ -76,15 +80,6 @@ export interface OwnAddress {
 
 /** How a host a request was signed for stands here. */
 export type AudienceStanding = 'own' | 'unconfigured' | 'foreign';
-
-const LOOPBACK = ['localhost', '127.0.0.1', '[::1]', '::1'];
-
-/** An address as a host in the one form signatures carry (audienceOf), or null for anything that is not one. */
-export function normalizeAddress(input: unknown): string | null {
-    if (typeof input !== 'string') return null;
-    const host = audienceOf(input);
-    return host && host.length <= 253 ? host : null;
-}
 
 const warnedEnvEntries = new Set<string>();
 
@@ -122,6 +117,9 @@ export function checkEnvAddresses(): void {
     envAddresses();
 }
 
+/** More than any real community needs; a bound on what one Settings session, or `beanpool claim`, can write to (3). */
+export const MAX_OWNER_ADDRESSES = 20;
+
 /** The owner-confirmed addresses as stored in node_config (3). */
 export function ownerConfirmedAddresses(): string[] {
     const stored = (getNodeConfig() as any).ownerAddresses;
@@ -158,27 +156,15 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     };
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
+    if (isOwnPublicAddress(config.publicAddress)) {
+        const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
+        add(given ? normalizeAddress(given) : null, 'public-address');
+    }
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
     for (const r of names) add(r.address, 'registrar', r.role === 'former');
     cache = { at: now, version, list };
     return list;
-}
-
-/** The zone the BeanPool registrar names communities in: `<name>.beanpool.org` (registrar-names.ts, resolvePublicNodeUrl). */
-export const BEANPOOL_ZONE = 'beanpool.org';
-
-/**
- * A name in the registrar's zone: beanpool.org itself or any name under it. One that isn't among this node's
- * configured names (its own registrar name is item 1 or 4) is another community's, or free to be claimed by one.
- */
-export function isBeanPoolName(host: string): boolean {
-    return host === BEANPOOL_ZONE || host.endsWith(`.${BEANPOOL_ZONE}`);
-}
-
-/** A host on this machine: localhost, 127.0.0.0/8, [::1]. */
-export function isLoopbackHost(host: string): boolean {
-    return LOOPBACK.includes(host) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
 }
 
 /** A configured name that names this community: any but a loopback name the operator listed (5). */
@@ -190,20 +176,6 @@ const namesThisCommunity = (a: OwnAddress) => !isLoopbackHost(a.address);
  */
 export function knowsItsNames(): boolean {
     return configuredAddresses().some(namesThisCommunity);
-}
-
-/**
- * A host on this machine or the local network: loopback, private IPv4 ranges, IPv6 unique-local and link-local,
- * `.local`. This community's (5) only on a node that knows none of its names.
- */
-export function isLocalNetworkHost(host: string): boolean {
-    if (isLoopbackHost(host) || host.endsWith('.local')) return true;
-    const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-    if (v4) {
-        const [a, b] = [Number(v4[1]), Number(v4[2])];
-        return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
-    }
-    return /^\[(fc|fd|fe8|fe9|fea|feb)[0-9a-f]*:/.test(host);
 }
 
 /**
@@ -235,11 +207,19 @@ export function isLostAddress(host: string): boolean {
     return configuredAddresses().some((a) => a.address === host && a.lost);
 }
 
+/** A beanpool.org name, or a public IP or name a public CA can certify (so one in the Internet's DNS): never a home-network host. */
+const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
+
 /**
  * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
  * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
- * live, else the first of its other published names; null on a node with none (one that knows none of its names, or whose
- * only name it released). Always one of publishedAddresses(), so never a former name or a loopback one.
+ * live, else the first of its other published names, a name before an IP address (design
+ * scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3: a name survives a change of server, a number does not, so
+ * new members are sent to the name while those holding the IP keep working); null on a node with none (one that knows
+ * none of its names, or whose only name it released). Always one of publishedAddresses(), so never a former name or a
+ * loopback one. Only a name the Internet can reach comes before an IP, and a public IP before a name or IP on the home
+ * network (a `.local` or `.lan` name an operator listed): newcomers sent there from outside would find nothing (S2
+ * review 4305346684).
  */
 export function primaryAddress(): string | null {
     const published = publishedAddresses();
@@ -250,36 +230,8 @@ export function primaryAddress(): string | null {
     // members are sent, though a real node also has it as publicAddress (item 1): the next of its names, else none, so
     // the web app says nothing rather than point at a name with no route yet (#1275 review 4118422613).
     const notLive = new Set(current.filter((r) => r.status !== 'live').map((r) => r.address));
-    return published.find((a) => !notLive.has(a)) ?? null;
-}
-
-/** Top-level names no public CA certifies (RFC 6761, RFC 8375 and the usual home and company ones). */
-const NON_PUBLIC_TLDS = new Set(['local', 'localhost', 'internal', 'lan', 'home', 'corp', 'test', 'invalid', 'example', 'onion', 'arpa']);
-
-/** A bracketed IPv6 literal anyone on the Internet could reach: global unicast (2000::/3) only, never an IPv4-mapped one. */
-function isPublicIpv6(host: string): boolean {
-    if (!/^\[[0-9a-f:.]+\]$/.test(host)) return false;
-    let canonical: string;
-    try { canonical = new URL(`http://${host}/`).hostname; } catch { return false; }
-    const first = parseInt(canonical.slice(1).split(':')[0] || '0', 16);
-    return first >= 0x2000 && first <= 0x3fff;
-}
-
-/**
- * Whether a public CA can certify `host` by fetching it from the Internet (services/acme): a public IP literal (an IPv4 one by
- * core's isPublicIpv4, the phone's own reading of a server's public number), or a name of
- * two labels or more, each a-z, 0-9 and inner hyphens, under a top-level name that is not numeric and not a home, test or
- * special-use one. Never a beanpool.org name (Cloudflare's edge holds those), never loopback or a local-network host.
- */
-export function isCertifiableHost(host: string): boolean {
-    if (normalizeAddress(host) !== host || isBeanPoolName(host) || isLocalNetworkHost(host)) return false;
-    if (host.startsWith('[')) return isPublicIpv6(host);
-    if (/^[\d.]+$/.test(host)) return isPublicIpv4(host);
-    const labels = host.split('.');
-    if (labels.length < 2) return false;
-    if (!labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) return false;
-    const tld = labels[labels.length - 1];
-    return !/^\d+$/.test(tld) && !NON_PUBLIC_TLDS.has(tld);
+    const usable = published.filter((a) => !notLive.has(a));
+    return usable.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? usable.find(reachableFromInternet) ?? usable[0] ?? null;
 }
 
 /**

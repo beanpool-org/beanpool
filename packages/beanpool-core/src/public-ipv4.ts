@@ -1,8 +1,9 @@
 /**
  * A server's public number, read one way by the server and the phone (review of #2138): the server holds a certificate
- * only for such a number (apps/server/src/engine/own-addresses.ts isCertifiableHost, tlsIdentifiers), and the phone takes
- * only such a number as a community's address (apps/native/utils/community-origin.ts communityOrigin). So a directory row
- * naming any other number never shows as a community the phone can knock on and then fails at TLS.
+ * only for such a number (apps/server/src/engine/host-kinds.ts isCertifiableHost, read by own-addresses.ts tlsIdentifiers
+ * and `beanpool claim --ip`), and the phone takes only such a number as a community's address
+ * (apps/native/utils/community-origin.ts communityOrigin). So a directory row naming any other number never shows as a
+ * community the phone can knock on and then fails at TLS.
  *
  * Not the cleartext rule (cleartext-address.ts isPrivateHost): that one says where plain http may still go, and reading
  * these ranges as private there would let http reach more of the Internet.

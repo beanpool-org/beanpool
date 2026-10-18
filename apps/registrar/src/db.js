@@ -35,14 +35,16 @@ export const listActive = async (env) =>
         "SELECT * FROM name_allocations WHERE status IN ('pending','live','paused','blocked','released') ORDER BY requested_at DESC"
     ).all()).results || [];
 
-// Atomic reserve. Throws (UNIQUE constraint) if the name is already held.
+// Atomic reserve. Throws (UNIQUE constraint) if the name is already held. `held_reason` (migration 0011) is written only
+// when the row carries one: a database without the column still takes every other claim.
 export const insertAllocation = (env, a) =>
     env.DB.prepare(
         `INSERT INTO name_allocations
-           (name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact, attest_fails, requested_at)
-         VALUES (?,?,?,?,?,?,?,?,?,0,?)`
+           (name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact, attest_fails, requested_at${a.held_reason ? ', held_reason' : ''})
+         VALUES (?,?,?,?,?,?,?,?,?,0,?${a.held_reason ? ',?' : ''})`
     ).bind(a.name, a.node_pubkey, a.hostname, a.mode, a.status,
-           a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, a.requested_at).run();
+           a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, a.requested_at,
+           ...(a.held_reason ? [a.held_reason] : [])).run();
 
 export const updateAllocation = async (env, name, fields) => {
     const keys = Object.keys(fields);
@@ -182,11 +184,22 @@ export const dropTeardownIfUnchanged = async (env, kind, cfId, name, expected) =
 export const teardownRefused = (env, kind, cfId, error) =>
     env.DB.prepare('UPDATE teardown SET tries = tries + 1, last_error=? WHERE kind=? AND cf_id=?').bind(error, kind, cfId).run();
 
-// For the admin's alerts (src/alerts.js): claims waiting for the admin (pending on a name that is not auto-approved, as
-// index.js awaitingApproval decides), and live names.
-export const countAwaitingApproval = async (env) => Number((await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
-).first())?.n) || 0;
+// For the admin's alerts (src/alerts.js): claims waiting for the admin (pending on a name that is not auto-approved, or
+// held for approval: index.js awaitingApproval), and live names. On a database without migration 0011 (no held_reason),
+// the gated ones only.
+export const countAwaitingApproval = async (env) => {
+    try {
+        return Number((await env.DB.prepare(
+            `SELECT COUNT(*) AS n FROM name_allocations a LEFT JOIN name_policy p ON p.pattern = a.name
+             WHERE a.status = 'pending' AND (a.held_reason IS NOT NULL OR COALESCE(NULLIF(p.tier, ''), 'auto') <> 'auto')`
+        ).first())?.n) || 0;
+    } catch (e) {
+        if (!/no such column/i.test(String(e?.message || e))) throw e;
+        return Number((await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
+        ).first())?.n) || 0;
+    }
+};
 // The policy tier of every pending row's name that has a policy row (any other is auto), in one read: the admin's list
 // asks it once whatever the number of claims (D1 allows 50 queries an invocation on Workers Free).
 export const pendingTiers = async (env) => new Map(((await env.DB.prepare(
@@ -194,16 +207,26 @@ export const pendingTiers = async (env) => new Map(((await env.DB.prepare(
 ).all()).results || []).map((r) => [r.name, r.tier]));
 
 // Claims whose provisioning never finished, for the sweep to finish (index.js finishOrphans): pending on a name that is
-// auto-approved (as policyTier decides: no policy row, or tier 'auto'), claimed before `before` (unix s), by a key the
+// auto-approved (as policyTier decides: no policy row, or tier 'auto') and not held for approval (held_reason, migration
+// 0011: asked of the database itself, as countAwaitingApproval asks it — never inferred from a settings read, which a D1
+// blip fails: review of #2132), claimed before `before` (unix s), by a key the
 // admin has not stopped — none of its rows blocked, nor a release the admin holds from it ('admin-held-all') released
 // after `heldSince`. At most `limit`, in no fixed order: a few Cloudflare keeps refusing never hold back the rest.
-export const listOrphans = async (env, before, heldSince, limit) => (await env.DB.prepare(
-    `SELECT a.* FROM name_allocations a LEFT JOIN name_policy p ON p.pattern = a.name
-     WHERE a.status = 'pending' AND COALESCE(NULLIF(p.tier, ''), 'auto') = 'auto' AND a.requested_at < ?
-       AND NOT EXISTS (SELECT 1 FROM name_allocations b WHERE b.node_pubkey = a.node_pubkey
-                         AND (b.status = 'blocked' OR (b.status = 'released' AND b.pause_reason = 'admin-held-all' AND COALESCE(b.released_at, 0) > ?)))
-     ORDER BY RANDOM() LIMIT ?`
-).bind(before, heldSince, limit).all()).results || [];
+export const listOrphans = async (env, before, heldSince, limit) => {
+    const list = async (held) => (await env.DB.prepare(
+        `SELECT a.* FROM name_allocations a LEFT JOIN name_policy p ON p.pattern = a.name
+         WHERE a.status = 'pending' AND COALESCE(NULLIF(p.tier, ''), 'auto') = 'auto' AND a.requested_at < ?${held ? ' AND a.held_reason IS NULL' : ''}
+           AND NOT EXISTS (SELECT 1 FROM name_allocations b WHERE b.node_pubkey = a.node_pubkey
+                             AND (b.status = 'blocked' OR (b.status = 'released' AND b.pause_reason = 'admin-held-all' AND COALESCE(b.released_at, 0) > ?)))
+         ORDER BY RANDOM() LIMIT ?`
+    ).bind(before, heldSince, limit).all()).results || [];
+    try {
+        return await list(true);
+    } catch (e) {
+        if (!/no such column/i.test(String(e?.message || e))) throw e;
+        return list(false);
+    }
+};
 export const countLive = async (env) =>
     Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status = 'live'").first())?.n) || 0;
 // The new-name budget (index.js newNameBudget): auto-approved names that went live after `since` (unix s), whatever their
@@ -228,3 +251,88 @@ export const insertSweepLog = async (env, s, now) => {
 // Did the registrar hold `name` before the tenure claimed at `since`? A claim event earlier than it says so.
 export const claimedBefore = async (env, name, since) =>
     !!(await env.DB.prepare("SELECT 1 AS yes FROM name_events WHERE name=? AND event='claimed' AND at < ? LIMIT 1").bind(name, since).first());
+
+// --- Where new names come from (migration 0011; index.js claimGate) ---
+
+// Everything a claim of a new name is decided on, in one read: how many new names its source (`hash`) and its network
+// (`asn`) claimed since `hourAgo` and `dayAgo`, whether either is blocked now (the blocked_sources row's kind, or null),
+// the auto names that went live across all keys in the hour and the day (the new-name budget: autoNamesSince), and the
+// names against the zone's capacity (namesOnZone).
+export const claimFacts = async (env, { hash, asn }, now, hourAgo, dayAgo) => {
+    const a = asn === null || asn === undefined ? null : String(asn);
+    const r = await env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM claim_sources WHERE source_hash = ? AND at > ?) AS source_hour,
+           (SELECT COUNT(*) FROM claim_sources WHERE source_hash = ? AND at > ?) AS source_day,
+           (SELECT COUNT(*) FROM claim_sources WHERE asn = ? AND at > ?) AS asn_day,
+           (SELECT kind FROM blocked_sources WHERE until > ? AND ((kind = 'source' AND value = ?) OR (kind = 'asn' AND value = ?)) LIMIT 1) AS blocked,
+           (SELECT COUNT(*) FROM name_allocations WHERE decided_by = 'auto' AND decided_at > ?) AS auto_hour,
+           (SELECT COUNT(*) FROM name_allocations WHERE decided_by = 'auto' AND decided_at > ?) AS auto_day,
+           (SELECT COUNT(*) FROM name_allocations WHERE ${ON_ZONE}) AS names`
+    ).bind(hash, hourAgo, hash, dayAgo, asn ?? null, dayAgo, now, hash, a, hourAgo, dayAgo).first();
+    const n = (k) => Number(r?.[k]) || 0;
+    return {
+        source_hour: n('source_hour'), source_day: n('source_day'), asn_day: n('asn_day'), blocked: r?.blocked || null,
+        auto_hour: n('auto_hour'), auto_day: n('auto_day'), names: n('names'),
+    };
+};
+
+// The names that hold a DNS record at the zone, or are about to: live, and pending but not held for approval (a claim
+// being made, or a gated one an approve would make). A held name makes nothing until the admin approves it: a bot's
+// held batch must not fill the capacity and hold every honest claim behind it.
+const ON_ZONE = "status = 'live' OR (status = 'pending' AND held_reason IS NULL)";
+export const namesOnZone = async (env) => Number((await env.DB.prepare(`SELECT COUNT(*) AS n FROM name_allocations WHERE ${ON_ZONE}`).first())?.n) || 0;
+
+// One new name's source, kept 24 h, or for as long as its name is held for approval (pruneSources). Never the
+// connecting address: its keyed hash only.
+export const recordSource = (env, r) =>
+    env.DB.prepare('INSERT INTO claim_sources (at, name, node_pubkey, source_hash, asn, as_org, country, held_reason) VALUES (?,?,?,?,?,?,?,?)')
+        .bind(r.at, r.name, r.node_pubkey, r.source_hash ?? null, r.asn ?? null, r.as_org ?? null, r.country ?? null, r.held_reason ?? null).run();
+
+// The row (`a`) of the tenure a claim (`s`) began, still held for the admin's approval: its source is kept past the day
+// while it waits, so a bot's held batch is still rejected or blocked by source in one click however long it waits
+// (Marty 2026-10-18: bulk action on a batch always works). Once the name is decided its source goes at the next prune.
+const TENURE = 'a.name = s.name AND a.node_pubkey = s.node_pubkey AND a.requested_at = s.at';
+const STILL_HELD = "a.status = 'pending' AND a.held_reason IS NOT NULL";
+
+export const pruneSources = (env, before) => env.DB.prepare(
+    `DELETE FROM claim_sources WHERE at < ? AND NOT EXISTS (SELECT 1 FROM name_allocations a
+       WHERE a.name = claim_sources.name AND a.node_pubkey = claim_sources.node_pubkey AND a.requested_at = claim_sources.at AND ${STILL_HELD})`
+).bind(before).run();
+
+// The last day's new names, and older ones still held, with where they came from and their row as it is now (null when
+// it is gone or another tenure's), newest first: /admin's "New names, last 24 h", grouped there by source and by network.
+export const recentSources = async (env, since) => ((await env.DB.prepare(
+    `SELECT s.at, s.name, s.node_pubkey, s.source_hash, s.asn, s.as_org, s.country, s.held_reason AS held_at_claim,
+            a.status, a.held_reason, a.verified_at, a.community_name
+     FROM claim_sources s LEFT JOIN name_allocations a ON ${TENURE}
+     WHERE s.at > ? OR (${STILL_HELD}) ORDER BY s.at DESC LIMIT 1000`
+).bind(since).all()).results || []);
+
+// A group's names (claimed since `since`, or before it and still held, from one source, or with no source — SOURCE_KEY
+// unset — from one network: the panel's group of that network's names with no source, never a keyed source's) still
+// held by the tenure its claim made, that /admin's "Block all" acts on — every pending one (rejected: held, gated or
+// being set up), live and paused (blocked) — or, `heldOnly`, "Reject all held": the pending ones held for approval
+// (held_reason set), never a gated claim or a name still being set up. At most `limit`, oldest first.
+export const groupNames = async (env, { source = null, asn = null, heldOnly = false }, since, limit) => ((await env.DB.prepare(
+    `SELECT DISTINCT a.* FROM claim_sources s JOIN name_allocations a ON ${TENURE}
+     WHERE ${source ? 's.source_hash = ?' : 's.source_hash IS NULL AND s.asn = ?'} AND (s.at > ? OR (${STILL_HELD}))
+       AND ${heldOnly ? STILL_HELD : "a.status IN ('pending', 'live', 'paused')"}
+     ORDER BY a.requested_at LIMIT ?`
+).bind(source || asn, since, limit).all()).results || []);
+
+// The latest facts the registrar keeps of a source (its network, country): what a block's label says.
+export const sourceFacts = async (env, hash) => env.DB.prepare(
+    'SELECT asn, as_org, country, COUNT(*) AS names FROM claim_sources WHERE source_hash = ? GROUP BY asn, as_org, country ORDER BY MAX(at) DESC LIMIT 1'
+).bind(hash).first();
+
+export const listBlocked = async (env, now) =>
+    (await env.DB.prepare('SELECT * FROM blocked_sources WHERE until > ? ORDER BY at DESC').bind(now).all()).results || [];
+
+export const blockSource = (env, kind, value, until, now, by, label) => env.DB.prepare(
+    `INSERT INTO blocked_sources (kind, value, until, at, by, label) VALUES (?,?,?,?,?,?)
+     ON CONFLICT(kind, value) DO UPDATE SET until=excluded.until, at=excluded.at, by=excluded.by, label=excluded.label`
+).bind(kind, value, until, now, by ?? null, label ?? null).run();
+
+export const unblockSource = async (env, kind, value) =>
+    ((await env.DB.prepare('DELETE FROM blocked_sources WHERE kind=? AND value=?').bind(kind, value).run())?.meta?.changes ?? 0) > 0;

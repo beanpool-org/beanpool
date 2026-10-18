@@ -18,6 +18,10 @@
  *   9. The hand-off file: only a small regular file is read (a named pipe never stops the node); anything else is moved
  *      out of the way and logged once. --contact is cleaned and reaches the registrar with the claim.
  *  10. --key for a key that is already a member: the terminal and the community notice name the member's own callsign.
+ *  11. --ip (HTTPS S2): the request reaches the node, which keeps the IP as its address and looks at its certificate at
+ *      once (its scheduler runs against no CA here: ACME_DIRECTORY_URL is a closed port); the QR carries
+ *      node=https://<IP> once it answers there. --address https://<domain> later: the domain is the address, the IP stays.
+ *      Off a terminal with a failing check: the scheduler's reason, exit 0, and a QR with no address.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-cli.ts
  */
@@ -57,6 +61,12 @@ async function child(): Promise<void> {
     const port = await startHttpsServer(0);
     await startP2P(0, 0);   // the node's identity, which signs its registrar requests
     initPublicAddress();
+    // The certificate scheduler, as on a node: an own address is ordered at once. Its self-check goes to a closed port and
+    // the CA's directory is none (ACME_DIRECTORY_URL, startNode): nothing leaves this machine, and the order fails in words.
+    const { startAcmeScheduler } = await import('./services/acme/schedule.js');
+    const { _setChallengeOriginForTests } = await import('./services/acme/challenge.js');
+    _setChallengeOriginForTests(() => 'http://127.0.0.1:9');
+    startAcmeScheduler();
     process.stdout.write('@@ ' + JSON.stringify({ ready: true, port }) + '\n');
 }
 
@@ -66,7 +76,7 @@ const started: Node[] = [];
 function startNode(name: string, env: Record<string, string>): Promise<Node> {
     const dir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dir, { recursive: true });
-    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', ...env };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', ACME_DIRECTORY_URL: 'http://127.0.0.1:9/directory', ...env };
     for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
@@ -292,6 +302,56 @@ async function main(): Promise<void> {
         const stager = fs.readFileSync(path.join(SRC, 'services/stager.ts'), 'utf8');
         check(/CREDENTIALS_LEFT_OUT = \[[^\]]*'addressRequest'/.test(stager), 'the stager\'s copy leaves it out');
         check(/CREDENTIALS_LEFT_OUT = \[[^\]]*'agentOAuthGrants'/.test(stager), 'the stager\'s copy leaves out the assistants\' OAuth grants too (per-server, #1881)');
+
+        console.log('\n11. --ip: the node keeps its IP and gets its own certificate; the QR carries https://<IP>');
+        const Sqlite = (await import('better-sqlite3')).default;
+        const nodeConfigOf = (n: Node) => {
+            const conn = new Sqlite(path.join(n.dir, 'state.db'), { readonly: true });
+            try { return JSON.parse((conn.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string } | undefined)?.value || '{}'); } finally { conn.close(); }
+        };
+        const certState = (n: Node, host: string) => path.join(n.dir, 'tls', 'acme', host, 'state.json');
+        const claimsBefore = reg.claims;
+        const ipNode = await startNode('d', { REGISTRAR_URL: regUrl });
+        const [idD, codeD] = [readConfig(ipNode).claim.id, codeOf(ipNode)];
+        const byIp = await cli(ipNode, ['--ip', '203.0.113.5']);
+        const cd = nodeConfigOf(ipNode);
+        check(byIp.code === 0, `--ip 203.0.113.5: exit 0 (${byIp.code} ${byIp.err.trim()})`);
+        check(cd.publicAddress?.mode === 'ip' && cd.publicAddress?.hostname === '203.0.113.5' && cd.ownerAddresses?.includes('203.0.113.5'),
+            `the request reached the node, which keeps 203.0.113.5 as its address (${JSON.stringify(cd.publicAddress)})`);
+        check(byIp.out.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent('https://203.0.113.5')}&id=${idD}&code=${codeD}`)),
+            'the QR carries node=https://203.0.113.5');
+        check(!/WARNING/.test(byIp.out) && byIp.out.includes('Address: https://203.0.113.5\n'), 'it answered there as this server: no warning');
+        for (let i = 0; i < 20 && !fs.existsSync(certState(ipNode, '203.0.113.5')); i++) await pause(250);
+        check(fs.existsSync(certState(ipNode, '203.0.113.5')), 'the node\'s certificate scheduler looked at 203.0.113.5 at once (its state.json)');
+        check(reg.claims === claimsBefore, 'the registrar heard nothing of it');
+
+        const byDomain = await cli(ipNode, ['--address', 'https://beans.example.org']);
+        const cd2 = nodeConfigOf(ipNode);
+        check(byDomain.code === 0 && cd2.publicAddress?.mode === 'own' && cd2.publicAddress?.hostname === 'beans.example.org'
+            && ['203.0.113.5', 'beans.example.org'].every((h) => cd2.ownerAddresses?.includes(h)),
+            `--address https://beans.example.org later: the domain is its address now, and the IP stays one of its own (${JSON.stringify(cd2)})`.slice(0, 400));
+        check(byDomain.out.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent('https://beans.example.org')}&id=${idD}&code=${codeD}`)),
+            'its QR carries node=https://beans.example.org');
+
+        const failNode = await startNode('e', { REGISTRAR_URL: regUrl });
+        const [idE, codeE] = [readConfig(failNode).claim.id, codeOf(failNode)];
+        // Nothing answers at https://<IP> (the check goes to a closed port): off a terminal, as every AI installer runs it.
+        const failing = await cli(failNode, ['--ip', '198.51.100.7'], { BEANPOOL_CLAIM_CHECK_ORIGIN: 'https://127.0.0.1:9', BEANPOOL_CLAIM_NAME_WAIT_MS: '8000' });
+        check(failing.code === 0, `a failing check off a terminal: exit 0 (${failing.code} ${failing.err.trim()})`);
+        check(/No certificate a phone trusts for 198\.51\.100\.7 within 8 s\./.test(failing.out)
+            && /Why: .*port 80 at 198\.51\.100\.7 is not reachable from the Internet/.test(failing.out),
+            `it prints the reason, in the node's certificate scheduler's words (${failing.out.split('\n').find((l) => l.includes('Why:'))?.slice(0, 300)})`);
+        check(failing.out.includes('Behind a home router? Use a name: beanpool claim --name yourtown'), '…and the way out behind a home router');
+        check(failing.out.includes(await qrOf(`beanpool://claim?id=${idE}&code=${codeE}`)) && /The QR code carries no address/.test(failing.out),
+            'the QR carries no address: the phone asks');
+        check(nodeConfigOf(failNode).publicAddress?.hostname === '198.51.100.7' && /keeps 198\.51\.100\.7 and keeps trying by itself/.test(failing.out),
+            'the node keeps the IP and keeps trying, and says so');
+        const lan = await cli(failNode, ['--ip', '192.168.1.20']);
+        check(lan.code === 2 && /home network/.test(lan.err), `--ip with a home-network address: refused in words (${lan.code})`);
+        // A benchmarking-network number (198.18.0.0/15): no CA reaches it, and the phone (core isPublicIpv4) never takes it either.
+        const bench = await cli(failNode, ['--ip', '198.18.0.1']);
+        check(bench.code === 2 && /198\.18\.0\.1 is not a public IP address/.test(bench.err), `--ip 198.18.0.1: refused in words (${bench.code} ${bench.err.trim()})`);
+        check(nodeConfigOf(failNode).publicAddress?.hostname === '198.51.100.7', '…and the node still keeps the IP it had');
     } finally {
         for (const n of started) { try { if (n.proc.pid && n.proc.exitCode === null) process.kill(-n.proc.pid, 'SIGKILL'); } catch { /* gone */ } }
         registrar.close();

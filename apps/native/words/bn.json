@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-18",
@@ -61,6 +61,7 @@
   "Can't reach it right now. Tap to try again.": "এখন পৌঁছানো যাচ্ছে না। আবার চেষ্টা করতে ট্যাপ করুন।",
   "Can't reach it right now": "এখন পৌঁছানো যাচ্ছে না",
   "Your account there was closed.": "সেখানে আপনার অ্যাকাউন্ট বন্ধ করা হয়েছে।",
+  "Your own community isn't affected.": "আপনার নিজের কমিউনিটি এতে প্রভাবিত হয়নি।",
   "Global community, {state}": "বৈশ্বিক কমিউনিটি, {state}",
   "Switches to this community. Long press to remove it.": "এই কমিউনিটিতে চলে যায়। সরাতে চেপে ধরে রাখুন।",
   "Guest": "অতিথি",

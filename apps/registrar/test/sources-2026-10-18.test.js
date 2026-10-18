@@ -1,0 +1,746 @@
+// Slice S3 of scratch/global-node/DESIGN-registrar-trust-fable.md (§4, §6) as decided by Marty on 2026-10-18: where new
+// names come from (claim_sources), held — never refused — over any limit (D6), "Block all" by source, probation, the
+// "Hold all new names" switch, the DNS cap (CAPACITY 200: told at 120), and the live limits as private settings in D1.
+// Every test here fails on origin/main (7f4e9b08 and after, before migration 0011).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import worker, { attestSweep, sourceAddress } from '../src/index.js';
+import { world, makeKey, attestsAs, nowS } from './harness.js';
+import { dailyLine } from '../src/watch.js';
+
+const KEY = 'a-test-source-key-not-a-real-one';
+const sourceWorld = (env = {}) => world({ env: { SOURCE_KEY: KEY, ...env } });
+
+// A signed claim as Cloudflare's edge hands it to the Worker: the client's address in CF-Connecting-IP, its network and
+// country in request.cf.
+const FROM = {
+    bot: { ip: '198.51.100.7', cf: { asn: 64500, asOrganization: 'Example Hosting', country: 'NL' } },
+    home: { ip: '203.0.113.20', cf: { asn: 64501, asOrganization: 'Example Broadband', country: 'AU' } },
+    other: { ip: '192.0.2.44', cf: { asn: 64500, asOrganization: 'Example Hosting', country: 'NL' } },
+};
+async function claimFrom(w, from, key, body) {
+    const req = await w.signed('POST', '/api/registrar/claim', key, { mode: 'tunnel', ...body });
+    req.headers.set('cf-connecting-ip', from.ip);
+    Object.defineProperty(req, 'cf', { value: from.cf });
+    const res = await worker.fetch(req, w.env);
+    return { status: res.status, body: await res.json() };
+}
+async function admin(w, path, body) {
+    const res = await worker.fetch(new Request(`https://beanpool.org/api/local/admin/registrar/${path}`, body === undefined
+        ? { headers: { 'x-admin-secret': 'test-admin-secret' } }
+        : { method: 'POST', headers: { 'x-admin-secret': 'test-admin-secret', 'content-type': 'application/json' }, body: JSON.stringify(body) }), w.env);
+    return { status: res.status, body: await res.json() };
+}
+const page = async (w, path) => (await worker.fetch(new Request(`https://beanpool.org${path}`), w.env)).status;
+const told = (w, like) => w.sqlite.prepare('SELECT title, body, name FROM alert_outbox WHERE title LIKE ? ORDER BY id').all(like).map((r) => ({ ...r }));
+const row = (w, n) => w.sqlite.prepare('SELECT * FROM name_allocations WHERE name=?').get(n);
+const liveTunnels = (w) => [...w.cf.tunnels.values()].filter((t) => !t.deleted_at).length;
+
+test('the 4th new name from one source in an hour is HELD for approval — not a 429 — and approving it makes it live', async () => {
+    const w = await sourceWorld();
+    try {
+        const keys = await Promise.all([1, 2, 3, 4, 5].map(() => makeKey()));
+        for (const i of [0, 1, 2]) assert.equal((await claimFrom(w, FROM.bot, keys[i], { name: `bot-${i}` })).body.status, 'live');
+        const fourth = await claimFrom(w, FROM.bot, keys[3], { name: 'bot-3' });
+        assert.equal(fourth.status, 200, JSON.stringify(fourth.body));
+        assert.deepEqual([fourth.body.status, fourth.body.note], ['pending', 'awaiting approval']);
+        assert.equal(row(w, 'bot-3').held_reason, 'source');
+        assert.equal(liveTunnels(w), 3, 'nothing made at Cloudflare for a held name');
+        // Its node waits, as for a gated claim: /status says awaiting approval, never provisioning (it never asks again).
+        const st = (await w.status(keys[3])).body;
+        assert.deepEqual([st.status, st.reason], ['pending', 'awaiting-approval']);
+        // Another source is not held for it.
+        assert.equal((await claimFrom(w, FROM.home, keys[4], { name: 'homenode' })).body.status, 'live');
+        // One alert, in counts and the network, never the address or a name.
+        const held = told(w, 'New names held%');
+        assert.equal(held.length, 1, JSON.stringify(held));
+        assert.match(held[0].body, /more than 3 new names from one source in an hour \(AS64500 Example Hosting, NL\)/);
+        assert.equal(held[0].name, null);
+        for (const ip of Object.values(FROM).map((f) => f.ip)) assert.ok(!JSON.stringify(held).includes(ip));
+        // A second one held in the same hour is not told again.
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'bot-4' })).body.status, 'pending');
+        assert.equal(told(w, 'New names held%').length, 1);
+        // The admin's list: awaiting approval, with where it came from.
+        const listed = (await admin(w, 'pending')).body.allocations.find((a) => a.name === 'bot-3');
+        assert.equal(listed.awaiting_approval, true);
+        assert.equal(listed.held_reason, 'source');
+        assert.deepEqual({ ...listed.source, id: typeof listed.source.id }, { id: 'string', asn: 64500, as_org: 'Example Hosting', country: 'NL' });
+        // Approved: live, by the admin, held no more; the token reaches its node through /status.
+        assert.equal((await w.admin('bot-3', 'approve')).body.status, 'live');
+        assert.deepEqual([row(w, 'bot-3').status, row(w, 'bot-3').held_reason, row(w, 'bot-3').decided_by], ['live', null, 'admin']);
+        const after = (await w.status(keys[3])).body;
+        assert.equal(after.status, 'live');
+        assert.ok(after.tunnelToken);
+        // A day's limit too: past it (with the hour's room) still held.
+        w.sqlite.prepare('UPDATE claim_sources SET at = at - 7200').run();
+        w.setting('source_per_day', 5);
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'bot-5' })).body.status, 'pending', 'the day\'s 5 from that source');
+    } finally { w.restore(); }
+});
+
+test('a source\'s "Block all" rejects its held names, blocks its live ones, and refuses its next claim 403', async () => {
+    const w = await sourceWorld();
+    try {
+        const keys = await Promise.all(Array.from({ length: 6 }, () => makeKey()));
+        for (const i of [0, 1, 2]) assert.equal((await claimFrom(w, FROM.bot, keys[i], { name: `farm-${i}` })).body.status, 'live');
+        for (const i of [3, 4]) assert.equal((await claimFrom(w, FROM.bot, keys[i], { name: `farm-${i}` })).body.status, 'pending');
+        assert.equal((await claimFrom(w, FROM.home, keys[5], { name: 'honest' })).body.status, 'live');
+        // The panel groups them by source: the farm's 5 names in one group, with its network and how many are held.
+        const panel = (await admin(w, 'sources')).body;
+        assert.equal(panel.source_key_set, true);
+        const farm = panel.groups.find((g) => g.names === 5);
+        assert.ok(farm, JSON.stringify(panel.groups));
+        assert.deepEqual([farm.asn, farm.as_org, farm.country, farm.held, farm.live, farm.keys], [64500, 'Example Hosting', 'NL', 2, 3, 5]);
+        assert.ok(!JSON.stringify(panel).includes(FROM.bot.ip), 'no address in the panel');
+        // Block all, in the page's batches until it says no more.
+        const run = 'run-block-farm-0001';
+        let r, rounds = 0;
+        const blocked = [], rejected = [];
+        do {
+            r = await admin(w, 'sources', { source: farm.source, block: true, run, total: 5 });
+            assert.equal(r.status, 200, JSON.stringify(r.body));
+            blocked.push(...r.body.blocked); rejected.push(...r.body.rejected);
+            assert.deepEqual(r.body.refused, []);
+        } while (r.body.more && ++rounds < 10);
+        assert.deepEqual(rejected.sort(), ['farm-3', 'farm-4']);
+        assert.deepEqual(blocked.sort(), ['farm-0', 'farm-1', 'farm-2']);
+        for (const i of [0, 1, 2]) assert.equal(row(w, `farm-${i}`).status, 'blocked');
+        for (const i of [3, 4]) assert.deepEqual([row(w, `farm-${i}`).status, row(w, `farm-${i}`).pause_reason], ['released', 'admin'], 'rejected: free at once');
+        assert.equal(liveTunnels(w), 1, 'only the honest name still has a tunnel');
+        assert.equal(row(w, 'honest').status, 'live');
+        // Its next claim of a new name: 403, nothing written; another source still claims.
+        const again = await claimFrom(w, FROM.bot, await makeKey(), { name: 'farm-9' });
+        assert.equal(again.status, 403, JSON.stringify(again.body));
+        assert.equal(row(w, 'farm-9'), undefined);
+        assert.equal((await claimFrom(w, FROM.other, await makeKey(), { name: 'farm-free' })).body.status, 'live', 'same network, another source');
+        // One alert for the click, in counts and the network.
+        const did = told(w, '%blocked a source%');
+        assert.equal(did.length, 1, JSON.stringify(did));
+        assert.match(did[0].body, /Block all for one source \(AS64500 Example Hosting, NL\): 5 names/);
+        // The block is listed, and lifting it lets the source claim again.
+        const list = (await admin(w, 'sources')).body.blocked;
+        assert.deepEqual(list.map((b) => b.kind), ['source']);
+        assert.equal((await admin(w, 'blocked', { kind: 'source', value: farm.source, remove: true })).body.removed, true);
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'farm-9' })).status, 200);
+    } finally { w.restore(); }
+});
+
+test('"Reject all held" frees a source\'s held names and leaves its live ones; a network blocked by hand is refused 403', async () => {
+    const w = await sourceWorld();
+    try {
+        for (let i = 0; i < 5; i++) await claimFrom(w, FROM.bot, await makeKey(), { name: `rj-${i}` });
+        const farm = (await admin(w, 'sources')).body.groups[0];
+        const r = await admin(w, 'sources', { source: farm.source });
+        assert.deepEqual(r.body.rejected.sort(), ['rj-3', 'rj-4']);
+        assert.deepEqual(r.body.blocked, []);
+        assert.equal(r.body.more, false);
+        for (const i of [0, 1, 2]) assert.equal(row(w, `rj-${i}`).status, 'live');
+        assert.equal((await admin(w, 'sources')).body.blocked.length, 0, 'no block written');
+        // A network blocked by hand: every new name from it refused, until lifted.
+        assert.equal((await admin(w, 'blocked', { kind: 'asn', value: 64501, days: 1 })).status, 200);
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'from-home' })).status, 403);
+        assert.equal((await admin(w, 'blocked', { kind: 'asn', value: 64501, remove: true })).body.removed, true);
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'from-home' })).body.status, 'live');
+        assert.equal((await admin(w, 'blocked', { kind: 'asn', value: 'x' })).status, 400);
+    } finally { w.restore(); }
+});
+
+// Review of #2132: "Reject all held" took every pending name of the group, a gated claim and a name still being set up
+// with the held ones, while its button counted and promised the held ones only.
+test('"Reject all held" frees only the held names: a gated claim and a name being set up from the same source stay; Block all takes them', async () => {
+    const w = await sourceWorld();
+    try {
+        w.cf.fail.createTunnel = true;
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'inflight' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'sydney' })).body.status, 'pending', 'gated in the 0001 seed');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'rjg-live' })).body.status, 'live');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'bot-held' })).body.status, 'pending');
+        assert.deepEqual(['inflight', 'sydney', 'bot-held'].map((n) => [row(w, n).status, row(w, n).held_reason]),
+            [['pending', null], ['pending', null], ['pending', 'source']]);
+        const farm = (await admin(w, 'sources')).body.groups[0];
+        assert.deepEqual([farm.names, farm.pending, farm.held], [4, 3, 1]);
+        const r = await admin(w, 'sources', { source: farm.source });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual([r.body.rejected, r.body.blocked, r.body.refused, r.body.more], [['bot-held'], [], [], false]);
+        assert.equal(row(w, 'bot-held').status, 'released');
+        assert.deepEqual(['inflight', 'sydney', 'rjg-live'].map((n) => row(w, n).status), ['pending', 'pending', 'live'], 'only the held name freed');
+        // Asked again: nothing held is left, so nothing is done.
+        const again = await admin(w, 'sources', { source: farm.source });
+        assert.deepEqual([again.body.rejected, again.body.more], [[], false]);
+        assert.deepEqual(['inflight', 'sydney'].map((n) => row(w, n).status), ['pending', 'pending']);
+        // Block all takes every pending name of the source (its confirm says so), and blocks its live one.
+        const rejected = [], blocked = [];
+        let b, rounds = 0;
+        do {
+            b = await admin(w, 'sources', { source: farm.source, block: true });
+            assert.equal(b.status, 200, JSON.stringify(b.body));
+            rejected.push(...b.body.rejected); blocked.push(...b.body.blocked);
+        } while (b.body.more && ++rounds < 10);
+        assert.deepEqual([rejected.sort(), blocked], [['inflight', 'sydney'], ['rjg-live']]);
+    } finally { w.restore(); }
+});
+
+// Review of #2132: without SOURCE_KEY every name fell into one "no source" group, whose Reject all held sent the newest
+// row's network: it freed that network's held names only (and any keyed source's on it), not the group's.
+test('without SOURCE_KEY the names with no source group by network, and a group\'s "Reject all held" frees exactly its held names', async () => {
+    const w = await sourceWorld();
+    try {
+        const net = (ip, asn) => ({ ip, cf: { asn, asOrganization: `Example AS${asn}`, country: 'NL' } });
+        await admin(w, 'settings', { hold: true });
+        // A keyed source on AS64502, held, from before the key went.
+        assert.equal((await claimFrom(w, net('198.51.100.50', 64502), await makeKey(), { name: 'keyed-held' })).body.status, 'pending');
+        delete w.env.SOURCE_KEY;
+        for (const [i, from] of [net('198.51.100.60', 64500), net('198.51.100.61', 64502), net('198.51.100.62', 64500), net('198.51.100.63', 64502)].entries())
+            assert.equal((await claimFrom(w, from, await makeKey(), { name: `nh-${i}` })).body.status, 'pending', `nh-${i}`);
+        const panel = (await admin(w, 'sources')).body;
+        assert.equal(panel.source_key_set, false);
+        const groups = panel.groups.map((g) => [g.source === null ? 'no source' : 'keyed', g.asn, g.names, g.held]).sort((a, b) => `${a}`.localeCompare(`${b}`));
+        assert.deepEqual(groups, [['keyed', 64502, 1, 1], ['no source', 64500, 2, 2], ['no source', 64502, 2, 2]]);
+        // Each no-source group's button names its own network and counts its own held names.
+        const p = await adminPage(w);
+        p.ctx.renderSources(panel);
+        const card = p.els.sourcesContainer.innerHTML;
+        assert.match(card, /data-source-act="reject" data-asn="64500" data-total="2"[^>]*>Reject all held \(2\)</);
+        assert.match(card, /data-source-act="reject" data-asn="64502" data-total="2"[^>]*>Reject all held \(2\)</);
+        // Pressed for AS64502: its two, not AS64500's, nor the keyed source's on the same network.
+        const r = await admin(w, 'sources', { asn: 64502 });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual([r.body.rejected.sort(), r.body.more], [['nh-1', 'nh-3'], false]);
+        assert.deepEqual(['nh-0', 'nh-2', 'keyed-held'].map((n) => row(w, n).status), ['pending', 'pending', 'pending']);
+    } finally { w.restore(); }
+});
+
+// Review of #2132: a held name outlived its claim_sources row (pruned at 24 h), so after a day a bot's held batch was in
+// no group, its /pending rows had no source, and Reject all held and Block all both reached none of it.
+test('a held batch keeps its source past 24 h: still grouped, and Reject all held and Block all reach every held name; a decided name\'s source goes on schedule', async () => {
+    const w = await sourceWorld();
+    try {
+        // Two sources of one network, 9 and 8 new names each in an hour: 3 live, the rest held for `source`.
+        const batch = async (from, prefix, n) => {
+            for (let i = 0; i < n; i++)
+                assert.equal((await claimFrom(w, from, await makeKey(), { name: `${prefix}-${i}` })).body.status, i < 3 ? 'live' : 'pending', `${prefix}-${i}`);
+        };
+        await batch(FROM.bot, 'old', 9);
+        await batch(FROM.other, 'oldb', 8);
+        // 25 hours on (a tenure is its claim's time: the claim and its row move back together). One held name approved then.
+        const ago = 25 * 3600;
+        w.sqlite.prepare('UPDATE claim_sources SET at = at - ?').run(ago);
+        w.sqlite.prepare('UPDATE name_allocations SET requested_at = requested_at - ?, decided_at = decided_at - ?').run(ago, ago);
+        assert.equal((await w.admin('old-8', 'approve')).body.status, 'live');
+        // Both prunes run: a new claim's and the sweep's.
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'today' })).body.status, 'live');
+        await attestSweep(w.env);
+        const heldOf = (p, from, to) => Array.from({ length: to - from + 1 }, (_, i) => `${p}-${from + i}`);
+        const sourcesOf = () => w.sqlite.prepare("SELECT name FROM claim_sources WHERE name LIKE 'old%' ORDER BY name").all().map((r) => r.name);
+        assert.deepEqual(sourcesOf(), [...heldOf('old', 3, 7), ...heldOf('oldb', 3, 7)], 'the held names\' sources kept; the decided ones\' (live, approved) gone');
+        // The panel still groups each held batch by its source.
+        const panel = (await admin(w, 'sources')).body;
+        const groupWith = (n) => panel.groups.find((g) => g.rows.some((r) => r.name === n));
+        const [a, b] = [groupWith('old-3'), groupWith('oldb-3')];
+        assert.ok(a && b && a.source && b.source && a.source !== b.source, JSON.stringify(panel.groups));
+        assert.deepEqual([a.names, a.held, a.asn, b.names, b.held, b.asn], [5, 5, 64500, 5, 5, 64500]);
+        // /pending says where each held name came from.
+        const pending = (await admin(w, 'pending')).body.allocations.filter((r) => r.name.startsWith('old') && r.status === 'pending');
+        assert.equal(pending.length, 10);
+        for (const r of pending) {
+            assert.equal(r.awaiting_approval, true, r.name);
+            assert.equal(r.source?.id, r.name.startsWith('oldb-') ? b.source : a.source, r.name);
+        }
+        // Reject all held on one, Block all on the other, in the page's batches: each reaches all 5.
+        const press = async (body) => {
+            const out = { rejected: [], blocked: [], refused: [] };
+            let r, rounds = 0;
+            do {
+                r = await admin(w, 'sources', body);
+                assert.equal(r.status, 200, JSON.stringify(r.body));
+                for (const k of Object.keys(out)) out[k].push(...r.body[k]);
+            } while (r.body.more && ++rounds < 10);
+            return out;
+        };
+        assert.deepEqual(await press({ source: a.source }), { rejected: heldOf('old', 3, 7), blocked: [], refused: [] });
+        assert.deepEqual(await press({ source: b.source, block: true }), { rejected: heldOf('oldb', 3, 7), blocked: [], refused: [] });
+        for (const n of [...heldOf('old', 3, 7), ...heldOf('oldb', 3, 7)]) assert.equal(row(w, n).status, 'released', n);
+        assert.deepEqual((await admin(w, 'sources')).body.blocked.map((x) => [x.kind, x.value]), [['source', b.source]]);
+        assert.equal((await claimFrom(w, FROM.other, await makeKey(), { name: 'oldb-again' })).status, 403, 'the blocked source refused');
+        // Decided now: their sources go at the next prune.
+        await attestSweep(w.env);
+        assert.deepEqual(sourcesOf(), []);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name = 'today'").get().n, 1, 'the last day\'s kept');
+    } finally { w.restore(); }
+});
+
+test('probation: a new name is live but "not found" on /i/ and the directory waits, until 3 ok sweeps and an hour', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey(), other = await makeKey();
+        const c = await claimFrom(w, FROM.home, key, { name: 'newtown', community_name: 'New Town' });
+        assert.deepEqual([c.body.status, c.body.probation], ['live', true]);
+        w.nodes['newtown.beanpool.org'] = attestsAs(key);
+        // A verified name beside it, so the sweep sees its verifier working.
+        assert.equal((await claimFrom(w, FROM.home, other, { name: 'oldtown' })).body.status, 'live');
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'oldtown'").run();
+        w.nodes['oldtown.beanpool.org'] = attestsAs(other);
+        const onProbation = async () => {
+            assert.equal(await page(w, '/i/anything?n=newtown'), 404);
+            assert.equal(await page(w, '/i/newtown'), 404);
+            assert.equal((await w.status(key)).body.probation, true);
+        };
+        await onProbation();
+        assert.equal(await page(w, '/i/anything?n=oldtown'), 200, 'a verified name is answered');
+        assert.equal((await w.status(other)).body.probation, undefined);
+        // No "New community" at the claim.
+        assert.deepEqual(told(w, 'New communit%'), []);
+        // Three ok sweeps, but not yet an hour: still on probation.
+        for (let i = 0; i < 3; i++) await attestSweep(w.env);
+        assert.equal(row(w, 'newtown').ok_sweeps, 3);
+        await onProbation();
+        // An hour on, the next ok sweep ends it — unless an answer that is not its own comes first: the count starts again.
+        w.sqlite.prepare("UPDATE name_allocations SET decided_at = decided_at - 3700 WHERE name = 'newtown'").run();
+        w.nodes['newtown.beanpool.org'] = async () => new Response('nope', { status: 503 });
+        await attestSweep(w.env);
+        assert.equal(row(w, 'newtown').ok_sweeps, 0, 'an answer that was not its own starts the count again');
+        await onProbation();
+        w.nodes['newtown.beanpool.org'] = attestsAs(key);
+        for (let i = 0; i < 2; i++) await attestSweep(w.env);
+        await onProbation();
+        await attestSweep(w.env);
+        assert.ok(row(w, 'newtown').verified_at > 0, 'verified on the third ok sweep in a row');
+        assert.equal(await page(w, '/i/anything?n=newtown'), 200);
+        assert.equal(await page(w, '/i/newtown'), 200);
+        assert.equal((await w.status(key)).body.probation, undefined, 'its node lists itself now');
+        assert.ok(w.events('newtown').some((e) => e.event === 'verified'));
+        // The "New community" alert, at verification, once.
+        const nc = told(w, 'New communit%');
+        assert.equal(nc.length, 1, JSON.stringify(nc));
+        assert.match(nc[0].body, /newtown\.beanpool\.org — "New Town" is live and verified/);
+        await attestSweep(w.env);
+        assert.equal(told(w, 'New communit%').length, 1);
+        // A bot's burst verified in one sweep is one message.
+        w.setting('probation_sweeps', 1);
+        w.setting('probation_s', 0);
+        for (let i = 0; i < 4; i++) {
+            const k = await makeKey();
+            await claimFrom(w, { ip: `198.51.100.${100 + i}`, cf: {} }, k, { name: `burst-${i}` });
+            w.nodes[`burst-${i}.beanpool.org`] = attestsAs(k);
+        }
+        await attestSweep(w.env);
+        const burst = told(w, 'New communities%');
+        assert.equal(burst.length, 1, JSON.stringify(told(w, 'New communit%')));
+        assert.match(burst[0].title, /4 verified/);
+    } finally { w.restore(); }
+});
+
+test('"Hold all new names": an auto claim waits for approval, names held now are untouched; it lets go by itself after 24 h', async () => {
+    const w = await sourceWorld();
+    try {
+        const owner = await makeKey();
+        assert.equal((await claimFrom(w, FROM.home, owner, { name: 'already' })).body.status, 'live');
+        w.nodes['already.beanpool.org'] = attestsAs(owner);
+        const on = await admin(w, 'settings', { hold: true });
+        assert.equal(on.status, 200, JSON.stringify(on.body));
+        assert.equal(on.body.hold.on, true);
+        assert.ok(on.body.hold.until > nowS() + 23 * 3600);
+        const k = await makeKey();
+        const r = await claimFrom(w, FROM.home, k, { name: 'whileheld' });
+        assert.equal(r.body.status, 'pending');
+        assert.equal(row(w, 'whileheld').held_reason, 'hold-all');
+        assert.deepEqual([(await w.status(k)).body.reason], ['awaiting-approval']);
+        // Names already held are untouched: the owner's claim and heal of its own name still work.
+        assert.equal((await claimFrom(w, FROM.home, owner, { name: 'already' })).body.status, 'live');
+        assert.equal((await w.heal(owner, { name: 'already' })).body.status, 'live');
+        assert.equal(told(w, '%changed the registrar\'s settings').length, 1, 'the switch is told');
+        // Off: claims go live again.
+        await admin(w, 'settings', { hold: false });
+        // (Each from its own address from here: one source's fourth would be held for that.)
+        assert.equal((await claimFrom(w, { ip: '203.0.113.31', cf: {} }, await makeKey(), { name: 'afteroff' })).body.status, 'live');
+        // On again, then 24 h pass: off by itself.
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, { ip: '203.0.113.32', cf: {} }, await makeKey(), { name: 'heldagain' })).body.status, 'pending');
+        w.sqlite.prepare("UPDATE settings SET value = ? WHERE key = 'hold_new_names_until'").run(String(nowS() - 1));
+        assert.equal((await claimFrom(w, { ip: '203.0.113.33', cf: {} }, await makeKey(), { name: 'letgo' })).body.status, 'live');
+    } finally { w.restore(); }
+});
+
+test('the DNS cap (CAPACITY 200): the 121st name alerts, and from the 161st every new auto name is held', async () => {
+    const w = await sourceWorld();
+    try {
+        const k = (i) => i.toString(16).padStart(4, '0').repeat(16);
+        const add = (from, to) => {
+            const ins = w.sqlite.prepare("INSERT INTO name_allocations (name, node_pubkey, hostname, mode, status, attest_fails, requested_at, decided_at, decided_by, verified_at) VALUES (?, ?, ?, 'tunnel', 'live', 0, ?, ?, 'admin', 1)");
+            for (let i = from; i < to; i++) ins.run(`fill-${i}`, k(i), `fill-${i}.beanpool.org`, nowS() - 86400 * 3, nowS() - 86400 * 3);
+        };
+        add(0, 119);
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'the-120th' })).body.status, 'live');
+        assert.deepEqual(told(w, 'Names near the DNS cap%'), [], 'nothing at 120');
+        assert.equal((await claimFrom(w, { ip: '203.0.113.21', cf: {} }, await makeKey(), { name: 'the-121st' })).body.status, 'live');
+        const cap = told(w, 'Names near the DNS cap%');
+        assert.equal(cap.length, 1, JSON.stringify(cap));
+        assert.match(cap[0].title, /121 of 200/);
+        assert.match(cap[0].body, /from 160 every new name is held/);
+        // Told once a day, not once a name.
+        assert.equal((await claimFrom(w, { ip: '203.0.113.22', cf: {} }, await makeKey(), { name: 'the-122nd' })).body.status, 'live');
+        assert.equal(told(w, 'Names near the DNS cap%').length, 1);
+        // 160 names: the 161st is held for the admin, whose last places they are.
+        add(122, 160);
+        const r = await claimFrom(w, { ip: '203.0.113.23', cf: {} }, await makeKey(), { name: 'the-161st' });
+        assert.equal(r.body.status, 'pending');
+        assert.equal(row(w, 'the-161st').held_reason, 'near-full');
+        assert.equal((await w.admin('the-161st', 'approve')).body.status, 'live', 'the admin gives it');
+        // Held names make nothing at Cloudflare: a bot's held batch does not count against the zone.
+        const held = await claimFrom(w, { ip: '203.0.113.25', cf: {} }, await makeKey(), { name: 'held-one' });
+        assert.equal(held.body.status, 'pending');
+        assert.equal((await admin(w, 'sources')).body.capacity.names, 161, 'the 161 live; the held one not counted');
+        // Raised to a Pro zone's 1,000 in /admin: the gate moves with it (80%), and so does the alert line (60%).
+        const pro = await admin(w, 'settings', { key: 'capacity', value: 1000 });
+        assert.equal(pro.status, 200);
+        assert.deepEqual(['capacity_alert_at', 'capacity_hold_at'].map((k) => pro.body.settings.find((x) => x.key === k)).map((x) => [x.value, x.default]), [[600, 600], [800, 800]]);
+        assert.equal((await claimFrom(w, { ip: '203.0.113.24', cf: {} }, await makeKey(), { name: 'after-pro' })).body.status, 'live');
+    } finally { w.restore(); }
+});
+
+test('the live limits are settings in D1: a row there beats the env and the default; /admin writes them, refusing nonsense', async () => {
+    const w = await sourceWorld({ NEW_NAMES_PER_HOUR: '40' });
+    try {
+        const panel = (await admin(w, 'sources')).body;
+        const get = (p, key) => p.settings.find((x) => x.key === key);
+        assert.deepEqual([get(panel, 'source_per_hour').value, get(panel, 'source_per_hour').set], [3, null], 'the default');
+        assert.equal(get(panel, 'new_names_per_hour').value, 40, 'the env, with no row');
+        assert.equal(get(panel, 'capacity').value, 200);
+        assert.equal(get(panel, 'capacity_alert_at').value, 120);
+        // Raised in /admin: the 4th and 5th from one source go live, the 6th is held.
+        const set = await admin(w, 'settings', { key: 'source_per_hour', value: 5 });
+        assert.equal(set.status, 200, JSON.stringify(set.body));
+        assert.equal(get(set.body, 'source_per_hour').value, 5);
+        assert.equal(get(set.body, 'source_per_hour').set.value, '5');
+        for (let i = 0; i < 5; i++) assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: `lim-${i}` })).body.status, 'live', `lim-${i}`);
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'lim-5' })).body.status, 'pending');
+        // A D1 row beats the env.
+        assert.equal(get((await admin(w, 'settings', { key: 'new_names_per_hour', value: 5 })).body, 'new_names_per_hour').value, 5);
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'budgeted' })).body.status, 'pending', 'the 5 live this hour spent it');
+        assert.equal(row(w, 'budgeted').held_reason, 'budget');
+        // The per-key limit and the sweep's strikes read it too.
+        await admin(w, 'settings', { key: 'claim_limit_per_key', value: 1 });
+        const one = await makeKey();
+        await w.setting('new_names_per_hour', 100);
+        assert.equal((await claimFrom(w, FROM.home, one, { name: 'firstone' })).body.status, 'live');
+        assert.equal((await claimFrom(w, FROM.home, one, { name: 'secondone' })).status, 403, 'one name a key');
+        // Nonsense is refused, and nothing changes: a missing or null value too (review of #2132: the page's NaN, which JSON
+        // writes as null, put the limit back to its default), never read as a reset.
+        for (const bad of [{ key: 'source_per_hour', value: 0 }, { key: 'source_per_hour', value: 'lots' }, { key: 'source_per_hour', value: 1.5 }, { key: 'no_such', value: 3 },
+            { key: 'source_per_hour', value: null }, { key: 'source_per_hour' }, { key: 'source_per_hour', value: '' }]) {
+            const r = await admin(w, 'settings', bad);
+            assert.equal(r.status, 400, JSON.stringify(bad));
+        }
+        assert.equal(get((await admin(w, 'sources')).body, 'source_per_hour').value, 5);
+        // Back to the default: said so (reset), never a null value.
+        assert.equal(get((await admin(w, 'settings', { key: 'source_per_hour', reset: true })).body, 'source_per_hour').value, 3);
+        // Every change is told.
+        assert.ok(told(w, '%changed the registrar\'s settings').length >= 4);
+        // The admin's routes answer only the admin.
+        const anon = await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/settings', { method: 'POST', body: '{"key":"source_per_hour","value":99}' }), w.env);
+        assert.equal(anon.status, 401);
+    } finally { w.restore(); }
+});
+
+test('privacy: no address is stored — a keyed hash only, and none without SOURCE_KEY; sources go after 24 h; IPv6 counts by its /64', async () => {
+    const w = await sourceWorld();
+    try {
+        await claimFrom(w, FROM.bot, await makeKey(), { name: 'priv-a' });
+        const dump = JSON.stringify(w.sqlite.prepare('SELECT * FROM claim_sources').all());
+        assert.ok(!dump.includes(FROM.bot.ip), 'the address is in no column');
+        const r = w.sqlite.prepare('SELECT * FROM claim_sources').get();
+        assert.match(r.source_hash, /^[0-9a-f]{64}$/);
+        assert.deepEqual([r.asn, r.as_org, r.country, r.name], [64500, 'Example Hosting', 'NL', 'priv-a']);
+        // The hash is keyed: another SOURCE_KEY gives another one for the same address.
+        w.env.SOURCE_KEY = 'another-key';
+        await claimFrom(w, FROM.bot, await makeKey(), { name: 'priv-b' });
+        const hashes = w.sqlite.prepare('SELECT DISTINCT source_hash FROM claim_sources').all();
+        assert.equal(hashes.length, 2);
+        // Without the secret: no hash at all, so no per-source budget — the claims still work.
+        delete w.env.SOURCE_KEY;
+        for (let i = 0; i < 5; i++) assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: `nokey-${i}` })).body.status, 'live');
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name LIKE 'nokey-%' AND source_hash IS NULL").get().n, 5);
+        assert.equal((await admin(w, 'sources')).body.source_key_set, false);
+        // A day on, the sweep deletes them.
+        w.sqlite.prepare("UPDATE claim_sources SET at = at - 86401 WHERE name LIKE 'nokey-%'").run();
+        await attestSweep(w.env);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name LIKE 'nokey-%'").get().n, 0);
+        assert.equal(w.sqlite.prepare('SELECT COUNT(*) AS n FROM claim_sources').get().n, 2);
+        // IPv6: one host's /64 is one source, however it spells its address; IPv4 in IPv6 is the IPv4 address.
+        assert.equal(sourceAddress('2001:db8:1:2::1'), '2001:db8:1:2::/64');
+        assert.equal(sourceAddress('2001:0DB8:0001:0002:ffff:0:0:9'), '2001:db8:1:2::/64');
+        assert.equal(sourceAddress('::ffff:198.51.100.7'), '198.51.100.7');
+        assert.equal(sourceAddress('2001:db8::198.51.100.7'), null, 'only a mapped IPv4 address is read as one');
+        assert.equal(sourceAddress('not an address'), null);
+        assert.equal(sourceAddress('1::2::3'), null);
+        w.env.SOURCE_KEY = KEY;
+        for (let i = 0; i < 4; i++) await claimFrom(w, { ip: `2001:db8:1:2::${i + 1}`, cf: {} }, await makeKey(), { name: `six-${i}` });
+        assert.equal(row(w, 'six-3').held_reason, 'source', 'four addresses of one /64 are one source');
+        // The alerts carry no address either.
+        assert.ok(!JSON.stringify(w.sqlite.prepare('SELECT * FROM alert_outbox').all()).includes('2001:db8'));
+    } finally { w.restore(); }
+});
+
+test('a busy network is told once a day, and nothing is held for that alone', async () => {
+    const w = await sourceWorld();
+    try {
+        w.setting('asn_per_day', 2);
+        for (let i = 0; i < 4; i++) {
+            const r = await claimFrom(w, { ip: `198.51.100.${10 + i}`, cf: { asn: 64999, asOrganization: 'Busy Cloud', country: 'DE' } }, await makeKey(), { name: `busy-${i}` });
+            assert.equal(r.body.status, 'live', `busy-${i}: four sources, one network`);
+        }
+        const t = told(w, 'Many new names from AS64999');
+        assert.equal(t.length, 1, JSON.stringify(t));
+        assert.match(t[0].body, /3 in the last 24 hours from AS64999 Busy Cloud \(DE\)/);
+    } finally { w.restore(); }
+});
+
+// D1 allows 50 queries an invocation on Workers Free: one request of Block all (its batch of names, the block, the alert)
+// stays well inside it, with alerts on and Cloudflare refusing every delete (each refusal is owed: more queries).
+test('one Block all request stays inside D1\'s 50 queries, with alerts on and Cloudflare refusing deletes', async () => {
+    const w = await sourceWorld({ NTFY_URL: 'https://ntfy.test/bp-topic' });
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => (new URL(typeof input === 'string' ? input : input.url).hostname === 'ntfy.test'
+        ? new Response('{"id":"x"}', { status: 200 }) : inner(input, init));
+    try {
+        for (let i = 0; i < 6; i++) await claimFrom(w, FROM.bot, await makeKey(), { name: `q-${i}` });
+        const farm = (await admin(w, 'sources')).body.groups[0];
+        w.cf.fail.deleteTunnel = true;
+        w.cf.fail.deleteDns = true;
+        const DB = w.env.DB;
+        let most = 0;
+        for (let round = 0; round < 5; round++) {
+            let n = 0;
+            const counted = (stmt) => ({ bind: (...a) => counted(stmt.bind(...a)), first: (...a) => (n++, stmt.first(...a)), all: (...a) => (n++, stmt.all(...a)), run: (...a) => (n++, stmt.run(...a)) });
+            w.env.DB = { prepare: (sql) => counted(DB.prepare(sql)) };
+            const r = await admin(w, 'sources', { source: farm.source, block: true, run: 'run-q-budget-01', total: 6 });
+            w.env.DB = DB;
+            assert.equal(r.status, 200, JSON.stringify(r.body));
+            most = Math.max(most, n);
+            if (!r.body.more) break;
+        }
+        assert.ok(most <= 45, `a Block all request ran ${most} D1 queries`);
+        for (let i = 0; i < 6; i++) assert.ok(['blocked', 'released'].includes(row(w, `q-${i}`).status), `q-${i}: ${row(w, `q-${i}`).status}`);
+    } finally { globalThis.fetch = inner; w.restore(); }
+});
+
+// The served page against a stub document: what the New names card draws, and what its buttons send.
+async function adminPage(w, answers = {}) {
+    const html = await (await worker.fetch(new Request('https://beanpool.org/admin'), w.env)).text();
+    const script = html.split('<script>')[1].split('</script>')[0];
+    const els = {};
+    const sent = [];
+    const confirms = [];
+    const alerts = [];
+    const clicks = [];
+    const el = (id) => (els[id] ??= { id, innerHTML: '', value: '', textContent: '', style: {}, addEventListener() {}, querySelector: () => null });
+    const ctx = {
+        console,
+        document: { getElementById: el, addEventListener: (type, fn) => { if (type === 'click') clicks.push(fn); }, querySelector: () => null },
+        sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+        confirm: (text) => { confirms.push(text); return true; },
+        alert: (text) => { alerts.push(text); },
+        fetch: async (url, init = {}) => {
+            sent.push({ url, init });
+            const body = (answers[url] || (() => ({ allocations: [], events: [] })))(init);
+            return { ok: true, status: 200, json: async () => body };
+        },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(script, ctx);
+    const click = async (attrs) => {
+        const target = { closest: (sel) => { const m = /^\[([a-z-]+)\]$/.exec(sel); return m && attrs[m[1]] !== undefined ? { getAttribute: (k) => attrs[k] ?? null } : null; } };
+        for (const fn of clicks) await fn({ target });
+        for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    };
+    return { html, ctx, els, sent, confirms, alerts, click };
+}
+
+test('/admin: the New names card shows the switch, the groups and their one-click actions; held names say why and from where', async () => {
+    const w = await sourceWorld();
+    try {
+        for (let i = 0; i < 5; i++) await claimFrom(w, FROM.bot, await makeKey(), { name: `pg-${i}` });
+        const panel = (await admin(w, 'sources')).body;
+        let rounds = 0;
+        const p = await adminPage(w, { '/api/local/admin/registrar/sources': (init) => (init.method === 'POST'
+            ? { rejected: ['pg-3'], blocked: ['pg-0'], refused: [], more: ++rounds < 2 } : panel) });
+        assert.match(p.html, /🧭 New names, last 24 h</);
+        p.ctx.renderSources(panel);
+        const card = p.els.sourcesContainer.innerHTML;
+        assert.match(card, /data-hold="1"[^>]*>⏸️ Hold all new names \(24 h\)</);
+        assert.match(card, /AS64500 Example Hosting \(NL\)/);
+        assert.match(card, /data-source-act="reject" data-source="[0-9a-f]{64}" data-total="2"[^>]*>Reject all held \(2\)</);
+        assert.match(card, /data-source-act="block" data-source="[0-9a-f]{64}" data-total="5"[^>]*>Block all \(5\)</);
+        assert.match(card, /pg-3 \(held\)/);
+        assert.match(card, /pg-0 \(probation\)/);
+        assert.match(card, /Names on the zone \(live, or being made\): <b>3<\/b> of its 200 DNS records/);
+        assert.match(card, /data-setting-save="source_per_hour"/);
+        assert.ok(!card.includes(FROM.bot.ip), 'no address on the page');
+        // Block all: confirmed, then the Worker's batches until it says no more, with one run id for the click.
+        await p.click({ 'data-source-act': 'block', 'data-source': panel.groups[0].source, 'data-total': '5' });
+        assert.match(p.confirms.at(-1), /^⛔ BLOCK ALL from this source \(5 names\)\?/);
+        const posts = p.sent.filter((x) => x.url === '/api/local/admin/registrar/sources' && x.init.method === 'POST').map((x) => JSON.parse(x.init.body));
+        assert.equal(posts.length, 2, 'asked again while more');
+        assert.deepEqual(posts.map((b) => [b.source, b.block, b.total]), [[panel.groups[0].source, true, 5], [panel.groups[0].source, true, 5]]);
+        assert.equal(posts[0].run, posts[1].run);
+        // The switch.
+        await p.click({ 'data-hold': '1' });
+        assert.deepEqual(JSON.parse(p.sent.at(-1).init.body), { hold: true });
+        assert.equal(p.sent.at(-1).url, '/api/local/admin/registrar/settings');
+        // A held name in the Awaiting card: why it waits and where it came from, never its address.
+        const pending = (await admin(w, 'pending')).body.allocations.filter((a) => a.status === 'pending');
+        p.ctx.renderPending(pending);
+        const awaiting = p.els.pendingTableContainer.innerHTML;
+        assert.match(awaiting, /held: many from one source · AS64500 Example Hosting \(NL\) · source [0-9a-f]{8}/);
+        assert.ok(!awaiting.includes(FROM.bot.ip));
+    } finally { w.restore(); }
+});
+
+// Review of #2132: Number('1,000') is NaN, which JSON writes as null, which the Worker read as "back to the default".
+test('/admin: a Limits box saves digits only, refusing anything else on the page; Default asks for the default by name', async () => {
+    const w = await sourceWorld();
+    try {
+        w.setting('source_per_hour', 7);
+        const panel = (await admin(w, 'sources')).body;
+        const p = await adminPage(w, { '/api/local/admin/registrar/settings': () => panel });
+        p.ctx.renderSources(panel);
+        const settingPosts = () => p.sent.filter((x) => x.url === '/api/local/admin/registrar/settings').map((x) => JSON.parse(x.init.body));
+        const box = p.ctx.document.getElementById('set-source_per_hour');
+        for (const typed of ['1,000', '5h', '1e3', '-2', '1.5', '7 0']) {
+            box.value = typed;
+            await p.click({ 'data-setting-save': 'source_per_hour' });
+            assert.match(p.alerts.at(-1), /^Not saved: type a whole number/, typed);
+        }
+        assert.deepEqual(settingPosts(), [], 'nothing sent for any of them');
+        box.value = ' 12 ';
+        await p.click({ 'data-setting-save': 'source_per_hour' });
+        await p.click({ 'data-setting-default': 'source_per_hour' });
+        assert.deepEqual(settingPosts(), [{ key: 'source_per_hour', value: 12 }, { key: 'source_per_hour', reset: true }]);
+        assert.equal(w.sqlite.prepare("SELECT value FROM settings WHERE key = 'source_per_hour'").get().value, '7', 'the stub answered; the row is as it was');
+    } finally { w.restore(); }
+});
+
+test('the daily line says while "Hold all new names" is on', async () => {
+    const w = await sourceWorld();
+    try {
+        const at = Math.floor(Date.UTC(2026, 9, 18, 22, 30) / 1000);   // 08:30 in Brisbane: the daily line's hour
+        w.setting('hold_new_names_until', at + 3600);
+        assert.equal(await dailyLine(w.env, [], at), true);
+        const line = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary'").get().body;
+        assert.match(line, /Hold all new names is on, until 2026-10-18 23:30 UTC: every new name waits for your approval\./);
+        // Off (or past its 24 h): not said.
+        w.setting('hold_new_names_until', 0);
+        w.sqlite.prepare('DELETE FROM watch_marks').run();
+        await dailyLine(w.env, [], at + 86400);
+        const next = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary' ORDER BY id DESC").get().body;
+        assert.doesNotMatch(next, /Hold all new names/);
+        // A read of the switch that fails (D1 busy) says so, and the rest of the line still goes.
+        w.sqlite.prepare('DELETE FROM watch_marks').run();
+        w.failSettingsRead();
+        assert.equal(await dailyLine(w.env, [], at + 2 * 86400), true);
+        const third = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary' ORDER BY id DESC").get().body;
+        assert.match(third, /Hold all new names: its setting could not be read just now/);
+    } finally { w.restore(); }
+});
+
+// Review of #2132: a settings read that fails (D1 overloaded, a connection lost) is not a database without migration
+// 0011. Read as one, a claim skipped the blocks, the holds, the source record and probation, and the sweep finished held
+// names as orphans.
+test('a settings read that fails stops a new name with a 5xx (its node retries): a blocked network and "Hold all new names" are never skipped', async () => {
+    const w = await sourceWorld();
+    try {
+        assert.equal((await admin(w, 'blocked', { kind: 'asn', value: 64500 })).status, 200);
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-a' })).status, 403);
+        w.failSettingsRead();
+        const r = await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-b' });
+        assert.equal(r.status, 500, JSON.stringify(r.body));
+        assert.equal(row(w, 'blocked-b'), undefined, 'nothing written');
+        assert.equal(liveTunnels(w), 0, 'nothing made at Cloudflare');
+        assert.equal((await claimFrom(w, FROM.bot, await makeKey(), { name: 'blocked-b' })).status, 403, 'read again: blocked');
+        // The switch, the same.
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'held-a' })).body.status, 'pending');
+        w.failSettingsRead();
+        const h = await claimFrom(w, FROM.home, await makeKey(), { name: 'held-b' });
+        assert.equal(h.status, 500, JSON.stringify(h.body));
+        assert.equal(row(w, 'held-b'), undefined);
+        assert.equal(liveTunnels(w), 0);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM claim_sources WHERE name = 'held-b'").get().n, 0);
+        // A key taking back its own release reads them too (its claim limit): it waits as well, its row as it was.
+        await admin(w, 'settings', { hold: false });
+        const own = await makeKey();
+        const LONE = { ip: '203.0.113.40', cf: {} };   // a network not blocked above
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).body.status, 'live');
+        assert.equal((await w.release(own)).body.status, 'released');
+        w.failSettingsRead();
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).status, 500);
+        assert.equal(row(w, 'mine').status, 'released');
+        assert.equal((await claimFrom(w, LONE, own, { name: 'mine' })).status, 200);
+    } finally { w.restore(); }
+});
+
+test('a sweep whose settings read fails never finishes a held name as an orphan, and still finishes a real one', async () => {
+    const w = await sourceWorld();
+    try {
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'hold-c' })).body.status, 'pending');
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'hold-c'").run();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'hold-c').status, 'pending');
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.deepEqual([row(w, 'hold-c').status, row(w, 'hold-c').held_reason, row(w, 'hold-c').tunnel_id], ['pending', 'hold-all', null]);
+        assert.equal(liveTunnels(w), 0, 'nothing made for it');
+        // A claim Cloudflare failed (held by nothing) is an orphan whatever the settings read: that sweep finishes it.
+        await admin(w, 'settings', { hold: false });
+        w.cf.fail.createTunnel = true;
+        assert.equal((await claimFrom(w, FROM.home, await makeKey(), { name: 'orphaned' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'orphaned'").run();
+        await admin(w, 'settings', { hold: true });
+        w.failSettingsRead();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'orphaned').status, 'live');
+        assert.equal(row(w, 'hold-c').status, 'pending');
+    } finally { w.restore(); }
+});
+
+test('on a database without migration 0011 (no held_reason) the sweep still finishes an orphan', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql'] });
+    try {
+        w.cf.fail.createTunnel = true;
+        assert.equal((await w.claim(await makeKey(), { name: 'oldorphan' })).status, 502);
+        w.cf.fail.createTunnel = false;
+        w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'oldorphan'").run();
+        await attestSweep(w.env);
+        assert.equal(row(w, 'oldorphan').status, 'live');
+    } finally { w.restore(); }
+});
+
+test('a sweep whose settings read fails acts on no verdict — no strike, no pause, no probation counted — and is logged suspended and told', async () => {
+    const w = await sourceWorld();
+    try {
+        const a = await makeKey(), b = await makeKey(), stranger = await makeKey();
+        assert.equal((await claimFrom(w, FROM.home, a, { name: 'steady' })).body.status, 'live');
+        assert.equal((await claimFrom(w, FROM.other, b, { name: 'twin' })).body.status, 'live');
+        w.nodes['steady.beanpool.org'] = attestsAs(a);
+        w.nodes['twin.beanpool.org'] = attestsAs(stranger);
+        w.setting('attest_fail_limit', 5);   // the admin's, over the env's 2
+        const facts = () => [row(w, 'steady').ok_sweeps, row(w, 'twin').attest_fails, row(w, 'twin').status];
+        assert.equal((await attestSweep(w.env)).action, 'applied');
+        assert.deepEqual(facts(), [1, 1, 'live']);
+        w.failSettingsRead();
+        assert.equal((await attestSweep(w.env)).action, 'suspended:settings');
+        assert.deepEqual(facts(), [1, 1, 'live'], 'nothing counted and nothing paused: not by the env\'s limit either');
+        assert.equal(w.sqlite.prepare('SELECT action FROM sweep_log ORDER BY id DESC LIMIT 1').get().action, 'suspended:settings');
+        const t = told(w, 'Attest sweep suspended');
+        assert.equal(t.length, 1, JSON.stringify(t));
+        assert.match(t[0].body, /could not read its settings/);
+        // Read again: the sweep acts, by the admin's limit.
+        assert.equal((await attestSweep(w.env)).action, 'applied');
+        assert.deepEqual(facts(), [2, 2, 'live']);
+        assert.equal(told(w, 'Resolved: Attest sweep suspended').length, 1);
+    } finally { w.restore(); }
+});

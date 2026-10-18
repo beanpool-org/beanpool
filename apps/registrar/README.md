@@ -5,7 +5,7 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
   name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `POST /api/registrar/rotate` (a fresh
-  tunnel, below) · `GET /api/registrar/status` (with `?seen=`, and its `notices`: "Notices to operators", below) ·
+  tunnel, below) · `GET /api/registrar/status` (with `?notices=1` and `?seen=`, and its `notices`: "Notices to operators", below) ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works) ·
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
@@ -274,9 +274,11 @@ Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §3.2 (D4, decided
   hears it on its own signed `/status` (every 5 or 15 minutes): up to 5 not yet seen, oldest first, as
   `notices: [{id, at, level, text, name, link?}]`. The node sends back
   `?seen=<the highest id it has>`, signed with the query (`x-bp-signature-query`); every notice carried to it up to that
-  id is marked seen and never carried again. A notice is carried only while its name is still held by that key
-  (pending, live, paused or **blocked**: a blocked operator hears why); it stops at release. An older node ignores the
-  field and sends no `seen`. A failure here never fails a `/status`.
+  id is marked seen and never carried again. Only a node that asks with `?notices=1`, signed with the query too, is
+  carried any: an older node asks for none, and is carried none and marked as having none (it would store the whole
+  answer in its saved address, a reply link included, and never show it or say `seen`). A notice is carried only while
+  its name is still held by that key (pending, live, paused or **blocked**: a blocked operator hears why); it stops at
+  release. A failure here never fails a `/status`.
 - **The words:** at most 500 characters, lines kept, no control or text-reordering characters; level `info`, `warning` or
   `action`; carried for `days` (default 14, at most 90). Each name's history (`name_events`, event `notice`) records the
   notice's number and level, never its words; the admin's phone is told it was sent (how many names), never the words.
@@ -295,8 +297,8 @@ Design: `scratch/global-node/DESIGN-registrar-trust-fable.md` §3.2 (D4, decided
   with their recipients and links (a used link is a reply /admin counts, so it stays as long as its notice) — each only
   with D1 queries to spare.
 - **Deploy:** migration 0012 before the Worker (the workflow applies `migrations/` first; this Worker without it carries
-  no notices and answers everything else as before). The node release after the Worker (an older node ignores
-  `notices`). Reply links: deploy apps/feedback (its README, "Reply links") after this Worker, then uncomment
+  no notices and answers everything else as before). The node release after the Worker (an older node asks for no
+  `notices` and is carried none; "delivered" in /admin counts only the nodes that asked). Reply links: deploy apps/feedback (its README, "Reply links") after this Worker, then uncomment
   `REPLY_URL` and deploy this Worker again.
 
 ## Limits on what a key may do (the 2026-10-01 review)
@@ -673,7 +675,8 @@ log line. `test/sources-2026-10-18.test.js` covers S3: a source past its limit h
 all and Reject all held, a network blocked by hand, probation (the switchboard, `/status`, the alert at verification,
 a burst told once), the hold switch, the DNS cap's alert and hold, the settings beating the env and the defaults, no
 address stored anywhere, and one Block all request inside D1's budget. `test/notices-2026-10-18.test.js` covers S2: a
-notice carried once per `/status` until `seen` (a `seen` outside its signature acknowledges nothing), a blocked key still
+notice carried once per `/status` until `seen` (a `seen` outside its signature acknowledges nothing), none to a `/status`
+that does not ask with `?notices=1` (an older node: nothing marked delivered, no reply link made), a blocked key still
 hearing it and a released name not, reply links (one use, expiry, a released name, only the hash kept), the audiences
 (one per key, a source and a network group), the words never in an event or an alert, contact retention, the hourly
 tidying, and a database without migration 0012.

@@ -13,9 +13,10 @@ const REPLY_URL = 'https://beanpool.org/reply/';
 const noticeWorld = (env = {}) => world({ env });
 
 // A node's /status, as registrar-client.ts sends it: the path signed in x-bp-signature, and the query (`?name=`,
-// `?seen=`) in x-bp-signature-query under the same timestamp.
+// `?notices=1`, `?seen=`) in x-bp-signature-query under the same timestamp. `notices: null`: an older node's, which
+// asks for none.
 async function status(w, key, query = {}) {
-    const search = Object.entries(query).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+    const search = Object.entries({ notices: '1', ...query }).filter(([, v]) => v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
     const req = await w.signed('GET', '/api/registrar/status', key);
     if (search) {
         const ts = req.headers.get('x-bp-timestamp');
@@ -77,13 +78,43 @@ test('a notice sent appears once in the next /status, and never after the node s
         // A seen that is not covered by its signature is not read: a replayed /status can't acknowledge for the node.
         const second = (await send(w, { to: { names: ['alpha'] }, text: 'Second notice.' })).body.id;
         assert.deepEqual(ids(await status(w, key)), [second]);
-        const unsigned = new Request(`https://beanpool.org/api/registrar/status?seen=${second}`, { headers: (await w.signed('GET', '/api/registrar/status', key)).headers });
-        assert.deepEqual((await (await worker.fetch(unsigned, w.env)).json()).notices.map((x) => x.id), [second], 'an unsigned ?seen= acknowledges nothing');
+        // Nor is an unsigned ?notices=1, so it carries nothing; the signed /status after it still carries the notice.
+        const unsigned = new Request(`https://beanpool.org/api/registrar/status?notices=1&seen=${second}`, { headers: (await w.signed('GET', '/api/registrar/status', key)).headers });
+        assert.equal((await (await worker.fetch(unsigned, w.env)).json()).notices, undefined, 'an unsigned ?notices=1 carries nothing');
+        assert.deepEqual(ids(await status(w, key)), [second], 'an unsigned ?seen= acknowledges nothing');
         assert.deepEqual(ids(await status(w, key, { seen: String(second) })), []);
         // Another key hears nothing of it.
         const other = await makeKey();
         await liveName(w, 'beta', other);
         assert.deepEqual(ids(await status(w, other)), []);
+    } finally { w.restore(); }
+});
+
+// An older node asks for no notices (no `?notices=1`): it would keep the whole answer in its saved address, a live reply
+// link included, and never show it or say seen (#2151 review 4306341021). It is carried none, nothing is marked
+// delivered to it, and no reply link is made for it; a node that asks is carried the same notice after.
+test('a /status without ?notices=1 (an older node) carries no notice and marks nothing delivered', async () => {
+    const w = await noticeWorld({ REPLY_URL });
+    try {
+        const key = await makeKey();
+        await liveName(w, 'old-node', key);
+        const id = (await send(w, { to: { names: ['old-node'] }, text: 'Please tell us how setup went.', reply: true })).body.id;
+        for (const query of [{ notices: null }, { notices: null, name: 'old-node' }, { notices: '0', name: 'old-node' }]) {
+            const st = await status(w, key, query);
+            assert.equal(st.status, 200);
+            assert.equal(st.body.status, 'live', 'the rest of the answer is as before');
+            assert.ok(st.body.tunnelToken);
+            assert.equal(st.body.notices, undefined, JSON.stringify(query));
+        }
+        const r = w.sqlite.prepare('SELECT * FROM notice_recipients WHERE notice_id=?').get(id);
+        assert.equal(r.delivered_at, null, 'not marked delivered');
+        assert.equal(r.reply_token, null);
+        assert.equal(tokens(w).length, 0, 'no reply link made for it');
+        assert.equal((await admin(w, 'notices')).body.notices.find((x) => x.id === id).delivered, 0, '/admin counts it as not delivered');
+        const asked = await status(w, key, { name: 'old-node' });
+        assert.deepEqual(ids(asked), [id], 'a node that asks is carried it');
+        assert.match(asked.body.notices[0].link, /^https:\/\/beanpool\.org\/reply\/[A-Za-z0-9_-]{43}$/);
+        assert.equal((await admin(w, 'notices')).body.notices.find((x) => x.id === id).delivered, 1);
     } finally { w.restore(); }
 });
 

@@ -30,9 +30,14 @@ const REPLY_PATH = /^\/reply\/[A-Za-z0-9_-]{43}$/;
 const range = (a: number, b: number) => `${String.fromCodePoint(a)}-${String.fromCodePoint(b)}`;
 const UNSAFE = new RegExp(`[${range(0x00, 0x09)}${range(0x0b, 0x1f)}${range(0x7f, 0x9f)}${range(0x2028, 0x2029)}${range(0x202a, 0x202e)}${range(0x2066, 0x2069)}]`, 'u');
 
+/** Whether this server takes notices, and so asks /status for them (`notices=1`): the main server only. */
+export function takesRegistrarNotices(): boolean {
+    return getNodeRole() === 'primary';
+}
+
 /** The highest notice id this server has had, for /status's `seen`; 0 on a standby, which takes none. */
 export function noticeSeenMark(): number {
-    if (getNodeRole() !== 'primary') return 0;
+    if (!takesRegistrarNotices()) return 0;
     const n = Number(getLocalConfig().registrarNoticeSeen);
     return Number.isSafeInteger(n) && n > 0 ? n : 0;
 }
@@ -78,7 +83,7 @@ function noticeOf(raw: any, registrarBase: string, now: number): RegistrarNotice
  */
 export function takeRegistrarNotices(list: unknown, registrarBase: string, now = Date.now()): number[] {
     try {
-        if (!Array.isArray(list) || !list.length || getNodeRole() !== 'primary') return [];
+        if (!Array.isArray(list) || !list.length || !takesRegistrarNotices()) return [];
         const config = getLocalConfig();
         const stored = Array.isArray(config.registrarNotices) ? config.registrarNotices.map((n) => ({ ...n })) : [];
         const had = new Map(stored.map((n) => [n.id, n]));

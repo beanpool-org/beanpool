@@ -135,10 +135,10 @@ const nodeSendingNext = (src: string) => once(
     `export const SEND_PROTO: Proto = '${node.SEND_PROTO}';`, `export const SEND_PROTO: Proto = '${NEXT}';`);
 // Step 2 for v2 (the one-use nonce): the node sends it.
 const nodeSendingV2 = (src: string) => once(src, `export const SEND_PROTO: Proto = '${node.SEND_PROTO}';`, 'export const SEND_PROTO: Proto = \'v2\';');
-// The x-bp-* headers a request under `proto` carries, sorted.
-const xbpHeaders = (n: NodeClient, proto: node.Proto) => [
+// The x-bp-* headers a request under `proto` carries, sorted; `query`: one with a query signs it too (x-bp-signature-query).
+const xbpHeaders = (n: NodeClient, proto: node.Proto, query = false) => [
     ...(proto === n.DEFAULT_PROTO ? [] : ['x-bp-proto']), ...(n.usesNonce(proto) ? ['x-bp-nonce'] : []),
-    'x-bp-pubkey', 'x-bp-signature', 'x-bp-timestamp',
+    'x-bp-pubkey', 'x-bp-signature', 'x-bp-timestamp', ...(query ? ['x-bp-signature-query'] : []),
 ].sort();
 // The 2026-09-24 mistake: one side edits a tag in place.
 const changeTag = (tag: string) => (src: string) => once(src, `'${tag}'`, `'${tag}-changed'`);
@@ -147,7 +147,7 @@ const changeTag = (tag: string) => (src: string) => once(src, `'${tag}'`, `'${ta
 const REGISTRAR_HOST = 'registrar.contract.test';
 const realFetch = globalThis.fetch;
 const nodesAt = new Map<string, (nonce: string) => Promise<Response>>();   // hostname → the node answering /api/attest there
-const sent: { path: string; proto: string | null; xbp: string[]; status: number }[] = [];   // signed requests the registrar got
+const sent: { path: string; search: string; proto: string | null; xbp: string[]; status: number }[] = [];   // signed requests the registrar got
 let registrar: Worker;
 let world: ReturnType<typeof newWorld>;
 let harness: Harness;
@@ -174,7 +174,7 @@ async function route(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
             method: req.method, headers: req.headers, body: bodyText || undefined,
         }), world.env);
         sent.push({
-            path: url.pathname, proto: req.headers.get('x-bp-proto'), status: res.status,
+            path: url.pathname, search: url.search, proto: req.headers.get('x-bp-proto'), status: res.status,
             xbp: [...req.headers.keys()].filter((k) => k.startsWith('x-bp-')).sort(),
         });
         return res;
@@ -304,8 +304,12 @@ async function run() {
         const expectHeader = node.SEND_PROTO === node.DEFAULT_PROTO ? null : node.SEND_PROTO;
         assert(sent.length === 4 && sent.every((r) => r.status === 200 && r.proto === expectHeader),
             `all four signed calls went out once each, ${expectHeader ? `with x-bp-proto: ${expectHeader}` : 'with no x-bp-proto'}, and verified`, sent);
-        assert(sent.every((r) => isDeepStrictEqual(r.xbp, xbpHeaders(node, node.SEND_PROTO))),
-            `and carried no other x-bp-* header (${xbpHeaders(node, node.SEND_PROTO).join(', ')})`, sent);
+        assert(sent.every((r) => isDeepStrictEqual(r.xbp, xbpHeaders(node, node.SEND_PROTO, !!r.search))),
+            `and carried no other x-bp-* header (${xbpHeaders(node, node.SEND_PROTO).join(', ')}; x-bp-signature-query with a query)`, sent);
+        // The main server's /status asks for notices (registrar S2, #2151 review 4306341021): its only query, signed, so
+        // the Worker carries them; no other call carries a query.
+        assert(isDeepStrictEqual(sent.filter((r) => r.search).map((r) => `${r.path}${r.search}`), ['/api/registrar/status?notices=1']),
+            'only /status carries a query: notices=1', sent);
         assert(warnings.length === 0, 'no protocol warning when both sides agree', warnings);
 
         // ── 4. A one-sided change fails the contract ──
@@ -414,7 +418,7 @@ async function run() {
         assert(v2Status.status === 'live' && v2Status.tunnelToken === v2Claim.tunnelToken, 'status: live, with its token', v2Status);
         assert((await nodeV2.updateAddressMetadata('Contract V2')).status === 'ok', 'update: verifies');
         assert((await nodeV2.releaseAddress()).status === 'released', 'release: verifies');
-        assert(sent.length === 4 && sent.every((r) => r.status === 200 && r.proto === 'v2' && isDeepStrictEqual(r.xbp, xbpHeaders(node, 'v2'))) && warnings.length === 0,
+        assert(sent.length === 4 && sent.every((r) => r.status === 200 && r.proto === 'v2' && isDeepStrictEqual(r.xbp, xbpHeaders(node, 'v2', !!r.search))) && warnings.length === 0,
             'all four went out once each, as v2 with a nonce, and verified first time (no retry, no warning)', { sent, warnings });
         // A captured request, replayed inside its window: v2 is refused, and no token is handed out; v1 still answers.
         await nodeV2.claimAddress('contract-v2', 'tunnel', 'http://beanpool-node:8080');

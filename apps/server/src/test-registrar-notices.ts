@@ -3,14 +3,15 @@
  * §3.2): the registrar's /status carries the notices its admin sent this key; the node keeps them for Settings, tells its
  * owners once per notice, and sends back `seen` (the highest id it has) so they are never carried again.
  *
- *  1. Every /status sends `seen` (signed with the query) once the node has had a notice, and the answer's `notices` are
- *     kept, newest first, out of the answer the callers store.
+ *  1. Every /status asks for notices (`notices=1`; the registrar carries none to one that does not, as an older node's)
+ *     and sends `seen` once the node has had a notice, both signed with the query; the answer's `notices` are kept,
+ *     newest first, out of the answer the callers store (#2151 review 4306341021).
  *  2. Exactly one owner alert (`reg.notice`) per notice id, however many answers carry it (the registrar carries a notice
  *     until `seen` reaches it), two answers at once included; in the server's own words by level, never the notice's.
  *  3. What can't be shown safely is not kept: a reply link anywhere but the address service's own /reply/, words with a
  *     control or reordering character, too long, a name that is no name. Its id still counts as had (`seen` moves past
  *     it), so the registrar stops carrying it.
- *  4. A standby takes none and sends no `seen`: its main server's owners must hear them.
+ *  4. A standby asks for none, takes none and sends no `seen`: its main server's owners must hear them.
  *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`.
  *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none.
  *  7. A burst is bounded as every server alert is: three told in the hour, the rest folded.
@@ -84,6 +85,7 @@ async function startRegistrar(): Promise<http.Server> {
 const token = (c: string) => c.repeat(43);
 const notice = (id: number, over: Record<string, unknown> = {}) => ({ id, at: 1_760_000_000 + id, level: 'info', text: `Notice number ${id}.`, name: 'kestrel', ...over });
 const lastSeen = () => reg.asked.at(-1)?.get('seen') ?? null;
+const lastAsks = () => reg.asked.at(-1)?.get('notices') ?? null;
 
 async function main(): Promise<void> {
     initStateEngine();
@@ -109,6 +111,7 @@ async function main(): Promise<void> {
             fresh();
             await addressStatus('kestrel');
             assert(lastSeen() === null && reg.asked.at(-1)?.get('name') === 'kestrel', `no notice had: no seen, the name as before (${reg.asked.at(-1)})`);
+            assert(lastAsks() === '1', `it asks for notices, signed with the query (${reg.asked.at(-1)})`);
             reg.notices = [notice(3), notice(5, { level: 'warning', link: `${base}/reply/${token('a')}` })];
             const answer = await addressStatus('kestrel');
             assert(answer.status === 'live' && answer.tunnelToken === 'T-k', 'the answer is as before');
@@ -122,7 +125,7 @@ async function main(): Promise<void> {
             await addressStatus('kestrel');
             assert(lastSeen() === '5' && reg.asked.at(-1)?.get('name') === 'kestrel', `the next /status says seen=5, with its name (${reg.asked.at(-1)})`);
             await addressStatus();
-            assert(lastSeen() === '5', 'without a name too');
+            assert(lastSeen() === '5' && lastAsks() === '1', 'without a name too');
         });
 
         await section('2. exactly one owner alert per notice id, in the server\'s own words', async () => {
@@ -190,10 +193,11 @@ async function main(): Promise<void> {
                 reg.notices = [notice(31)];
                 await addressStatus('kestrel');
                 assert(lastSeen() === null, 'no seen from a standby');
+                assert(lastAsks() === null, `a standby asks for none (${reg.asked.at(-1)})`);
                 assert(registrarNotices().length === 0 && noted().length === 0, 'nothing kept, nothing told');
             } finally { setNodeRole('primary'); }
             await addressStatus('kestrel');
-            assert(noted().length === 1 && lastSeen() === '30', 'the main server takes it');
+            assert(noted().length === 1 && lastSeen() === '30' && lastAsks() === '1', 'the main server asks, and takes it');
         });
 
         await section('5. the agent\'s tick takes them, and stores no notices in the address', async () => {
@@ -202,6 +206,7 @@ async function main(): Promise<void> {
             reg.notices = [notice(40, { level: 'action', link: `${base}/reply/${token('e')}` })];
             await reconcile();
             assert(registrarNotices().some((n) => n.id === 40) && noted().length === 1, 'kept and told from the agent\'s check');
+            assert(reg.asked.length > 0 && reg.asked.every((q) => q.get('notices') === '1'), `the agent's check asks for them (${reg.asked.map(String)})`);
             const pa = (getNodeConfig() as any).publicAddress;
             assert(pa?.status === 'live' && !('notices' in pa), `the stored address carries no notices (${JSON.stringify(pa)})`);
             assert(!JSON.stringify(getLocalConfig()).includes('"notices"'), 'nor anything else stored as the answer came');

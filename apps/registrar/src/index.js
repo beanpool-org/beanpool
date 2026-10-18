@@ -1188,8 +1188,11 @@ async function handleRotate(request, env, bodyText) {
 // row as before. Read only when x-bp-signature-query covers it (sign.js signedQuery): a captured /status replayed inside
 // the clock window with another `?name=` gets the first row, as before `?name=` existed, never the row it names.
 // `notices`: what the admin sent this key and it has not seen yet (carryNotices), in any state that holds a name —
-// blocked too; `?seen=`: the highest notice id the node has, read under the same signature, so those are never carried
-// again. An older node sends no `seen` and ignores `notices`.
+// blocked too — only to a node that asks for them with `?notices=1`, read under the same signature; `?seen=`: the
+// highest notice id the node has, so those are never carried again. An older node asks for none: it stores the whole
+// answer in its saved address (routes/public-address.ts on main spreads it in), so a notice carried to it would sit there
+// with its live reply link, never shown and never seen (#2151 review 4306341021). It is carried nothing, and nothing is
+// marked delivered to it.
 async function handleStatus(request, env) {
     const pubkey = await signer(request, env, '');
     if (pubkey instanceof Response) return pubkey;
@@ -1216,8 +1219,10 @@ async function handleStatus(request, env) {
         // Routed, but not yet listed: the node's directory push waits until this is gone (onProbation).
         if (onProbation(a)) out.probation = true;
     }
-    const notices = await carryNotices(env, pubkey, seen, now);
-    if (notices.length) out.notices = notices;
+    if (query.get('notices') === '1') {
+        const notices = await carryNotices(env, pubkey, seen, now);
+        if (notices.length) out.notices = notices;
+    }
     return json(out);
 }
 

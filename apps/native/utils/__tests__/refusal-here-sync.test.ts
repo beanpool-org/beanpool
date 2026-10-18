@@ -49,6 +49,9 @@ vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...me, callsi
 vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
     addSavedNode: vi.fn(async () => {}),
+    // For the app's signing wrapper (utils/node-request-signing.ts), installed by the cold-start test below.
+    getSavedNodes: vi.fn(async () => []),
+    loadSavedRequestSigning: vi.fn(async () => {}),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
@@ -59,17 +62,23 @@ import { marketEmptyState } from '../market-empty-state';
 import { forceResyncNotice, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 import { t } from '@beanpool/core';
 import { loadIdentity } from '../identity';
+import { installNodeRequestSigning } from '../node-request-signing';
 
 const NOTE_KEY = `beanpool_members_only_${ANCHOR}`;
 const PREVIEW = { error: 'This community is in a private preview. Ask its owner for an invite.', code: 'private_preview' };
 const CLOSED = { error: 'This account was closed here.', code: 'account_closed' };
 
-/** The stubbed node: what the posts read and the membership probe answer, or 'network' for no answer at all. */
+/**
+ * The stubbed node: what the posts read and the membership probe answer, or 'network' for no answer at all. With
+ * `signedOnly`, a posts read that isn't signed is refused as a members-only community refuses it (401 `members_only`).
+ */
 const node = {
     posts: { status: 200, body: [] as unknown } as { status: number; body: unknown } | 'network',
     probe: { status: 200, body: { isMember: false } as unknown } as { status: number; body: unknown } | 'network',
+    signedOnly: false,
 };
 let probes: Array<{ url: string; headers: Record<string, string> }> = [];
+let postsReads: Array<{ url: string; headers: Record<string, string> }> = [];
 
 function answer(status: number, body: unknown) {
     const text = JSON.stringify(body);
@@ -83,7 +92,9 @@ const fetchMock = vi.fn(async (url: string, init?: { headers?: Record<string, st
         return answer(node.probe.status, node.probe.body);
     }
     if (url.includes('/api/marketplace/posts')) {
+        postsReads.push({ url, headers: init?.headers ?? {} });
         if (node.posts === 'network') throw new TypeError('Network request failed');
+        if (node.signedOnly && !init?.headers?.['X-Signature']) return answer(401, { error: 'Members only', code: 'members_only' });
         return answer(node.posts.status, node.posts.body);
     }
     if (url.includes('/api/members')) return answer(200, []);
@@ -92,6 +103,7 @@ const fetchMock = vi.fn(async (url: string, init?: { headers?: Record<string, st
 
 async function sync() {
     probes = [];
+    postsReads = [];
     // pillar-sync tells the screens through `require('react-native')`, which does not load under node.
     const nodeLoad = (Module as any)._load;
     (Module as any)._load = function (request: string, ...rest: unknown[]) {
@@ -121,7 +133,7 @@ beforeEach(async () => {
     store.set('beanpool_node_profiles', JSON.stringify({ [ANCHOR]: { profile: 'local', features: {}, checkedAt: new Date().toISOString() } }));
     store.set('bp_trust_sync_v3', 'true');
     resetSyncFingerprints();
-    Object.assign(node, { posts: { status: 200, body: [] }, probe: { status: 200, body: { isMember: false } } });
+    Object.assign(node, { posts: { status: 200, body: [] }, probe: { status: 200, body: { isMember: false } }, signedOnly: false });
     vi.mocked(loadIdentity).mockImplementation(async () => ({ ...me, callsign: 'Me' }) as any);
     (globalThis as any).fetch = fetchMock;
     await getDb();
@@ -267,5 +279,65 @@ describe('everything else, as before', () => {
         const result = await sync();
         expect(result.success).toBe(true);
         expect(store.has(NOTE_KEY)).toBe(false);
+    });
+});
+
+// A posts read refused 401 is said in the log, for whoever diagnoses a failed first sync: in the node's own words, and
+// "unsigned" only when this phone had no key to sign with. A signed read is refused 401 too, its timestamp stale on a phone
+// whose clock is off (apps/server/src/engine/member-signature.ts), and said "unsigned" sent a diagnosis the wrong way
+// (review of PR #2127).
+describe('what the log says of a posts read refused 401', () => {
+    const refusedLine = (warn: { mock: { calls: unknown[][] } }) =>
+        warn.mock.calls.map(c => String(c[0])).find(l => l.includes('refused the posts read')) ?? '';
+
+    it("a signed read: the node's words, never \"unsigned\" or a key it could not read", async () => {
+        node.posts = { status: 401, body: { error: 'Request timestamp is stale or invalid' } };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect((await sync()).success).toBe(false);
+            const line = refusedLine(warn);
+            expect(line).toContain('(401: "Request timestamp is stale or invalid")');
+            expect(line).not.toMatch(/unsigned|could not read its key/);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it("a phone with no key to sign with: the node's words, and that the read went unsigned", async () => {
+        vi.mocked(loadIdentity).mockImplementation(async () => null as any);
+        node.posts = { status: 401, body: { error: 'Members only', code: 'members_only' } };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect((await sync()).success).toBe(false);
+            const line = refusedLine(warn);
+            expect(line).toContain('(401: "Members only")');
+            expect(line).toContain('this phone could not read its key, so it went unsigned');
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});
+
+// Android 1.2.66, 18 Oct: at a cold start just after an update the key was slow to read. The sync found none, so its posts
+// read went unsigned, and the community, which keeps its listings for its members, refused it (401): the Market's first
+// sync failed, and it said "Having trouble connecting". The sync now reads the key once more a moment later
+// (KEY_READ_AGAIN_MS) before it goes on without it. Through the app's own signing wrapper over the stubbed node; last in
+// the file, since the wrapper stays installed in this module (each test's fetch is set afresh in beforeEach).
+describe('a key slow to read at a cold start', () => {
+    it('is read once more before the posts read goes out, which is signed with it and lands', async () => {
+        // The key store answers nothing for 300 ms from the first read, then the key.
+        let readyAt = 0;
+        vi.mocked(loadIdentity).mockImplementation(async () => {
+            if (!readyAt) readyAt = Date.now() + 300;
+            return (Date.now() < readyAt ? null : { ...me, callsign: 'Me' }) as any;
+        });
+        node.signedOnly = true;
+        installNodeRequestSigning();
+        const result = await sync();
+        expect(postsReads.length).toBeGreaterThan(0);
+        expect(postsReads[0].headers['X-Public-Key']).toBe(me.publicKey);
+        expect(postsReads[0].headers['X-Signature']).toBeTruthy();
+        expect(result.success).toBe(true);
+        expect(await refusalHere()).toBeNull();
     });
 });

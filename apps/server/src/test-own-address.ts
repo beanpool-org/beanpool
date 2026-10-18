@@ -13,9 +13,11 @@
  *   3. { domain } later: a name beats an IP. The domain becomes the community's address and primary; the IP stays this
  *      community's and published. An IP given after it never displaces it. A home-network name listed on the server
  *      (`.local`, `.lan`) never beats the IP: nobody outside can reach it.
- *   4. The registrar's routes leave an own address alone: Take offline is refused (nothing is released unnamed), and a
- *      BeanPool name the registrar says this key holds replaces it as the community's address with nothing of it mixed
- *      in, while the IP and the domain stay accepted.
+ *   4. The registrar's routes leave an own address alone: Take offline is refused (nothing is released unnamed), and
+ *      Settings' status read with no name asked for asks the registrar nothing, showing the own address and its
+ *      certificate's state (#2143 item 1). With a name asked for (`beanpool claim --name`), the BeanPool name the
+ *      registrar says this key holds replaces it as the community's address with nothing of it mixed in, while the IP
+ *      and the domain stay accepted.
  *   5. Removed in Settings → Network: an own address that was the community's address stops being that too. With none
  *      left, a public IP is primary before a home-network name published ahead of it.
  *   6. The command's file (address-request.ts kinds ip and domain): taken within the node's tick and stored; one that
@@ -272,7 +274,21 @@ try {
         && /not a BeanPool name/.test(off.body?.error ?? '') && /Settings → Network/.test(off.body?.error ?? ''), show(off));
     check('…the registrar was asked nothing, and the address stands', registrar.calls.length === 0 && pa()?.hostname === DOMAIN, show(registrar.calls));
     registrar.status = { status: 'live', name: 'riverbend', hostname: 'riverbend.beanpool.org', mode: 'direct' };
+    // With only its own address and no name asked for, Settings' status read has nothing to ask the registrar (#2143 item 1).
+    const asked = registrar.calls.length;
+    const ownOnly = await fetch(`${base}/api/local/admin/public-address/status`).then(async (r) => ({ status: r.status, body: await r.json() as any }));
+    const tlsFacts = (await import('./services/acme/status.js')).tlsStatus().identifiers.find((i) => i.identifier === DOMAIN);
+    check('Settings\' status read with only the own address: 200, the registrar asked nothing', ownOnly.status === 200
+        && registrar.calls.length === asked, show({ status: ownOnly.status, calls: registrar.calls.slice(asked) }));
+    check('…it shows the own address as the community\'s, from this server alone', ownOnly.body?.status === 'live'
+        && ownOnly.body?.hostname === DOMAIN && ownOnly.body?.mode === 'own' && ownOnly.body?.nameServiceNote === undefined, show(ownOnly.body));
+    check('…with its certificate\'s state as GET /tls/status reads it', !!tlsFacts && show(ownOnly.body?.tls)
+        === show({ certificate: tlsFacts.certificate, nextRenewalAt: tlsFacts.nextRenewalAt, lastError: tlsFacts.lastError }), show({ tls: ownOnly.body?.tls, tlsFacts }));
+    check('…and the BeanPool name this key holds is not stored', pa()?.mode === 'own' && pa()?.hostname === DOMAIN, show(pa()));
+    // A name asked for (`beanpool claim --name riverbend` stands, as the agent would claim it): the read asks, and stores it.
+    updateLocalConfig({ addressRequest: { name: 'riverbend', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
     const st = await fetch(`${base}/api/local/admin/public-address/status`).then((r) => r.json()) as any;
+    updateLocalConfig({ addressRequest: null });
     const after = pa();
     check('Settings\' status read: the BeanPool name this key holds is stored as the community\'s address', st?.success === true
         && after?.name === 'riverbend' && after?.hostname === 'riverbend.beanpool.org', show(after));

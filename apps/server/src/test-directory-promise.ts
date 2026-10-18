@@ -25,7 +25,8 @@
  *   8. the order (global profile): two communities at the same distance without the promise come in both orders over 50
  *      reads, and the one keeping the promise and taking requests is always first; a promise without knocks, and a
  *      forged promise, are not first; member count never sorts; the next band comes after; paging with the reader's own
- *      `order` walks one order; the card's answer carries promise, acceptingKnocks and closingOn
+ *      `order` walks one order; the card's answer carries promise, acceptingKnocks and closingOn; Home's find card,
+ *      with ties in its band, keeps one order and one tag for a reader (a 304 on the repeat), and readers differ
  *   9. the ticks travel to a standby with the community's settings, rewritten to their three fields, never with a closing
  *      day the route refuses; a stored one is never pushed
  *
@@ -33,6 +34,7 @@
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-directory-promise.ts (the runner: SERVER_SUITES_ONLY)
  */
+import crypto from 'node:crypto';
 import http from 'node:http';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -391,6 +393,50 @@ async function main() {
             || !same(h.json?.communities?.[0]?.promise, KEPT)) homeWrong++;
     }
     assert(homeWrong === 0, `the landing card's three: the promising one first, then two of the ties, with the promise (${homeWrong} reads otherwise)`);
+    // The landing card is also Home's `find` card, and Home's tag is a hash of the answer (routes/home.ts homeEtag): the
+    // card's shuffle is the reader's own until the mirror next writes, so the tag holds and an unchanged Home is a 304
+    // (the deciding review of #2142, 4305740212). Four ties in the first band: a shuffle on every read moved the tag.
+    const homePath = `/api/home?cards=find&lat=${HERE.lat}&lng=${HERE.lng}`;
+    const home = async (signer: crypto.KeyObject | null, extra: Record<string, string> = {}) => {
+        const headers: Record<string, string> = { ...extra };
+        if (signer) {
+            const ts = Date.now();
+            const nonce = crypto.randomBytes(16).toString('hex');
+            headers['X-Public-Key'] = crypto.createPublicKey(signer).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+            headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n/api/home\n${ts}\n${nonce}\n`), signer).toString('base64');
+            headers['X-Timestamp'] = String(ts);
+            headers['X-Nonce'] = nonce;
+        }
+        const res = await localFetch(`${BASE}${homePath}`, { headers });
+        const text = await res.text();
+        let json: any = null;
+        try { json = JSON.parse(text); } catch { /* a 304 has no body */ }
+        return { status: res.status, etag: res.headers.get('etag'), text, keys: ((json?.cards?.find?.communities ?? []) as any[]).map(c => c.key).join(',') };
+    };
+    const unsignedTags = new Set<string>();
+    const unsignedOrders = new Set<string>();
+    let unsignedWrong = 0;
+    for (let i = 0; i < 20; i++) {
+        const h = await home(null);
+        if (h.status !== 200 || h.keys.split(',').length !== 3 || !h.keys.startsWith('peer-keeps,')) unsignedWrong++;
+        unsignedTags.add(String(h.etag));
+        unsignedOrders.add(h.keys);
+    }
+    assert(unsignedWrong === 0 && unsignedTags.size === 1 && unsignedOrders.size === 1,
+        `Home's find card with ties in its band: one order and one tag over 20 reads (${unsignedOrders.size} orders, ${unsignedTags.size} tags, ${unsignedWrong} wrong)`);
+    const revalidated = await home(null, { 'If-None-Match': [...unsignedTags][0] });
+    assert(revalidated.status === 304 && revalidated.text === '', `and a revalidating reader gets a 304 (${revalidated.status})`);
+    const readerOrders = new Set<string>();
+    let readerWrong = 0;
+    for (let i = 0; i < 12; i++) {
+        const { privateKey } = crypto.generateKeyPairSync('ed25519');
+        const first = await home(privateKey);
+        const again = await home(privateKey, { 'If-None-Match': String(first.etag) });
+        if (first.status !== 200 || !first.keys.startsWith('peer-keeps,') || again.status !== 304) readerWrong++;
+        readerOrders.add(first.keys);
+    }
+    assert(readerWrong === 0, `each signed reader's Home holds its tag: a 304 on the repeat (${readerWrong} readers otherwise)`);
+    assert(readerOrders.size >= 2, `and the readers' cards are not all in one order, so no community is always the first a stranger sees (${[...readerOrders].join(' | ')})`);
     const byName = await call('GET', '/api/global/communities', undefined, {});
     assert(same(keysOf(byName.json), ['peer-big', 'peer-forged', 'peer-keeps', 'peer-shut', 'peer-small', 'peer-far', 'peer-far-keeps']),
         `without a point: by name, as before (${JSON.stringify(keysOf(byName.json))})`);

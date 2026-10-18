@@ -10,7 +10,8 @@
  *          → { communities, total, limit, offset, fetchedAt }
  *   GET    /api/global/home?lat&lng                           public, better signed. Everything the "Find your community"
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,
- *          watches, knock, directoryFetchedAt }
+ *          watches, knock, directoryFetchedAt }. Its communities' shuffle is the reader's own until the mirror next
+ *          writes the cache (cardOrder), so the Home screen's tag holds.
  *   GET    /api/global/watches                                a member's own watches. → { watches, limit }
  *   POST   /api/global/watches  { lat, lng, radiusKm? }       set one (the 0.1° cell; the same cell again: its radius;
  *                                                            radiusKm left out or null: the default)
@@ -109,6 +110,21 @@ function openKnockFor(_actor: string | undefined): null {
     return null;
 }
 
+/** This process's own secret, so nobody outside can work out the order a reader's card is in. */
+const CARD_ORDER_KEY = crypto.randomBytes(32);
+
+/**
+ * The shuffle for this reader's card (listCommunities `order`): theirs until the mirror next writes the cache, then a
+ * new one. Not a new one on every read: the card is the Home screen's `find` card, and Home's tag is a hash of the
+ * answer (routes/home.ts homeEtag), so a card that reshuffled on every read gave every read a new tag and a phone never
+ * a 304. `fetchedAt` moves with every run that writes the cache and the card carries it, so this changes the tag only
+ * when the card changes anyway. Each reader has their own (a key from their signature; every unsigned reader shares
+ * one), so no community is always the first the strangers see.
+ */
+function cardOrder(actor: string | undefined, fetchedAt: string | null): number {
+    return crypto.createHmac('sha256', CARD_ORDER_KEY).update(`${actor ?? ''}\n${fetchedAt ?? ''}`).digest().readUInt32BE(0);
+}
+
 /** The "Find your community" card's body (GET /api/global/home). */
 export interface LandingCard {
     /** Where the point came from: the request, the member's own area, or neither (no communities, no count). */
@@ -165,9 +181,12 @@ export function landingCardFor(actor: string | undefined, asked: Point | null, g
     }
     return {
         point: from,
-        // Nearest first puts the communities with a place first: none with no distance is "near you". Shuffled afresh
-        // among those at the same distance on every read, the promise kept and knocks taken first (design §1.2).
-        communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities.filter(c => c.distanceKm !== null) : [],
+        // Nearest first puts the communities with a place first: none with no distance is "near you". Shuffled among
+        // those at the same distance by this reader's own order (cardOrder), the promise kept and knocks taken first
+        // (design §1.2).
+        communities: point
+            ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0, order: cardOrder(actor, status.fetchedAt) }).communities.filter(c => c.distanceKm !== null)
+            : [],
         communityCount: listedCommunityCount(),
         nearbyPosts,
         // null: not a member's read, so no watches to show; [] a member with none.

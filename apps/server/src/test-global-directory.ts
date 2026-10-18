@@ -720,9 +720,10 @@ async function main(): Promise<void> {
     createPost('offer', 'other', 'Far', 'In Castlemaine', 0, 'fixed', poster.pk, -37.07, 144.22);
     const home = await call('GET', wes, `/api/global/home?lat=${BYRON_POINT.lat}&lng=${BYRON_POINT.lng}`);
     assert(home.status === 200, `a signed member: 200 (${home.status} ${home.text.slice(0, 200)})`);
-    // Since the listing promise (mothership A2, design §1.2) the nearest come in 25 km bands, shuffled on every read within
-    // a band (none of these keeps the promise): the three are three of the four within 25 km of the point, never one
-    // further. Before A2 this was exactly the three nearest by distance (Byron, Suffolk Park, Bangalow).
+    // Since the listing promise (mothership A2, design §1.2) the nearest come in 25 km bands, shuffled within a band by the
+    // reader's own order (routes/global-directory.ts cardOrder; none of these keeps the promise): the three are three of
+    // the four within 25 km of the point, never one further. Before A2 this was exactly the three nearest by distance
+    // (Byron, Suffolk Park, Bangalow).
     const NEAREST_BAND = ['peer-byron', 'peer-suffolk', 'peer-bangalow', 'peer-mullum'];
     const fromNearestBand = (r: Res) => keys(r).length === 3 && new Set(keys(r)).size === 3 && keys(r).every(k => NEAREST_BAND.includes(k))
         && (r.body?.communities ?? []).every((c: any) => typeof c.distanceKm === 'number' && c.distanceKm < 25);
@@ -736,7 +737,7 @@ async function main(): Promise<void> {
     assert(typeof home.body === 'object' && home.body !== null && 'knock' in home.body && home.body.knock === null, 'the knock seam is there, and null: no knock exists before G6');
     assert(typeof home.body?.directoryFetchedAt === 'string', 'and when the directory was fetched');
     const guest = await call('GET', null, `/api/global/home?lat=${BYRON_POINT.lat}&lng=${BYRON_POINT.lng}`);
-    // The same communities to choose from (the shuffle is the read's own, so not always the same three): see above.
+    // The same communities to choose from (the shuffle is the reader's own, so not always the same three): see above.
     assert(guest.status === 200 && guest.body?.watches === null && fromNearestBand(guest) && guest.body?.nearbyPosts?.count === 2,
         `unsigned: three from the same band, the same posts, no watches (${guest.status} ${JSON.stringify(keys(guest))} ${JSON.stringify(guest.body?.watches)})`);
     const noPoint = await call('GET', wes, '/api/global/home');

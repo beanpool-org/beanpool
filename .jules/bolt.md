@@ -267,3 +267,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-15 - O(1) User Group Lookups in Native Market Screen Filter Summary
 **Learning:** In `apps/native/app/(tabs)/market.tsx`, evaluating `filterSummary` invoked `groupName: id => userGroups.find(g => g.id === id)?.name`, resulting in linear $O(G)$ array scans on render cycles.
 **Action:** Pre-computed `userGroupsById` Map indexed by `g.id` via `React.useMemo` at component scope, converting group name resolution in active filter summaries to constant-time $O(1)$ retrievals.
+
+## 2026-10-19 - O(1) Project Lookups in getAllProjects
+**Learning:** In `apps/server/src/state-engine.ts`, `getAllProjects()` mapped through bounded enterprises and executed `blobProjects.find(p => p.id === e.public_key)` inside the `for...of` loop over `enterprises`. For $E$ enterprises and $P$ projects, this caused an $O(E \times P)$ linear array search on every project list read.
+**Action:** Pre-indexed `blobProjects` into a `Map` (`blobProjectsMap`) before the loop, turning enterprise project lookups into constant-time $O(1)$ retrievals ($O(E + P)$ overall).

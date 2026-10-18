@@ -9046,11 +9046,13 @@ export function getAllProjects(): CommunityProject[] {
         `).all() as any[];
         // The proposer's name only: getMember read their photo too, once a project (#1478).
         const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+        // ⚡ Bolt: index blobProjects by ID into a Map for O(1) lookups instead of O(E * P) linear array scans
+        const blobProjectsMap = new Map(blobProjects.map(p => [p.id, p]));
 
         for (const e of enterprises) {
             const lead = e.lead_keeper || e.any_keeper || e.public_key;
             const leadMember = callsignOfKey.get(lead) as { callsign: string } | undefined;
-            const existing = blobProjects.find(p => p.id === e.public_key);
+            const existing = blobProjectsMap.get(e.public_key);
             if (existing) {
                 // Keep live values from members table so blob doesn't shadow SQL
                 existing.title = e.callsign || existing.title;
@@ -9058,7 +9060,7 @@ export function getAllProjects(): CommunityProject[] {
                 if (e.goal_amount != null) existing.requestedAmount = Number(e.goal_amount);
                 if (e.status) existing.status = e.status.toLowerCase() as any;
             } else {
-                blobProjects.push({
+                const newProject: CommunityProject = {
                     id: e.public_key,
                     title: e.callsign,
                     description: e.purpose || e.bio || '',
@@ -9067,7 +9069,9 @@ export function getAllProjects(): CommunityProject[] {
                     requestedAmount: Number(e.goal_amount || 0),
                     status: (e.status || 'proposed').toLowerCase() as any,
                     createdAt: e.joined_at || new Date().toISOString(),
-                });
+                };
+                blobProjects.push(newProject);
+                blobProjectsMap.set(e.public_key, newProject);
                 knownIds.add(e.public_key);
             }
         }

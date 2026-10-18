@@ -17,7 +17,7 @@ On the global community, the **Find your community** card on **Home** shows the 
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
-- Communities at about the same distance from you are shuffled, so no one community is always at the top. The order changes from time to time (about once an hour), not every time you look.
+- Communities at about the same distance from you are shuffled, so no one community is always at the top.
 - Each one shows how far away it is and how many members it has, when the community has said.
 
 A community that hasn't published its address is listed, but it can't be asked from here yet.

@@ -353,8 +353,10 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
 
     const view = readNodeView(dir);
     if ('missing' in view) { io.err(`Nothing was changed. ${view.missing}`); return 1; }
-    if (view.standby) { io.err('Nothing was changed. This server is a standby copy of its community: it has no claim code, and its owners are its main server\'s. To sign in to it, make an owner of the community an owner here too: beanpool recover --key <member public key | @callsign>'); return 1; }
+    // The owner first, as claim-code.ts initClaimCode orders them: a standby an owner of the community made theirs with
+    // beanpool recover has an owner of its own, and the standby's sentence would send them to do it again.
     if (view.owner) { io.err('Nothing was changed. This community already has an owner. To add one from the server: beanpool recover --key <member public key | @callsign>'); return 1; }
+    if (view.standby) { io.err('Nothing was changed. This server is a standby copy of its community: it has no claim code, and its owners are its main server\'s. To sign in to it, make an owner of the community an owner here too: beanpool recover --key <member public key | @callsign>'); return 1; }
     if (!view.claim) { io.err('Nothing was changed. This community has no claim code waiting. Restart the node to make one, or add an owner with: beanpool recover --key <member public key | @callsign>'); return 1; }
     const held = heldAddress(view);
     if (name !== undefined && held) { io.err(`Nothing was changed. This community already has an address (${held}). Change it in Settings → Address, signed in as an owner.`); return 1; }

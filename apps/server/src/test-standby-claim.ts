@@ -18,7 +18,8 @@
  *      never "Restart the node to make one".
  *   R. The way in the log names works: with a member in its copy, `beanpool recover --key` makes them the standby's
  *      owner (exit 0, an owner row). From then on it is a server with an owner: its next start says nothing of a claim,
- *      and GET answers as any server with an owner (no standby flag, so no sign-in says it has none).
+ *      GET answers as any server with an owner (no standby flag, so no sign-in says it has none), and `beanpool claim`
+ *      says it has an owner, never that it is a standby with no claim code (which would send them to recover again).
  *   P. The control: a main server's first start on a fresh dir still makes a code and says "no owner yet".
  *
  * On origin/main S, O and C fail: the standby made a code like any server and said "no owner yet", GET offered it,
@@ -253,6 +254,10 @@ async function main(): Promise<void> {
     assert(!o.output().includes(STANDBY_SAYS) && !o.output().includes(NO_OWNER_YET), 'R3. its next start says nothing of a claim: it has an owner');
     assert(info.status === 200 && JSON.stringify(info.json) === JSON.stringify({ unclaimed: false, password: false }),
         `R4. and GET answers as a server with an owner: unclaimed false, no standby flag (${info.status} ${JSON.stringify(info.json)})`);
+    const owned = await beanpool(dirO, ['claim', '--no-name'], { NODE_ROLE: 'backup' });
+    assert(owned.code === 1 && owned.out.includes('This community already has an owner') && owned.out.includes('beanpool recover --key'),
+        `R5. \`beanpool claim\` is refused (exit 1), saying it already has an owner (exit ${owned.code}: ${owned.out.trim().slice(0, 300)})`);
+    assert(!owned.out.includes(STANDBY_SAYS) && !owned.out.includes('no claim code'), 'R6. and never that it is a standby with no claim code');
 
     console.log('\nP. The control: a main server');
     const dirP = path.join(root, 'p');

@@ -63,10 +63,13 @@ export interface PromiseTicks {
 
 const NO_TICKS: PromiseTicks = { reports: false, notice: false, closingOn: null };
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-/** A stored row read back: each field only when it is what the route writes, else its default. Never throws. */
-function ticksOf(value: unknown): PromiseTicks {
+/**
+ * A stored row read back: each field only when it is what the route writes, else its default. The closing day passes
+ * the route's own check (closingDay: a real date, up to {@link MAX_CLOSING_DAYS} days ahead), so a standby installing
+ * its main server's row holds no day the route would refuse, and a push never carries one. A day long past reads back
+ * as none, as the push leaves it out anyway. Never throws.
+ */
+function ticksOf(value: unknown, now: number = Date.now()): PromiseTicks {
     if (typeof value !== 'string' || value.length > 200) return { ...NO_TICKS };
     let v: any;
     try { v = JSON.parse(value); } catch { return { ...NO_TICKS }; }
@@ -74,13 +77,13 @@ function ticksOf(value: unknown): PromiseTicks {
     return {
         reports: v.reports === true,
         notice: v.notice === true,
-        closingOn: typeof v.closingOn === 'string' && DAY.test(v.closingOn) ? v.closingOn : null,
+        closingOn: closingDay(v.closingOn, now),
     };
 }
 
-export function readPromiseTicks(): PromiseTicks {
+export function readPromiseTicks(now: number = Date.now()): PromiseTicks {
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(DIRECTORY_PROMISE_KEY) as { value: string | null } | undefined;
-    return ticksOf(row?.value);
+    return ticksOf(row?.value, now);
 }
 
 /**
@@ -124,7 +127,7 @@ export function setPromiseTicks(update: { reports?: unknown; notice?: unknown; c
         }
         closingOn = day;
     }
-    const current = readPromiseTicks();
+    const current = readPromiseTicks(now);
     const next: PromiseTicks = {
         reports: typeof update.reports === 'boolean' ? update.reports : current.reports,
         notice: typeof update.notice === 'boolean' ? update.notice : current.notice,

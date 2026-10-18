@@ -26,7 +26,8 @@
  *      reads, and the one keeping the promise and taking requests is always first; a promise without knocks, and a
  *      forged promise, are not first; member count never sorts; the next band comes after; paging with the reader's own
  *      `order` walks one order; the card's answer carries promise, acceptingKnocks and closingOn
- *   9. the ticks travel to a standby with the community's settings, rewritten to their three fields
+ *   9. the ticks travel to a standby with the community's settings, rewritten to their three fields, never with a closing
+ *      day the route refuses; a stored one is never pushed
  *
  * Contacts no registry: DIRECTORY_REGISTRY_URL and DIRECTORY_MIRROR_URL are the fixture on 127.0.0.1.
  *
@@ -409,6 +410,27 @@ async function main() {
     const garbage = parseCommunitySettings({ localConfig: {}, directory: {}, nodeConfig: { directory_promise: '[1,2]' } });
     assert(garbage !== null && !('directory_promise' in garbage.record.nodeConfig) && garbage.left.some(l => l.startsWith('nodeConfig.directory_promise')),
         `and leaves out one that isn't theirs (${JSON.stringify(garbage?.left)})`);
+    // The closing day a standby keeps is one the route could have written: a real date, at most 400 days ahead (the
+    // deciding review of #2142, 4305740265). A registry's date column can't take 2026-99-99, so a push carrying it would be
+    // refused and resent without the promise.
+    for (const bad of ['2026-99-99', '2026-02-31', '9999-12-31', day(450), day(-10)]) {
+        const kept = parseCommunitySettings({ localConfig: {}, directory: {}, nodeConfig: {
+            directory_promise: JSON.stringify({ reports: true, notice: true, closingOn: bad }),
+        } });
+        assert(same(kept?.record.nodeConfig, { directory_promise: JSON.stringify({ reports: true, notice: true, closingOn: null }) }),
+            `a standby keeps the ticks without the closing day ${bad}, which the route refuses (${JSON.stringify(kept?.record.nodeConfig)})`);
+    }
+    // A row already holding one (installed before this check): the push and the owners' screen read it as no day.
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run('directory_promise', JSON.stringify({ reports: true, notice: true, closingOn: '2026-99-99' }));
+    p = await pushNow();
+    const ownersRead = (await call('GET', '/api/local/admin/directory/promise')).json;
+    assert(p.answer.promise === 'sent' && same(p.push?.body?.promise, KEPT) && p.push?.body?.closingOn === null && ownersRead?.promise?.closingOn === null,
+        `a stored 2026-99-99 is never pushed: the promise still goes, with no closing day (${JSON.stringify({ answer: p.answer.promise, closingOn: p.push?.body?.closingOn, owners: ownersRead?.promise?.closingOn })})`);
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run('directory_promise', JSON.stringify({ reports: true, notice: true, closingOn: '9999-12-31' }));
+    p = await pushNow();
+    assert(p.answer.promise === 'sent' && p.push?.body?.closingOn === null, `nor a stored 9999-12-31 (${JSON.stringify(p.push?.body?.closingOn)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     await p2p.stop();

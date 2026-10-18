@@ -412,7 +412,7 @@ async function directoryRegistry(): Promise<{ url: string; bodies: any[]; close:
 type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kept: any; directory: any };
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
@@ -480,6 +480,9 @@ async function main(): Promise<void> {
         // Keeping fewer than the default 7 asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
         built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
+        // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
+        built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
+            reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));

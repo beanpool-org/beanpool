@@ -101,6 +101,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { haversineKm } from '@beanpool/engine';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -1692,6 +1693,13 @@ async function main(): Promise<void> {
             + `(${km(attack.centre, LONE_AT).toFixed(3)} km from it)`);
 
         console.log('\n── 7c. the communities: distances and order from the places they show ──');
+        // Since the listing promise (mothership A2, design §1.2) the communities come nearest first in 25 km bands, shuffled
+        // within a band on every read (none of these makes the promise): one in a nearer band than the one before it is out
+        // of order. Measured as the server measures (the engine's haversine, the place it shows). Before A2 every community
+        // came after any nearer one, and Dateline and Far Side, 13 km apart, always in the same order.
+        const { DISTANCE_BAND_KM } = await import('./engine/directory-cache.js');
+        const bandOf = (q: Place, c: any): number | null =>
+            c.lat === null || c.lng === null ? null : Math.floor(haversineKm(q.lat, q.lng, c.lat, c.lng) / DISTANCE_BAND_KM);
         const off: string[] = [];
         let listed = 0;
         for (let i = 0; i < points.length; i += 4) {
@@ -1699,7 +1707,7 @@ async function main(): Promise<void> {
             const [, id] = guests[i % guests.length];
             const at = `lat=${q.lat}&lng=${q.lng}`;
             for (const [route, r] of [['communities', await call('GET', id, `/api/global/communities?${at}&limit=50`)], ['home', await call('GET', id, `${HOME}?${at}`)]] as const) {
-                let prev = -1;
+                let prevBand = -1;
                 for (const c of (r.body?.communities ?? []) as any[]) {
                     listed++;
                     const seeded = COMMUNITIES.find(s => s.key === c.key);
@@ -1708,8 +1716,9 @@ async function main(): Promise<void> {
                     if (d === null ? c.distanceKm !== null : typeof c.distanceKm !== 'number' || Math.abs(c.distanceKm - d) > 0.05 + 1e-9) {
                         off.push(`${route} #${i}: ${c.key} distanceKm ${c.distanceKm}, from the place it shows ${d?.toFixed(3)}`);
                     }
-                    if (c.distanceKm !== null && c.distanceKm < prev) off.push(`${route} #${i}: ${c.key} after one ${prev} km away`);
-                    if (c.distanceKm !== null) prev = c.distanceKm;
+                    const band = bandOf(q, c);
+                    if (band !== null && band < prevBand) off.push(`${route} #${i}: ${c.key} (band ${band}) after one in band ${prevBand}`);
+                    if (band !== null) prevBand = band;
                 }
             }
         }
@@ -1719,6 +1728,17 @@ async function main(): Promise<void> {
         console.log('\n── 7d. /api/home, the visitors\' Home: the landing card\'s own body, and each distance the listing\'s own visitors\' read ──');
         const homeOff: string[] = [];
         let homeItems = 0;
+        /**
+         * Two reads of the landing card, the same up to the shuffle within a band (each read shuffles its own, 7c): every
+         * other field equal, the same bands in the same order, and each community both hold the same in both.
+         */
+        const sameUpToShuffle = (a: any, b: any, q: Place): boolean => {
+            const { communities: ca, ...ra } = a ?? {};
+            const { communities: cb, ...rb } = b ?? {};
+            if (JSON.stringify(ra) !== JSON.stringify(rb) || !Array.isArray(ca) || !Array.isArray(cb) || ca.length !== cb.length) return false;
+            const inB = new Map(cb.map((c: any) => [c.key, JSON.stringify(c)]));
+            return ca.every((c: any, n: number) => bandOf(q, c) === bandOf(q, cb[n]) && (!inB.has(c.key) || inB.get(c.key) === JSON.stringify(c)));
+        };
         for (let i = 0; i < points.length; i += 4) {
             const q = points[i];
             const [, id] = guests[i % guests.length];
@@ -1726,9 +1746,9 @@ async function main(): Promise<void> {
             const r = await call('GET', id, `/api/home?${at}&cards=find,market,events,community,joined,pulse`);
             const cards = r.body?.cards ?? {};
             if (r.status !== 200 || r.body?.welcome !== true || cards.joined || cards.pulse) homeOff.push(`#${i}: ${r.status} ${Object.keys(cards).join(',')}`);
-            // The landing card, which 7b measures: the same body, for the same reader at the same point.
+            // The landing card, which 7b measures: the same body, for the same reader at the same point (up to the shuffle).
             const landing = await call('GET', id, `${HOME}?${at}`);
-            if (cards.find && JSON.stringify(cards.find) !== JSON.stringify(landing.body)) homeOff.push(`#${i}: the find card is not the landing card's body`);
+            if (cards.find && !sameUpToShuffle(cards.find, landing.body, q)) homeOff.push(`#${i}: the find card is not the landing card's body`);
             // Each listing and event: no place of its own, and the distance the listing's visitors' read gives (section 7).
             for (const item of [...(cards.market?.items ?? []), ...(cards.events?.items ?? [])] as any[]) {
                 homeItems++;

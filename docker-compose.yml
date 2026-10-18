@@ -26,6 +26,9 @@ services:
       - CF_API_TOKEN=${CF_API_TOKEN:-}
       - CF_ZONE_ID=${CF_ZONE_ID:-}
       - CF_RECORD_NAME=${CF_RECORD_NAME:-}
+      # The ACME CA the node asks for its own certificates (apps/server/src/services/acme/schedule.ts). EMPTY = Let's
+      # Encrypt production. https://acme-staging-v02.api.letsencrypt.org/directory for a trial run.
+      - ACME_DIRECTORY_URL=${ACME_DIRECTORY_URL:-}
       - PUBLIC_ADDRESS_AUTO=${PUBLIC_ADDRESS_AUTO:-0}
       - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =

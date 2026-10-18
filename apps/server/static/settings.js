@@ -290,9 +290,10 @@
                 + notices.map((n) => {
                     const lv = NOTICE_LEVELS[n.level] || NOTICE_LEVELS.info;
                     const day = n.at ? new Date(n.at * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                    // The server gives a reply link to an owner only; anyone else is told so, with nothing to press.
                     const reply = typeof n.link === 'string' && n.link
                         ? ` · <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8;">Reply</a>`
-                        : '';
+                        : n.replyOwnerOnly === true ? ' · only an owner can reply' : '';
                     return `<div style="border-left:3px solid ${lv.colour}; background:rgba(255,255,255,0.03); padding:0.5rem 0.75rem; margin-bottom:0.5rem; border-radius:0 6px 6px 0;">`
                         + `<div style="font-size:0.75rem; color:#94a3b8;">${lv.icon} ${lv.word} · ${esc(day)} · about <strong>${esc(n.name)}</strong>${reply}</div>`
                         + `<div style="font-size:0.85rem; color:#e2e8f0; white-space:pre-line; margin-top:0.25rem; overflow-wrap:anywhere;">${esc(n.text)}</div>`

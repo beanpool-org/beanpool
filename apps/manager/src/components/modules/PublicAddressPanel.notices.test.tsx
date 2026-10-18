@@ -49,6 +49,20 @@ describe('PublicAddressPanel: notices from the address service', () => {
         expect(reply[0]).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
+    it('tells an admin, who is given no reply link, that only an owner can reply, with nothing to press', async () => {
+        mockNotices([
+            { id: 9, at: 1_760_000_000, level: 'action', text: 'Blocked by mistake?', name: 'kestrel', link: null, replyOwnerOnly: true },
+            { id: 4, at: 1_759_000_000, level: 'info', text: 'Your name is set up.', name: 'kestrel', link: null },
+        ]);
+        render(<PublicAddressPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'b'.repeat(64), role: 'admin' }} />);
+        const items = await screen.findAllByTestId('address-notice');
+        expect(items).toHaveLength(2);
+        expect(items[0]).toHaveTextContent('only an owner can reply');
+        expect(items[1]).not.toHaveTextContent('only an owner can reply');
+        expect(screen.queryByRole('link', { name: 'Reply' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /reply/i })).not.toBeInTheDocument();
+    });
+
     it('shows nothing when there are none', async () => {
         const calls = mockNotices([]);
         render(<PublicAddressPanel activeNode={node} />);

@@ -89,8 +89,10 @@ export interface AddressNotice {
     text: string;
     /** The name it is about. */
     name: string;
-    /** A one-use reply link on the address service's own site, or null (the server keeps no other). */
+    /** A one-use reply link on the address service's own site, or null (the server keeps no other, and gives it to an owner only). */
     link: string | null;
+    /** The notice has a reply link, which only an owner is given: an admin is told so. */
+    replyOwnerOnly?: boolean;
 }
 
 const NOTICE_LEVEL: Record<string, { icon: string; word: string; border: string }> = {
@@ -121,6 +123,8 @@ export function AddressNotices({ notices }: { notices: AddressNotice[] }) {
                                     {' · '}
                                     <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Reply</a>
                                 </>
+                            ) : n.replyOwnerOnly === true ? (
+                                <span data-testid="address-notice-reply-owner-only">{' · '}only an owner can reply</span>
                             ) : null}
                         </p>
                         <p className="m-0 text-xs text-nature-200 whitespace-pre-line break-words">{n.text}</p>

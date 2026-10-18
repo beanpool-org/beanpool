@@ -273,10 +273,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     });
 
     // Notices from the address service (services/registrar-notices.ts), newest first: Settings → Public address shows them.
-    // Kept here as each /status brought them; reading them asks the address service nothing.
+    // Kept here as each /status brought them; reading them asks the address service nothing. A reply link is a one-use
+    // credential to answer for the community, so it is an owner's, as the tunnel token is (addressFields): an admin reads
+    // the words and is told only that an owner can reply (`replyOwnerOnly`; #2151 review 4306457093).
     router.get('/api/local/admin/public-address/notices', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        ctx.body = { success: true, notices: registrarNotices() };
+        const owner = ctx.state?.adminRole === 'owner';
+        ctx.body = { success: true, notices: registrarNotices().map((n) => (owner || !n.link ? n : { ...n, link: null, replyOwnerOnly: true })) };
     });
 
     router.post('/api/local/admin/public-address/claim', async (ctx) => {

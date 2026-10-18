@@ -15,7 +15,8 @@
  *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`; for a direct name as
  *     for a tunnel one, live or blocked, every 15 minutes, and its next check-in sends `seen` (#2151 review 4306456979: a
  *     direct name has no tunnel to ask, and heard none until Settings was opened).
- *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none;
+ *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, "only an owner can reply"
+ *     where the server gave an admin no link (#2151 review 4306457093), nothing when there are none;
  *     the legacy page reads them whatever the name's state, paused, blocked and released included (#2151 review 4306341103).
  *  7. A burst is bounded as every server alert is: three told in the hour, the rest folded.
  *  8. Kept on this server only: classified per-server, and never in a backup file's local config or the stager's copy
@@ -265,6 +266,8 @@ async function main(): Promise<void> {
             assert((html.match(/>Reply</g) || []).length === 1 && html.includes(`href="https://beanpool.org/reply/${token('f')}"`) && html.includes('rel="noopener noreferrer"'),
                 'one Reply link, the kept one, opened with no referrer');
             assert(/Action needed/.test(html) && /Information/.test(html), 'each with its level in words');
+            ctx.renderAddressNotices([{ id: 2, at: 1_760_000_000, level: 'action', text: 'Blocked by mistake?', name: 'kestrel', link: null, replyOwnerOnly: true }]);
+            assert(/only an owner can reply/.test(box.innerHTML) && !/<a /.test(box.innerHTML), 'to an admin (no link given): "only an owner can reply", and nothing to press');
             ctx.renderAddressNotices([]);
             assert(box.style.display === 'none' && box.innerHTML === '', 'nothing while there are none');
 

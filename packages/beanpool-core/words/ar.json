@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -373,5 +373,41 @@
   "Sunset {time}.": "الغروب {time}.",
   "Look around ›": "تصفح الأرجاء ›",
   "Pick up the tour at step {step} ›": "متابعة الجولة من الخطوة {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "هذه صفحتك الرئيسية. أنت تختار ما يظهر هنا. قبل أن تبدأ، ألقِ نظرة سريعة على علامات التبويب الأخرى."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "هذه صفحتك الرئيسية. أنت تختار ما يظهر هنا. قبل أن تبدأ، ألقِ نظرة سريعة على علامات التبويب الأخرى.",
+  "Save this search to Home": "حفظ هذا البحث في الرئيسية",
+  "Save the search \"{q}\" to Home": "حفظ البحث \"{q}\" في الرئيسية",
+  "The 1 vote came from a new or 12-word account": "جاء الصوت الواحد من حساب جديد أو بـ 12 كلمة",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "zero": "جاءت كل الأصوات الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "one": "جاء الصوت من حساب جديد أو بـ 12 كلمة",
+    "two": "جاء الصوتان من حسابات جديدة أو بـ 12 كلمة",
+    "few": "جاءت كل الأصوات الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "many": "جاءت كل الأصوات الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "other": "جاءت كل الأصوات الـ {n} من حسابات جديدة أو بـ 12 كلمة"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "zero": "جاء {n} من أصل {total} صوت من حساب جديد أو بـ 12 كلمة",
+    "one": "جاء صوت واحد من أصل {total} صوت من حساب جديد أو بـ 12 كلمة",
+    "two": "جاء صوتان من أصل {total} صوت من حسابات جديدة أو بـ 12 كلمة",
+    "few": "جاءت {n} من أصل {total} أصوات من حسابات جديدة أو بـ 12 كلمة",
+    "many": "جاء {n} من أصل {total} صوتًا من حسابات جديدة أو بـ 12 كلمة",
+    "other": "جاء {n} من أصل {total} صوت من حسابات جديدة أو بـ 12 كلمة"
+  },
+  "This 1 from a new or 12-word account": "هذا الصوت الواحد من حساب جديد أو بـ 12 كلمة",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "zero": "جميع الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "one": "من حساب جديد أو بـ 12 كلمة",
+    "two": "كلاهما من حسابات جديدة أو بـ 12 كلمة",
+    "few": "جميع الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "many": "جميع الـ {n} من حسابات جديدة أو بـ 12 كلمة",
+    "other": "جميع الـ {n} من حسابات جديدة أو بـ 12 كلمة"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "zero": "{n} من هذه الـ {count} من حساب جديد أو بـ 12 كلمة",
+    "one": "واحد من هذه الـ {count} من حساب جديد أو بـ 12 كلمة",
+    "two": "اثنان من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة",
+    "few": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة",
+    "many": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة",
+    "other": "{n} من هذه الـ {count} من حسابات جديدة أو بـ 12 كلمة"
+  }
 }

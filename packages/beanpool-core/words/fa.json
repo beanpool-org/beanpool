@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "غروب خورشید {time}.",
   "Look around ›": "نگاهی به اطراف بیندازید ›",
   "Pick up the tour at step {step} ›": "ادامه تور از مرحله {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "این خانه شماست. شما انتخاب می‌کنید چه مواردی اینجا باشد. قبل از شروع، نگاهی یک‌دقیقه‌ای به سایر تب‌ها بیندازید."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "این خانه شماست. شما انتخاب می‌کنید چه مواردی اینجا باشد. قبل از شروع، نگاهی یک‌دقیقه‌ای به سایر تب‌ها بیندازید.",
+  "Save this search to Home": "ذخیره این جستجو در خانه",
+  "Save the search \"{q}\" to Home": "ذخیره جستجوی \"{q}\" در خانه",
+  "The 1 vote came from a new or 12-word account": "این ۱ رأی از یک حساب جدید یا ۱۲ کلمه‌ای ثبت شد",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "هر {n} رأی از حساب‌های جدید یا ۱۲ کلمه‌ای ثبت شد",
+    "other": "هر {n} رأی از حساب‌های جدید یا ۱۲ کلمه‌ای ثبت شدند"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} از {total} رأی از یک حساب جدید یا ۱۲ کلمه‌ای ثبت شد",
+    "other": "{n} از {total} رأی از حساب‌های جدید یا ۱۲ کلمه‌ای ثبت شدند"
+  },
+  "This 1 from a new or 12-word account": "این ۱ مورد از یک حساب جدید یا ۱۲ کلمه‌ای",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "هر {n} مورد از حساب‌های جدید یا ۱۲ کلمه‌ای",
+    "other": "هر {n} مورد از حساب‌های جدید یا ۱۲ کلمه‌ای"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} از این {count} مورد از یک حساب جدید یا ۱۲ کلمه‌ای",
+    "other": "{n} از این {count} مورد از حساب‌های جدید یا ۱۲ کلمه‌ای"
+  }
 }

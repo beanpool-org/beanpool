@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "Paglubog ng araw {time}.",
   "Look around ›": "Magmasid ›",
   "Pick up the tour at step {step} ›": "Ipagpatuloy ang paglilibot sa hakbang {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Ito ang iyong Home. Ikaw ang pumipili kung ano ang ilalagay rito. Bago ka magsimula, silipin sandali ang iba pang mga tab."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Ito ang iyong Home. Ikaw ang pumipili kung ano ang ilalagay rito. Bago ka magsimula, silipin sandali ang iba pang mga tab.",
+  "Save this search to Home": "I-save ang paghahanap na ito sa Home",
+  "Save the search \"{q}\" to Home": "I-save ang paghahanap na \"{q}\" sa Home",
+  "The 1 vote came from a new or 12-word account": "Ang 1 boto ay nagmula sa isang bago o 12-salitang account",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Lahat ng {n} boto ay nagmula sa mga bago o 12-salitang account",
+    "other": "Lahat ng {n} boto ay nagmula sa mga bago o 12-salitang account"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} sa {total} boto ay nagmula sa isang bago o 12-salitang account",
+    "other": "{n} sa {total} boto ay nagmula sa mga bago o 12-salitang account"
+  },
+  "This 1 from a new or 12-word account": "Ang 1 ito ay mula sa isang bago o 12-salitang account",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Lahat ng {n} ay mula sa mga bago o 12-salitang account",
+    "other": "Lahat ng {n} ay mula sa mga bago o 12-salitang account"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} sa {count} na ito ay mula sa isang bago o 12-salitang account",
+    "other": "{n} sa {count} na ito ay mula sa mga bago o 12-salitang account"
+  }
 }

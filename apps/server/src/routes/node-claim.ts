@@ -23,6 +23,11 @@
  * same key retrying the claim that made it owner (a lost answer; K is gone, so only the signature is checked): that is
  * answered as the claim was, and changes nothing.
  *
+ * A standby is never unclaimed (claim-code.ts): it has no owner of its own and no claim code. While it has none, GET
+ * answers `unclaimed: false, standby: true`, so no sign-in offers a claim and one can say what the server is; once an
+ * owner of the community has made themselves its owner (`beanpool recover --key` on its shell), GET answers as any
+ * server with an owner does. Every POST is refused first, 409 `claim_standby`, with a sentence naming that way in.
+ *
  * Under /api/local/, so the signed-request middleware never sees these (https-server.ts isSignatureBypassed): the
  * statement's own signature is the proof.
  */
@@ -36,8 +41,10 @@ import { nodeHasOwner } from '../engine/node-roles.js';
 import { verifyStatementSignature } from '../engine/member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import {
-    brakeClaimSource, claimBrakeWait, claimedByThisKey, claimKey, claimLogAdmit, claimNode, claimProofMatches, isClaimCodeId, pendingClaim,
+    brakeClaimSource, CLAIM_STANDBY_CODE, CLAIM_STANDBY_MESSAGE, claimBrakeWait, claimedByThisKey, claimKey, claimLogAdmit, claimNode,
+    claimProofMatches, isClaimCodeId, pendingClaim,
 } from '../claim-code.js';
+import { getNodeRole } from '../config/node-role.js';
 import { getMember } from '../state-engine.js';
 import { logger } from '../logger.js';
 
@@ -58,6 +65,10 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
         // says why (design step 10), so the sign-in can say an owner retired it.
         const password = !config.passwordRetired && hasAdminPassword(config);
         const retired = config.passwordRetired ? { passwordRetired: true } : {};
+        if (getNodeRole() === 'backup' && !nodeHasOwner()) {
+            ctx.body = { unclaimed: false, standby: true, password, ...retired };
+            return;
+        }
         if (nodeHasOwner()) {
             ctx.body = { unclaimed: false, password, ...retired };
             return;
@@ -78,6 +89,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/claim', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
+        if (getNodeRole() === 'backup') return refuse(ctx, 409, CLAIM_STANDBY_CODE, CLAIM_STANDBY_MESSAGE);
         const body = bodyOf(ctx);
         const key = claimKey(body.publicKey);
         if (!key) return refuse(ctx, 400, 'claim_bad_key', 'A member key (64 lower-case hex digits) is needed to claim.');

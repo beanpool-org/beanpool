@@ -135,6 +135,43 @@ describe('useClaimState hook', () => {
         expect(fetchClaimStateMock).toHaveBeenCalledTimes(3);
     });
 
+    it('polls while the node answers as a standby with no owner and stops once it has one', async () => {
+        vi.useFakeTimers();
+
+        fetchClaimStateMock
+            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false, standby: true })
+            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false, standby: true })
+            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false });
+
+        const { result } = renderHook(() => useClaimState('https://example.com/api/local/claim'));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false, standby: true });
+        expect(fetchClaimStateMock).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS);
+        });
+        expect(fetchClaimStateMock).toHaveBeenCalledTimes(2);
+        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false, standby: true });
+
+        // An owner made themselves one on the standby's shell (beanpool recover): the flag is gone, so the note goes
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS);
+        });
+        expect(fetchClaimStateMock).toHaveBeenCalledTimes(3);
+        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false });
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS * 3);
+        });
+        expect(fetchClaimStateMock).toHaveBeenCalledTimes(3);
+        // Community info is read only for an unclaimed node
+        expect(fetchCommunityInfoMock).not.toHaveBeenCalled();
+    });
+
     it('pauses polling when document becomes hidden and resumes when document becomes visible', async () => {
         vi.useFakeTimers();
 

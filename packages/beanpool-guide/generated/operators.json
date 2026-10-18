@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 138,
-  "hash": "3f371cfc766ae13a268b026836fb94ccabfd5ec072ca552eecaac4caca96eed6",
+  "version": 139,
+  "hash": "b4f959cda81bee1a8da28118a1a9e6ac9cb19e94f788889c887468a2f9e978c2",
   "sections": [
     {
       "id": "setup",
@@ -139,18 +139,27 @@
         },
         {
           "type": "p",
-          "text": "The BeanPool app reaches a server on the internet only over https. Before you claim your community, choose one of these two. Either works as well as the other:"
+          "text": "The BeanPool app reaches a server on the internet only over https. Before you claim your community, choose one of these three. Each works as well as the others:"
         },
         {
           "type": "ul",
           "items": [
-            "**A free name ending in .beanpool.org.** beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand. Some names, such as big cities, wait for approval by the BeanPool project.",
-            "**Your own domain, over https.** Point your domain at your server, with port 443 open, and give it a certificate: your server gets one from Let's Encrypt by itself when the domain's DNS is in a Cloudflare account of yours (CF_RECORD_NAME, CF_API_TOKEN and CF_ZONE_ID in .env), or put a web server of your own with a certificate in front of it. Then claim with --address https://your.domain. BeanPool does not need to be involved."
+            "**Your server's IP address, on a rented server.** If your server has a public IP address and ports 80 and 443 are open to the internet, claim with --ip and that address, for example --ip 203.0.113.7. Your server gets its own certificate for the address from Let's Encrypt by itself, over port 80, and renews it every few days. Phones then reach it at https://203.0.113.7.",
+            "**A free name ending in .beanpool.org.** beanpool claim offers it. Your server reaches it through a tunnel it runs itself, so there are no ports to open and no DNS to understand: it works on a computer at home too. Some names, such as big cities, wait for approval by the BeanPool project.",
+            "**Your own domain.** Make an A record for your domain with your server's public IP address, open ports 80 and 443, and claim with --address https://your.domain. Your server gets its own certificate for the domain by itself, over port 80. If a web server of your own holds the certificate in front of it, that works too. BeanPool does not need to be involved."
           ]
         },
         {
           "type": "p",
-          "text": "A bare IP address, such as http://203.0.113.7, works only on a home network today. A phone never uses plain http to a server on the internet, so a claim QR code that carries one does not open. beanpool claim warns you before it shows such a QR code, and when you press Enter to skip the name on a server with no https address. Run it again with a name or your own address: the claim code waits until a phone uses it."
+          "text": "A name survives a change of server; a number does not. If your server or its IP address changes, every member has to type the new one, while a name can be pointed at the new server. You can add a .beanpool.org name later in Settings → Public Address: members who use the IP address keep working, and new members are sent to the name."
+        },
+        {
+          "type": "p",
+          "text": "Behind a home router with no ports open, use a name: nothing on the internet can reach your server to check its IP address or a domain."
+        },
+        {
+          "type": "p",
+          "text": "A plain http:// address, such as http://203.0.113.7, works only on a home network. A phone never uses plain http to a server on the internet, so a claim QR code that carries one does not open. beanpool claim warns you before it shows such a QR code, and when you press Enter to skip the name on a server with no https address. Run it again with --ip, a name or your own address: the claim code waits until a phone uses it."
         },
         {
           "type": "p",
@@ -171,8 +180,9 @@
         {
           "type": "ul",
           "items": [
-            "It asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.",
-            "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
+            "With your server's IP address, beanpool claim --ip 203.0.113.7, or your own domain, beanpool claim --address https://your.domain: your server keeps the address and gets its own certificate for it, and beanpool claim waits up to three minutes until the address answers with that certificate. Then the QR code carries it. If it does not answer in time, beanpool claim says why, for example that port 80 is not reachable from the internet and needs opening in the firewall; for a domain, it also says which DNS record to make. With --ip the QR code then carries no address, and with --address it carries your domain anyway. Your server keeps trying by itself: run beanpool claim again once it has its certificate, and the QR code carries the address.",
+            "Without either, it asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip, or use --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.",
+            "Without an address that works, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
             "It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
           ]
         },
@@ -321,7 +331,7 @@
             "Install Docker and Docker Compose from the system's own packages (on Ubuntu 24.04: docker.io and docker-compose-v2).",
             "On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.",
             "Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from source, and change nothing in docker-compose.yml.",
-            "For the block's last line, take a name for the community's address: docker compose exec beanpool-node beanpool claim --name NAME. If I have my own domain with https, use --address https://my.domain instead. Never give the phone a plain http:// address on the internet: phones refuse it.",
+            "For the block's last line, give the community its address. On a rented server with a public IP address and ports 80 and 443 open: docker compose exec beanpool-node beanpool claim --ip THE-SERVER'S-IP. On a computer at home, or with no ports open: --name NAME instead. If I have my own domain pointed at the server: --address https://my.domain. Never give the phone a plain http:// address on the internet: phones refuse it.",
             "Stop when it shows the one-time claim code and the QR code, and show me both. Never claim the community yourself, and never run beanpool claim --key.",
             "Tell me what you ran, and anything you decided on your own."
           ]
@@ -336,13 +346,17 @@
             "Looks at the server: its system, memory and disk.",
             "Installs Docker, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.",
             "Runs the one block: fetches the compose file, creates the network the server uses, pulls the published image, starts it, and waits until the server has made its one-time claim code.",
-            "Runs beanpool claim with your name. Your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live. A name that waits for approval moves over by itself once approved. With your own domain, there is nothing to wait for. See Your community needs an address phones can reach, in First-time setup.",
+            "Runs beanpool claim with the address. With --ip or your own domain, your server gets its own certificate for the address, and beanpool claim waits up to three minutes until the address answers with it. With a name, your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live; a name that waits for approval moves over by itself once approved. See Your community needs an address phones can reach, in First-time setup.",
             "Shows you the claim code and the QR code."
           ]
         },
         {
           "type": "p",
-          "text": "If beanpool claim prints a warning that phones will not connect to the address, the QR code will not work: run it again with a name or your own https address. The claim code waits until a phone uses it."
+          "text": "If beanpool claim prints a warning that phones will not connect, or that the QR code carries no address, it says why: with --ip, most often port 80 or 443 closed in the server's firewall. Fix that and run it again, or use a name. The claim code waits until a phone uses it."
+        },
+        {
+          "type": "p",
+          "text": "An IP address is a number: if your server or its IP address changes, every member has to type the new one. A name follows the community, so you can add one later in Settings → Public Address."
         },
         {
           "type": "h2",
@@ -1087,7 +1101,7 @@
         {
           "type": "ul",
           "items": [
-            "**The settings only, keeping members, posts, deals and Beans**: docker compose stop beanpool-node, then move data/local-config.json out of the data folder (for example to your home folder), then docker compose up -d. That file holds the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its main server, and on a main server the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It keeps the community's own key. Delete data/first-admin-password.txt too if it is still there: the password in it no longer works. After the start the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run docker compose exec beanpool-node beanpool claim to see it. To add an owner when nobody can sign in, run beanpool recover on the server (Signing in).",
+            "**The settings only, keeping members, posts, deals and Beans**: docker compose stop beanpool-node, then move data/local-config.json out of the data folder (for example to your home folder), then docker compose up -d. That file holds the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its main server, and on a main server the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It keeps the community's own key. Delete data/first-admin-password.txt too if it is still there: the password in it no longer works. After the start the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, a main server makes a one-time claim code: run docker compose exec beanpool-node beanpool claim to see it. A standby makes none, and refuses a claim: make yourself its owner with docker compose exec beanpool-node beanpool recover --key @callsign (your callsign, or your public key), as in Backups and replicas. To add an owner when nobody can sign in, run beanpool recover on the server (Signing in).",
             "**The whole community, from nothing**: docker compose down, then move the whole data folder away, then docker compose up -d, then claim the server as in First-time setup (docker compose exec beanpool-node beanpool claim). Keep the old data folder until you are sure."
           ]
         }
@@ -3120,7 +3134,7 @@
         {
           "type": "ul",
           "items": [
-            "the standby's own Settings, signed in as an owner of the standby: its admin password counts as one only with two-factor sign-in on, and a newer standby has no password. An admin is refused;",
+            "the standby's own Settings, signed in as an owner of the standby: its admin password counts as one only with two-factor sign-in on, and a newer standby has no password. An admin is refused. A standby has no owner of its own (the main server's owners come with the take-over) and no claim code: its log says so at every start until you have made yourself its owner, and a claim from a phone is refused. So first make yourself its owner on the standby's machine, in the folder with docker-compose.yml: docker compose exec beanpool-node beanpool recover --key @callsign (your callsign, or your public key), then sign in to its Settings with your phone. Settings alone can't do this. The take-over replaces the standby's owners with the main server's;",
             "**either** the paper with the recovery code (the code on it must be one the standby's copy of the keys was locked to: the screen says which number it needs), **or** an owner with the BeanPool app on their phone, who can scan a code on your screen. Any owner the keys were locked to will do; the app must be the newest version. The web app works too, by pasting a link, if it still opens: it lives at the community's own address, which may be down with the main server.",
             "If the standby's Settings only answer certain internet addresses (the admin IP allowlist under **Gateway & Peers**), the owner's phone must be on one of them too."
           ]
@@ -3356,6 +3370,14 @@
         {
           "type": "p",
           "text": "To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out."
+        },
+        {
+          "type": "h3",
+          "text": "The phone app's newest version"
+        },
+        {
+          "type": "p",
+          "text": "The server also asks Google Play and the App Store for the newest BeanPool phone app, shortly after it starts and every 6 hours, and tells members' phones, so an old app can show that an update is available. To stop it asking, put DISABLE_APP_STORE_CHECK=true in .env and run docker compose up -d (with the new docker-compose.yml, as above). The server then never asks either store. Phones are told of no newer app, and the app's floor (see Raising the app's floor) shows its banner only: no app is stopped with the full-screen update, because the server never holds anyone to a version it has not seen in the store. Home's **Phone app versions** card says the check is off."
         },
         {
           "type": "h2",
@@ -3634,7 +3656,7 @@
         },
         {
           "type": "p",
-          "text": "A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform."
+          "text": "A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone."
         },
         {
           "type": "h2",
@@ -4789,7 +4811,7 @@
           "type": "ul",
           "items": [
             "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
-            "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it.",
+            "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it. To stop the app stores' check, put DISABLE_APP_STORE_CHECK=true in .env: phones are then told of no newer app, and the app's floor shows a banner only.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",
             "Server alerts, only if an owner sets up a channel of their own (an ntfy topic or a web address) in the Alerts card or in .env: your community's name, what is wrong in plain words, and counts. Never a member's name, key, address or anything anyone wrote (see Updates, health checks and disk space).",

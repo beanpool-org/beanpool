@@ -11,7 +11,7 @@ Your server tells every phone app the oldest version it should run: the floor. A
 
 The server never refuses an app because of its version. Whatever a member was doing when their app fell below the floor still reaches the server. Only the app stops, and only until it is updated.
 
-A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform.
+A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone.
 
 ## Setting it
 

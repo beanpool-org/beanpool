@@ -53,6 +53,10 @@ The server asks GitHub for the newest release shortly after it starts and every 
 
 To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
 
+### The phone app's newest version
+
+The server also asks Google Play and the App Store for the newest BeanPool phone app, shortly after it starts and every 6 hours, and tells members' phones, so an old app can show that an update is available. To stop it asking, put DISABLE_APP_STORE_CHECK=true in .env and run docker compose up -d (with the new docker-compose.yml, as above). The server then never asks either store. Phones are told of no newer app, and the app's floor (see Raising the app's floor) shows its banner only: no app is stopped with the full-screen update, because the server never holds anyone to a version it has not seen in the store. Home's **Phone app versions** card says the check is off.
+
 ## Checking from outside
 
 These addresses answer without signing in, so a monitoring service or a phone browser can check them:
@@ -90,7 +94,7 @@ The server watches itself every minute and tells its owners when it needs them:
 - the host watchdog restarted it after a freeze, or the watchdog has gone quiet;
 - the standby needs attention;
 - on a standby: it is not paired with a main server, or the server it copies from answers with a key that is not its main server's (see Which server a standby trusts, in Backups and replicas);
-- the Let's Encrypt certificate could not be renewed and browsers see a self-signed one.
+- a certificate the server holds for one of its own addresses could not be renewed for a day after it was due (once a day while it lasts), has less than a day left (urgent), or expired before it was renewed, so apps and browsers see a self-signed one there and refuse it. Each names the address, so an owner with two knows which one. The first two also say when the certificate expires; the third says that it expired, or that there is none yet. The server keeps trying, at least once a day and more often near the end; once a new certificate arrives, the alert is resolved.
 
 It also tells them when someone gains power on the server, saying what happened and how, never who:
 
@@ -134,7 +138,7 @@ The address and token are kept in data/alerts.json (readable by the server's own
 
 A channel that does not answer is tried again every 5 minutes, with everything it missed in one message whose text is at most 4096 bytes (ntfy's limit; a JSON channel's POST also carries each line's details, so its body is larger): the high and urgent lines first, then the others, report lines last (they were pushed already), as many as fit, and the rest as a count ("And 28 more, too many for one message"). At most 20 messages an hour go to it; high and urgent ones still go, up to 60 an hour, and anything held goes in the next message. A redirect is treated as a failure and never followed. Only whether the channel took the message is read, never what it answered.
 
-**What an alert says:** your community's name, what is wrong in plain words, since when, and counts. Never a member's name, key or address, nothing anyone wrote, and never a backup store's key or the channel's address.
+**What an alert says:** your community's name, what is wrong in plain words, since when, and counts. Never a member's name, key or address, nothing anyone wrote, and never a backup store's key or the channel's address. The certificate alerts name the server's own address they are about (a name or an IP it publishes anyway), never a visitor's.
 
 ## The ledger audit
 

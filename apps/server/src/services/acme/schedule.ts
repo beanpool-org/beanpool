@@ -23,6 +23,9 @@
  *
  * A standby orders nothing: certificates never travel, and a standby gets its own once the address points at it and it
  * has taken over (D8). A `.beanpool.org` name (Cloudflare's edge holds those) and a private host are never ordered.
+ *
+ * The owners are told (services/alerts.ts, from heldCertificates and tls.ts selfSignedHosts) when a renewal is a day
+ * past due, when a certificate has less than a day left, and when one expired before it was renewed.
  */
 
 import fs from 'node:fs';
@@ -32,7 +35,7 @@ import { getNodeRole } from '../../config/node-role.js';
 import { tlsIdentifiers } from '../../engine/own-addresses.js';
 import { writeFileAtomic } from '../../write-file-atomic.js';
 import {
-    fleetIdentifier, noteFleetChecked, serveCertificate, servedCertificate, servedHosts, setPreferredOrder, tlsDataDir,
+    checkedHosts, fleetIdentifier, noteChecked, serveCertificate, servedCertificate, servedHosts, setPreferredOrder, tlsDataDir,
 } from '../tls.js';
 import { LETS_ENCRYPT_PRODUCTION, SelfCheckFailed, orderCertificate, type AcmeTarget } from './order.js';
 import { readPair, readState, writePair, writeState, type AcmeState, type CertPair } from './store.js';
@@ -153,7 +156,7 @@ export async function runAcmeTick(): Promise<TickReport> {
                 outcomes[target.host] = 'failed';
                 console.error(`❌ ACME: ${target.host}:`, (err as Error).message);
             }
-            if (target.challenge === 'dns-01') noteFleetChecked();
+            noteChecked(target.host);
         }
         return { outcomes };
     } catch (err) {
@@ -267,6 +270,28 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
         console.warn(`⚠️  ACME: ${target.host}: ${kind}: ${words}. ${held ? 'The current certificate stays. ' : ''}Next try ${new Date(next).toISOString()}.`);
         return 'failed';
     }
+}
+
+/** A CA certificate an identifier holds (heldCertificates). */
+export interface HeldCertificate {
+    host: string;
+    notAfter: number;
+    /** When its renewal fell due: a third of its life left (RENEW_WHEN_LEFT). */
+    renewDueAt: number;
+}
+
+/**
+ * The valid CA certificates of the identifiers a renewal tick has looked at since this start, in configured order, at
+ * `now`: what services/alerts.ts tells the owners of (design scratch/global-node/DESIGN-https-anywhere-fable.md §2), with
+ * tls.ts selfSignedHosts for those that have none. Empty on a standby, which orders nothing, and before the first tick,
+ * so nothing is told before the scheduler has had its go.
+ */
+export function heldCertificates(now: number): HeldCertificate[] {
+    return checkedHosts().flatMap((host) => {
+        const held = servedCertificate(host);
+        if (!held || held.notAfter <= now) return [];
+        return [{ host, notAfter: held.notAfter, renewDueAt: held.notAfter - (held.notAfter - held.notBefore) * RENEW_WHEN_LEFT }];
+    });
 }
 
 /** The order, or a rejection after the timeout. What a timed-out order brings back later is never written. */

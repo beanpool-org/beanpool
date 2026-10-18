@@ -89,6 +89,11 @@ export interface TakeoverPreview {
     connectors: number;
     publicAddress: string | null;
     tunnel: { source: string; message: string };
+    /**
+     * Members reached the community only by an IP address, which this server does not have: they will need its new
+     * address. In the server's words; null otherwise. Absent on servers before HTTPS anywhere S7. Never a gate.
+     */
+    addressWarning?: string | null;
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
     /**
      * This standby's copy of the main server, in the server's words: "Last exact copy of the main server: <time>", or what
@@ -602,6 +607,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 {preview.mainServer.warning && (
                                     <div role="alert" className="p-3 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-200">
                                         ⚠️ {preview.mainServer.warning}
+                                    </div>
+                                )}
+                                {preview.addressWarning && (
+                                    <div id="takeover-address-warning" className="p-3 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-200">
+                                        ⚠️ {preview.addressWarning}
                                     </div>
                                 )}
                                 {preview.copy?.warning && (

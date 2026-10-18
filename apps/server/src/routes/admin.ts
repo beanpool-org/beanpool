@@ -57,7 +57,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
-import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
+import { APP_PLATFORMS, appStoreCheckDisabled, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
@@ -1438,8 +1438,9 @@ router.get('/api/local/admin/web-visits', async (ctx) => {
  * The phone app's versions in this community and each platform's floor, for the manager's "App versions" card: whom a
  * raised floor would stop, before it is raised. Counts only (app-version-counts.ts: members seen in the last 30 days, or
  * since the server started), never who. Each platform's floor as set, its store's build, whether the floor is enforced
- * or held for the store, its grace date and whether it stops apps yet (app-store-versions.ts). Read-only, owners and
- * admins (a moderator's session reaches reports only, admin-auth.ts).
+ * or held for the store, its grace date and whether it stops apps yet (app-store-versions.ts). `storeCheckOff`: the
+ * operator turned the store lookup off (DISABLE_APP_STORE_CHECK), so a store's build stays unknown for good, not "not
+ * read yet". Read-only, owners and admins (a moderator's session reaches reports only, admin-auth.ts).
  */
 router.get('/api/local/admin/app-versions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -1453,6 +1454,7 @@ router.get('/api/local/admin/app-versions', async (ctx) => {
         minAppVersion: getMinAppVersion(),
         minAppVersionFrom: getMinAppVersionFrom(),
         storeCheckedAt: getAppStoreVersions().checkedAt,
+        storeCheckOff: appStoreCheckDisabled(),
         platforms,
     };
 });

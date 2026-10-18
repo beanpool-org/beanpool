@@ -8,9 +8,10 @@ import {
 } from '../../lib/node-claim';
 
 /**
- * Asks GET /api/local/claim once on mount. While the node answers unclaimed it asks again every CLAIM_POLL_MS, paused
- * while the tab is hidden (and asked at once when it is shown again), and stops for good once the node has an owner
- * or the page closes.
+ * Asks GET /api/local/claim once on mount. While the node answers unclaimed, or as a standby with no owner of its own
+ * (claimed + standby: true), it asks again every CLAIM_POLL_MS, paused while the tab is hidden (and asked at once when
+ * it is shown again), and stops for good once the node has an owner (for a standby: once the flag is gone, after
+ * beanpool recover on its shell) or the page closes.
  *
  * Community addresses are read from /api/community/info ONCE per card mount, and never again while the card stays up.
  * A failed info read = no list (the card works as before).
@@ -23,7 +24,7 @@ export function useClaimState(url: string): ClaimState {
 
     useEffect(() => {
         let alive = true;
-        let waiting = false; // the node answered unclaimed at least once: keep asking
+        let waiting = false; // the node answered unclaimed, or as a standby with no owner: keep asking
         let inFlight = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const ctl = new AbortController();
@@ -60,7 +61,7 @@ export function useClaimState(url: string): ClaimState {
             if (next.kind === 'unknown') {
                 if (!waiting) setState(next);
             } else {
-                waiting = next.kind === 'unclaimed';
+                waiting = next.kind === 'unclaimed' || (next.kind === 'claimed' && next.standby === true);
                 setState(next);
             }
             schedule();

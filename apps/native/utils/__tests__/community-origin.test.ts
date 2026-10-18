@@ -74,9 +74,12 @@ describe('everything else stays refused', () => {
     });
 
     it('a server\'s number is read by the server\'s own rule: one copy, in core, so the phone never offers a number no server is certified for', () => {
-        const server = fs.readFileSync(path.resolve(__dirname, '../../../server/src/engine/own-addresses.ts'), 'utf8');
+        // The server's certificate rule (isCertifiableHost) is in host-kinds.ts since S2 (#2135); own-addresses.ts re-exports it.
+        const engine = (name: string) => fs.readFileSync(path.resolve(__dirname, `../../../server/src/engine/${name}`), 'utf8');
+        const server = engine('host-kinds.ts');
         expect(server).toMatch(/import \{[^}]*\bisPublicIpv4\b[^}]*\} from '@beanpool\/core';/);
-        expect(server).not.toMatch(/function isPublicIpv4/);
+        expect(server).toMatch(/if \(\/\^\[\\d\.\]\+\$\/\.test\(host\)\) return isPublicIpv4\(host\);/);
+        for (const name of ['host-kinds.ts', 'own-addresses.ts']) expect(engine(name), name).not.toMatch(/function isPublicIpv4\b|\bisPublicIpv4 = /);
         const phone = fs.readFileSync(path.resolve(__dirname, '../community-origin.ts'), 'utf8');
         expect(phone).toMatch(/import \{[^}]*\bisPublicIpv4\b[^}]*\} from '@beanpool\/core';/);
     });

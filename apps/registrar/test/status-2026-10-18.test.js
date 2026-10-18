@@ -5,7 +5,8 @@
 // last look, its last incident and its share of looks answered over 90 days, counted from the log; a community's node
 // that is watched is never in it, nor any address, version or IP; GET /api/registrar/status.json serves it with cache
 // headers (404 before the first tick and with no KV); an incident begins at the first of two failed looks and ends at the
-// first answer, and the registrar's missed ticks are one; a tick whose status write failed loses nothing; a quiet tick
+// first answer, and the registrar's missed ticks are one; the first tick names the log's last incidents, so the page
+// never says "no incident since" over one; a tick whose status write failed loses nothing; a quiet tick
 // spends 2 D1 queries on it; status.json is bounded; /admin links the page.
 
 import test from 'node:test';
@@ -94,6 +95,10 @@ async function room({ env = {}, kv = fakeKV(), log = true, migrations } = {}) {
 }
 
 const share = (ok, looks) => Math.floor((ok * 10000) / looks) / 100;
+// The log's last incidents, as the first tick names them: global's 7 timed-out looks (the first of them, to the next
+// answer) and the registrar's missed hour (from the first slot with no tick to the next that ran).
+const LOG_GLOBAL = { began_at: T0S - (3 * 288 + 6) * 300, ended_at: T0S - (3 * 288 - 1) * 300, why: 'timed-out' };
+const LOG_REGISTRAR = { began_at: T0S - (5 * 288 + 11) * 300, ended_at: T0S - (5 * 288 - 1) * 300, why: 'checks-missed' };
 const slot = (s) => Math.floor((s + 30) / 300);
 const dayOf = (s) => new Date(s * 1000).toISOString().slice(0, 10);
 
@@ -117,11 +122,13 @@ test('a tick writes status.json from the watch log: our servers STATUS_SERVERS n
         const g = r.server('global');
         assert.deepEqual(g, {
             name: 'global', up: true, checked_at: T0S, looks, answered: looks - 7, percent: share(looks - 7, looks),
-            since: dayOf(r.history.first), incident: null,
-        }, "global: its 7 timed-out looks counted (the log's incidents before the first tick are counted, not named)");
+            since: dayOf(r.history.first), incident: LOG_GLOBAL,
+        }, "global: its 7 timed-out looks counted, and named: the log's last incident, 35 minutes 3 days back");
+        assert.equal(LOG_GLOBAL.ended_at - LOG_GLOBAL.began_at, 35 * 60);
         assert.equal(g.percent, 99.87);
         const ts = r.server('test');
         assert.equal(ts.answered, looks - 1, "test's one 502");
+        assert.equal(ts.incident, null, 'one failed look is not an incident');
         assert.equal(ts.percent, share(looks - 1, looks));
         assert.equal(ts.up, true);
         // The registrar: its ticks (each looked at every server) of the 5-minute slots since its first tick; the hour
@@ -131,8 +138,9 @@ test('a tick writes status.json from the watch log: our servers STATUS_SERVERS n
         assert.equal(slots, LOG_DAYS * 288 + 1);
         assert.deepEqual(reg, {
             name: 'registrar', up: true, checked_at: T0S, looks: slots, answered: slots - 12, percent: share(slots - 12, slots),
-            since: dayOf(r.history.first), incident: null,
-        });
+            since: dayOf(r.history.first), incident: LOG_REGISTRAR,
+        }, "the registrar: the log's missed hour named");
+        assert.equal(LOG_REGISTRAR.ended_at - LOG_REGISTRAR.began_at, 60 * 60);
         assert.equal(reg.percent, 99.79);
 
         const text = r.kv.m.get('status.json');
@@ -184,7 +192,7 @@ test('an incident: one failed look is not one (up: false); two begin it at the f
         await r.tick();
         assert.deepEqual(r.server('test').incident, { began_at: t1 + 300, ended_at: t1 + 1200, why: 'timed-out' }, 'the last incident stays');
         assert.equal(r.server('test').answered, r.server('test').looks - 1 - 3, 'its 3 failed looks counted, with the log\'s one');
-        assert.equal(r.server('global').incident, null, 'global untouched');
+        assert.deepEqual(r.server('global').incident, LOG_GLOBAL, "global untouched: still the log's");
 
         // The next one replaces it, with what it said: an HTTP error, something else at the address, unreachable.
         for (const [fail, why] of [[503, 'http-503'], ['unreachable', 'unreachable']]) {
@@ -201,12 +209,63 @@ test('an incident: one failed look is not one (up: false); two begin it at the f
     } finally { r.done(); }
 });
 
+test("the first tick names the last incident already in watch_log, never \"no incident since\" over it; refused, the next tick does", async () => {
+    // The 2026-10-18 review's case: the log holds global for 7 days, with 3 failed looks in a row 2 days back.
+    const r = await room({ log: false });
+    try {
+        const ins = r.w.sqlite.prepare('INSERT INTO watch_log (ran_at, target, ok, ms, status) VALUES (?,?,?,?,?)');
+        const down = new Set([576, 577, 578]);
+        for (let i = 7 * 288; i >= 1; i--) ins.run(T0S - i * 300, 'global', down.has(i) ? 0 : 1, 40, down.has(i) ? 'HTTP 503' : 'HTTP 200');
+        await r.tick();
+        const g = r.server('global');
+        assert.deepEqual([g.up, g.percent, g.since], [true, 99.85, '2026-10-03']);
+        assert.deepEqual(g.incident, { began_at: T0S - 578 * 300, ended_at: T0S - 575 * 300, why: 'http-503' },
+            'named: from the first of the 3 failed looks to the next answer');
+        assert.equal(r.server('test').incident, null, 'nothing in the log: no incident');
+        assert.equal(r.server('registrar').incident, null, 'no tick missed in the log');
+        await r.tick();
+        assert.deepEqual(r.server('global').incident, g.incident, 'and it stays');
+    } finally { r.done(); }
+
+    // The log's outage still open at the first tick: named as begun, and ended at the first answer as any other.
+    const open = await room({ log: false });
+    try {
+        const ins = open.w.sqlite.prepare('INSERT INTO watch_log (ran_at, target, ok, ms, status) VALUES (?,?,?,?,?)');
+        for (let i = 288; i >= 1; i--) ins.run(T0S - i * 300, 'test', i <= 3 ? 0 : 1, 40, i <= 3 ? 'unreachable' : 'HTTP 200');
+        open.servers['test.watch.test'].fail = 'unreachable';
+        await open.tick();
+        assert.deepEqual(open.server('test').incident, { began_at: T0S - 900, ended_at: null, why: 'unreachable' });
+        open.servers['test.watch.test'].fail = null;
+        await open.tick();
+        assert.deepEqual(open.server('test').incident, { began_at: T0S - 900, ended_at: T0S + 300, why: 'unreachable' });
+    } finally { open.done(); }
+
+    // The first tick's mark and names are one statement: refused, nothing is marked, and the next tick names them.
+    const again = await room();
+    try {
+        const prepare = again.w.env.DB.prepare.bind(again.w.env.DB);
+        let refused = 0;
+        again.w.env.DB.prepare = (sql) => {
+            if (/SUM\(ok\) OVER/.test(sql) && !refused++) throw new Error('D1: too many queries in this invocation');
+            return prepare(sql);
+        };
+        await again.tick();
+        assert.equal(refused, 1);
+        assert.equal(again.doc(), null, 'not written this tick');
+        assert.deepEqual(again.w.sqlite.prepare("SELECT key FROM watch_marks WHERE key LIKE 'status:%'").all(), [], 'nothing marked');
+        await again.tick();
+        assert.deepEqual(again.server('global').incident, LOG_GLOBAL);
+        assert.deepEqual(again.server('registrar').incident, LOG_REGISTRAR);
+        assert.equal(again.server('registrar').since, dayOf(again.history.first));
+    } finally { again.done(); }
+});
+
 test("the registrar: its checks missed two ticks or more is an incident from the first missed to the next that ran; one missed is not", async () => {
     const r = await room();
     try {
         await r.tick();
         await r.tick(600);   // one tick missed
-        assert.equal(r.server('registrar').incident, null);
+        assert.deepEqual(r.server('registrar').incident, LOG_REGISTRAR, "not an incident: still the log's");
         const before = r.server('registrar');
         assert.equal(before.looks - before.answered, 12 + 1);
         const last = r.nowS();
@@ -215,7 +274,7 @@ test("the registrar: its checks missed two ticks or more is an incident from the
         assert.deepEqual(reg.incident, { began_at: last + 300, ended_at: r.nowS(), why: 'checks-missed' });
         assert.equal(reg.looks - reg.answered, 12 + 1 + 3);
         assert.equal(reg.percent, share(reg.answered, reg.looks));
-        assert.equal(r.server('global').incident, null, 'a server is not down because the checks did not look');
+        assert.deepEqual(r.server('global').incident, LOG_GLOBAL, 'a server is not down because the checks did not look');
         assert.equal(r.server('global').looks, r.history.ticks + 3, 'nor counted for the ticks that did not run');
     } finally { r.done(); }
 });

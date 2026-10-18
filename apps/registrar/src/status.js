@@ -107,10 +107,29 @@ export async function writeStatus(env, { targets, recent, now, missedToRaise, ke
         else if (r.kind === 'mark' && r.k.startsWith(INCIDENT)) marks.set(r.k.slice(INCIDENT.length), incidentFrom({ since: r.a, value: r.c }));
         else if (r.kind === 'first') first = Number(r.a) || null;
     }
-    // The registrar's line starts at its first tick counted.
+    // The registrar's line starts at its first tick counted. With that mark, once: the last incident already in
+    // watch_log of each server shown (its last run of missedToRaise failed looks or more, from the first of them to the
+    // next answer) and of the registrar (its last missedToRaise slots or more with no tick), by the rules below, so an
+    // outage the share counts is named too, never "no incident since" over it. One statement: refused, the next tick
+    // tries it again.
     if (!since && first) {
         since = Math.max(first, fromS);
-        await env.DB.prepare('INSERT OR IGNORE INTO watch_marks (key, since) VALUES (?, ?)').bind(SINCE, since).run();
+        const seeded = (await env.DB.prepare(`WITH looked AS (SELECT id, target, ok, SUM(ok) OVER (PARTITION BY target ORDER BY id) AS n
+                    FROM watch_log WHERE target IN (SELECT value FROM json_each(?))),
+                runs AS (SELECT target, MIN(id) AS id, COUNT(*) AS failed FROM looked WHERE ok = 0 GROUP BY target, n),
+                last AS (SELECT target, MAX(id) AS id FROM runs WHERE failed >= ? GROUP BY target),
+                ticks AS (SELECT ran_at, LAG(ran_at) OVER (ORDER BY ran_at) AS prev FROM (SELECT DISTINCT ran_at FROM watch_log))
+            INSERT INTO watch_marks (key, since, value)
+            SELECT ?, ?, NULL WHERE true
+            UNION ALL SELECT '${INCIDENT}' || l.target, w.ran_at, json_object('ended',
+                    (SELECT MIN(ran_at) FROM watch_log WHERE target = l.target AND ok = 1 AND id > l.id), 'status', w.status)
+                FROM last l JOIN watch_log w ON w.id = l.id WHERE true
+            UNION ALL SELECT * FROM (SELECT '${INCIDENT}${SELF_NAME}', prev + ${TICK_S}, json_object('ended', ran_at, 'status', 'checks-missed')
+                FROM ticks WHERE (ran_at + 30) / ${TICK_S} - (prev + 30) / ${TICK_S} - 1 >= ? ORDER BY ran_at DESC LIMIT 1) WHERE true
+            ON CONFLICT (key) DO UPDATE SET since = excluded.since, value = excluded.value WHERE key <> '${SINCE}'
+            RETURNING key, since, value`)
+            .bind(JSON.stringify(shown.map((t) => t.name)), missedToRaise, SINCE, since, missedToRaise).all()).results || [];
+        for (const r of seeded) if (r.key.startsWith(INCIDENT)) marks.set(r.key.slice(INCIDENT.length), incidentFrom(r));
     }
 
     // The registrar: ticks missed since the one before (the newest look before this tick's, of any server).

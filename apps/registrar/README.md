@@ -215,7 +215,8 @@ it; it stays under 2 KB (at most six servers).
 
 The counts are D1's `watch_days` (migration 0011, kept 100 days): each server's looks per UTC day, counted again from
 `watch_log` at every tick from the newest day counted, so a tick that failed loses nothing and the first tick fills in
-`watch_log`'s 30 days. The last incidents and the first tick are marks in `watch_marks` (`status:…`). A quiet tick
+`watch_log`'s 30 days and, once, names the last incident already in them of each server and of the registrar. The last
+incidents and the first tick are marks in `watch_marks` (`status:…`). A quiet tick
 spends 2 D1 queries on this, after the alerts and the daily line (a watch tick already spends 38 with our five servers,
 and about 50 — Workers Free's limit for one invocation — on a tick that raises or clears an alert, where this is what
 gets refused: `status.json` is then one tick older); one write to KV a tick, 288 a day (Workers Free allows 1,000).

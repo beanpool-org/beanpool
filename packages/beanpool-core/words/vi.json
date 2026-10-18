@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -288,5 +288,21 @@
   "Sunset {time}.": "Hoàng hôn {time}.",
   "Look around ›": "Xem quanh đây ›",
   "Pick up the tour at step {step} ›": "Tiếp tục xem hướng dẫn ở bước {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Đây là Trang chủ của bạn. Bạn tự chọn những gì xuất hiện tại đây. Trước khi bắt đầu, hãy dành một phút xem qua các tab khác nhé."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Đây là Trang chủ của bạn. Bạn tự chọn những gì xuất hiện tại đây. Trước khi bắt đầu, hãy dành một phút xem qua các tab khác nhé.",
+  "Save this search to Home": "Lưu tìm kiếm này vào Trang chủ",
+  "Save the search \"{q}\" to Home": "Lưu tìm kiếm \"{q}\" vào Trang chủ",
+  "The 1 vote came from a new or 12-word account": "1 phiếu này đến từ một tài khoản mới hoặc tài khoản 12 từ",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "other": "Tất cả {n} phiếu đều đến từ các tài khoản mới hoặc tài khoản 12 từ"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "other": "{n} trong tổng số {total} phiếu đến từ tài khoản mới hoặc tài khoản 12 từ"
+  },
+  "This 1 from a new or 12-word account": "1 phiếu này từ một tài khoản mới hoặc tài khoản 12 từ",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "other": "Tất cả {n} phiếu từ các tài khoản mới hoặc tài khoản 12 từ"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "other": "{n} trong số {count} phiếu này từ tài khoản mới hoặc tài khoản 12 từ"
+  }
 }

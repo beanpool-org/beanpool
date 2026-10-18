@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -288,5 +288,21 @@
   "Sunset {time}.": "일몰 {time}.",
   "Look around ›": "둘러보기 ›",
   "Pick up the tour at step {step} ›": "{step}단계부터 둘러보기 이어하기 ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "여기는 홈이에요. 여기에 무엇을 둘지 직접 고를 수 있어요. 시작하기 전에 다른 탭들을 1분간 둘러보세요."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "여기는 홈이에요. 여기에 무엇을 둘지 직접 고를 수 있어요. 시작하기 전에 다른 탭들을 1분간 둘러보세요.",
+  "Save this search to Home": "이 검색을 홈에 저장",
+  "Save the search \"{q}\" to Home": "\"{q}\" 검색을 홈에 저장",
+  "The 1 vote came from a new or 12-word account": "투표 1표는 신규 또는 12단어 계정에서 나왔어요",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "other": "투표 {n}표 모두 신규 또는 12단어 계정에서 나왔어요"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "other": "전체 {total}표 중 {n}표는 신규 또는 12단어 계정에서 나왔어요"
+  },
+  "This 1 from a new or 12-word account": "이 1표는 신규 또는 12단어 계정에서 나왔어요",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "other": "{n}표 모두 신규 또는 12단어 계정에서 나왔어요"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "other": "이 {count}표 중 {n}표는 신규 또는 12단어 계정에서 나왔어요"
+  }
 }

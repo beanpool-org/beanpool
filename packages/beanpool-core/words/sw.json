@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "Machweo {time}.",
   "Look around ›": "Tazama pembeni ›",
   "Pick up the tour at step {step} ›": "Endelea na ziara katika hatua ya {step} ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Hii ndio Nyumbani yako. Unachagua kile kinachowekwa hapa. Kabla ya kuanza, tazama vichupo vingine kwa dakika moja."
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "Hii ndio Nyumbani yako. Unachagua kile kinachowekwa hapa. Kabla ya kuanza, tazama vichupo vingine kwa dakika moja.",
+  "Save this search to Home": "Hifadhi utafutaji huu kwenye Nyumbani",
+  "Save the search \"{q}\" to Home": "Hifadhi utafutaji \"{q}\" kwenye Nyumbani",
+  "The 1 vote came from a new or 12-word account": "Kura 1 ilitoka kwa akaunti mpya au ya maneno 12",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "Kura zote {n} zilitoka kwa akaunti mpya au za maneno 12",
+    "other": "Kura zote {n} zilitoka kwa akaunti mpya au za maneno 12"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{n} kati ya kura {total} ilitoka kwa akaunti mpya au ya maneno 12",
+    "other": "{n} kati ya kura {total} zilitoka kwa akaunti mpya au za maneno 12"
+  },
+  "This 1 from a new or 12-word account": "Hii 1 inatoka kwa akaunti mpya au ya maneno 12",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "Zote {n} kutoka kwa akaunti mpya au za maneno 12",
+    "other": "Zote {n} kutoka kwa akaunti mpya au za maneno 12"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "{n} kati ya hizi {count} inatoka kwa akaunti mpya au ya maneno 12",
+    "other": "{n} kati ya hizi {count} zinatoka kwa akaunti mpya au za maneno 12"
+  }
 }

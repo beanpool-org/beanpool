@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -288,5 +288,21 @@
   "Sunset {time}.": "日落 {time}。",
   "Look around ›": "隨意逛逛 ›",
   "Pick up the tour at step {step} ›": "從第 {step} 步繼續導覽 ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "這是你的首頁。由你決定要放置什麼內容。在開始之前，不妨花一分鐘瀏覽其他分頁。"
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "這是你的首頁。由你決定要放置什麼內容。在開始之前，不妨花一分鐘瀏覽其他分頁。",
+  "Save this search to Home": "將此搜尋儲存到首頁",
+  "Save the search \"{q}\" to Home": "將搜尋「{q}」儲存到首頁",
+  "The 1 vote came from a new or 12-word account": "這 1 票來自新帳號或 12 字帳號",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "other": "全部 {n} 票均來自新帳號或 12 字帳號"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "other": "{total} 票中有 {n} 票來自新帳號或 12 字帳號"
+  },
+  "This 1 from a new or 12-word account": "這一票來自新帳號或 12 字帳號",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "other": "全部 {n} 票均來自新帳號或 12 字帳號"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "other": "這 {count} 票中有 {n} 票來自新帳號或 12 字帳號"
+  }
 }

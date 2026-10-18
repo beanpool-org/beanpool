@@ -10,7 +10,8 @@
  *   - add: POST /public-address/own { ip } or { domain }. Moving the community's live own address to another of its kind
  *     asks an owner's fresh proof (the box opens in this card);
  *   - try again: the same address given again, which the server takes as the owner's retry past its back-off (as
- *     `beanpool claim --ip` run again);
+ *     `beanpool claim --ip` run again). Offered only where the server says that is all it does (retryOnly): one kept beside
+ *     the community's address that would take its place, given again, is not offered it (#2148 review 4306126212);
  *   - remove: app-addresses/remove, after an in-page question, with an owner's fresh proof each time: members' apps that
  *     use the address are refused after it.
  *
@@ -197,7 +198,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
                         const expiresMs = cert ? Date.parse(cert.expiresAt) : NaN;
                         const expiringSoon = Number.isFinite(expiresMs) && expiresMs - now < DAY_MS;
                         const canChange = id.ownerAdded && id.challenge === 'http-01' && status.orders;
-                        const offerRetry = canChange && (!cert || !!id.lastError) && !id.identifier.startsWith('[');
+                        const offerRetry = canChange && id.retryOnly === true && (!cert || !!id.lastError) && !id.identifier.startsWith('[');
                         return (
                             <li
                                 key={id.identifier}

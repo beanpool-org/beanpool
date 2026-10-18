@@ -3302,6 +3302,11 @@ export interface TlsIdentifierStatus {
     source: AppAddress['source'] | 'fleet';
     /** In the owner-confirmed list: an owner can remove it here. */
     ownerAdded: boolean;
+    /**
+     * Given again, it is only asked for again and the community's address stays where it is: "Try again now" is offered
+     * only then (server services/acme/status.ts). False for one that would become the community's address.
+     */
+    retryOnly: boolean;
     /** Where new members are sent (/api/community/info primaryAddress). */
     communityAddress: boolean;
     /** The certificate served for it now (ISO times), or null. */

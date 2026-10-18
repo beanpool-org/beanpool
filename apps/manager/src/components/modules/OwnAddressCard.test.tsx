@@ -26,17 +26,17 @@ function tlsStatus(over: Partial<TlsStatus> = {}): TlsStatus {
         orders: true,
         identifiers: [
             {
-                identifier: 'beans.example.org', kind: 'name', challenge: 'http-01', source: 'public-address', ownerAdded: true, communityAddress: true,
+                identifier: 'beans.example.org', kind: 'name', challenge: 'http-01', source: 'public-address', ownerAdded: true, retryOnly: true, communityAddress: true,
                 certificate: { issuedAt: at(-DAY), expiresAt: at(89 * DAY) }, nextRenewalAt: at(59 * DAY),
                 lastAttemptAt: at(-DAY), lastSuccessAt: at(-DAY), failures: 0, lastError: null,
             },
             {
-                identifier: '203.0.113.5', kind: 'ip', challenge: 'http-01', source: 'owner', ownerAdded: true, communityAddress: false,
+                identifier: '203.0.113.5', kind: 'ip', challenge: 'http-01', source: 'owner', ownerAdded: true, retryOnly: true, communityAddress: false,
                 certificate: null, nextRenewalAt: at(4 * HOUR), lastAttemptAt: at(-HOUR), lastSuccessAt: null, failures: 2,
                 lastError: 'port 80 is not reachable from the internet',
             },
             {
-                identifier: 'nas.example.net', kind: 'name', challenge: 'http-01', source: 'env', ownerAdded: false, communityAddress: false,
+                identifier: 'nas.example.net', kind: 'name', challenge: 'http-01', source: 'env', ownerAdded: false, retryOnly: false, communityAddress: false,
                 certificate: { issuedAt: at(-80 * DAY), expiresAt: at(10 * HOUR) }, nextRenewalAt: null,
                 lastAttemptAt: null, lastSuccessAt: null, failures: 0, lastError: null,
             },
@@ -241,6 +241,25 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Try again now' }));
         await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent('203.0.113.5 is being tried again now.'));
         expect(sent[0].body).toEqual({ ip: '203.0.113.5', password: 'pw' });
+    });
+
+    it('an address that given again would become the community\'s address (retryOnly false) is offered no Try again now, only Remove', async () => {
+        const sent: Sent[] = [];
+        const kept = {
+            identifier: 'coop.example.net', kind: 'name' as const, challenge: 'http-01' as const, source: 'owner' as const, ownerAdded: true, retryOnly: false,
+            communityAddress: false, certificate: null, nextRenewalAt: at(HOUR), lastAttemptAt: at(-HOUR), lastSuccessAt: null, failures: 1,
+            lastError: 'port 80 is not reachable from the internet',
+        };
+        mockNode(() => tlsStatus({ identifiers: [...tlsStatus().identifiers, kept] }), { '/public-address/own': [[200, { success: true }]] }, sent);
+        render(<PublicAddressPanel activeNode={node} />);
+        await card();
+        const coop = row('coop.example.net');
+        expect(within(coop).getByTestId('own-address-error')).toHaveTextContent(/Last try .+: port 80 is not reachable from the internet/);
+        expect(within(coop).queryByRole('button', { name: 'Try again now' })).toBeNull();
+        expect(within(coop).getByRole('button', { name: 'Remove coop.example.net' })).toBeInTheDocument();
+        // The IP beside the community's domain still offers it, and nothing was sent.
+        expect(within(row('203.0.113.5')).getByRole('button', { name: 'Try again now' })).toBeInTheDocument();
+        expect(sent).toHaveLength(0);
     });
 
     it('Remove asks in the page first, then the fresh proof; Keep it sends nothing', async () => {

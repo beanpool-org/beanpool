@@ -588,19 +588,19 @@ const TLS_STATUS = {
     orders: true,
     identifiers: [
         {
-            identifier: OWN_DOMAIN, kind: 'name', challenge: 'http-01', source: 'public-address', ownerAdded: true, communityAddress: true,
+            identifier: OWN_DOMAIN, kind: 'name', challenge: 'http-01', source: 'public-address', ownerAdded: true, retryOnly: true, communityAddress: true,
             certificate: { issuedAt: '2026-09-28T10:00:00.000Z', expiresAt: '2026-12-27T10:00:00.000Z' }, nextRenewalAt: '2026-11-27T10:00:00.000Z',
             lastAttemptAt: '2026-09-28T09:58:00.000Z', lastSuccessAt: '2026-09-28T10:00:00.000Z', failures: 0, lastError: null,
         },
         {
-            identifier: '203.0.113.5', kind: 'ip', challenge: 'http-01', source: 'owner', ownerAdded: true, communityAddress: false,
+            identifier: '203.0.113.5', kind: 'ip', challenge: 'http-01', source: 'owner', ownerAdded: true, retryOnly: true, communityAddress: false,
             certificate: null, nextRenewalAt: '2026-09-28T14:00:00.000Z', lastAttemptAt: '2026-09-28T10:00:00.000Z', lastSuccessAt: null, failures: 2,
             lastError: "could not confirm from inside your network; trying with Let's Encrypt anyway, once a day. Let's Encrypt said: "
                 + 'Fetching http://203.0.113.5/.well-known/acme-challenge/kE7rXb3YwQ0f9tZuVnM2pLs8HdCjAaGi: Timeout during connect (likely firewall problem). '
                 + 'The check from here: port 80 is not reachable from the internet',
         },
         {
-            identifier: 'nas.example.net', kind: 'name', challenge: 'http-01', source: 'env', ownerAdded: false, communityAddress: false,
+            identifier: 'nas.example.net', kind: 'name', challenge: 'http-01', source: 'env', ownerAdded: false, retryOnly: false, communityAddress: false,
             certificate: { issuedAt: '2026-07-01T10:00:00.000Z', expiresAt: '2026-09-29T08:00:00.000Z' }, nextRenewalAt: null,
             lastAttemptAt: null, lastSuccessAt: null, failures: 0, lastError: null,
         },

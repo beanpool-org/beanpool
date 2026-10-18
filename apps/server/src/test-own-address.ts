@@ -41,6 +41,10 @@
  *      next, the failures and last error in the scheduler's words, where it comes from and whether an owner can remove it;
  *      the CA by name and whether it is a test CA; that a standby orders nothing. Owner-only. Never a key: no PEM, nothing
  *      of the served pair or the ACME account.
+ *  13. Whether giving an address again is only a retry (retryOnly, which Settings draws "Try again now" by; #2148 review
+ *      4306126212): the community's own address and an IP kept beside its domain are, and the IP given again with its
+ *      order failing leaves the domain the community's; a domain kept beside the domain that replaced it, a domain
+ *      beside the community's IP, and any address while none is stored would become the community's address, and are not.
  *
  * No real registrar, CA or BeanPool node: the registrar is a fake HTTP server here, and the certificate scheduler's order
  * is a stand-in that records what it was asked for and fails.
@@ -602,6 +606,54 @@ try {
     const standby12 = await getStatus();
     setNodeRole('primary');
     check('on a standby: it orders nothing, and says so', standby12.status === 200 && standby12.json?.orders === false, show(standby12.json?.orders));
+
+    console.log('\n13. "Try again now" only where giving the address again is a retry: never one that moves the community\'s address');
+    // The status's retryOnly, which Settings draws the button by (#2148 review 4306126212), and what giving it again does.
+    const only = async () => Object.fromEntries(((await getStatus()).json?.identifiers ?? []).map((i: any) => [i.identifier, i.retryOnly]));
+    const byIdIn = (json: any, h: string) => ((json?.identifiers ?? []) as any[]).find((i) => i.identifier === h);
+    const r13 = await only();
+    check('the community\'s domain and the IP kept beside it (an IP never takes a domain\'s place): retries', r13[S_DOM] === true && r13[S_IP] === true, show(r13));
+    const ipAgain = await post(OWN, { ip: S_IP });
+    check('…the IP, its order failing, given again: 200, not the community\'s address; the domain stays the community\'s, primary and the directory\'s publicUrl',
+        ipAgain.status === 200 && ipAgain.body?.communityAddress === false && pa()?.hostname === S_DOM && own.primaryAddress() === S_DOM
+        && se.getDirectoryInfo().publicUrl === `https://${S_DOM}`, show({ ipAgain, pa: pa() }));
+    // The review's case: a domain kept beside the domain that replaced it (section 9), its order failing.
+    fresh = false;
+    forgetUsedTotpCodesForTests();
+    const KEPT = 'kept.example.net';
+    const NOW13 = 'now.example.net';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { domain: KEPT });
+    const moved13 = await post(OWN, { domain: NOW13, code: generateTotpCode(secret) });
+    await settledTick();
+    acmeStore.writeState(tdir, { ...acmeStore.emptyState(KEPT), failures: 1, lastError: WHY, lastAttemptAt: Date.now() - 60_000, nextAttemptAt: Date.now() + 3_600_000 });
+    const kept13 = byIdIn((await getStatus()).json, KEPT);
+    check('precondition: the domain moved with a code; the old one listed, an owner\'s, not the community\'s, no certificate, its last try failed',
+        moved13.status === 200 && pa()?.hostname === NOW13 && kept13?.ownerAdded === true && kept13.communityAddress === false
+        && kept13.certificate === null && kept13.lastError === WHY, show({ moved13: moved13.status, kept13 }));
+    check('…given again, it would be the community\'s address: no retry', kept13?.retryOnly === false, show(kept13));
+    check('…the community\'s domain itself: a retry', (await only())[NOW13] === true);
+    // A domain beside the community's IP would take its place with no code asked (a first name over an IP).
+    const IP13 = '203.0.113.60';
+    const DOM13 = 'beside.example.net';
+    se.updateNodeConfig({ publicAddress: null, registrarNames: [], ownerAddresses: [] } as any);
+    own.forgetOwnAddresses();
+    await post(OWN, { ip: IP13 });
+    se.updateNodeConfig({ ownerAddresses: [...owned(), DOM13] } as any);
+    own.forgetOwnAddresses();
+    const r13b = await only();
+    check('a domain on the list beside the community\'s IP: no retry; the IP: a retry', r13b[DOM13] === false && r13b[IP13] === true
+        && pa()?.hostname === IP13, show({ r13b, pa: pa() }));
+    // No address stored and no name given: giving any of them again would make it the community's address.
+    forgetUsedTotpCodesForTests();
+    const rm13 = await post('/api/local/admin/app-addresses/remove', { address: IP13, code: generateTotpCode(secret) });
+    se.updateNodeConfig({ ownerAddresses: [...owned(), S_IP] } as any);
+    own.forgetOwnAddresses();
+    const r13c = await only();
+    check('with no address stored and no name given: no retry for any', rm13.status === 200 && pa() === null && r13c[DOM13] === false
+        && r13c[S_IP] === false, show({ rm13: rm13.status, r13c }));
+    fresh = true;
 } catch (e) {
     failed++;
     console.log(`  ❌ the suite threw: ${(e as Error).stack}`);

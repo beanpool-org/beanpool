@@ -159,6 +159,20 @@ export function replacesLiveOwnAddress(input: string): boolean {
 }
 
 /**
+ * Whether giving `host` again (Settings' "Try again now", `beanpool claim` run again) is only a retry of its certificate
+ * (runAcmeTickSoon): it is in the owner-confirmed list, storeOwnAddress takes it, and would not store it as the
+ * community's address (asCommunityAddress). False for one kept beside the community's own address that would take its
+ * place (another of its kind, a domain beside an IP), and for every one while the community has no address stored and
+ * no name given: the button that says retry never moves where newcomers are sent (#2148 review 4306126212). Adding it in
+ * Settings stays the one way to.
+ */
+export function givenAgainOnlyRetries(input: string): boolean {
+    const host = normalizeAddress(input);
+    if (!host || !ownerConfirmedAddresses().includes(host) || ownAddressRefused(host)) return false;
+    return !asCommunityAddress(host, isIpLiteral(host) ? 'ip' : 'own').replace;
+}
+
+/**
  * An own address given to this server: `beanpool claim --ip/--address` (the request file, below) or Settings
  * (routes/public-address.ts /own, owner-only). Kept in the owner-confirmed list (`ownerAddresses`), which only an owner
  * shortens (routes/app-addresses.ts remove), so members' apps holding it keep working whatever the community's address

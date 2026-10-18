@@ -8,6 +8,7 @@
 
 import { getNodeRole } from '../../config/node-role.js';
 import { configuredAddresses, ownerConfirmedAddresses, primaryAddress, type AddressSource } from '../../engine/own-addresses.js';
+import { givenAgainOnlyRetries } from '../public-address-agent.js';
 import { servedCertificate, tlsDataDir } from '../tls.js';
 import { acmeDirectoryUrl, acmeTargets, caName, RENEW_WHEN_LEFT } from './schedule.js';
 import { readState } from './store.js';
@@ -22,6 +23,12 @@ export interface IdentifierStatus {
     source: AddressSource | 'fleet';
     /** In the owner-confirmed list (Settings, `beanpool claim --ip/--address`): an owner can remove it in Settings. */
     ownerAdded: boolean;
+    /**
+     * Given again, it is only asked for again, past the back-off, and the community's address stays where it is
+     * (public-address-agent.ts givenAgainOnlyRetries): Settings offers "Try again now" only then. False for one that would
+     * become the community's address, and for one no owner added.
+     */
+    retryOnly: boolean;
     /** Where /api/community/info sends newcomers (primaryAddress). */
     communityAddress: boolean;
     /** The certificate served for it now, or null for none. */
@@ -77,6 +84,7 @@ export function tlsStatus(now = Date.now()): TlsStatus {
             challenge: target.challenge,
             source: sources.get(target.host) ?? 'fleet',
             ownerAdded: owned.has(target.host),
+            retryOnly: owned.has(target.host) && givenAgainOnlyRetries(target.host),
             communityAddress: primary === target.host,
             certificate: held ? { issuedAt: new Date(held.notBefore).toISOString(), expiresAt: new Date(held.notAfter).toISOString() } : null,
             nextRenewalAt: iso(renewAt > now ? renewAt : nextTry),

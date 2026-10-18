@@ -61,7 +61,8 @@ function page(status, title, body) {
 }
 
 const LEAD = '<p>This page sends a reply to the BeanPool project, which runs the address service your community\'s name comes from. '
-    + 'Only the project team reads it. Write what you want us to know; please don\'t include anyone\'s personal details.</p>';
+    + 'Only the project team reads it. Your reply is sent with the name your community has on the address service, so we know which community it is from. '
+    + 'Write what you want us to know; please don\'t include anyone\'s personal details.</p>';
 
 function form(text = '', error = null) {
     return page(error ? 400 : 200, 'Reply to the address service', `<h1>Reply to the address service</h1>${LEAD}`

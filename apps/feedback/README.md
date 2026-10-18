@@ -60,10 +60,13 @@ without giving an address (scratch/global-node/DESIGN-registrar-trust-fable.md Â
 - The registrar tells Marty's phone a reply came (the name and the notice's number, never the words); the weekly
   digest lists every reply under "Worth a look".
 
+## What is stored
 
 In `feedback_items`, one row per suggestion: the text, kind, source, app version, platform, language,
 the community name **only if the member typed one** (the field starts empty), the time received, and a
 triage status (`new` â†’ `spam` / `triaged` / `filed`), plus an optional GitHub link and triage note.
+A reply to a notice (`source` `address-reply`, above) is stored the same way, but its community is always
+the name the reply link was made for (the reply page says so), and it has no app version, platform or language.
 
 ## What is not stored
 
@@ -87,6 +90,11 @@ salt rotates.
 > scrambled code that changes every day and is deleted after it. Suggestions are read by the project
 > team with help from an AI assistant that sorts, translates and groups them; nothing is published
 > automatically. Please don't include personal details.
+>
+> A reply to a notice from the address service (the page its reply link opens) also goes to the project
+> team. We keep what you write and the name your community has on the address service, so we know which
+> community it is from. We do not keep your IP address, your device details or anything that identifies
+> your account, and the same daily-changing code counts how many come from each connection.
 
 Limits of that promise, stated honestly: Cloudflare, which runs this Worker, sees the connection like
 any website host does. On the day a suggestion is sent, someone with access to the database *and* a

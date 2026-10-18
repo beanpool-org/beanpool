@@ -71,6 +71,8 @@ test('a working link shows the form, and says nothing of the name or the key; th
     assert.match(html, /<form method="post">/);
     assert.match(html, /Reply to the address service/);
     assert.ok(!html.includes('kestrel') && !html.includes(KEY.slice(0, 8)), 'neither the name nor the key');
+    // It names nothing, but says the reply goes with the community's name (it is filed under it; #2151 review 4306341216).
+    assert.match(html, /Your reply is sent with the name your community has on the address service, so we know which community it is from\./);
     assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
     assert.equal(res.headers.get('cache-control'), 'no-store');
     assert.match(res.headers.get('content-security-policy'), /default-src 'none'/);

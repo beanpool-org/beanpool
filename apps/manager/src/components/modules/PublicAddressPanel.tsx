@@ -937,7 +937,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                     </div>
                 )}
 
-                <form onSubmit={handleClaim} className="space-y-4">
+                <form onSubmit={handleClaim} className="space-y-4" data-testid="claim-form">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Subdomain Input */}
                         <div>

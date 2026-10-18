@@ -209,6 +209,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const moderatorRef = useRef(false);
     moderatorRef.current = isModerator;
     /**
+     * Single-node Settings asks the node nothing until it is signed in (and past the 2FA card). It used to load everything
+     * on mount, before the phone's one-time link had been exchanged for the session cookie: those requests were refused,
+     * and a refusal that landed after the sign-in signed the owner straight out again (`sessionExpired`), or wiped the
+     * members' data whose signed-in load had been skipped as a duplicate.
+     */
+    const signedIn = isFleetMode || ((!!keySession || passwordSession) && !totpGate);
+    /**
      * Who the open screens work for. A new Manage link that signs this page in as someone else (another key, another
      * role, or the password instead of a key) starts the screens afresh: an open modal or wizard, and what it holds, was
      * the earlier session's (opus-2028 confirm N1). The same session carried on keeps them (opus-2028 B3).
@@ -379,6 +386,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     const [nodeData, setNodeData] = useState<NodeDataPayload | null>(null);
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
+    /** Why the active node's data last failed to load, for Home's figures ("couldn't load", never 0); null once it loads. */
+    const [nodeDataError, setNodeDataError] = useState<string | null>(null);
     const [nodeLogs, setNodeLogs] = useState<LogEntry[]>([]);
 
     const [publicCommunityName, setPublicCommunityName] = useState<string | null>(null);
@@ -658,12 +667,16 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     // overlap and deliver nothing.
                     if (p.id === activeNodeIdRef.current) {
                         setNodeData(nData);
+                        setNodeDataError(null);
                     }
-                } catch {
+                } catch (e: unknown) {
                     // A failure must not buy this node five minutes of no flag checking — that is
                     // the one thing the five-minute window is not allowed to cost. Wind the stamp
                     // back so the tick tries again shortly.
                     lastFlagFetchRef.current[p.id] = retryStamp(Date.now());
+                    if (manual && p.id === activeNodeIdRef.current) {
+                        setNodeDataError(e instanceof Error ? e.message : String(e));
+                    }
                 } finally {
                     dataInFlightRef.current[p.id] = false;
                 }
@@ -774,7 +787,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      */
     const refreshFleetDiagnostics = async (opts?: { manual?: boolean }) => {
         if (moderatorRef.current) return;
-        profiles.forEach(async (p) => {
+        // Single-node Settings watches its own node only. The saved fleet list holds the test node too, which it used to
+        // ask every five seconds through a /proxy path the node doesn't serve.
+        (isFleetMode ? profiles : [activeNode]).forEach(async (p) => {
             // A node that rejected its password five seconds ago will reject it again
             // now, and retrying regardless did real harm. The server tarpits failed admin
             // auth with a delay that grows per failure (https-server.ts), that counter is
@@ -967,6 +982,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             // are keyed by id, so they are safe either way.
             if (requestedFor === activeNodeIdRef.current) {
                 setNodeData(data);
+                setNodeDataError(null);
             }
             delete alertsSummaryRef.current[activeNode.id];
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
@@ -985,6 +1001,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 if (requestedFor === activeNodeIdRef.current) {
                     setNodeData(null);
                 }
+            }
+            // Said on Home, with a retry: whatever the cause, the figures this data carries are not 0. Nothing retries it
+            // by itself: the five-minute tick reads only the alerts' names-free summary (a full read is a logged look).
+            if (requestedFor === activeNodeIdRef.current) {
+                setNodeDataError(errMsg || 'The request failed');
             }
         } finally {
             dataInFlightRef.current[activeNode.id] = false;
@@ -1007,6 +1028,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     };
 
     const refreshAll = () => {
+        // Not signed in yet (single-node): each sign-in asks for this refresh itself once it holds the session.
+        if (!signedIn) return;
         // Manual: every caller of this is a human action — selecting a node, saving
         // credentials, pressing refresh — so an auth-blocked node gets another attempt.
         refreshFleetDiagnostics({ manual: true });
@@ -1101,8 +1124,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      * refresh of their own.
      */
     usePausablePoll(() => {
-        // Held to the 2FA card, nothing else would open: ask nothing until a code is confirmed (TotpSetupGate.onDone).
-        if (!isFleetMode && totpGate) return;
+        // Not signed in yet, or held to the 2FA card (nothing else would open): ask nothing until then. A refusal of a
+        // request asked before the sign-in, landing after it, would read as the session ending (`sessionExpired`).
+        if (!signedIn) return;
         void refreshFleetDiagnostics();
     }, 5000);
 
@@ -1111,6 +1135,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         gatewayEditedRef.current = false;
         setGateway(null);
         setNodeData(null);
+        setNodeDataError(null);
         setNodeLogs([]);
         refreshAll();
     }, [activeProfileId]);
@@ -1560,9 +1585,16 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             version="1.4.2"
                                             diag={diag}
                                             nodeData={nodeData}
-                                            onNavigate={(tab, sub) => {
+                                            nodeDataLoading={nodeDataLoading}
+                                            nodeDataError={nodeDataError}
+                                            diagError={diagError}
+                                            onRetryNodeData={() => loadNodeData()}
+                                            onRetryDiag={() => refreshFleetDiagnostics({ manual: true })}
+                                            onNavigate={(tab, sub, anchor) => {
                                                 setNavSubTab(sub);
                                                 setActiveTab(tab);
+                                                // A card inside the section (the Alerts card): brought into view once it is drawn.
+                                                if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView?.({ block: 'start' }), 0);
                                             }}
                                             onInviteMember={() => {
                                                 setNavSubTab('invites');

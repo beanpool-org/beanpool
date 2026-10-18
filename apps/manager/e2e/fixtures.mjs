@@ -401,6 +401,17 @@ const DIAGNOSTICS = {
                 + 'Last one that arrived: 2026-09-18 02:00 UTC. Next try: 2026-09-19 03:00 UTC.',
         ],
     },
+    // The alerts the phone's "This server has alerts: 2" counts (services/alerts.ts serverAlertsBanner): Home lists each in
+    // these words, and the long address must wrap at 320px.
+    serverAlerts: {
+        count: 2,
+        items: [
+            { key: 'tls.fallback', title: 'certificate fell back to self-signed', priority: 4, since: Date.parse('2026-09-18T04:00:00Z'),
+                detail: 'The certificate for riverbend-community-garden-and-tool-library.beanpool.org expired before it was renewed: browsers now see a self-signed one. It is tried again within a day.' },
+            { key: 'backups.none', title: 'backups stay on this server', priority: 2, since: Date.parse('2026-09-12T02:00:00Z'),
+                detail: 'Backups stay on this server: no destination and no recovery code.' },
+        ],
+    },
 };
 
 const GATEWAY_CONFIG = {

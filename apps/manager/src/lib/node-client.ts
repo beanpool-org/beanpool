@@ -135,6 +135,21 @@ export interface DiagnosticsResponse {
     standbyHealth?: StandbyHealthBanner | null;
     /** Off-box backups that need the owners (apps/server services/offbox-backups.ts): owners only, null to anyone else. */
     offboxBackups?: { problems: string[] } | null;
+    /**
+     * The alerts the phone's "This server has alerts: N" counts, each in the node's words (apps/server services/alerts.ts
+     * serverAlertsBanner): owners only, null to anyone else; absent on a server from before it, or when the node couldn't
+     * read its alert book. Settings' Home lists these as they are, never working them out again.
+     */
+    serverAlerts?: { count: number; items: ServerAlert[] } | null;
+}
+
+/** One of the server's own alerts, as the node says it. `priority`: 5 urgent, 4 high, 3 warning, 2 low, 1 info. */
+export interface ServerAlert {
+    key: string;
+    title: string;
+    priority: number;
+    since: number;
+    detail: string;
 }
 
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */

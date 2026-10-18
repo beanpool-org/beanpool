@@ -12,7 +12,9 @@
  *     control or reordering character, too long, a name that is no name. Its id still counts as had (`seen` moves past
  *     it), so the registrar stops carrying it.
  *  4. A standby asks for none, takes none and sends no `seen`: its main server's owners must hear them.
- *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`.
+ *  5. The agent's tick (reconcile) takes them too, and the address it stores carries no `notices`; for a direct name as
+ *     for a tunnel one, live or blocked, every 15 minutes, and its next check-in sends `seen` (#2151 review 4306456979: a
+ *     direct name has no tunnel to ask, and heard none until Settings was opened).
  *  6. Settings shows them under Public address: the words as text, a Reply link only when kept, nothing when there are none;
  *     the legacy page reads them whatever the name's state, paused, blocked and released included (#2151 review 4306341103).
  *  7. A burst is bounded as every server alert is: three told in the hour, the rest folded.
@@ -33,7 +35,7 @@ import vm from 'node:vm';
 import { initStateEngine, getNodeConfig, updateNodeConfig } from './state-engine.js';
 import { startP2P } from './p2p.js';
 import { addressStatus } from './services/registrar-client.js';
-import { reconcile } from './services/public-address-agent.js';
+import { reconcile, tick, TICK_MS, QUIET_TICK_MS } from './services/public-address-agent.js';
 import { registrarNotices, noticeSeenMark } from './services/registrar-notices.js';
 import { setSecurityAlertHandler, REGISTRAR_NOTICE_WORDS, type SecurityNote } from './services/security-signal.js';
 import * as alerts from './services/alerts.js';
@@ -211,6 +213,33 @@ async function main(): Promise<void> {
             const pa = (getNodeConfig() as any).publicAddress;
             assert(pa?.status === 'live' && !('notices' in pa), `the stored address carries no notices (${JSON.stringify(pa)})`);
             assert(!JSON.stringify(getLocalConfig()).includes('"notices"'), 'nor anything else stored as the answer came');
+
+            // A direct name: no tunnel asks for it, so the agent's tick does, at its quiet cadence, live or blocked.
+            const tunnelStatus = reg.status;
+            let at = Date.now() + 10 * QUIET_TICK_MS;   // past any tick before
+            try {
+                for (const [i, status] of (['live', 'blocked'] as const).entries()) {
+                    fresh();
+                    const id = 41 + i;
+                    const stored = { status: 'live', name: 'kestrel', hostname: 'kestrel.beanpool.org', mode: 'direct' };
+                    updateNodeConfig({ publicAddress: stored } as any);
+                    reg.status = { ...stored, status };
+                    reg.notices = [notice(id, { level: 'action', link: `${base}/reply/${token('g')}` })];
+                    at += 2 * QUIET_TICK_MS;
+                    await tick(at);
+                    assert(reg.asked.length === 1 && reg.asked[0].get('name') === 'kestrel' && reg.asked[0].get('notices') === '1',
+                        `a ${status} direct name: the agent's tick asks /status for notices (${reg.asked.map(String)})`);
+                    assert(registrarNotices().some((n) => n.id === id) && noted().length === 1, `…keeps it and tells the owners once (${noted().length})`);
+                    await tick(at + TICK_MS);
+                    assert(reg.asked.length === 1, '…quiet: not asked again five minutes on');
+                    await tick(at + QUIET_TICK_MS);
+                    assert(reg.asked.length === 2 && reg.asked[1].get('seen') === String(id) && reg.asked[1].get('notices') === '1',
+                        `…the next check-in, 15 minutes on, says seen=${id} (${reg.asked.map(String)})`);
+                    assert(noted().length === 1, '…carried again until then: not told again');
+                    const pa = (getNodeConfig() as any).publicAddress;
+                    assert(pa?.mode === 'direct' && pa.status === 'live' && pa.name === 'kestrel' && !('notices' in pa), `…the stored direct name stays, with no notices (${JSON.stringify(pa)})`);
+                }
+            } finally { reg.status = tunnelStatus; }
         });
 
         await section('6. Settings shows them under Public address', async () => {

@@ -176,6 +176,7 @@ export const SUITES = [
     'test-admin-auth',
     'test-first-admin-password',
     'test-node-claim',
+    'test-standby-claim',
     'test-no-password-fresh-install',
     'test-config-write-races',
     'test-admin-key-auth',

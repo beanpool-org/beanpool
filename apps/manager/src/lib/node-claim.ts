@@ -5,6 +5,8 @@
  * communityName, password }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). `password` says
  * whether the server has an admin password at all, and `passwordRetired: true` comes with it when an owner retired it. It
  * never answers the code itself, and this page never shows it: the page is public, the code is read on the server.
+ * A standby answers `{ unclaimed: false, standby: true, password }`: it has no owner of its own and no claim code, and an
+ * owner of the community gets in with `beanpool recover --key` on its shell (STANDBY_RECOVER_COMMAND).
  *
  * A failed or unreadable answer is `unknown`, and the sign-in card treats it as "show the sign-in": the check must
  * never stand between an operator and the password.
@@ -19,6 +21,8 @@ export const CLAIM_POLL_MS = 5_000;
 export const CLAIM_TIMEOUT_MS = 8_000;
 /** What `beanpool claim` is run as on a Docker install; it prints the code and its own QR. */
 export const CLAIM_COMMAND = 'docker compose exec beanpool-node beanpool claim';
+/** How an owner of the community becomes an owner of a standby, on its shell (apps/server/src/recover-command.ts). */
+export const STANDBY_RECOVER_COMMAND = 'docker compose exec beanpool-node beanpool recover --key @your-callsign';
 export const COMMUNITY_INFO_PATH = '/api/community/info';
 
 export interface CommunityAddresses {
@@ -32,7 +36,7 @@ export type ClaimState =
      * `password: false`: this server has no admin password, so no password field is drawn. A new install never had one;
      * `retired`: an owner retired it (design step 10). Absent `password` (any other answer) keeps the password form.
      */
-    | { kind: 'claimed'; password?: false; retired?: boolean }
+    | { kind: 'claimed'; password?: false; retired?: boolean; standby?: true }
     /** `password: false` once the node has no admin password (stage C); any other answer keeps the password's fold. */
     | {
         kind: 'unclaimed';
@@ -91,7 +95,8 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         if (!body || typeof body !== 'object') return { kind: 'unknown' };
         const b = body as Record<string, unknown>;
         if (b.unclaimed === false) {
-            return b.password === false ? { kind: 'claimed', password: false, retired: b.passwordRetired === true } : { kind: 'claimed' };
+            const standby = b.standby === true ? { standby: true as const } : {};
+            return b.password === false ? { kind: 'claimed', password: false, retired: b.passwordRetired === true, ...standby } : { kind: 'claimed', ...standby };
         }
         if (b.unclaimed !== true) return { kind: 'unknown' };
 

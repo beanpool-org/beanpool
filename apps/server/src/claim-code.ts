@@ -25,6 +25,11 @@
  *
  * Never blocks the boot: anything that fails here is logged, and the node starts without a claim code (the password
  * still works).
+ *
+ * A standby has no claim. It holds no owner of its own: its owners are its main server's, and only a take-over brings
+ * them (engine/replication-manifest.ts node_roles, the take-over's `roles` step). So it makes no code, deletes one an
+ * older build made, says at each start how an operator gets in (`beanpool recover --key`, recover-command.ts), and every
+ * claim is refused with a sentence, 409 `claim_standby` (CLAIM_STANDBY_MESSAGE).
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -33,7 +38,7 @@ import { getMember, isInvalidatedKey, isMemberKeySpelling, isVisitorKey } from '
 import { CLAIM_SCRYPT, claimProofText } from '@beanpool/core';
 import { db } from './db/db.js';
 import { getLocalConfig, updateLocalConfig, type LocalConfig } from './config/local-config.js';
-import { assertPlainTablesWritable } from './config/node-role.js';
+import { assertPlainTablesWritable, getNodeRole } from './config/node-role.js';
 import { grantNodeRole, nodeHasOwner } from './engine/node-roles.js';
 import { registerMemberInternal } from './engine/members.js';
 import { BREAK_GLASS_WHILE_BRAKED_MS } from './admin-auth.js';
@@ -58,6 +63,27 @@ export function claimCodePath(): string {
 /** The command that reads the file. The image keeps its data in /data (Dockerfile, docker-compose.yml). */
 function readCommand(file: string): string {
     return dataDir() === '/data' ? `docker compose exec beanpool-node cat ${file}` : `cat ${file}`;
+}
+
+/** `beanpool recover --key`, as it is run on this server (readCommand says why the two forms). */
+function recoverCommand(): string {
+    return dataDir() === '/data' ? 'docker compose exec beanpool-node beanpool recover --key' : 'beanpool recover --key';
+}
+
+/** What a claim on a standby answers (routes/node-claim.ts, claimNode): 409, with this code and sentence. */
+export const CLAIM_STANDBY_CODE = 'claim_standby';
+export const CLAIM_STANDBY_MESSAGE = 'This server is a standby copy of its community, not its main server, so it cannot be claimed: '
+    + 'its owners are the main server\'s. An owner of the community gets in from this server\'s shell, with beanpool recover --key.';
+
+/** At each start of a standby with no owner of its own: what it is, and the way in that exists (recover-command.ts). */
+function logStandbyHasNoClaim(): void {
+    console.log('');
+    console.log('🔑 This server is a standby copy of its community, so it has no owner of its own and makes no claim code.');
+    console.log('   Its owners are its main server\'s: a take-over brings them.');
+    console.log('   To sign in to its Settings (to take over, for one), an owner of the community makes themselves an owner here too:');
+    console.log(`   ${recoverCommand()} @their-callsign   (or their public key)`);
+    console.log('   It prints their break-glass code once. Then they sign in with their phone, as on the main server.');
+    console.log('');
 }
 
 /** A new code, e.g. claim-a1b2-c3d4-e5f6-7890. */
@@ -157,8 +183,9 @@ function readClaimFile(): string | null {
 }
 
 /**
- * At boot, after the database is open. An owner exists: no claim code, and any file left is deleted. No owner: the
- * waiting code is kept while its file still holds it; otherwise a new one is made. Never throws.
+ * At boot, after the database is open. An owner exists: no claim code, and any file left is deleted. A standby with no
+ * owner of its own: no claim code either (any left by an older build is deleted), and the log says how to get in. No
+ * owner on a main server: the waiting code is kept while its file still holds it; otherwise a new one is made. Never throws.
  */
 export function initClaimCode(): void {
     try {
@@ -166,6 +193,12 @@ export function initClaimCode(): void {
         if (nodeHasOwner()) {
             if (pendingClaim(config)) updateLocalConfig({ claim: null });
             removeClaimFile('This community has an owner');
+            return;
+        }
+        if (getNodeRole() === 'backup') {
+            if (pendingClaim(config)) updateLocalConfig({ claim: null });
+            removeClaimFile('This server is a standby');
+            logStandbyHasNoClaim();
             return;
         }
         const file = claimCodePath();
@@ -307,6 +340,8 @@ export function claimNode(params: {
     source: string;
 }): ClaimOutcome {
     const { pubkey, claim } = params;
+    // A sentence, not the plain tables' StandbyLedgerError (a bare 409 and a stack in the log): a standby has no claim.
+    if (getNodeRole() === 'backup') return { ok: false, status: 409, error: CLAIM_STANDBY_MESSAGE, code: CLAIM_STANDBY_CODE };
     assertPlainTablesWritable();
     if (isInvalidatedKey(db, pubkey)) {
         return { ok: false, status: 403, error: 'This key was replaced by a new one, so it cannot claim this community.', code: 'claim_key_replaced' };

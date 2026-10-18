@@ -5,7 +5,8 @@ import { signInWithPassword, type KeySession } from '../../lib/key-session';
 import { PhoneSignIn } from './PhoneSignIn';
 import { UnclaimedCard } from './UnclaimedCard';
 import { useClaimState } from './useClaimState';
-import { CLAIM_PATH } from '../../lib/node-claim';
+import { CLAIM_PATH, STANDBY_RECOVER_COMMAND } from '../../lib/node-claim';
+import { t } from '../../lib/fresh-proof';
 
 interface AdminLoginCardProps {
     nodeUrl: string;
@@ -34,6 +35,9 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     // install never had one (node sign-in step 8), or an owner retired it (design step 10; the answer says which).
     const noPassword = claim.kind === 'claimed' && claim.password === false;
     const passwordRetired = claim.kind === 'claimed' && claim.password === false && claim.retired === true;
+    // A standby has no owner of its own (the claim check answers standby: true): nobody signs in here until an owner of the
+    // community makes themselves one on its shell, so the card says how, above the usual sign-in.
+    const standby = claim.kind === 'claimed' && claim.standby === true;
     // If the operator has entered a password or submitted (an error shown, 2FA open, or in flight)
     // before the first claim check answers "unclaimed", start the fold open so their form and result stay visible.
     const wasUnclaimedRef = useRef(claim.kind === 'unclaimed');
@@ -178,6 +182,14 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                     </div>
                     <HelpLink screen="login" />
                 </div>
+
+                {standby && (
+                    <div data-testid="standby-signin-note" className="mb-4 p-3 rounded-xl border border-amber-800 bg-bp-chip-warn-tint text-bp-chip-warn-ink text-xs leading-relaxed">
+                        <p className="m-0 mb-2">{t("This server is a standby copy of its community. It has no owner of its own: its owners are the main server's, and a take-over brings them.")}</p>
+                        <p className="m-0 mb-2">{t('To sign in here, an owner of the community makes themselves an owner of this standby too, on its shell, and then signs in with their phone:')}</p>
+                        <code className="block font-mono break-all">{STANDBY_RECOVER_COMMAND}</code>
+                    </div>
+                )}
 
                 {claim.kind === 'unclaimed' ? (
                     <>

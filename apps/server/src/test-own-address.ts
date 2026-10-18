@@ -11,11 +11,13 @@
  *      IP; an IPv6 address sent as `ip`; a beanpool.org name (the global node's among them), a `.local` one, an IP sent as
  *      a domain; on a standby.
  *   3. { domain } later: a name beats an IP. The domain becomes the community's address and primary; the IP stays this
- *      community's and published. An IP given after it never displaces it.
+ *      community's and published. An IP given after it never displaces it. A home-network name listed on the server
+ *      (`.local`, `.lan`) never beats the IP: nobody outside can reach it.
  *   4. The registrar's routes leave an own address alone: Take offline is refused (nothing is released unnamed), and a
  *      BeanPool name the registrar says this key holds replaces it as the community's address with nothing of it mixed
  *      in, while the IP and the domain stay accepted.
- *   5. Removed in Settings → Network: an own address that was the community's address stops being that too.
+ *   5. Removed in Settings → Network: an own address that was the community's address stops being that too. With none
+ *      left, a public IP is primary before a home-network name published ahead of it.
  *   6. The command's file (address-request.ts kinds ip and domain): taken within the node's tick and stored; one that
  *      can't be this server's address is not, and the log says why.
  *   7. Given again after its order failed (`beanpool claim --ip` run again once port 80 is open): ordered at once, past
@@ -180,6 +182,12 @@ try {
     check('nothing changed by any of them', show(se.getNodeConfig()) === before);
 
     console.log('\n3. A name beats an IP');
+    // Names on the home network the operator lists beside it: nobody outside can reach them, so newcomers are never sent there.
+    process.env.BEANPOOL_ADDRESSES = 'beanpool.local,nas.lan';
+    own.forgetOwnAddresses();
+    check('precondition: a .local and a .lan name in BEANPOOL_ADDRESSES are published beside the IP', show(own.publishedAddresses())
+        === show([IP, 'beanpool.local', 'nas.lan']), show(own.publishedAddresses()));
+    check('…and leave the IP primary, where /api/community/info sends newcomers', own.primaryAddress() === IP, String(own.primaryAddress()));
     const r3 = await post('/api/local/admin/public-address/own', { domain: 'Beans.Example.org.' });
     check('/own { domain }: 200, the domain as signatures carry it, the community\'s address', r3.status === 200 && r3.body?.address === DOMAIN
         && r3.body?.kind === 'own' && r3.body?.communityAddress === true, show(r3));
@@ -194,6 +202,10 @@ try {
         && own.primaryAddress() === DOMAIN, show({ r3b, pa: pa() }));
     check('…it is this community\'s too, and published', own.audienceStanding(ip2) === 'own' && owned().includes(ip2), show(owned()));
     check('…and both IPs and the domain are certificate identifiers', [IP, DOMAIN, ip2].every((h) => own.tlsIdentifiers().includes(h)), show(own.tlsIdentifiers()));
+    check('the domain beside the IP and the home-network names: the domain primary', own.primaryAddress() === DOMAIN
+        && own.publishedAddresses().includes('beanpool.local'), show({ primary: own.primaryAddress(), published: own.publishedAddresses() }));
+    delete process.env.BEANPOOL_ADDRESSES;
+    own.forgetOwnAddresses();
 
     console.log('\n4. The registrar\'s routes leave an own address alone');
     const off = await post('/api/local/admin/public-address/offline', {});
@@ -224,6 +236,13 @@ try {
     check('…members\' apps signing for it are refused now; the IPs stay', own.audienceStanding(DOMAIN) === 'foreign' && own.audienceStanding(IP) === 'own');
     const rmIp = await post('/api/local/admin/app-addresses/remove', { address: ip2 });
     check('an own address that is not the community\'s address: off the list, publicAddress untouched', rmIp.status === 200 && !owned().includes(ip2) && pa() === null);
+    // With no community address left, a home-network name listed on the server comes first among the published ones.
+    process.env.BEANPOOL_ADDRESSES = 'beanpool.local';
+    own.forgetOwnAddresses();
+    check('a .local name published ahead of the IPs: the public IP is primary, not the name', own.publishedAddresses()[0] === 'beanpool.local'
+        && own.primaryAddress() === IP, show({ primary: own.primaryAddress(), published: own.publishedAddresses() }));
+    delete process.env.BEANPOOL_ADDRESSES;
+    own.forgetOwnAddresses();
 
     console.log('\n6. The command\'s file');
     const dir = dataDir();

@@ -60,7 +60,7 @@
 import { domainToASCII } from 'node:url';
 import { getNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
-import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
+import { isBeanPoolName, isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
 
 // The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
@@ -202,6 +202,9 @@ export function isLostAddress(host: string): boolean {
     return configuredAddresses().some((a) => a.address === host && a.lost);
 }
 
+/** A beanpool.org name, or a public IP or name a public CA can certify (so one in the Internet's DNS): never a home-network host. */
+const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
+
 /**
  * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
  * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
@@ -209,7 +212,9 @@ export function isLostAddress(host: string): boolean {
  * scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3: a name survives a change of server, a number does not, so
  * new members are sent to the name while those holding the IP keep working); null on a node with none (one that knows
  * none of its names, or whose only name it released). Always one of publishedAddresses(), so never a former name or a
- * loopback one.
+ * loopback one. Only a name the Internet can reach comes before an IP, and a public IP before a name or IP on the home
+ * network (a `.local` or `.lan` name an operator listed): newcomers sent there from outside would find nothing (S2
+ * review 4305346684).
  */
 export function primaryAddress(): string | null {
     const published = publishedAddresses();
@@ -221,7 +226,7 @@ export function primaryAddress(): string | null {
     // the web app says nothing rather than point at a name with no route yet (#1275 review 4118422613).
     const notLive = new Set(current.filter((r) => r.status !== 'live').map((r) => r.address));
     const usable = published.filter((a) => !notLive.has(a));
-    return usable.find((a) => !isIpLiteral(a)) ?? usable[0] ?? null;
+    return usable.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? usable.find(reachableFromInternet) ?? usable[0] ?? null;
 }
 
 /**

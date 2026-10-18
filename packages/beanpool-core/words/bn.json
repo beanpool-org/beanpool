@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -305,5 +305,25 @@
   "Sunset {time}.": "সূর্যাস্ত {time}।",
   "Look around ›": "চারপাশে দেখুন ›",
   "Pick up the tour at step {step} ›": "ধাপ {step} থেকে ট্যুর আবার শুরু করুন ›",
-  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "এটি আপনার হোম। এখানে কী থাকবে তা আপনি বেছে নেন। শুরু করার আগে, অন্যান্য ট্যাবে এক মিনিটের নজর দিন।"
+  "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.": "এটি আপনার হোম। এখানে কী থাকবে তা আপনি বেছে নেন। শুরু করার আগে, অন্যান্য ট্যাবে এক মিনিটের নজর দিন।",
+  "Save this search to Home": "এই অনুসন্ধানটি হোমে সেভ করুন",
+  "Save the search \"{q}\" to Home": "\"{q}\" অনুসন্ধানটি হোমে সেভ করুন",
+  "The 1 vote came from a new or 12-word account": "১টি ভোট নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে",
+  "All {n} votes came from new or 12-word accounts|All {n} votes came from new or 12-word accounts": {
+    "one": "সব {n}টি ভোটই নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে",
+    "other": "সব {n}টি ভোটই নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে"
+  },
+  "{n} of {total} votes came from a new or 12-word account|{n} of {total} votes came from new or 12-word accounts": {
+    "one": "{total}টি ভোটের মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে",
+    "other": "{total}টি ভোটের মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে"
+  },
+  "This 1 from a new or 12-word account": "এই ১টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে",
+  "All {n} from new or 12-word accounts|All {n} from new or 12-word accounts": {
+    "one": "সব {n}টিই নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে",
+    "other": "সব {n}টিই নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে"
+  },
+  "{n} of these {count} from a new or 12-word account|{n} of these {count} from new or 12-word accounts": {
+    "one": "এই {count}টির মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে",
+    "other": "এই {count}টির মধ্যে {n}টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে"
+  }
 }

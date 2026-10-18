@@ -1,0 +1,14 @@
+diff --git a/ios/LinkPreview/LinkPreviewNativeActionView.swift b/ios/LinkPreview/LinkPreviewNativeActionView.swift
+index 3884b7844b99484f705632100134a16547e0bf0f..e371c04e6a21dd95dac659e3552be02e325475bb 100644
+--- a/ios/LinkPreview/LinkPreviewNativeActionView.swift
++++ b/ios/LinkPreview/LinkPreviewNativeActionView.swift
+@@ -137,7 +137,8 @@ class LinkPreviewNativeActionView: RouterViewWithLogger, LinkPreviewMenuUpdatabl
+     baseUiAction.attributes = attributes
+     baseUiAction.state = isOn == true ? .on : .off
+ 
+-    if let subtitle = subtitle {
++    // BeanPool patch: UIMenuElement.subtitle is iOS 16+ and Xcode 27 refuses it unguarded at the app's iOS 15.1 minimum.
++    if #available(iOS 16.0, *), let subtitle = subtitle {
+       baseUiAction.subtitle = subtitle
+     }
+     if let label = discoverabilityLabel {

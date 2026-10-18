@@ -15,6 +15,9 @@
  */
 import { t, tn, word, type WordKey, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT } from '@beanpool/core';
 
+/** utils/name-key-memory.ts markKeyChanged: the details line, alone or after a note the line already had. */
+const KEY_CHANGED_DETAILS = "This phone knew this name on another key, and the new key hasn't confirmed it was theirs.";
+
 /** Whole sentences, by their English. */
 const FIXED: Readonly<Record<string, WordKey>> = {
     // utils/db.ts getConversations: a row with no words to show; getMessages: a line this phone can't open.
@@ -72,8 +75,9 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Ask a member of the group to confirm this phone': word('Ask a member of the group to confirm this phone'),
     'Keep them locked': word('Keep them locked'),
     'Confirm new phone': word('Confirm new phone'),
-    // utils/name-key-memory.ts: beside a name this phone saw on another key.
+    // utils/name-key-memory.ts: beside a name this phone saw on another key, and the details line under it.
     '(key changed)': word('(key changed)'),
+    [KEY_CHANGED_DETAILS]: word("This phone knew this name on another key, and the new key hasn't confirmed it was theirs."),
 };
 
 /**
@@ -125,6 +129,13 @@ export function chatLineWords(text: string): string;
 export function chatLineWords(text: string | null | undefined): string | null | undefined;
 export function chatLineWords(text: string | null | undefined): string | null | undefined {
     if (!text) return text;
+    // "<note> <details>": both sentences, and only when the first is a line this table knows. Peeled off first, so the
+    // details never end up inside the first sentence's {date}.
+    const details = ` ${KEY_CHANGED_DETAILS}`;
+    if (text.endsWith(details)) {
+        const before = knownLine(text.slice(0, -details.length));
+        if (before !== null) return t('{note} {details}', { note: before, details: t(FIXED[KEY_CHANGED_DETAILS]) }, 'two notes under a chat line, one after the other');
+    }
     const known = knownLine(text);
     if (known !== null) return known;
     for (const [prefix, say] of PREFIXED) {

@@ -26,15 +26,20 @@
  *   5. a knock from node B's member to node A, its answer, and the join it lets in
  *   6. a 12-words restore: Ann's new phone, from her words alone, is back in with her chats and Beans
  *   7. a sealed backup, an off-box upload to a loopback S3 stub, a restore from that copy
- *   8. a standby copy and a take-over by code (B's main server dead, S becomes it)
+ *   8. a standby copy and a take-over by code (B's main server dead, S becomes it). A standby holds no owner of its own,
+ *      so Cy first makes himself S's owner from its shell (`beanpool recover --key`), as the other take-over suites mint
+ *      one inside the standby's process
  *   9. an update check that gets no answer
+ *  10. A's own timers: index.ts's first timed calls run 30 s after a start, after the walk, so it waits for them
  * Then the count: no call to any of our domains, and no call to a host outside ALLOWED. Each allowed host is one §2.2
  * lists, and the suite shows the step that asked it still passed.
  *
- * Fail-first (the PR says the numbers): a `fetch('https://global.beanpool.org')` planted in a scratch copy of one member
- * path fails the step it is on and the count.
+ * Fail-first (the PR says the numbers): a `fetch('https://global.beanpool.org')` planted in a scratch copy of a member
+ * path fails the count, naming its file and line and the step that made it; awaited, it fails that step too.
  *
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-no-mothership" node ../../scripts/run-server-suites.mjs
+ * (in a checkout whose path is too long for tsx's IPC pipe under .th: BEANPOOL_DATA_DIR=<a new folder> node --import tsx
+ * src/test-no-mothership.ts).
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -150,9 +155,11 @@ async function pickPorts(): Promise<{ http: number; https: number; p2p: number }
     const http = await unusedPort();
     let https = await unusedPort();
     while (https === http) https = await unusedPort();
-    for (let tries = 0; tries < 50; tries++) {
+    // macOS hands out a listener's port 0 in order through 49152-65535, so near the top every try is above any bound short
+    // of the last port: only p2p + 1 must exist.
+    for (let tries = 0; tries < 200; tries++) {
         const p2p = await unusedPort();
-        if (p2p < 65_000 && ![http, https].includes(p2p) && ![http, https].includes(p2p + 1) && !handedOut.has(p2p + 1) && await canListen(p2p + 1)) {
+        if (p2p < 65_535 && ![http, https].includes(p2p) && ![http, https].includes(p2p + 1) && !handedOut.has(p2p + 1) && await canListen(p2p + 1)) {
             for (const p of [http, https, p2p, p2p + 1]) handedOut.add(p);
             return { http, https, p2p };
         }
@@ -375,9 +382,10 @@ async function main(): Promise<void> {
     core = await import('@beanpool/core');
     const { startFakeS3 } = await import('./fake-s3-test-harness.js');
     const { lockedDm } = await import('./dm-test-payload.js');
-    // The `beanpool pair` command's half, and where a standby keeps the keys it holds (neither opens the database).
+    // The `beanpool pair` command's half (it opens no database).
     const { writePairRequestFile } = await import('./services/standby-main.js');
-    const { HELD_ENVELOPES_DIR } = await import('./services/standby-envelopes.js');
+    /** Where a standby keeps the take-over keys it holds: services/standby-envelopes.ts, whose logger opens a database. */
+    const HELD_ENVELOPES_DIR = 'held-takeover-envelopes';
 
     const nodes: Node[] = [];
     const s3 = await startFakeS3({ bucket: 'olive-backups' });

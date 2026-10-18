@@ -12,6 +12,8 @@
  *     (TypeError "fetch failed", its cause ENOTFOUND), and the request is never made.
  *   - a socket: Socket.prototype.connect (http, https, tls, net, a libp2p dial) to a host that is not loopback is destroyed
  *     with ENOTFOUND for a name, ENETUNREACH for an address (loopback-guard-test-harness.ts reads where a connect goes).
+ * Not stopped: UDP. The one sender in the server is the DNS shim (dns-shim.ts), forwarding a LAN client's query, and no
+ * suite sends it one.
  *
  * Each try is one JSON line in `file` (appended synchronously, so a node that exits a moment later, as a restore or a
  * take-over does, still leaves it), with the host, the watched domain it falls under, and the first line of our code on

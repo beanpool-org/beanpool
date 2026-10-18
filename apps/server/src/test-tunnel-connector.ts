@@ -825,10 +825,16 @@ async function main(): Promise<void> {
                 `the requested name's own live answer is stored, with no claim (${pa()?.name} ${claims().length - m})`);
             await post('/api/local/admin/public-address/offline');
             updateLocalConfig({ addressRequest: null });
-            // A fresh server learns a name made for its key elsewhere (a name it never left): stored, as before.
+            // A name made for its key elsewhere (one it never left), on a fresh server holding no name and asked for none:
+            // Settings' status read asks the registrar nothing (#2143 item 1), so it is not learnt there, as it was until
+            // then. Its owner claims it in Settings, and the registrar gives the key its own name.
             reg.status = () => live('made-elsewhere', 'eyJ.token-made-elsewhere');
-            await settingsGet!('/api/local/admin/public-address/status');
-            assert(pa()?.name === 'made-elsewhere', `a name this server never left is stored (${pa()?.name})`);
+            const asked = reg.calls.length;
+            const bare = await settingsGet!('/api/local/admin/public-address/status');
+            assert(bare.status === 200 && bare.body?.status === 'none' && pa() == null && reg.calls.length === asked,
+                `holding no name, Settings' status read asks the registrar nothing and stores nothing (${bare.status} ${bare.body?.status}, ${reg.calls.length - asked} calls)`);
+            const claimed = await post('/api/local/admin/public-address/claim', { name: 'made-elsewhere', mode: 'tunnel' });
+            assert(claimed.status === 200 && pa()?.name === 'made-elsewhere', `the owner claims the name made elsewhere: stored (${claimed.status} ${pa()?.name})`);
             await post('/api/local/admin/public-address/offline');
             reg.status = () => ({ status: 'none' });
         });

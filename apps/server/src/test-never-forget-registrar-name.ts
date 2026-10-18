@@ -14,8 +14,9 @@
  * (takeover-test-harness.ts). Nor Docker: no server code talks to its socket (test-no-docker-socket.ts).
  *
  * Node N (BEANPOOL_ADDRESSES=b2.test, so it has another name):
- *  1. The registrar answers live `bname`; Settings' status stores it. Requests signed for bname.beanpool.org and b2.test
- *     are accepted, other.test → 421.
+ *  1. With no name, Settings' status asks the registrar nothing (#2143 item 1). The owner claims `bname` in Settings and
+ *     the registrar answers it live; Settings' status stores it. Requests signed for bname.beanpool.org and b2.test are
+ *     accepted, other.test → 421.
  *  2. The registrar answers `none`, and the admin opens Settings: bname is still accepted (main: 421), the tunnel token
  *     file is intact (main: deleted), and Settings says the address service has no record of the name.
  *  3. The registrar answers live `newname`, another name this key holds: not stored, the node stays on bname (the
@@ -25,7 +26,7 @@
  *  4. Take offline: newname is still accepted during the hold (main: 421), held until the registrar's held_until; the
  *     token is removed. A release answer without held_until holds 30 days. Claiming a released name again takes it back.
  * Node U (no other name):
- *  5. The registrar answers `none`: U still knows its name, so a request for random.example → 421 rather than accepted
+ *  5. U's owner claims `uname`; then the registrar answers `none`: U still knows its name, so a request for random.example → 421 rather than accepted
  *     as an unconfigured node's (main: accepted until the switch), and Settings says it knows its names.
  * The take-over:
  *  6. N's standby holds the keys sealed after all that; N dies and the standby takes over with the recovery code. It
@@ -293,6 +294,14 @@ async function main(): Promise<void> {
         console.log('\n— 1. N stores its registrar name —');
         await section('1', async () => {
             reg.status = live('bname');
+            // Holding no name and asked for none, N has nothing to ask the registrar when Settings opens (#2143 item 1): the
+            // name is the owner's claim in Settings, as a first claim is.
+            const callsBefore = reg.calls.length;
+            const bare = await statusOpen();
+            assert(bare.status === 200 && bare.body?.status === 'none' && reg.calls.length === callsBefore,
+                `with no name, Settings' status asks the registrar nothing (${show(bare)}; ${reg.calls.slice(callsBefore).join(', ') || 'no calls'})`);
+            const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'bname', mode: 'tunnel' });
+            assert(claimed.status === 200, `the owner claims bname in Settings (${show(claimed)})`);
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.status === 'live' && opened.body?.hostname === 'bname.beanpool.org', `Settings shows bname live (${show(opened)})`);
             const s = await N.send('inspect');
@@ -416,6 +425,9 @@ async function main(): Promise<void> {
             const uSetup = await U.send('setup', { ownerSeedHex });
             const uAdmin: Record<string, string> = await U.send('owner-session');
             reg.status = live('uname');
+            // The owner's first claim, as for N: a node with no name asks the registrar nothing when Settings opens.
+            const claimed = await call(uSetup.https, 'POST', '/api/local/admin/public-address/claim', uAdmin, { name: 'uname', mode: 'tunnel' });
+            assert(claimed.status === 200, `U's owner claims uname in Settings (${show(claimed)})`);
             const first = await call(uSetup.https, 'GET', '/api/local/admin/public-address/status', uAdmin);
             assert(first.status === 200 && first.body?.status === 'live', `U stores uname (${show(first)})`);
             reg.status = { status: 'none' };

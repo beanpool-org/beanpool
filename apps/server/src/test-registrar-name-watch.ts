@@ -747,6 +747,8 @@ async function main(): Promise<void> {
                 `with no registrar name, it asks the registrar nothing (${JSON.stringify(due)})`);
 
             reg.status = { status: 'live', name: 'uname', hostname: host('uname'), mode: 'tunnel', tunnelToken: 'T-shared' };
+            // Holding no name, U asks the registrar nothing when Settings opens (#2143 item 1): its owner claims uname.
+            assert((await claim(uSetup.https, U, 'uname')).status === 200, 'U\'s owner claims uname in Settings');
             const opened = await statusOpen(uSetup.https, uAdmin);
             assert(opened.status === 200 && opened.body?.hostname === host('uname'), `U stores uname (${show(opened)})`);
             const firstDue = await U.send('due', { now: Date.now() });
@@ -923,6 +925,8 @@ async function main(): Promise<void> {
             };
 
             reg.status = { status: 'live', name: 'qname', hostname: qname, mode: 'tunnel', tunnelToken: 'T-shared' };
+            // Holding no name, Q asks the registrar nothing when Settings opens (#2143 item 1): its owner claims qname.
+            assert((await claim(qSetup.https, Q, 'qname')).status === 200, 'Q\'s owner claims qname in Settings');
             const opened = await statusOpen(qSetup.https, qAdmin);
             assert(opened.status === 200 && opened.body?.hostname === qname, `Q stores qname, live (${show(opened)})`);
             const t1 = Date.now();

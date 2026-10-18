@@ -8,7 +8,8 @@ import { passwordField } from '../../lib/node-client';
 import { proofField } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
-import { OwnAddressCard } from './OwnAddressCard';
+import { OwnAddressCard, formatMoment } from './OwnAddressCard';
+import { t } from '../../lib/fresh-proof';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -43,6 +44,25 @@ export interface PublicAddressStatus {
     tunnel?: TunnelStatus;
     /** docker-compose.yml still mounts Docker's control socket into the server, which never uses it. */
     dockerSocket?: boolean;
+    /**
+     * The address service gave no answer the server could use (unreachable, or answering an error): one calm sentence,
+     * shown beside what the server holds. Absent when it answered, or when the server had nothing to ask it (#2143 item 1).
+     */
+    nameServiceNote?: string;
+    /**
+     * With an own address (mode `ip` or `own`): its certificate's state, as GET /tls/status reads it; null for none looked
+     * after. An owner's only, as that route is: absent for an admin.
+     */
+    tls?: { certificate?: { issuedAt?: string; expiresAt?: string } | null; nextRenewalAt?: string | null; lastError?: string | null } | null;
+}
+
+/** An own address's certificate in one line, or null when the server looks after none for it. */
+export function ownCertificateLine(tls: PublicAddressStatus['tls']): string | null {
+    if (!tls || typeof tls !== 'object') return null;
+    const expires = typeof tls.certificate?.expiresAt === 'string' ? formatMoment(tls.certificate.expiresAt) : '';
+    if (expires) return t('Certificate valid until {date}.', { date: expires });
+    if (typeof tls.lastError === 'string' && tls.lastError) return t('No certificate yet. The last try failed: {error}', { error: tls.lastError });
+    return t('No certificate yet: the server is asking for one.');
 }
 
 export interface TunnelStatus {
@@ -651,6 +671,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
     const tunnelLine = mode === 'tunnel' ? describeTunnel(statusData?.tunnel) : null;
     const tunnelOk = statusData?.tunnel?.state === 'connected';
+    // This server's own IP or domain (HTTPS S4), not a BeanPool name: no tunnel, and nothing to take offline at the address
+    // service (the server refuses it; the card below removes one).
+    const isOwn = isLive && (mode === 'ip' || mode === 'own');
+    const ownCertificate = isOwn ? ownCertificateLine(statusData?.tls) : null;
+    const nameServiceNote = typeof statusData?.nameServiceNote === 'string' ? statusData.nameServiceNote : '';
     const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
     const currentStep = typeof lastLog?.step === 'string' ? lastLog.step : 'Ready';
 
@@ -775,13 +800,13 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                                     {hostname || 'your-node.beanpool.org'}
                                 </a>
                                 <span className="text-nature-400 font-mono text-[11px]">
-                                    ({mode === 'tunnel' ? '🛡️ tunnel' : '🌐 direct'})
+                                    {isOwn ? t("(this server's own address)") : `(${mode === 'tunnel' ? '🛡️ tunnel' : '🌐 direct'})`}
                                 </span>
                             </div>
 
-                            {statusData?.error && (
-                                <div className="text-xs text-red-400">
-                                    Couldn&apos;t refresh registrar status — {String(statusData.error)}
+                            {ownCertificate && (
+                                <div data-testid="public-address-own-certificate" className="text-xs text-nature-300 break-words">
+                                    {ownCertificate}
                                 </div>
                             )}
 
@@ -893,6 +918,21 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         </div>
                     )}
 
+                    {/* The server's own fault acting on an answer the address service gave (storing it, the tunnel), in every
+                        state it answers with (an error answer says it in its own red line above). */}
+                    {(isLive || isPending || isPaused || isNone) && statusData?.error && (
+                        <p data-testid="public-address-server-error" className="m-0 text-xs text-red-400 break-words">
+                            {t("This server couldn't act on the address service's answer — {error}", { error: String(statusData.error) })}
+                        </p>
+                    )}
+
+                    {/* The address service gave no answer to use: one calm line beside what the server holds (#2143 item 1). */}
+                    {nameServiceNote && (
+                        <p data-testid="public-address-name-service" className="m-0 text-xs text-nature-400 break-words">
+                            {nameServiceNote}
+                        </p>
+                    )}
+
                     <AddressNotices notices={notices} />
 
                     {/* Operational Action Buttons */}
@@ -919,7 +959,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                             </button>
                         )}
 
-                        {(isLive || isPending) && (
+                        {(isLive || isPending) && !isOwn && (
                             <button
                                 type="button"
                                 onClick={requestOfflineConfirmation}

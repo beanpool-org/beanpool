@@ -30,7 +30,9 @@
  *      so Cy first makes himself S's owner from its shell (`beanpool recover --key`), as the other take-over suites mint
  *      one inside the standby's process
  *   9. an update check that gets no answer
- *  10. A's own timers: index.ts's first timed calls run 30 s after a start, after the walk, so it waits for them
+ *  10. an owner opens Settings' Public address on a node with no address: every read answers from the node alone, with
+ *      no call to our domains (#2143 item 1; until then the status read asked beanpool.org, and answered 400 without it)
+ *  11. A's own timers: index.ts's first timed calls run 30 s after a start, after the walk, so it waits for them
  * Then the count: no call to any of our domains, and no call to a host outside ALLOWED. Each allowed host is one §2.2
  * lists, and the suite shows the step that asked it still passed.
  *
@@ -659,11 +661,29 @@ async function main(): Promise<void> {
             assert(ok(version) && version.body?.updateAvailable === undefined, `and A goes on: its version answers, with no update notice (${brief(version)})`);
         });
 
-        // ── 10. The node's own timers ──
+        // ── 10. Settings' Public address on a node with no address (#2143 item 1) ──
+        // What the manager's panel and settings.js read when it opens. With no BeanPool name held or asked for there is
+        // nothing to ask the registrar: each answers from A alone. Until #2143 item 1 the status read asked beanpool.org
+        // every time, and answered 400 when it could not be reached.
+        await step('10. Olive opens Settings\' Public address on A, which has no address', async () => {
+            const from = Date.now();
+            const read = (route: string) => olive.call('GET', route, undefined, { headers: oliveAdmin });
+            const status = await read('/api/local/admin/public-address/status');
+            assert(status.status === 200 && status.body?.success === true && status.body?.status === 'none',
+                `the address status answers 200: no address yet (${brief(status)})`);
+            assert(status.body?.nameServiceNote === undefined && status.body?.error === undefined,
+                `…with no word of a name service it had no need to ask (${JSON.stringify(status.body?.nameServiceNote ?? status.body?.error ?? null)})`);
+            const others = await Promise.all(['/api/local/admin/public-address/extra-names', '/api/local/admin/tls/status', '/api/local/admin/public-address/logs'].map(read));
+            assert(others.every(ok), `the panel's other reads answer too (${others.map((a) => a.status).join(', ')})`);
+            const asked = allCalls().filter((c) => c.at >= from && c.domain);
+            assert(asked.length === 0, `…and no process asked for any of our domains while it opened (${describeOutsideCalls(asked).join('; ') || 'none'})`);
+        });
+
+        // ── 11. The node's own timers ──
         // index.ts arms its first timed calls 30 s after a start (the release check, the app-store lookup, the publisher's
         // first push, the registrar name watch's first look). The walk is over sooner, so it waits, for those to have run
         // on A since its last start, rather than for a time: then the count covers them too.
-        await step('10. A\'s own timers, 30 s after its start', async () => {
+        await step('11. A\'s own timers, 30 s after its start', async () => {
             const since = A.liveSince();
             need(since !== null, 'A is running');
             // Not step 9's own check, which asked GitHub from Olive's Settings.

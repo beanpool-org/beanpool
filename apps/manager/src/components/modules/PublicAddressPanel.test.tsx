@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PublicAddressPanel } from './PublicAddressPanel';
+import { PublicAddressPanel, ownCertificateLine } from './PublicAddressPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
 const mockActiveNode: NodeProfile = {
@@ -618,6 +618,76 @@ describe('PublicAddressPanel Component', () => {
         expect(admin.textContent).toMatch(/the BeanPool project paused it/);
         expect(admin.textContent).toMatch(/until the BeanPool project lifts the pause/);
         expect(admin.textContent).not.toMatch(/asks for it back by itself/);
+    });
+
+    // #2143 item 1: the node answers 200 whether or not the address service could be reached, and says so in one line.
+    describe('the address service out of reach', () => {
+        const LINE = "The BeanPool name service can't be reached right now.";
+        const serve = (status: Record<string, unknown>) => {
+            const asked: string[] = [];
+            vi.spyOn(global, 'fetch').mockImplementation((url) => {
+                asked.push(String(url));
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(String(url).includes('/public-address/status') ? status : { logs: [] }),
+                } as Response);
+            });
+            return () => asked.filter((u) => u.includes('/public-address/status')).length;
+        };
+
+        it('a stored name: shown as the node keeps it, with one calm line and nothing in red, asked once', async () => {
+            const statusReads = serve({ success: true, status: 'live', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', cached: true, nameServiceNote: LINE });
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText('cairns.beanpool.org')).toBeInTheDocument();
+            const note = screen.getByTestId('public-address-name-service');
+            expect(note).toHaveTextContent(LINE);
+            expect(note.className).not.toMatch(/red/);
+            expect(note).not.toHaveAttribute('role', 'alert');
+            expect(screen.queryByText(/Couldn.t (reach|refresh)/i)).not.toBeInTheDocument();
+            expect(statusReads()).toBe(1);
+        });
+
+        it('no address and nothing to ask: "No public address", and no line about the name service', async () => {
+            serve({ success: true, status: 'none' });
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText(/No public address currently assigned/)).toBeInTheDocument();
+            expect(screen.queryByTestId('public-address-name-service')).not.toBeInTheDocument();
+            expect(screen.queryByText(/Couldn.t reach the registrar/i)).not.toBeInTheDocument();
+        });
+
+        it('an own address: this server\'s own, its certificate, and no Take offline (the server refuses it for one)', async () => {
+            serve({ success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', tls: { certificate: null, nextRenewalAt: null, lastError: 'the CA could not reach port 80' } });
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText("(this server's own address)")).toBeInTheDocument();
+            expect(screen.getByText('203.0.113.5')).toBeInTheDocument();
+            expect(screen.getByTestId('public-address-own-certificate')).toHaveTextContent('No certificate yet. The last try failed: the CA could not reach port 80');
+            expect(screen.queryByText('(🌐 direct)')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Take offline/i })).not.toBeInTheDocument();
+        });
+
+        // PR #2158 review 4307110322: the server's own fault after the address service answered is 200 with what it holds
+        // and `error`; until then only a live name showed it.
+        it('the server failing to act on an answer: its error shown with no address, and with an own address', async () => {
+            serve({ success: true, status: 'none', error: 'database or disk is full' });
+            const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText(/No public address currently assigned/)).toBeInTheDocument();
+            expect(screen.getByTestId('public-address-server-error')).toHaveTextContent("This server couldn't act on the address service's answer — database or disk is full");
+            unmount();
+
+            vi.restoreAllMocks();
+            serve({ success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', error: 'database or disk is full' });
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText("(this server's own address)")).toBeInTheDocument();
+            expect(screen.getByTestId('public-address-server-error')).toHaveTextContent('database or disk is full');
+            expect(screen.queryByText(/Couldn.t (reach|refresh)/i)).not.toBeInTheDocument();
+        });
+
+        it('an own address with a certificate says until when it is valid', () => {
+            expect(ownCertificateLine({ certificate: { issuedAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-12-30T00:00:00.000Z' } })).toMatch(/^Certificate valid until .*2026/);
+            expect(ownCertificateLine({ certificate: null })).toBe('No certificate yet: the server is asking for one.');
+            expect(ownCertificateLine(null)).toBeNull();
+        });
     });
 
     it('New tunnel key: confirmed first, then the node rotates the name onto a fresh tunnel; offered only for a live tunnel name', async () => {

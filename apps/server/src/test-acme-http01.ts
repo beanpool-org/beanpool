@@ -715,6 +715,9 @@ try {
             was?.failures === 1 && was?.nextAttemptAt === stoppedAt + HOUR && was?.lastAttemptAt === stoppedAt, String(atTheCa));
         if (unconfirmed) {
             check(`${host}: …and that the CA was asked unconfirmed now, before the challenge went out`, was?.unconfirmedAttemptAt === stoppedAt, String(atTheCa));
+            check(`${host}: …with what the self-check found, in words, before the CA answers`,
+                /^could not confirm from inside your network; trying with the CA anyway, once a day\. The check from here: port 80 is shut$/.test(was?.lastError ?? ''),
+                String(was?.lastError));
         }
         leaveOnDisk(host, atTheCa);
         let reqs = fake.requests.length;

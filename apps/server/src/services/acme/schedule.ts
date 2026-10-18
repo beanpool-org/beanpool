@@ -222,8 +222,11 @@ async function considerTarget(target: AcmeTarget, now: number): Promise<TargetOu
             orderUnconfirmed: (problem) => {
                 selfCheckProblem = problem;
                 askedUnconfirmed = !settled && now - lastUnconfirmed >= UNCONFIRMED_EVERY_MS;
-                // The once-a-day limit on disk before the challenge goes to the CA, for the same reason.
-                if (askedUnconfirmed) writeState(dataDir, { ...readState(dataDir, target.host), unconfirmedAttemptAt: now });
+                // The once-a-day limit on disk before the challenge goes to the CA, for the same reason; and what the check
+                // found, so whoever reads state.json meanwhile (`beanpool claim`, waiting) is told it before the CA answers.
+                if (askedUnconfirmed) {
+                    writeState(dataDir, { ...readState(dataDir, target.host), unconfirmedAttemptAt: now, lastError: unconfirmedWords(ca, problem, null) });
+                }
                 return askedUnconfirmed;
             },
         })).finally(() => { settled = true; });

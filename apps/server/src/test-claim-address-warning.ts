@@ -22,12 +22,19 @@
  *   8. --name with no answer in the wait. A node that never took the request: the request is withdrawn, so no name is
  *      on its way, and the way out is --name again. A node that took it (still asking, or the name awaits approval):
  *      the name is on its way. No line before the warning says the phone uses the public http:// address it refuses.
+ *   9. The words: every line fits, nothing says a beanpool.org name is required, and a public IP is offered to --ip.
+ *  10. https by a public IP once the server has a certificate for it (HTTPS S2): not warned when this run saw it answer
+ *      as this server with a certificate (--ip, --address, or a run with no address on a server that keeps one); when
+ *      it did not, the scheduler's reason, the way out behind a home router, a QR with no address, and the warning
+ *      waiting for the certificate. --ip refuses a home-network address before anything reaches the node.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-address-warning.ts
  */
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 import Database from 'better-sqlite3';
 import { CLAIM_SCRYPT, shouldBlockCleartextNodeUrl } from '@beanpool/core';
 import { phoneAddressWarning, runClaim, type ClaimIo } from './claim-command.js';
@@ -105,6 +112,12 @@ const PUBLIC = 'http://203.0.113.7';
 const BLOCK = phoneAddressWarning(null).length;
 
 async function main(): Promise<void> {
+    // An --address a public CA can certify is handed to the node and waited for, as a name is (no node runs here, so it
+    // is never taken): the suite's wait, as section 8 sets it.
+    process.env.NODE_ENV = 'test';
+    process.env.BEANPOOL_CLAIM_NAME_WAIT_MS = '2500';
+    delete process.env.BEANPOOL_CLAIM_CHECK_ORIGIN;
+
     console.log('\n1. A public address over plain http');
     const pub = await claim(['--no-name', '--direct', `${PUBLIC}:80`]);
     const w = pub.at(l => l.startsWith('WARNING:'));
@@ -249,6 +262,87 @@ async function main(): Promise<void> {
         ...phoneAddressWarning('https://203.0.113.7:8443')];
     check(lines.every(l => l.length <= 120), 'every line fits a wide terminal (≤ 120 characters)');
     check(lines.every(l => !/beanpool\.org (?:is )?(?:required|needed)/i.test(l)), 'nothing says a beanpool.org name is required');
+    const ownLines = phoneAddressWarning(null, null, 'https://203.0.113.7');
+    check(ownLines.length === BLOCK && ownLines.every(l => l.length <= 120), 'the form for an own address on its way: as many lines, each fits');
+    check(phoneAddressWarning(`${PUBLIC}:80`).some(l => l.includes('beanpool claim --ip 203.0.113.7')),
+        'a public http:// IP address: the way out names the IP to give with --ip');
+
+    console.log('\n10. An https IP address: warned until this run sees it answer with a certificate phones trust');
+    // A stand-in for the node (services/public-address-agent.ts storeOwnAddress): takes an ip/domain request and keeps the
+    // address in node_config, as the node does; with `words`, the certificate scheduler's state.json for it too. The
+    // check that https://<IP> answers as this server is pointed at a stand-in claim route (BEANPOOL_CLAIM_CHECK_ORIGIN,
+    // NODE_ENV=test only), answering with this code's id, or another's when the IP does not reach this server.
+    const { writeState, emptyState } = await import('./services/acme/store.js');
+    const QRCode = (await import('qrcode')).default;
+    const qrOf = (link: string) => QRCode.toString(link, { type: 'terminal', small: true });
+    const route = { codeId: CODE_ID };
+    const claimRoute = createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(req.url === '/api/local/claim' ? { unclaimed: true, codeId: route.codeId } : {}));
+    });
+    await new Promise<void>(r => claimRoute.listen(0, '127.0.0.1', () => r()));
+    process.env.BEANPOOL_CLAIM_CHECK_ORIGIN = `http://127.0.0.1:${(claimRoute.address() as AddressInfo).port}`;
+    const keepsOwn = (dir: string, words: string | null = null) => {
+        const tick = setInterval(() => {
+            const req = takeAddressRequestFile(dir);
+            if (!req || req.kind === 'name') return;
+            const db = new Database(path.join(dir, 'state.db'));
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('node_config', ?)").run(JSON.stringify({
+                publicAddress: { mode: req.kind === 'ip' ? 'ip' : 'own', hostname: req.host, status: 'live', since: new Date().toISOString() },
+                ownerAddresses: [req.host],
+            }));
+            db.close();
+            if (words) writeState(dir, { ...emptyState(req.host), failures: 1, lastError: words, nextAttemptAt: Date.now() + 3_600_000 });
+        }, 200);
+        return () => clearInterval(tick);
+    };
+    const IP = '203.0.113.7';
+    try {
+        const okDir = nodeDir();
+        const stopOk = keepsOwn(okDir);
+        const byIp = await claim(['--ip', IP], null, okDir).finally(stopOk);
+        check(byIp.code === 0 && byIp.text.includes(`✓ https://${IP} reaches this server, with a certificate phones trust.`), `--ip ${IP}: proven (${byIp.code})`);
+        check(byIp.warnings.length === 0 && byIp.text.includes(`Address: https://${IP}\n`), `…no warning, and the Address line carries it plainly (${byIp.warnings.join(' | ')})`);
+        check(byIp.text.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent(`https://${IP}`)}&id=${CODE_ID}&code=${CODE}`)), '…the QR carries node=https://203.0.113.7');
+        check(/by this server's number, 203\.0\.113\.7/.test(byIp.text) && /A name follows the community/.test(byIp.text), '…and says a number does not follow the community, a name does');
+        const ownIpDir = nodeDir();
+        const stopOwnIp = keepsOwn(ownIpDir);
+        const ownIpProven = await claim(['--address', `https://${IP}`], null, ownIpDir).finally(stopOwnIp);
+        check(ownIpProven.code === 0 && ownIpProven.warnings.length === 0 && ownIpProven.text.includes(`Address: https://${IP}\n`),
+            `--address https://${IP} proven: no warning, where section 3's unproven one is warned (${ownIpProven.warnings.length})`);
+        const rerun = await claim([], null, ownIpDir);
+        check(rerun.code === 0 && rerun.warnings.length === 0 && rerun.text.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent(`https://${IP}`)}&id=${CODE_ID}&code=${CODE}`)),
+            `run again with no address given, on a server that keeps https://${IP} and answers there: no warning, the QR carries it (${rerun.warnings.length})`);
+
+        route.codeId = 'ffffffff';   // https://<IP> answers as another server, or not at all
+        const words = `port 80 at ${IP} is not reachable from the Internet (ETIMEDOUT): open port 80 in the firewall, or check that this is the server's public IP`;
+        const failDir = nodeDir();
+        const stopFail = keepsOwn(failDir, words);
+        const notYet = await claim(['--ip', IP], null, failDir).finally(stopFail);
+        const fw = notYet.at(l => l.startsWith('WARNING:'));
+        check(notYet.code === 0 && notYet.text.includes(`No certificate a phone trusts for ${IP} within 3 s.`) && notYet.text.includes(`  Why: ${words}`),
+            `not answering: exit 0, the scheduler's reason in its words (${notYet.code})`);
+        check(notYet.text.includes('Behind a home router? Use a name: beanpool claim --name yourtown'), '…and the way out behind a home router');
+        check(notYet.text.includes(await qrOf(`beanpool://claim?id=${CODE_ID}&code=${CODE}`)) && /The QR code carries no address/.test(notYet.text),
+            '…the QR carries no address (the phone asks)');
+        check(notYet.warnings.length === 1 && /with no https address/.test(notYet.warnings[0]) && fw < notYet.qr
+            && notYet.lines.slice(fw, fw + BLOCK).join('\n').includes(`once https://${IP} has its certificate, run beanpool claim again`),
+            `…warned before the QR, waiting for the IP's certificate (${notYet.warnings.join(' | ')})`);
+        const rerunNotYet = await claim([], null, failDir);
+        check(rerunNotYet.code === 0 && rerunNotYet.text.includes(`This server's address ${IP} has no certificate a phone trusts yet (${words}).`)
+            && /The QR code carries no address/.test(rerunNotYet.text), 'run again before it answers: says why, and the QR still carries none');
+        route.codeId = CODE_ID;
+
+        const lanIpDir = nodeDir();
+        const lanIp = await claim(['--ip', '10.0.0.5'], null, lanIpDir);
+        check(lanIp.code === 2 && /10\.0\.0\.5 is on a home network/.test(lanIp.text) && /--direct http:\/\/10\.0\.0\.5:<port>/.test(lanIp.text)
+            && !fs.existsSync(path.join(lanIpDir, ADDRESS_REQUEST_FILE)), `--ip 10.0.0.5: refused in words, nothing handed to the node (${lanIp.code})`);
+        const both = await claim(['--ip', IP, '--name', 'riverbend']);
+        check(both.code === 2, '--ip with --name: usage');
+    } finally {
+        claimRoute.close();
+        delete process.env.BEANPOOL_CLAIM_CHECK_ORIGIN;
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

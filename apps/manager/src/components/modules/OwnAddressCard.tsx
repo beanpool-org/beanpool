@@ -3,7 +3,8 @@
  * this server's public IP address, or a domain the owner points at it, without a .beanpool.org name or a Cloudflare
  * account. Owner-only, as every address change is: drawn only when the node answers GET /api/local/admin/tls/status
  * (an admin's 403, or an older server without the route, draws nothing). A read that fails any other way (a 5xx, no
- * connection) keeps what was last read, with Refresh, and says it could not refresh.
+ * connection) keeps what was last read, with Refresh, and says it could not refresh; a first read that fails so draws the
+ * heading, that and Refresh, and nothing else (#2148 review 4306127405).
  *
  *   - see: every address the server holds a certificate for, or asks one for, with the certificate's dates (valid until,
  *     renews about) or why the last try failed and when it is tried next, in the server's own words;
@@ -142,35 +143,62 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
         }
     };
 
-    if (!enabled || !status) return null;
+    // No answer at all yet, or the node's answer that it offers none (loadError null): nothing drawn.
+    if (!enabled || (!status && !loadError)) return null;
 
-    const now = Date.now();
-    const ca = status.ca;
     const button = 'min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50 max-w-full break-words';
     const field = 'w-full min-w-0 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]';
     const messageClass = message?.type === 'error' ? 'text-bp-ink-danger' : message?.type === 'success' ? 'text-bp-ink-success' : 'text-bp-ink-info';
 
-    return (
-        <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="own-address-card">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                <div className="min-w-0 grow basis-[12rem] space-y-1">
-                    <h3 className="text-base font-bold text-white m-0 flex items-center gap-2 break-words">
-                        <span aria-hidden="true">🔒</span>
-                        <span>{t('Your own address')}</span>
-                    </h3>
-                    <p className="text-sm text-nature-300 m-0 leading-relaxed break-words">
-                        {t("This server's public IP address, or a domain name you point at it. The server gets a certificate for each by itself, from {ca}, with no Cloudflare account: ports 80 and 443 must be open to the internet.", { ca })}
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => load()}
-                    disabled={loading}
-                    className={`${button} shrink-0 bg-nature-800 hover:bg-nature-700 border-nature-700 text-nature-200`}
-                >
-                    {loading ? t('Refreshing…') : t('Refresh')}
-                </button>
+    const heading = (ca: string) => (
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-nature-800 pb-3">
+            <div className="min-w-0 grow basis-[12rem] space-y-1">
+                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2 break-words">
+                    <span aria-hidden="true">🔒</span>
+                    <span>{t('Your own address')}</span>
+                </h3>
+                <p className="text-sm text-nature-300 m-0 leading-relaxed break-words">
+                    {t("This server's public IP address, or a domain name you point at it. The server gets a certificate for each by itself, from {ca}, with no Cloudflare account: ports 80 and 443 must be open to the internet.", { ca })}
+                </p>
             </div>
+            <button
+                type="button"
+                onClick={() => load()}
+                disabled={loading}
+                className={`${button} shrink-0 bg-nature-800 hover:bg-nature-700 border-nature-700 text-nature-200`}
+            >
+                {loading ? t('Refreshing…') : t('Refresh')}
+            </button>
+        </div>
+    );
+    const loadErrorBlock = loadError && (
+        <div role="alert" className="space-y-1" data-testid="own-address-load-error">
+            <p className="text-sm text-bp-ink-warning m-0 break-words">
+                {status
+                    ? t("Couldn't refresh this list, so it may be out of date. Press Refresh to try again.")
+                    : t("Couldn't read this server's addresses and certificates. Press Refresh to try again.")}
+            </p>
+            <p className="text-xs text-nature-400 m-0 break-words [overflow-wrap:anywhere]">{loadError}</p>
+        </div>
+    );
+    const cardClass = 'p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4';
+
+    // The first read failed (a 5xx, no connection): the heading, why, and Refresh, so the owner can try again here.
+    if (!status) {
+        return (
+            <div className={cardClass} data-testid="own-address-card">
+                {heading('the CA')}
+                {loadErrorBlock}
+            </div>
+        );
+    }
+
+    const now = Date.now();
+    const ca = status.ca;
+
+    return (
+        <div className={cardClass} data-testid="own-address-card">
+            {heading(ca)}
 
             <p className="text-sm text-nature-300 m-0 leading-relaxed break-words" data-testid="own-address-nudge">
                 {t('A name survives a change of server; a number does not. If this server or its IP address changes, every member who uses the number has to type the new one.')}
@@ -276,14 +304,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
                     {message.text}
                 </p>
             )}
-            {loadError && (
-                <div role="alert" className="space-y-1" data-testid="own-address-load-error">
-                    <p className="text-sm text-bp-ink-warning m-0 break-words">
-                        {t("Couldn't refresh this list, so it may be out of date. Press Refresh to try again.")}
-                    </p>
-                    <p className="text-xs text-nature-400 m-0 break-words [overflow-wrap:anywhere]">{loadError}</p>
-                </div>
-            )}
+            {loadErrorBlock}
 
             {status.orders && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-nature-800">

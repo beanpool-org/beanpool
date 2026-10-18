@@ -131,6 +131,40 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         expect(screen.queryByTestId('own-address-card')).toBeNull();
     });
 
+    it('a first read that fails (500) draws the heading, why and Refresh, nothing else; Refresh that is answered draws the card', async () => {
+        let reads = 0;
+        let healed = false;
+        mockNode(() => (++reads, healed ? tlsStatus() : json(500, {})), {}, []);
+        render(<PublicAddressPanel activeNode={node} />);
+        const c = await card();
+        expect(within(c).getByRole('heading', { name: /Your own address/ })).toBeInTheDocument();
+        expect(screen.getByTestId('own-address-load-error')).toHaveTextContent("Couldn't read this server's addresses and certificates. Press Refresh to try again.");
+        expect(screen.getByTestId('own-address-load-error')).toHaveTextContent('The server answered 500.');
+        expect(screen.queryAllByTestId('own-address')).toHaveLength(0);
+        expect(screen.queryByTestId('own-address-none')).toBeNull();
+        expect(screen.queryByTestId('own-address-nudge')).toBeNull();
+        expect(within(c).queryByRole('button', { name: /Remove|Try again|Use this/ })).toBeNull();
+        expect(reads).toBe(1);
+        healed = true;
+        fireEvent.click(within(c).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(screen.getAllByTestId('own-address')).toHaveLength(3));
+        expect(reads).toBe(2);
+        expect(screen.queryByTestId('own-address-load-error')).toBeNull();
+    });
+
+    it('a first read that cannot reach the server says so, with Refresh; a 404 after it draws nothing', async () => {
+        let reads = 0;
+        let older = false;
+        mockNode(() => { ++reads; if (older) return json(404, {}); throw new TypeError('Failed to fetch'); }, {}, []);
+        render(<PublicAddressPanel activeNode={node} />);
+        const c = await card();
+        expect(screen.getByTestId('own-address-load-error')).toHaveTextContent('Could not reach the server.');
+        older = true;
+        fireEvent.click(within(c).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(screen.queryByTestId('own-address-card')).toBeNull());
+        expect(reads).toBe(2);
+    });
+
     it('a re-read that fails after a change keeps the card, the change\'s message and what was last read, and says it could not refresh', async () => {
         const sent: Sent[] = [];
         let reads = 0;

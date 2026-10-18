@@ -10,10 +10,11 @@
  * - The address must be one the phone will sign for and connect to: a plain `scheme://host[:port]` and nothing after it
  *   (utils/node-url.ts), https, or http only where the cleartext rule allows it (a private address). Anything else is
  *   refused before anything is asked, and the screen says so.
- * - A link only opens the screen (app/+native-intent.ts, {@link doorLinkRoute}): its signed work waits for the member's
- *   first tap (`from=link`), as the global community's own link does (utils/global-link.ts). Another community's door that
- *   the member's Join in the app didn't open just now ({@link takeDoorTap}) waits the same, so a link in a spelling the
- *   intercept doesn't know holds too. Nothing joins without the member's tap, and the key that joins is the phone's own.
+ * - A link only opens the screen (app/+native-intent.ts, {@link doorLinkRoute}), and the root layout never reads it as an
+ *   invite (app/_layout.tsx): its signed work waits for the member's first tap (`from=link`), as the global community's
+ *   own link does (utils/global-link.ts). Another community's door that the member's Join in the app didn't open just now
+ *   ({@link takeDoorTap}) waits the same, so a link in a spelling the intercept doesn't know holds too. Nothing joins
+ *   without the member's tap, and the key that joins is the phone's own.
  * - The community's name is its own answer (or the phone's saved name for it, or its host), never a link's.
  *
  * Kept free of the screens' imports and of the phone's storage, so the router can read a link without loading either.
@@ -101,12 +102,13 @@ export interface DoorLink {
 }
 
 /**
- * `beanpool://join-open-door[?node=…]` in the spellings a system hands over (`beanpool:///…`, and the bare and `/` path
- * forms), and the door's old name with an address, `beanpool://join-global?node=…`: the same door (PR #2131 review). Every
- * other param is dropped: a link carries an address and nothing else. (`beanpool://join-global` with no address is left to
+ * `beanpool://join-open-door[?node=…]` in the spellings a system hands over (`beanpool:///…`, `beanpool:join-open-door`
+ * with no slashes, which Expo Router opens as the same screen, and the bare and `/` path forms), and the door's old name
+ * with an address, `beanpool://join-global?node=…`: the same door (PR #2131 review). Every other param is dropped: a link
+ * carries an address and nothing else. (`beanpool://join-global` with no address is left to
  * Expo Router as before P5: utils/__tests__/global-link.test.ts pins it as no link of its own.)
  */
-const DOOR_LINK = /^(?:beanpool:\/\/\/?|\/)?join-(open-door|global)\/?(?:\?([^#]*))?(?:#.*)?$/i;
+const DOOR_LINK = /^(?:beanpool:\/{0,3}|\/)?join-(open-door|global)\/?(?:\?([^#]*))?(?:#.*)?$/i;
 
 /** The door link in `path`, or null for every other link. */
 export function doorLinkFromSystemPath(path: unknown): DoorLink | null {

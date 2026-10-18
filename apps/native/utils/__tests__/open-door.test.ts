@@ -159,7 +159,9 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
 
     it('read in every spelling a system hands over; every other param dropped', () => {
         for (const p of [LINK, `beanpool:///join-open-door?node=${encodeURIComponent(SELF)}`, `/join-open-door?node=${encodeURIComponent(SELF)}`,
-            `join-open-door/?node=${encodeURIComponent(SELF)}&then=pair-device&from=tap#x`]) {
+            `join-open-door/?node=${encodeURIComponent(SELF)}&then=pair-device&from=tap#x`,
+            // With no slashes, or one: Expo Router opens the same screen for both (expo-router extractExpoPathFromURL).
+            `beanpool:join-open-door?node=${encodeURIComponent(SELF)}`, `beanpool:/join-open-door?node=${encodeURIComponent(SELF)}`]) {
             expect(doorLinkFromSystemPath(p), p).toEqual({ node: { url: SELF, global: false }, named: SELF });
         }
         expect(doorLinkFromSystemPath('beanpool://join-open-door')).toEqual({ node: { url: GLOBAL_NODE_URL, global: true }, named: null });
@@ -192,6 +194,30 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
             .toBe('/join-global?from=link');
         phone.identity = null;
         expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, initial: true })).toBe('/');
+    });
+
+    it('the root layout reads no door link as an invite: no "Switch Nodes?", no welcome with an invite (PR #2131 review)', async () => {
+        // app/_layout.tsx skips a door link before it looks for an invite, as it does the pairing and global links.
+        const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+        const skip = layout.indexOf('if (doorLinkFromSystemPath(currentUrl)) return;');
+        expect(skip).toBeGreaterThan(-1);
+        expect(skip).toBeLessThan(layout.indexOf('const inviteToken = extractInviteToken(currentUrl);'));
+        // Each link the layout's invite reader took for the invite JOIN-OPEN-DOOR or JOIN-GLOBAL is one it skips: the
+        // address as the operator page publishes it, encoded, by the old name, in capitals, and with no slashes.
+        const ADDRESS = 'https://your.address';
+        for (const link of [`beanpool://join-open-door?node=${ADDRESS}`, `beanpool://join-open-door?node=${encodeURIComponent(ADDRESS)}`,
+            `beanpool://join-global?node=${encodeURIComponent(ADDRESS)}`, `BEANPOOL://JOIN-OPEN-DOOR?node=${encodeURIComponent(ADDRESS)}`,
+            `beanpool:join-open-door?node=${encodeURIComponent(ADDRESS)}`, 'beanpool://join-open-door']) {
+            expect(doorLinkFromSystemPath(link), link).not.toBeNull();
+        }
+        // One that also carries an invite is the door's all the same: the router opens the door and drops the invite, so
+        // the layout offers nothing over it.
+        const withInvite = `beanpool://join-open-door?node=${encodeURIComponent(ADDRESS)}&invite=INV-ABCD-EFGH`;
+        expect(doorLinkFromSystemPath(withInvite)).toEqual({ node: { url: ADDRESS, global: false }, named: ADDRESS });
+        phone.identity = ACCOUNT;
+        expect(await redirectSystemPath({ path: withInvite, initial: false })).toBe(`/join-open-door?node=${encodeURIComponent(ADDRESS)}&from=link`);
+        expect(await redirectSystemPath({ path: `beanpool:join-open-door?node=${encodeURIComponent(ADDRESS)}`, initial: false }))
+            .toBe(`/join-open-door?node=${encodeURIComponent(ADDRESS)}&from=link`);
     });
 
     it('not a door link: join-global is left to Expo Router as before, and lookalikes are nothing', () => {

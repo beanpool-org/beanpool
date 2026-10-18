@@ -53,6 +53,7 @@ import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
+import { doorLinkFromSystemPath } from '../utils/open-door';
 import * as WebBrowser from 'expo-web-browser';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -315,6 +316,11 @@ function RootLayoutNav() {
         // The global community's link (utils/global-link.ts): routed to a door by +native-intent.ts. Not an invite. One that
         // carries an invite is not this, and goes on below as an invite.
         if (isGlobalLink(currentUrl)) return;
+        // A link to the door screen, `beanpool://join-open-door[?node=…]` (utils/open-door.ts): routed by +native-intent.ts,
+        // which drops every param but the address. Not an invite: with an address in it, extractInviteToken would read the
+        // route's name as one ("JOIN-OPEN-DOOR"), offer "Switch Nodes?" to the link's address, or put a welcome with that
+        // "invite" over the first screen (PR #2131 review).
+        if (doorLinkFromSystemPath(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).

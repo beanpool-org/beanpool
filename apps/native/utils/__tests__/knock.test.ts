@@ -107,14 +107,25 @@ describe('a knock goes to the community, signed with the member’s own key', ()
         expect(JSON.stringify(body)).not.toContain(me.publicKey);
     });
 
-    it('is never sent to the global node, nor to an address that is not an https host', async () => {
+    it('is never sent to the global node, nor to an address that is not an https host or public number', async () => {
         const me = await member();
         for (const bad of [GLOBAL_NODE_URL, `${GLOBAL_NODE_URL}/`, 'https://GLOBAL.beanpool.org', 'http://mullum.beanpool.org',
-            'https://203.0.113.9', 'https://user:pw@mullum.beanpool.org', 'mullum.beanpool.org', null, '']) {
+            'https://10.0.0.9', 'http://203.0.113.9', 'https://user:pw@mullum.beanpool.org', 'mullum.beanpool.org', null, '']) {
             const r = await sendKnock(bad, me, { callsign: 'Robin', message: 'Hi' });
             expect(r.kind).toBe('no_address');
         }
         expect(sent).toHaveLength(0);
+    });
+
+    // HTTPS S3 (DESIGN-https-anywhere-fable.md §3, D3): a server's public number over https is a community's address
+    // (utils/community-origin.ts). Before S3, https://203.0.113.9 was in the list above.
+    it('goes to a community at its server\'s public number, over https, signed for that number', async () => {
+        const me = await member();
+        answer = () => ({ status: 201, body: { knock: { status: 'pending' } } });
+        expect((await sendKnock('https://203.0.113.9/', me, { callsign: 'Robin', message: 'Hi' })).kind).toBe('waiting');
+        expect(sent[0].url).toBe('https://203.0.113.9/api/join/knock');
+        expect(JSON.parse(sent[0].body).toNode).toBe('203.0.113.9');
+        expect(await signedBy(sent[0], me.publicKey)).toBe(true);
     });
 
     it('names the community it is for inside what is signed, so it can’t be passed on to another community', async () => {

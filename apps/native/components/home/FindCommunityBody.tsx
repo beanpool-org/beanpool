@@ -6,9 +6,12 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, findCommunityCardCopy, nearbyPostsLine, watchPlace, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, findCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, findCommunityState, t } from '@beanpool/core';
 import { cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
+
+/** Shown through t() in the member's language. */
+const LINKS = { typeTown: TYPE_YOUR_TOWN };
 
 /**
  * "Find your community" (design §3.1, §7) as a Home card on the global node (slice H4): the way out of the worldwide
@@ -56,14 +59,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const state = findCommunityState(home);
     const startFirst = state === 'none' || state === 'far';
     const start = (
-        <HomeButton key="start" primary={startFirst} colors={colors} text={FIND_COMMUNITY_WORDS.start} onPress={() => router.push('/start-community')} testID="home-find-start" />
+        <HomeButton key="start" primary={startFirst} colors={colors} text={t(FIND_COMMUNITY_WORDS.start)} onPress={() => router.push('/start-community')} testID="home-find-start" />
     );
 
     const tellMe = async () => {
         if (!point || !identity) { router.push('/find-community'); return; }
         const r = await watchPlace(identity, point, nodeUrl ?? undefined);
         if (r.ok) setWatched(true);
-        setWatchNote(r.ok ? "Done. You'll be told when a community starts near here." : r.message);
+        setWatchNote(r.ok ? t("Done. You'll be told when a community starts near here.") : r.message);
     };
 
     return (
@@ -81,15 +84,15 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {!!watchNote && <Text style={[s.rowLine, { marginTop: 6 }]} accessibilityLiveRegion="polite" testID="home-find-watch-note">{watchNote}</Text>}
             <FabAware id="find:actions" style={s.buttonRow}>
                 {startFirst && start}
-                <HomeButton primary={!startFirst} colors={colors} text="Communities near you" onPress={() => router.push('/find-community')} testID="home-find-near" />
+                <HomeButton primary={!startFirst} colors={colors} text={t('Communities near you')} onPress={() => router.push('/find-community')} testID="home-find-near" />
                 {!startFirst && start}
                 {!watching && (
-                    <HomeButton colors={colors} text="Tell me when one starts here" a11y="Tell me when a community starts near here"
+                    <HomeButton colors={colors} text={t('Tell me when one starts here')} a11y={t('Tell me when a community starts near here')}
                         onPress={() => void tellMe()} testID="home-find-watch" />
                 )}
             </FabAware>
             {!point && (
-                <HomeLink id="find:town" colors={colors} text={TYPE_YOUR_TOWN} a11y="Or type your town, to see the communities near it"
+                <HomeLink id="find:town" colors={colors} text={t(LINKS.typeTown)} a11y={t('Or type your town, to see the communities near it')}
                     onPress={() => router.push({ pathname: '/find-community', params: { town: '1' } })} testID="home-find-type-town" />
             )}
         </>

@@ -41,6 +41,7 @@
       "react-native-map-clustering@4.0.0": "patches/react-native-map-clustering@4.0.0.patch",
       "expo-screen-capture@55.0.18": "patches/expo-screen-capture@55.0.18.patch",
       "expo-web-browser@55.0.20": "patches/expo-web-browser@55.0.20.patch",
+      "expo-router@55.0.18": "patches/expo-router@55.0.18.patch",
       "vitest@3.2.7": "patches/vitest@3.2.7.patch"
     }
   },

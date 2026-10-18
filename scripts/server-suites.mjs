@@ -300,6 +300,7 @@ export const SUITES = [
     'test-registrar-names-record',
     'test-registrar-name-watch',
     'test-registrar-provisioning',
+    'test-registrar-notices',
     'test-public-url-callers',
     'test-own-address',
     'test-read-auth-default',

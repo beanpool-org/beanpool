@@ -6,7 +6,7 @@
 # one needs scripts/bootstrap-d1-migrations.sql first; see README "Schema and migrations").
 
 name = "beanpool-registrar"
-main = "src/index.js"
+main = "src/worker.js"   # src/index.js, and the ReplyTokens entrypoint apps/feedback binds (src/worker.js)
 compatibility_date = "2025-06-01"
 
 # Two cron entries, each its own invocation (src/index.js scheduled): the attestation sweep every 5 minutes, and the
@@ -26,6 +26,12 @@ RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this l
 # D1 `settings` table, edited in /admin ("New names, last 24 h" → Limits); the code holds only safe defaults
 # (src/settings.js). A self-hoster with no /admin may set CLAIM_LIMIT_PER_KEY, NEW_NAMES_PER_HOUR, NEW_NAMES_PER_DAY,
 # ATTEST_FAIL_LIMIT, SWAP_FAIL_LIMIT or CAPACITY here; a D1 row beats them.
+# Reply links in notices (design §3.2, src/index.js replyBase): where a notice's one-use reply link points, the token
+# appended. apps/feedback serves that page (GET/POST /reply/<token>) and asks this Worker through the ReplyTokens
+# entrypoint (its wrangler.toml [[services]]). Uncomment once apps/feedback is deployed with that route and binding
+# (apps/feedback/README.md "Reply links"): until then /admin offers no reply link and notices carry none. A self-hoster
+# with no reply page leaves it unset.
+# REPLY_URL = "https://beanpool.org/reply/"
 # Circuit-breaker canary: one of OUR nodes, which must attest 'ok' in a sweep for that sweep to act on any
 # row. Leave unset until that node is live in the registrar again (`test` was revoked 2026-09-24 and is
 # `blocked` in name_policy) — a configured canary that isn't live suspends every sweep.
@@ -42,6 +48,11 @@ WATCH_TARGETS = '''[
   {"name": "castlemaine", "url": "https://castlemaine.beanpool.org"},
   {"name": "test", "url": "https://test.beanpool.org"}
 ]'''
+# The public status line (src/status.js, design scratch/global-node/DESIGN-global-mothership-fable.md §3.2 U4, slice A8):
+# the WATCH_TARGETS servers status.json shows at GET /api/registrar/status.json, which beanpool.org/status draws —
+# comma-separated, in order; the registrar itself is always shown, last. OUR servers only: never a community's node
+# (mullum, castlemaine) or name. Unset, only the registrar. Nothing is written without the STATUS binding below.
+STATUS_SERVERS = "global,test"
 # Who may use the control room (/admin and /api/local/admin/registrar/*, src/access.js): Cloudflare Access sits in
 # front of those paths (app "BeanPool control room (registrar admin)", its own MFA: email code + authenticator), and the
 # Worker believes only Access's signed token — this team's, for this app's AUD tag, naming an email listed here. With
@@ -63,6 +74,14 @@ database_name = "beanpool-registrar"
 database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
 # `wrangler d1 migrations` keeps what it applied in the table d1_migrations (its default).
 migrations_dir = "migrations"
+
+# KV binding for the public status line (src/status.js): one key, status.json, written at each watch tick (288 writes a
+# day; Workers Free allows 1,000) and read by GET /api/registrar/status.json. Unbound, nothing is written and the GET
+# answers 404 — the watch and the sweep are untouched. To turn it on (by hand, on the live account):
+# `npx wrangler kv namespace create beanpool-status`, then uncomment these three lines with the id it prints.
+# [[kv_namespaces]]
+# binding = "STATUS"
+# id = "<the id wrangler prints>"
 
 # Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
 # site continues to serve everything else. Uncomment + set zone_id at deploy time.

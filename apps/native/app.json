@@ -187,6 +187,7 @@
     "plugins": [
       "./plugins/withAndroidLargeHeap",
       "./plugins/withAppLanguages",
+      "./plugins/withPodDeploymentTarget",
       "expo-router",
       "expo-notifications",
       "expo-image",

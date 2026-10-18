@@ -14,6 +14,8 @@
  *   Edit home starts over from the first tip.
  */
 
+import { t, word, type WordKey } from './words.js';
+
 /** What a tip's rule reads: the Home answer's profile and features, and the reader's role on the node. */
 export interface TipsNode {
     profile: string;
@@ -23,7 +25,8 @@ export type TipsRole = 'owner' | 'admin' | 'moderator' | null | undefined;
 
 export interface HomeTip {
     id: string;
-    text: string;
+    /** Shown through t() where it is drawn. */
+    text: WordKey;
     /** The bundled guide page Read more opens; absent: no Read more. */
     guide?: string;
     when: (node: TipsNode, role: TipsRole) => boolean;
@@ -40,45 +43,45 @@ const always = () => true;
 /** Every tip, in the order a member meets them (design §3; wording approved by the founder 8 Oct 2026, word for word). */
 export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'what-this-is', when: always, guide: 'how-it-works',
-        text: 'BeanPool is neighbours helping neighbours. You offer what you can do or spare, and ask for what you need.' },
+        text: word('BeanPool is neighbours helping neighbours. You offer what you can do or spare, and ask for what you need.') },
     { id: 'offer', when: beansOn, guide: 'posting',
-        text: 'Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.' },
+        text: word('Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.') },
     { id: 'offer-global', when: n => !beansOn(n), guide: 'posting',
-        text: "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for." },
+        text: word("Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.") },
     { id: 'beans', when: beansOn, guide: 'how-it-works',
-        text: "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got." },
+        text: word("Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.") },
     { id: 'no-beans', when: n => !beansOn(n), guide: 'posting',
-        text: "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask." },
+        text: word("There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.") },
     { id: 'price', when: beansOn, guide: 'posting',
-        text: 'A rough guide: 40 Beans is about an hour of someone\'s time. You and the other person agree the real price.' },
+        text: word('A rough guide: 40 Beans is about an hour of someone\'s time. You and the other person agree the real price.') },
     { id: 'words', when: always, guide: 'your-12-words',
-        text: 'Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.' },
+        text: word('Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.') },
     { id: 'map', when: always, guide: 'map-pins',
-        text: "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it." },
+        text: word("The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.") },
     { id: 'messages', when: always, guide: 'messages',
-        text: "A chat with one person is locked end to end, so your community's server can't read it. Group, event and enterprise chats are not locked." },
+        text: word("A chat with one person is locked end to end, so your community's server can't read it. Group, event and enterprise chats are not locked.") },
     { id: 'deal', when: n => beansOn(n) && n.features.escrow !== false, guide: 'a-deal-step-by-step',
-        text: "When a deal is agreed, the buyer's Beans are held until the job is done and confirmed. If a deal gets stuck, an admin can step in." },
+        text: word("When a deal is agreed, the buyer's Beans are held until the job is done and confirmed. If a deal gets stuck, an admin can step in.") },
     { id: 'credit', when: beansOn, guide: 'credit-line',
-        text: 'You can go below zero: your credit line opens with your first finished trade and grows as you trade with more people. Being below zero costs nothing.' },
+        text: word('You can go below zero: your credit line opens with your first finished trade and grows as you trade with more people. Being below zero costs nothing.') },
     { id: 'levels', when: beansOn, guide: 'trust-badges',
-        text: 'Levels are badges for the trust you build by trading: Newcomer, Resident, Steward, Elder. A level is recognition, not permission: every member can post, trade and vote.' },
+        text: word('Levels are badges for the trust you build by trading: Newcomer, Resident, Steward, Elder. A level is recognition, not permission: every member can post, trade and vote.') },
     { id: 'find-community', when: n => n.profile === 'global', guide: 'finding-a-community',
-        text: 'Neighbours trade in a local community, with its own Beans. Find one near you on Home and ask to join: any member there can let you in.' },
+        text: word('Neighbours trade in a local community, with its own Beans. Find one near you on Home and ask to join: any member there can let you in.') },
     { id: 'invites', when: invitesHere, guide: 'joining',
-        text: "Know someone who'd fit in? Invite them from Talk, People, Invites: an invite works once and lasts 30 days." },
+        text: word("Know someone who'd fit in? Invite them from Talk, People, Invites: an invite works once and lasts 30 days.") },
     { id: 'groups', when: always, guide: 'groups',
-        text: 'Groups are for a street, a choir, a garden crew, a guild. Find them in Talk under Groups, or start one.' },
+        text: word('Groups are for a street, a choir, a garden crew, a guild. Find them in Talk under Groups, or start one.') },
     { id: 'votes', when: decideHere, guide: 'decisions',
-        text: 'Commons is where your community decides things together. A Decision is a secret ballot, and when it passes it is carried out.' },
+        text: word('Commons is where your community decides things together. A Decision is a secret ballot, and when it passes it is carried out.') },
     { id: 'polls', when: n => !decideHere(n), guide: 'polls',
-        text: 'Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.' },
+        text: word('Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.') },
     { id: 'private', when: beansOn, guide: 'privacy',
-        text: 'Only you can see your balance and your trades. Other members see your name, photo, level and reviews.' },
+        text: word('Only you can see your balance and your trades. Other members see your name, photo, level and reviews.') },
     { id: 'visitors', when: n => !beansOn(n), guide: 'privacy',
-        text: "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot." },
+        text: word("People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.") },
     { id: 'guide', when: always, guide: 'the-bean',
-        text: "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards." },
+        text: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.") },
 ];
 
 /** The tips this node shows this reader, in order. */
@@ -205,14 +208,14 @@ export function restartTips(list: readonly HomeTip[], today: string): TipsRecord
 
 /** The caption: "Tips · 3 of 15" (drawn in capitals as every caption; a screen reader says "Tips, 3 of 15"). */
 export function tipsCaption(view: Pick<TipsView, 'position' | 'total'>): string {
-    return `Tips · ${view.position} of ${view.total}`;
+    return t('Tips · {position} of {total}', { position: view.position, total: view.total });
 }
 
 /** The screen reader's words for Next, and for Done on the last tip. */
 export function tipsNextLabel(view: Pick<TipsView, 'last'>): string {
-    return view.last ? 'Done with tips. The card goes.' : 'Next tip';
+    return view.last ? t('Done with tips. The card goes.') : t('Next tip');
 }
 
-export const TIPS_DONT_SHOW = "Don't show tips again";
-export const TIPS_DONT_SHOW_LABEL = "Don't show tips again. Edit home brings them back.";
-export const TIPS_ALL_SEEN = 'All tips seen';
+export const TIPS_DONT_SHOW = word("Don't show tips again");
+export const TIPS_DONT_SHOW_LABEL = word("Don't show tips again. Edit home brings them back.");
+export const TIPS_ALL_SEEN = word('All tips seen');

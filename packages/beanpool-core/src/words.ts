@@ -520,6 +520,17 @@ export function formatNumber(n: number, decimals?: number, lang?: UiLang): strin
 }
 
 /**
+ * A count of things (members, people, listings): English groups thousands as the apps always have ("2,310"); every
+ * other language writes the digits alone, as amounts are written (formatNumber: `1.000` reads as one in es and pt).
+ * Give it to tn() as `{ n: formatCount(count) }` to keep the English grouping.
+ */
+export function formatCount(n: number, lang?: UiLang): string {
+    const l = lang ?? active.lang;
+    if (l !== 'en' || !Number.isInteger(n)) return numberIn(l, n);
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/**
  * A date from the tables, never Intl, in `opts.lang` or the current language. en reads exactly as the apps always
  * have: "3 Oct", "3 Oct 2026", "Sat 3 Oct", "Sat", "9:05" (24 h, hour unpadded).
  */

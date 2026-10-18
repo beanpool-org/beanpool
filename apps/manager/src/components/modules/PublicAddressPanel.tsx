@@ -101,6 +101,62 @@ export function describeTunnel(t: TunnelStatus | undefined): string | null {
     return `${t.state}${t.reason ? `: ${t.reason}` : ''}${since}`;
 }
 
+/** A notice from the address service (GET /api/local/admin/public-address/notices; apps/server services/registrar-notices.ts). */
+export interface AddressNotice {
+    id: number;
+    /** When the BeanPool project sent it (unix seconds). */
+    at: number;
+    level: 'info' | 'warning' | 'action' | string;
+    text: string;
+    /** The name it is about. */
+    name: string;
+    /** A one-use reply link on the address service's own site, or null (the server keeps no other, and gives it to an owner only). */
+    link: string | null;
+    /** The notice has a reply link, which only an owner is given: an admin is told so. */
+    replyOwnerOnly?: boolean;
+}
+
+const NOTICE_LEVEL: Record<string, { icon: string; word: string; border: string }> = {
+    info: { icon: 'ℹ️', word: 'Information', border: 'border-blue-500/30' },
+    warning: { icon: '⚠️', word: 'Warning', border: 'border-amber-500/30' },
+    action: { icon: '❗', word: 'Action needed', border: 'border-red-400' },
+};
+
+/**
+ * What the BeanPool project wrote to this community's name through the address service (registrar slice S2), newest
+ * first, as this server kept them from its status checks. The words are the project's, shown as text; a Reply link only
+ * when the server kept one. Nothing while there are none.
+ */
+export function AddressNotices({ notices }: { notices: AddressNotice[] }) {
+    if (!notices.length) return null;
+    return (
+        <div className="space-y-2 pt-2 border-t border-nature-800" data-testid="address-notices">
+            <p className="m-0 text-xs font-bold text-nature-300">📨 From your address service</p>
+            {notices.map((n) => {
+                const lv = NOTICE_LEVEL[n.level] ?? NOTICE_LEVEL.info;
+                const day = n.at ? new Date(n.at * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                return (
+                    <div key={n.id} className={`border-l-4 ${lv.border} bg-nature-950 rounded-r-xl px-3 py-2 space-y-1`} data-testid="address-notice">
+                        <p className="m-0 text-[11px] text-nature-400">
+                            {lv.icon} {lv.word} · {day} · about <span className="font-mono text-nature-200">{n.name}</span>
+                            {n.link ? (
+                                <>
+                                    {' · '}
+                                    <a href={n.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[48px] lg:min-h-0 text-blue-400 underline">Reply</a>
+                                </>
+                            ) : n.replyOwnerOnly === true ? (
+                                <span data-testid="address-notice-reply-owner-only">{' · '}only an owner can reply</span>
+                            ) : null}
+                        </p>
+                        <p className="m-0 text-xs text-nature-200 whitespace-pre-line break-words">{n.text}</p>
+                    </div>
+                );
+            })}
+            <p className="m-0 text-[11px] text-nature-500">A reply link works once, for 14 days, and goes to the BeanPool project only.</p>
+        </div>
+    );
+}
+
 export interface PublicAddressPanelProps {
     activeNode: NodeProfile;
     onRefreshDiag?: () => void;
@@ -134,6 +190,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     // Names this community's key holds besides its address (the install's late claim): shown to an owner, released by name.
     const [extraNames, setExtraNames] = useState<ExtraName[]>([]);
     const [releasingName, setReleasingName] = useState<string | null>(null);
+    // Notices from the address service, as this server kept them (its status checks bring them).
+    const [notices, setNotices] = useState<AddressNotice[]>([]);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
 
     // Confirmation dialog state for destructive actions
@@ -208,6 +266,23 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         }, 65000);
     }, [fetchLogs]);
 
+    // Notices from the address service: read after each status check, which is what brings new ones. An older server
+    // answers 404, and nothing is shown.
+    const loadNotices = useCallback(async () => {
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/notices');
+            const res = await fetch(url, {
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+            });
+            const data = res.ok ? await res.json().catch(() => ({})) : {};
+            setNotices(Array.isArray(data?.notices)
+                ? data.notices.filter((n: AddressNotice) => Number.isSafeInteger(n?.id) && typeof n?.text === 'string' && typeof n?.name === 'string')
+                : []);
+        } catch {
+            setNotices([]);
+        }
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
+
     // Fetch public address status
     const loadStatus = useCallback(async () => {
         setLoading(true);
@@ -236,8 +311,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         } finally {
             setLoading(false);
             fetchLogs();
+            loadNotices();
         }
-    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs, loadNotices]);
 
     // Owner-only: an admin gets 403, and nothing is shown.
     const loadExtraNames = useCallback(async () => {
@@ -857,6 +933,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         </p>
                     )}
 
+                    <AddressNotices notices={notices} />
+
                     {/* Operational Action Buttons */}
                     <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-nature-800">
                         <button
@@ -1034,7 +1112,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                                 className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                             />
                             <span className="text-[10px] text-nature-400 block mt-1">
-                                Used by registrar administrators for critical node operational notices
+                                Optional. Only the BeanPool project sees it, to reach you about this name; it is never checked, and it is deleted when the name&apos;s hold ends.
                             </span>
                         </div>
 

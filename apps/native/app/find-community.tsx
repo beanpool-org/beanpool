@@ -21,7 +21,7 @@ import {
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, type AddressResult } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
@@ -417,7 +417,7 @@ export default function FindCommunityScreen() {
     const listed = communities ?? [];
     // Nearest first from a place, with no name typed, and the nearest past 250 km: say so above the list (B2).
     const farLine = point && !query.trim() && findCommunityState({ communities: listed, point: 'request', directoryFetchedAt: listFetchedAt }) === 'far'
-        ? `${FIND_COMMUNITY_WORDS.noneNear} ${FIND_COMMUNITY_WORDS.farLead(listed.length)}`
+        ? FIND_COMMUNITY_WORDS.farLine(listed.length)
         : null;
     const askedNotListed = asked.filter(a => !listed.some(c => c.url === a.url));
 
@@ -537,7 +537,7 @@ export default function FindCommunityScreen() {
                         </View>
                     ) : listed.length === 0 ? (
                         <Text style={styles.empty} testID="find-empty">
-                            {!listFetchedAt ? FIND_COMMUNITY_WORDS.notLoaded : query.trim() ? 'No community by that name is listed.' : FIND_COMMUNITY_WORDS.noneNear}
+                            {!listFetchedAt ? t(FIND_COMMUNITY_WORDS.notLoaded) : query.trim() ? 'No community by that name is listed.' : t(FIND_COMMUNITY_WORDS.noneNear)}
                         </Text>
                     ) : [
                         farLine ? <Text key="far" style={styles.empty} testID="find-far">{farLine}</Text> : null,

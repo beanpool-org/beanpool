@@ -1,8 +1,8 @@
 ---
 slug: address-and-peers
 title: Address, identity and peers
-summary: Your community's web address, the addresses members' apps use, what it tells the BeanPool directory, the gateway switches, and links to other communities.
-related: what-the-server-sees, rate-limits, updates-and-health, backups-and-replicas
+summary: Your community's web address (a free .beanpool.org name, your server's IP address or your own domain, with the certificates your server gets by itself), the addresses members' apps use, what it tells the BeanPool directory, the gateway switches, and links to other communities.
+related: first-time-setup, what-the-server-sees, rate-limits, updates-and-health, backups-and-replicas, access-and-security
 ---
 
 ## Public address
@@ -21,11 +21,58 @@ related: what-the-server-sees, rate-limits, updates-and-health, backups-and-repl
 - Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.
 - You don't need to do anything about a pause. Your server asks for the name back by itself within a few minutes. It gets it back as soon as it shows its own key, on a new tunnel that only your server is given, so whoever was answering there is cut off. The one exception is a pause by the BeanPool project itself: only the project can lift it.
 - **New tunnel key** gives the tunnel a new key, and the old key stops working at once. Use it if someone else may have only the tunnel's key: someone saw it on this screen, or you gave away a machine that was a standby. Anyone with the old key could answer at your address. Your server switches to the new key by itself; visitors' connections drop for a few seconds.
+- **Notices from the address service.** The BeanPool project, which runs the address service, can send your community a notice about its address: that its name is set up, that it was blocked by mistake, that maintenance is coming. Your server hears it the next time it checks in with the address service (within 15 minutes, even while the name is blocked), shows it here under **From your address service**, and tells its owners there is a message. The alert says only that; the words are here. A notice may carry **Reply**: a link that works once, for 14 days, to answer the BeanPool project without giving an address. Only an owner is given it; an admin reads the notice and is told that an owner can reply. Nothing is collected to send you notices, and your server needs none of them to keep working.
+- The contact on the name is optional. Only the BeanPool project sees it, to reach you about the name; it is never checked, and it is deleted when the name's hold ends.
 - **New tunnel key does not help if a copy of this server's data folder, or a backup, went somewhere it shouldn't.** That copy holds your server's own key, which is what the name belongs to, and a server started from it gets the new tunnel key from the address service on its own. Nothing in Settings replaces your server's own key. Keep the data folder and backups private, and if a copy may have got out, contact the BeanPool project, who run the address service, and say so.
 
 ![Public Address configuration in Settings](images/appliance-network.webp)
 
-You can also use your own domain name and certificate. BeanPool does not need to be involved.
+## Your own address: an IP address or a domain
+
+Your community needs no BeanPool name. Members' phones can reach it at your server's public IP address, or at a domain of your own, over real https. BeanPool does not need to be involved. The free .beanpool.org name above is a convenience: a tunnel, so there are no ports to open. Nothing else in your community depends on it, and a server can have both.
+
+**What your server does by itself.** For its public IP address, and for each domain of its own it answers to, your server gets its own certificate from Let's Encrypt. It needs no Cloudflare account and no access to your DNS. Let's Encrypt asks your server for a short answer on port 80 (the http-01 check), and your server gives it. Each certificate is renewed when a third of its life is left. A certificate for an IP address lasts about 6½ days, so that one is renewed about every 4½ days. Your server checks every hour, and the old certificate keeps working until the new one is in place, with no restart. A .beanpool.org name never needs one: Cloudflare holds those.
+
+**What you do:**
+
+- Open ports 80 and 443 to the internet: in your hosting company's firewall, and in the server's own if it has one. Port 80 is for Let's Encrypt's check: it fetches http://YOUR-ADDRESS/.well-known/acme-challenge/… from port 80 at your address, so that must reach your server. Port 443 is where phones connect. docker-compose.yml already publishes both on the server.
+- For a domain, make an A record for it with your server's public IP address, wherever your domain's DNS is run.
+- Give your server the address: at install with beanpool claim --ip or --address (see First-time setup), or later with **Your own address**, below.
+
+Before it asks Let's Encrypt, your server checks itself: it fetches its own answer from the address, over port 80, as Let's Encrypt will. If that fails, it says why in words, in Settings and to beanpool claim. It still asks Let's Encrypt, at most once a day, because a home router can fail the check from inside while Let's Encrypt reaches the server from outside. After a failed try it waits 1 hour, then 4 hours, then a day between tries, and tries more often as a certificate it already has nears its end. So a typo or a closed port costs nothing, and your server stays far under Let's Encrypt's limits.
+
+### Your own address in Settings
+
+Owners see **Your own address** under **Public Address**. Admins don't. It lists every address your server holds a certificate for or is asking for one, with where the address comes from. Each one says "Certificate valid until … Renews about …", or the last try, why it failed, and when it tries next.
+
+- **Use this IP address** and **Use this domain** give your server an address. It starts asking for the certificate at once. That takes a minute or two once the address leads to your server.
+- Putting another IP address in place of the community's IP address, or another domain in place of its domain, asks the fresh proof (Access and security). Giving an address otherwise doesn't: a domain given after an IP address becomes the community's address and the IP address stays one of its addresses, and an IP address given after a domain, or either beside a name, is kept beside it.
+- **Try again now** shows for an address an owner gave while it has no certificate or its last try failed. Fix what it said (port 80 closed, no A record yet), then press it: your server tries at once instead of waiting.
+- **Remove** asks first, then the fresh proof. Members' apps that use the address are refused after it.
+- On a standby, the card says it asks for no certificates. On a server set to Let's Encrypt's test service (ACME_DIRECTORY_URL in .env), it says that phones and browsers do not trust the certificates it gives.
+
+### Behind a home router, or behind a proxy
+
+**Behind a home router** with no ports forwarded, use a .beanpool.org name. Nothing on the internet can reach your server to check an IP address or a domain. If you do forward ports 80 and 443 to it, an IP address or your own domain works the same way. But a home connection's IP address can change at any time, and only a name survives that.
+
+**Behind a web server or proxy of your own** that holds the certificate for your domain, give the domain under Your own address as usual (**Use this domain**, or beanpool claim --address https://your.domain). When the community has no address yet, that makes it the community's address, the one the BeanPool directory lists (the list above says when a domain replaces an address it already has). Listing it only in BEANPOOL_ADDRESSES (Addresses members' apps use, below) lets members' apps use it but gives the community no address, so the directory has none to list. Your server still tries to get a certificate of its own for that domain, over port 80. Where the proxy does not pass /.well-known/acme-challenge/ on to your server, that fails quietly: the card says why, Let's Encrypt is asked at most once a day, no alert is sent, and phones see your proxy's certificate.
+
+### Certificate alerts
+
+Owners are told when a certificate could not be renewed for a day after it was due, when one has less than a day left, and when one expired before it was renewed. Each alert names the address it is about. Act on the first one: phones and browsers refuse an expired certificate exactly as they refuse a self-signed one, and your server has nothing else to show them. The full list of alerts is in Updates and health.
+
+### A number or a name
+
+A name survives a change of server; a number does not. If your server or its IP address changes, every member who uses the number has to type the new one. A name can be pointed at the new server.
+
+- At an IP address, members' phones reach the community at https://203.0.113.5, as they would at a name. The owner's phone says what that means, after the claim and under **Manage**: "Members reach this community by its server's number, 203.0.113.5. If the server or its number changes, each member will have to type the new one. A name follows the community: Settings → Public Address." It never blocks anything and has no deadline. It goes once the community has a name.
+- To move to a name later, claim a .beanpool.org name above, or give your own domain under Your own address. The IP address stays one of the community's addresses until an owner removes it, so every phone that uses it keeps working. New members are sent to the name.
+- Once a member's phone has heard of the name (BeanPool asks when it starts), Home shows one card: "This community is also at yourtown.beanpool.org. Use that address from now on?" It shows only after the phone has checked, at both addresses, that it is the same community. **Use the new address** moves the phone there, with what it keeps for your community, messages included. **Not now** asks again in 7 days. Nothing moves on its own. The web app shows no card: tell members who use it the new address.
+- A phone that never heard of the name before the number stopped answering can't follow it: nothing can tell that phone where the community went, and the member has to type the new address. Keep the old address answering until your members have moved.
+
+### A standby, and moving to a new server
+
+Certificates and their keys never travel: they are not in a backup from Settings or in the take-over keys. A standby asks for none. After it takes over, it gets its own once the address leads to it: for a domain, point the A record at the new server; a .beanpool.org name needs nothing. A community reached only by an IP address can't follow it to a new server, which has another IP address. The take-over preview says so: "Members reached this community at 203.0.113.5, which this server does not have. They will need its new address."
 
 ## Addresses members' apps use
 
@@ -33,11 +80,11 @@ Also under **Public Address**. A member's app signs every request for the addres
 
 The list shows each address with where it comes from and how many apps used it today and on the busiest day this week:
 
-- **this community's web address**: the name you claimed above, or the server's CF_RECORD_NAME;
-- **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name). Write a name with letters outside a–z in its punycode form, which starts with xn-- (bücher.example is xn--bcher-kva.example). An entry that isn't an address is left out, and the server's log names it when the server starts: check the list here after changing the .env;
-- **confirmed in Settings**: addresses an owner or admin confirmed here. Only these can be removed here.
+- **this community's web address**: the name you claimed above; on a server with no .beanpool.org name or CF_RECORD_NAME, the IP address or domain given with beanpool claim or under Your own address (once it has a domain, a later IP address is kept beside it); or the server's CF_RECORD_NAME;
+- **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name). Write a name with letters outside a–z in its punycode form, which starts with xn-- (bücher.example is xn--bcher-kva.example). An entry that isn't an address is left out, and the server's log names it when the server starts: check the list here after changing the .env. Your server tries to get its own certificate for each one that is a public name or IP address, never for localhost or a home-network one (Your own address, above);
+- **confirmed in Settings**: addresses an owner or admin confirmed here, and an IP address or domain given beside the community's web address. Only these can be removed here, by an owner, with the fresh proof each time.
 
-If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used, with how many members' apps used each and whether yours or an admin's did. Open Settings at your community's own address (for example https://example.org/settings) and tap **Yes, … is its address**: only the address Settings is open at is offered with one tap. Any other address on the list needs you to tick **This is this community's address** first, because a member's app can be made to use any address, and one person can join more than once. A name ending in .beanpool.org is never offered: that is another community's. A server that keeps the BeanPool directory (the global community's does) also says when the directory lists an address as another community's, names that community, and asks you to tick that it is this one. Other servers don't keep the directory, so they can't warn you about that. Confirming another community's address would let what members' apps send that community be copied and used here, so never confirm one just because someone asked you to. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20) and the server's own name for itself (localhost). So you can open its web app through an SSH tunnel at localhost without setting anything.
+If your server has no address set up (for example your own domain behind a proxy that was never given under Your own address), it accepts any address for now and lists the ones apps used, with how many members' apps used each and whether yours or an admin's did. Open Settings at your community's own address (for example https://example.org/settings) and tap **Yes, … is its address**: only the address Settings is open at is offered with one tap. Any other address on the list needs you to tick **This is this community's address** first, because a member's app can be made to use any address, and one person can join more than once. A name ending in .beanpool.org is never offered: that is another community's. A server that keeps the BeanPool directory (the global community's does) also says when the directory lists an address as another community's, names that community, and asks you to tick that it is this one. Other servers don't keep the directory, so they can't warn you about that. Confirming another community's address would let what members' apps send that community be copied and used here, so never confirm one just because someone asked you to. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20) and the server's own name for itself (localhost). So you can open its web app through an SSH tunnel at localhost without setting anything.
 
 Once your server has an address, it accepts only its listed ones. It refuses localhost too, unless you list it. So if members' apps also reach it on your home network, confirm that address too. To open its web app through an SSH tunnel at localhost, add BEANPOOL_ADDRESSES=localhost to the server's .env (an IPv6 address goes in brackets, as [::1]), and remove it when you no longer need the tunnel: while it's listed, a request signed for localhost anywhere counts here. Localhost is never an address of your community: a server with only localhost listed still has no address set up, and the list says so. Only this list shows localhost; apps and the directory never see it.
 

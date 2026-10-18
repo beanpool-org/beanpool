@@ -15,6 +15,10 @@ import { getMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { KEY_MOVED_BODY, KEY_MOVED_OWN_ONLY, KEY_MOVED_REASON, KEY_MOVED_SHOW, KEY_MOVED_TITLE, keyReplacedHere, onKeyReplaced } from '../utils/key-replaced';
 import { NoScreenCapture } from './WordsOnScreen';
+import { t } from '@beanpool/core';
+
+/** The card's words (utils/key-replaced.ts), shown in the member's language. The 12 words themselves never are: they stay English. */
+const KEY_WORDS = { title: KEY_MOVED_TITLE, body: KEY_MOVED_BODY, ownOnly: KEY_MOVED_OWN_ONLY, show: KEY_MOVED_SHOW, reason: KEY_MOVED_REASON };
 
 
 export function KeyMovedCard({ colors }: { colors: AppColors }) {
@@ -40,29 +44,29 @@ export function KeyMovedCard({ colors }: { colors: AppColors }) {
     if (!moved) return null;
     return (
         <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]} testID="key-moved-card">
-            <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">{KEY_MOVED_TITLE}</Text>
-            <Text style={[styles.body, { color: colors.text.secondary }]}>{KEY_MOVED_BODY}</Text>
-            <Text style={[styles.body, { color: colors.text.body, fontWeight: '700' }]}>{KEY_MOVED_OWN_ONLY}</Text>
+            <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">{t(KEY_WORDS.title)}</Text>
+            <Text style={[styles.body, { color: colors.text.secondary }]}>{t(KEY_WORDS.body)}</Text>
+            <Text style={[styles.body, { color: colors.text.body, fontWeight: '700' }]}>{t(KEY_WORDS.ownOnly)}</Text>
             {words ? (
                 <NoScreenCapture>
                     <View style={styles.grid}>
                         {words.map((w, i) => (
-                            <View key={`${w}-${i}`} style={[styles.word, { backgroundColor: colors.surface.subtle }]} accessible accessibilityLabel={`Word ${i + 1}: ${w}`}>
+                            <View key={`${w}-${i}`} style={[styles.word, { backgroundColor: colors.surface.subtle }]} accessible accessibilityLabel={t('Word {n}: {word}', { n: i + 1, word: w })}>
                                 <Text style={[styles.wordText, { color: colors.text.heading }]}>{i + 1}. {w}</Text>
                             </View>
                         ))}
                     </View>
                     <Pressable onPress={() => setWords(null)} style={styles.secondaryBtn} accessibilityRole="button">
-                        <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Hide the words</Text>
+                        <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Hide the words')}</Text>
                     </Pressable>
                 </NoScreenCapture>
             ) : hasWords ? (
                 <Pressable
-                    onPress={async () => { const w = await readWordsBehindLock(identity, KEY_MOVED_REASON).catch(() => null); if (w) setWords(w); }}
+                    onPress={async () => { const w = await readWordsBehindLock(identity, t(KEY_WORDS.reason)).catch(() => null); if (w) setWords(w); }}
                     style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]}
                     accessibilityRole="button"
                 >
-                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{KEY_MOVED_SHOW}</Text>
+                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t(KEY_WORDS.show)}</Text>
                 </Pressable>
             ) : null}
         </View>

@@ -145,7 +145,7 @@ A few changes are rare, and are the kind a stolen sign-in would make in its firs
 - retire the admin password;
 - make an automation token;
 - change the gateway settings;
-- take this community offline, release a name, or replace this community's live address;
+- take this community offline, release a name, replace this community's live address, or remove an address members' apps use;
 - change the address and token a standby copies with (Live Backup Server; which server it trusts is set only on its own shell: beanpool pair);
 - remove, change or shorten where backups go off the box, or keep fewer snapshots, or make them cover less time;
 - roll back to a restore point.

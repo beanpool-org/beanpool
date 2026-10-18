@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, currentLanguage, formatDate,
+    DATE_WORDS, LANGS, LANGUAGE_HEADER, PLURAL_CATEGORIES, PLURAL_RULES, PSEUDO_LANG, canonicalLang, currentLanguage, formatCount, formatDate,
     formatNumber, isLang, normaliseLang, pluralCategory, pluralKey, pseudoLocalise, setLanguage, t, timeAgo, tn, withDigits, word,
     wordKey, wordsFor, type Lang, type UiLang,
 } from '../words.js';
@@ -428,6 +428,24 @@ describe('dates and numbers from tables', () => {
             const icu = new Intl.NumberFormat(INTL_TAG(lang)).formatToParts(1.5).find((p) => p.type === 'decimal')!.value;
             expect([lang, DATE_WORDS[lang]!.decimal], RECHECK).toEqual([lang, icu]);
         }
+    });
+
+    it('counts: English groups thousands as the apps always have; other languages write the digits alone', () => {
+        expect(formatCount(2310, 'en')).toBe('2,310');
+        expect(formatCount(1234567, 'en')).toBe('1,234,567');
+        expect(formatCount(-2310, 'en')).toBe('-2,310');
+        expect(formatCount(999, 'en')).toBe('999');
+        // A non-integer is never grouped, in English either.
+        expect(formatCount(1234.5, 'en')).toBe('1234.5');
+        // Elsewhere no group ('1.000' reads as one in es and pt), and the language's own decimal separator.
+        expect(formatCount(2310, 'ru')).toBe('2310');
+        expect(formatCount(12.5, 'ru')).toBe('12,5');
+        expect(formatCount(1234.5, 'ru')).toBe('1234,5');
+        for (const lang of ['fr', 'pt', 'es'] as const) expect([lang, formatCount(2310, lang)]).toEqual([lang, '2310']);
+        // No lang: the device's language; a lang given wins over it.
+        expect(formatCount(2310)).toBe('2,310');
+        setLanguage('ru');
+        expect([formatCount(2310), formatCount(12.5), formatCount(2310, 'en')]).toEqual(['2310', '12,5', '2,310']);
     });
 
     it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {

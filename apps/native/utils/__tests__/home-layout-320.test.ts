@@ -346,19 +346,25 @@ describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', ()
     const layout = read('app/(tabs)/_layout.tsx');
     const screens = [...layout.matchAll(/<Tabs\.Screen\s+name="([^"]+)"([\s\S]*?)\/>\s*(?=<Tabs\.Screen|\{\/\*|<\/Tabs>)/g)].map(m => ({ name: m[1], body: m[2] }));
     const onStrip = screens.filter(x => !/href: null/.test(x.body) || /hiddenTabs\.includes/.test(x.body));
+    // Each tab's name is a word() in the layout's TAB table, drawn through t() (in English, the name itself).
+    const tabTable = layout.slice(layout.indexOf('const TAB = {'), layout.indexOf('};', layout.indexOf('const TAB = {')));
+    const TAB_NAMES = Object.fromEntries([...tabTable.matchAll(/(\w+): word\('([^']+)', 'tab'\),/g)].map(m => [m[1], m[2]]));
+    /** The English of the label a tab draws: `<TabItem label={t(TAB.x)}`. */
+    const labelOf = (body: string) => TAB_NAMES[/<TabItem label=\{t\(TAB\.(\w+)\)\}/.exec(body)?.[1] ?? ''];
 
     it('six labelled tabs in the design\'s order; Pulse, People and Settings are routes off the strip', () => {
         expect(onStrip.map(x => x.name)).toEqual(['index', 'market', 'map', 'chats', 'projects', 'ledger']);
         expect(screens.find(x => x.name === 'pulse')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'people')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'settings')!.body).toMatch(/href: null/);
-        expect(screens.find(x => x.name === 'index')!.body).toMatch(/<TabItem label="Home"/);
+        expect(labelOf(screens.find(x => x.name === 'index')!.body)).toBe('Home');
         expect(screens.find(x => x.name === 'index')!.body).toMatch(/tabBarButtonTestID: 'tab-home'/);
     });
 
     it('the Market\'s tab still carries the deals count, and still answers to tab-market', () => {
         const market = screens.find(x => x.name === 'market')!.body;
-        expect(market).toMatch(/<TabItem label="Market" icon="🤝" focused=\{focused\} color=\{color\} count=\{dealsCount\} \/>/);
+        expect(market).toMatch(/<TabItem label=\{t\(TAB\.market\)\} icon="🤝" focused=\{focused\} color=\{color\} count=\{dealsCount\} \/>/);
+        expect(labelOf(market)).toBe('Market');
         expect(market).toMatch(/tabBarButtonTestID: 'tab-market'/);
         // The count is the same rule as the Market's own pill (MyDealsSheet usePendingDealsCount), set from the database.
         expect(layout).toMatch(/setDealsCount\(active\)/);
@@ -366,7 +372,7 @@ describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', ()
 
     it('"Home" is no wider than "Commons", the label measured to fit at 320dp under the strip\'s 1.1x cap', () => {
         expect(layout).toMatch(/const LABEL_MAX_SCALE = 1\.1;/);
-        const labels = onStrip.map(x => /<TabItem label="([^"]+)"/.exec(x.body)?.[1]);
+        const labels = onStrip.map(x => labelOf(x.body));
         expect(labels).toEqual(['Home', 'Market', 'Map', 'Talk', 'Commons', 'Ledger']);
         for (const l of labels) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });

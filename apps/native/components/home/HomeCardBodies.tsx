@@ -11,11 +11,11 @@ import { eventHomeWhen, formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
-    RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine, formatBeans,
+    RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, listPhotoUrl, readSearchSettings, tipsNextLabel, type SkyToday, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
@@ -23,6 +23,9 @@ import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinks
  * What each Home card says (design §3.1, §9), from the answer the screen holds. Every line is one target into a screen
  * that already exists; the words come from utils/home-cards.ts.
  */
+
+/** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
+const LINES = { searchOffline: SEARCH_OFFLINE_LINE, tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL };
 
 /** A path from the node ("/api/…") made an address on it; a full address as it is. */
 export function onNode(nodeUrl: string | null, path: string | null | undefined): string | null {
@@ -69,7 +72,7 @@ export function StepsBody({ lines, note, colors, onStep }: {
                     key={l.id}
                     colors={colors}
                     text={l.text}
-                    a11y={`${l.text}, ${l.done ? 'done' : 'not done yet'}`}
+                    a11y={l.done ? t('{step}, done', { step: l.text }) : t('{step}, not done yet', { step: l.text })}
                     onPress={l.done ? undefined : () => onStep(l.id)}
                     testID={`home-step-${l.id}`}
                     left={<Text style={[s.trailing, { fontSize: 18, color: l.done ? colors.brand.primary : colors.text.secondary }]} importantForAccessibility="no">{l.done ? '☑' : '☐'}</Text>}
@@ -78,7 +81,7 @@ export function StepsBody({ lines, note, colors, onStep }: {
             {!!note && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-limits">{note}</Text>}
             {offerUndone && (
                 <FabAware id="steps:offer" style={s.buttonRow}>
-                    <HomeButton primary colors={colors} text="Post an Offer" onPress={() => onStep('offer')} testID="home-step-post-offer" />
+                    <HomeButton primary colors={colors} text={t('Post an Offer')} onPress={() => onStep('offer')} testID="home-step-post-offer" />
                 </FabAware>
             )}
         </>
@@ -89,10 +92,11 @@ export function InterestsBody({ interests, colors, onToggle }: { interests: read
     const s = homeStyles(colors);
     return (
         <>
-            <Text style={s.note}>Tap a few. What you star comes first here and in the Market.</Text>
+            <Text style={s.note}>{t('Tap a few. What you star comes first here and in the Market.')}</Text>
             <FabAware id="interests:chips" style={s.chips}>
                 {POST_CATEGORIES.map(c => {
                     const on = interests.includes(c.id);
+                    const label = categoryLabel(c.id);
                     return (
                         <Pressable
                             key={c.id}
@@ -100,10 +104,10 @@ export function InterestsBody({ interests, colors, onToggle }: { interests: read
                             style={({ pressed }) => [s.chip, on && s.chipOn, pressed && !on && s.pressed]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: on }}
-                            accessibilityLabel={`${c.label}, ${on ? 'starred' : 'not starred'}`}
+                            accessibilityLabel={on ? t('{category}, starred', { category: label }) : t('{category}, not starred', { category: label })}
                             testID={`home-interest-${c.id}`}
                         >
-                            <Text style={[s.chipText, on && s.chipTextOn]}>{c.emoji} {c.label}{on ? ' ★' : ''}</Text>
+                            <Text style={[s.chipText, on && s.chipTextOn]}>{c.emoji} {label}{on ? ' ★' : ''}</Text>
                         </Pressable>
                     );
                 })}
@@ -119,7 +123,7 @@ export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals
         <HomeRow
             colors={colors}
             text={line}
-            a11y={`${sentence(line)} Opens ${w ? 'the deal' : 'your deals'}.`}
+            a11y={w ? t('{line} Opens the deal.', { line: sentence(line) }) : t('{line} Opens your deals.', { line: sentence(line) })}
             strong={!!w}
             onPress={() => (w
                 ? router.push({ pathname: '/post/[id]', params: { id: w.postId, txId: w.txId } })
@@ -137,7 +141,9 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
             text={card.name}
             sub={line}
             strong
-            a11y={`${card.name}: ${sentence(line)} Opens the ${card.lifecycle === 'bounded' ? 'project' : 'enterprise'}.`}
+            a11y={card.lifecycle === 'bounded'
+                ? t('{name}: {line} Opens the project.', { name: card.name, line: sentence(line) })
+                : t('{name}: {line} Opens the enterprise.', { name: card.name, line: sentence(line) })}
             onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } })}
             testID="home-enterprise-line"
         />
@@ -149,22 +155,28 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
     return (
         <>
             {card.items.map(e => {
-                const rsvp = e.rsvp ? RSVP_WORDS[e.rsvp] : null;
+                const rsvp = e.rsvp ? t(RSVP_WORDS[e.rsvp]) : null;
                 const far = formatDistance(e.distanceKm);
                 const trailing = [rsvp, far].filter(Boolean).join(' · ');
+                // Whole sentences for the screen reader, each in the member's language, said one after another.
+                const what = e.place ? t('{title}, at {place}', { title: e.title, place: e.place }) : e.title;
+                const when = t('{when}: {what}', { when: eventHomeWhen(e), what: sentence(what) });
+                const marked = e.rsvp ? t(RSVP_SAID[e.rsvp]) : null;
+                const away = far ? t('{distance} away.', { distance: far }) : null;
+                const opens = t('Opens the event.');
                 return (
                     <HomeRow
                         key={e.id}
                         colors={colors}
                         text={eventLine(e)}
-                        a11y={`${eventHomeWhen(e)}: ${sentence(`${e.title}${e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
+                        a11y={[when, marked, away, opens].filter(Boolean).join(' ')}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: e.id } })}
                         right={trailing ? <Text style={s.trailing}>{trailing}</Text> : undefined}
                         testID={`home-event-${e.id}`}
                     />
                 );
             })}
-            <HomeLink id="events:all" colors={colors} text="All events" a11y="All events, in the Market"
+            <HomeLink id="events:all" colors={colors} text={t('All events')} a11y={t('All events, in the Market')}
                 onPress={() => router.push({ pathname: '/(tabs)/market', params: { filter: 'events' } })} testID="home-events-all" />
         </>
     );
@@ -189,7 +201,7 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
             {items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-market-${p.id}`} />)}
             {/* A node that asks for them, with fewer than a handful of real listings: the made-up ones, each marked Example (§6.1). */}
             {examples && <View style={{ marginHorizontal: -14 }}><ExampleListings /></View>}
-            <HomeLink id="market:all" colors={colors} text="See all" a11y="See all listings in the Market" onPress={onSeeAll} testID="home-market-all" />
+            <HomeLink id="market:all" colors={colors} text={t('See all')} a11y={t('See all listings in the Market')} onPress={onSeeAll} testID="home-market-all" />
         </>
     );
 }
@@ -198,16 +210,21 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
 function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketItem; nodeUrl: string | null; showsBeans: boolean; colors: AppColors; testID: string }) {
     const s = homeStyles(colors);
     const type = p.type === 'need' ? colors.market.need : colors.market.offer;
-    const word = p.type === 'need' ? 'NEED' : 'OFFER';
-    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? `${formatBeans(p.credits)} Beans` : null;
+    const word = p.type === 'need' ? t('NEED') : t('OFFER');
+    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? beansAmount(p.credits) : null;
     const far = formatDistance(p.distanceKm);
     const facts = [price, far].filter(Boolean).join(' · ');
+    const category = categoryLabel(p.category);
+    const values = { title: sentence(p.title), facts, category };
+    const a11y = p.type === 'need'
+        ? (facts ? t('Need: {title} {facts}. {category}. Opens the listing.', values) : t('Need: {title} {category}. Opens the listing.', values))
+        : (facts ? t('Offer: {title} {facts}. {category}. Opens the listing.', values) : t('Offer: {title} {category}. Opens the listing.', values));
     return (
         <HomeRow
             colors={colors}
             text={p.title}
-            sub={facts || categoryLabel(p.category)}
-            a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
+            sub={facts || category}
+            a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
             left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} emoji={categoryEmoji(p.category)} colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
@@ -238,7 +255,7 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                         colors={colors}
                         text={line}
                         strong={g.unread > 0 && !g.muted}
-                        a11y={`${sentence(line)} Opens the chat.`}
+                        a11y={t('{line} Opens the chat.', { line: sentence(line) })}
                         onPress={() => router.push(g.kind === 'event'
                             ? { pathname: '/chat/[id]', params: { id: g.id, event: '1' } }
                             : { pathname: '/chat/[id]', params: { id: g.id, [g.kind]: '1' } })}
@@ -247,7 +264,7 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                 );
             })}
             {card.total > card.items.length && (
-                <HomeLink id="groups:all" colors={colors} text={`All ${card.total} groups`} a11y={`All ${card.total} of your groups, in Talk`}
+                <HomeLink id="groups:all" colors={colors} text={tn(card.total, 'All {n} group', 'All {n} groups')} a11y={tn(card.total, 'Your {n} group, in Talk', 'All {n} of your groups, in Talk')}
                     onPress={() => router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } })} testID="home-groups-all" />
             )}
         </>
@@ -264,7 +281,7 @@ export function JoinedBody({ card, profile, colors }: { card: NonNullable<HomeCa
             <HomeRow
                 colors={colors}
                 text={line}
-                a11y={names.length ? `${line} Opens People.` : line}
+                a11y={names.length ? t('{line} Opens People.', { line }) : line}
                 onPress={names.length ? () => router.push('/(tabs)/people') : undefined}
                 left={names.length ? (
                     <View style={s.faces} importantForAccessibility="no-hide-descendants">
@@ -291,15 +308,15 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
                         key={p.id}
                         colors={colors}
                         text={title}
-                        sub={`by ${p.callsign}`}
-                        a11y={`${title}, by ${sentence(p.callsign)} Opens the Pulse.`}
+                        sub={t('by {name}', { name: p.callsign })}
+                        a11y={t('{title}, by {name} Opens the Pulse.', { title, name: sentence(p.callsign) })}
                         onPress={() => router.push('/(tabs)/pulse')}
                         left={<Thumb uri={resolvePulseThumbnailUrl(nodeUrl, p)} emoji="📡" colors={colors} />}
                         testID={`home-pulse-${p.id}`}
                     />
                 );
             })}
-            <HomeLink id="pulse:all" colors={colors} text="See all" a11y="See all of the Pulse" onPress={() => router.push('/(tabs)/pulse')} testID="home-pulse-all" />
+            <HomeLink id="pulse:all" colors={colors} text={t('See all')} a11y={t('See all of the Pulse')} onPress={() => router.push('/(tabs)/pulse')} testID="home-pulse-all" />
         </>
     );
 }
@@ -307,16 +324,18 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
 export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans']>; colors: AppColors }) {
     const { main, sub } = beansLines(card);
     return (
-        <HomeRow colors={colors} text={main} sub={sub} strong a11y={`${sentence(main)}${sub ? ` ${sentence(sub)}` : ''} Opens your Ledger.`}
+        <HomeRow colors={colors} text={main} sub={sub} strong
+            a11y={sub ? t('{main} {sub} Opens your Ledger.', { main: sentence(main), sub: sentence(sub) }) : t('{main} Opens your Ledger.', { main: sentence(main) })}
             onPress={() => router.push('/(tabs)/ledger')} testID="home-beans-line" />
     );
 }
 
 export function NoticesBody({ card, colors, onOpen }: { card: NonNullable<HomeCards['notices']>; colors: AppColors; onOpen: (id: string) => void }) {
-    const more = card.unseen > 1 ? ` · ${card.unseen - 1} more` : '';
+    const more = card.unseen - 1;
+    const values = { title: sentence(card.first.title), line: sentence(card.first.line) };
     return (
-        <HomeRow colors={colors} text={card.first.title} sub={`${card.first.line}${more}`} strong
-            a11y={`${sentence(card.first.title)} ${sentence(card.first.line)}${card.unseen > 1 ? ` ${card.unseen - 1} more unread.` : ''} Opens it.`}
+        <HomeRow colors={colors} text={card.first.title} sub={more > 0 ? tn(more, '{line} · {n} more', '{line} · {n} more', { line: card.first.line }) : card.first.line} strong
+            a11y={more > 0 ? tn(more, '{title} {line} {n} more unread. Opens it.', '{title} {line} {n} more unread. Opens it.', values) : t('{title} {line} Opens it.', values)}
             onPress={() => onOpen(card.first.id)} testID="home-notice-line" />
     );
 }
@@ -325,7 +344,7 @@ export function InviteBody({ colors }: { colors: AppColors }) {
     const s = homeStyles(colors);
     return (
         <FabAware id="invite:button" style={s.buttonRow}>
-            <HomeButton colors={colors} text="Invite someone" onPress={() => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } })} testID="home-invite" />
+            <HomeButton colors={colors} text={t('Invite someone')} onPress={() => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } })} testID="home-invite" />
         </FabAware>
     );
 }
@@ -349,8 +368,8 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
             {(onAdd || onEdit) && (
                 <View style={communityLinksStyle}>
-                    {onAdd && <HomeLink id="community:add" colors={colors} text="Add a card" a11y="Add a card to Home" onPress={onAdd} testID="home-add-card" />}
-                    {onEdit && <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: move or remove cards" onPress={onEdit} testID="home-edit" />}
+                    {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
+                    {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
                 </View>
             )}
         </>
@@ -374,11 +393,11 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
     const page = slug ? getBundledGuide().guides.find(g => g.slug === slug) : undefined;
     return (
         <>
-            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-tip-text">{view.tip.text}</Text>
+            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-tip-text">{t(view.tip.text)}</Text>
             <FabAware id="tips:buttons" style={s.buttonRow}>
-                <HomeButton primary colors={colors} text={view.last ? 'Done' : 'Next'} a11y={tipsNextLabel(view)} onPress={onNext} testID="home-tip-next" />
+                <HomeButton primary colors={colors} text={view.last ? t('Done') : t('Next')} a11y={tipsNextLabel(view)} onPress={onNext} testID="home-tip-next" />
                 {page && slug && (
-                    <HomeButton colors={colors} text="Read more" a11y={`Read more in the guide: ${page.title}`} onPress={() => onReadMore(slug)} testID="home-tip-read-more" />
+                    <HomeButton colors={colors} text={t('Read more')} a11y={t('Read more in the guide: {page}', { page: page.title })} onPress={() => onReadMore(slug)} testID="home-tip-read-more" />
                 )}
             </FabAware>
             <FabAware id="tips:dont-show">
@@ -386,10 +405,10 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
                     onPress={onDontShow}
                     style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center', alignSelf: 'stretch' }, pressed && s.pressed]}
                     accessibilityRole="button"
-                    accessibilityLabel={TIPS_DONT_SHOW_LABEL}
+                    accessibilityLabel={t(LINES.tipsDontShowLabel)}
                     testID="home-tips-dont-show"
                 >
-                    <Text style={s.linkText}>{TIPS_DONT_SHOW}</Text>
+                    <Text style={s.linkText}>{t(LINES.tipsDontShow)}</Text>
                 </Pressable>
             </FabAware>
         </>
@@ -431,12 +450,13 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
     const first = searchFirstLine(q, shownKm);
     return (
         <>
-            <HomeRow colors={colors} text={first} a11y={`Looks for ${first}.`} strong testID="home-search-words" />
-            {!card && <Text style={s.note} testID="home-search-offline">{SEARCH_OFFLINE_LINE}</Text>}
+            <HomeRow colors={colors} text={first} a11y={t('Looks for {words}.', { words: first })} strong testID="home-search-words" />
+            {!card && <Text style={s.note} testID="home-search-offline">{t(LINES.searchOffline)}</Text>}
             {card && !card.items.length && <Text style={s.note} testID="home-search-empty">{searchEmptyLine(q, card.km)}</Text>}
             {card?.items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-search-row-${p.id}`} />)}
             {card?.more && (
-                <HomeLink id="search:more" colors={colors} text="See more" a11y={`See more listings for ${q || 'this search'} in the Market`} onPress={() => onMore(q)} testID="home-search-more" />
+                <HomeLink id="search:more" colors={colors} text={t('See more')}
+                    a11y={q ? t('See more listings for {words} in the Market', { words: q }) : t('See more listings for this search in the Market')} onPress={() => onMore(q)} testID="home-search-more" />
             )}
         </>
     );
@@ -464,10 +484,10 @@ export function StartBody({ words, button, colors, onLookAround, onSkip }: {
                     onPress={onSkip}
                     style={{ minHeight: HOME_TARGET_DP, minWidth: HOME_TARGET_DP, paddingHorizontal: 12, justifyContent: 'center' }}
                     accessibilityRole="button"
-                    accessibilityLabel="Skip the tour"
+                    accessibilityLabel={t('Skip the tour')}
                     testID="home-start-skip"
                 >
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>Skip</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>{t('Skip')}</Text>
                 </Pressable>
             </View>
         </View>

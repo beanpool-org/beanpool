@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, type HomeSearchKind, type SkySettings } from '@beanpool/core';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, t, type HomeSearchKind, type SkySettings } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName } from '../../utils/home-cards';
-import { POST_CATEGORIES } from '../../constants/categories';
+import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { editHomeStyles } from './EditHomeSheet';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
@@ -63,36 +63,36 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                 <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="card-settings-sheet">
                     <View style={editHomeStyles.head}>
                         <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{name}</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Cancel" testID="card-settings-cancel">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Cancel</Text>
+                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="card-settings-cancel">
+                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
                     <ScrollView style={editHomeStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
                         {sky ? (
-                            <SettingChips label="Whose place" id="place" colors={colors} value={place} onPick={setPlace}
-                                options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: p.label }))} />
+                            <SettingChips label={t('Whose place')} id="place" colors={colors} value={place} onPick={setPlace}
+                                options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: t(p.label) }))} />
                         ) : (<>
-                            <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">Words to look for</Text>
+                            <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">{t('Words to look for')}</Text>
                             <TextInput
                                 value={q}
                                 onChangeText={setQ}
                                 maxLength={HOME_SEARCH_MAX_CHARS}
-                                placeholder="eggs"
+                                placeholder={t('eggs', undefined, 'an example of words to look for')}
                                 placeholderTextColor={colors.text.muted}
                                 style={[settingsStyles.input, { color: colors.text.body, borderColor: colors.border.strong, backgroundColor: colors.surface.app }]}
-                                accessibilityLabel="Words to look for"
+                                accessibilityLabel={t('Words to look for')}
                                 accessibilityLabelledBy="card-settings-words-label"
                                 returnKeyType="done"
                                 onSubmitEditing={() => { if (words) done(); }}
                                 testID="card-settings-words"
                             />
-                            <SettingChips label="Show" id="kind" colors={colors} value={kind} onPick={setKind}
-                                options={SEARCH_KIND_CHIPS.map(k => ({ value: k.kind, label: k.label }))} />
-                            <SettingChips label="Category" id="category" colors={colors} value={category} onPick={setCategory}
-                                options={[{ value: null, label: 'Any category' }, ...POST_CATEGORIES.map(c => ({ value: c.id as string | null, label: `${c.emoji} ${c.label}` }))]} />
+                            <SettingChips label={t('Show')} id="kind" colors={colors} value={kind} onPick={setKind}
+                                options={SEARCH_KIND_CHIPS.map(k => ({ value: k.kind, label: t(k.label) }))} />
+                            <SettingChips label={t('Category')} id="category" colors={colors} value={category} onPick={setCategory}
+                                options={[{ value: null, label: t('Any category') }, ...POST_CATEGORIES.map(c => ({ value: c.id as string | null, label: `${c.emoji} ${categoryLabel(c.id)}` }))]} />
                             {hasPoint && (
-                                <SettingChips label="Distance" id="km" colors={colors} value={km} onPick={setKm}
-                                    options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map(k => ({ value: k as number | null, label: `${k} km` }))]} />
+                                <SettingChips label={t('Distance')} id="km" colors={colors} value={km} onPick={setKm}
+                                    options={[{ value: null, label: t('Any distance') }, ...HOME_SEARCH_KMS.map(k => ({ value: k as number | null, label: t('{distance} km', { distance: k }) }))]} />
                             )}
                         </>)}
                         <Pressable
@@ -100,11 +100,11 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                             onPress={done}
                             style={[settingsStyles.button, { backgroundColor: ready ? colors.brand.fill : colors.surface.subtle }]}
                             accessibilityRole="button"
-                            accessibilityLabel={mode === 'add' ? `Add ${name} to Home` : `Save ${name}`}
+                            accessibilityLabel={mode === 'add' ? t('Add {card} to Home', { card: name }) : t('Save {card}', { card: name })}
                             accessibilityState={{ disabled: !ready }}
                             testID="card-settings-done"
                         >
-                            <Text style={[settingsStyles.buttonText, { color: ready ? colors.text.inverse : colors.text.secondary }]}>{mode === 'add' ? 'Add to Home' : 'Save'}</Text>
+                            <Text style={[settingsStyles.buttonText, { color: ready ? colors.text.inverse : colors.text.secondary }]}>{mode === 'add' ? t('Add to Home') : t('Save')}</Text>
                         </Pressable>
                     </ScrollView>
                 </View>

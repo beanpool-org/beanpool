@@ -70,6 +70,8 @@ Home shows only the cards that have something to tell you, in this order from to
 - **Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.
 - **Your community:** member count and trades this month. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed.
 
+On the phone, when your community has moved to a new address, a card above all of these asks whether to use it: see "When your community moves to a new address" in "More than one community".
+
 ## The "…" menu
 
 Most cards have a **…** button at the top right. These do not:

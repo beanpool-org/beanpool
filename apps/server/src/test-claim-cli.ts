@@ -119,7 +119,8 @@ const registrar = http.createServer((req, res) => {
     req.on('end', () => {
         const send = (code: number, data: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
         if (!req.headers['x-bp-pubkey'] || !req.headers['x-bp-signature']) return send(401, { error: 'unsigned' });
-        if (req.url === '/api/registrar/status') return send(200, { status: reg.status, name: reg.name, hostname: reg.name ? `${reg.name}.beanpool.org` : null });
+        // The path alone: the main server's /status asks for notices (?notices=1), as the real registrar reads it.
+        if (req.url?.split('?')[0] === '/api/registrar/status') return send(200, { status: reg.status, name: reg.name, hostname: reg.name ? `${reg.name}.beanpool.org` : null });
         if (req.url === '/api/registrar/claim' && req.method === 'POST') {
             const b = JSON.parse(body || '{}');
             reg.claims++;
@@ -234,7 +235,7 @@ async function main(): Promise<void> {
         const findScreen = fs.readFileSync(path.join(nativeApp, 'app/find-community.tsx'), 'utf8');
         const homeCard = fs.readFileSync(path.join(nativeApp, 'components/home/FindCommunityBody.tsx'), 'utf8');
         check(['>Claim {name}<', '>Claim code<', '>Your name here<', '>Claim and become owner<', '>Claim a community<', '>Server address<', '>Check this server<'].every(l => claimScreen.includes(l))
-            && ['>Find a community<', '>Claim {claimable.name}<'].every(l => findScreen.includes(l)) && homeCard.includes('text="Communities near you"'),
+            && ['>Find a community<', '>Claim {claimable.name}<'].every(l => findScreen.includes(l)) && homeCard.includes("text={t('Communities near you')}"),
             'every label the steps name is still on the phone');
         check(readConfig(a).addressRequest === null, 'the request is cleared once the registrar holds the name');
 

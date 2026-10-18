@@ -5,7 +5,7 @@
  * lib/home-layout.ts, proved in home-layout.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { NEAR_COMMUNITY_KM } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, pluralKey, setLanguage } from '@beanpool/core';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
@@ -202,6 +202,25 @@ describe('the words (§3.1, §9)', () => {
         // 250 km is near; just past it is not.
         expect(findBody({ ...loaded, communities: [{ ...lismore, distanceKm: 250 }] })).toBe('The community nearest you. Ask to join, and trade with your neighbours there.');
         expect(findOffersStart({ ...loaded, communities: [{ ...lismore, distanceKm: 251 }] })).toBe(true);
+    });
+
+    it('"none" and the far line are one language: both halves through t() (deciding review of #2152)', () => {
+        const loaded = { ...find, directoryFetchedAt: '2026-10-14T08:00:00.000Z' };
+        const lismore = { key: 'l', name: 'Lismore', url: 'https://lismore.example', memberCount: 12, distanceKm: 12_489 };
+        // A French catalog that gives every key a value (the drafting pass will write the real ones).
+        setLanguage('fr', [{
+            [FIND_COMMUNITY_WORDS.noneNear]: 'Aucune communauté près de chez vous pour l’instant.',
+            [FIND_COMMUNITY_WORDS.notLoaded]: 'La liste des communautés n’est pas disponible. Réessayez bientôt.',
+            [pluralKey('The nearest listed is far from here:', 'The nearest listed are far from here:')]: { one: 'La plus proche est loin d’ici :', other: 'Les plus proches sont loin d’ici :' },
+        }]);
+        try {
+            expect(findBody({ ...loaded, communities: [lismore] })).toBe('Aucune communauté près de chez vous pour l’instant. La plus proche est loin d’ici :');
+            expect(findBody({ ...loaded, communities: [lismore, { ...lismore, key: 'm', distanceKm: 12_530 }] })).toBe('Aucune communauté près de chez vous pour l’instant. Les plus proches sont loin d’ici :');
+            expect(findBody({ ...loaded, communities: [], communityCount: 0 })).toBe('Aucune communauté près de chez vous pour l’instant.');
+            expect(findBody({ ...find, communities: [] })).toBe('La liste des communautés n’est pas disponible. Réessayez bientôt.');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('near: only communities within 250 km are called nearest you or listed under it (#1935 finding 2)', () => {

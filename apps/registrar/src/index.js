@@ -1,6 +1,7 @@
 // Beanpool node-address registrar — Cloudflare Worker.
 //   fetch:     claim / heal / rotate / status / release / holder (signed by node key) + admin approve/pause/resume/block/
-//              release + switchboard
+//              release + switchboard; notices from the admin to names, carried by each node's /status (migration 0012), and
+//              their one-use reply links, checked and taken through the ReplyTokens entrypoint (src/worker.js)
 //   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
 //              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
 //              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, a claim whose provisioning never finished is finished, and deletions
@@ -21,6 +22,7 @@ import * as alerts from './alerts.js';
 import * as settings from './settings.js';
 import { accessMode, accessIdentity } from './access.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
+import { handleStatusJson } from './status.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -1186,11 +1188,21 @@ async function handleRotate(request, env, bodyText) {
 // install's claim answered after the owner's pick). Without it, or for a name that is not this key's, the key's first
 // row as before. Read only when x-bp-signature-query covers it (sign.js signedQuery): a captured /status replayed inside
 // the clock window with another `?name=` gets the first row, as before `?name=` existed, never the row it names.
+// `notices`: what the admin sent this key and it has not seen yet (carryNotices), in any state that holds a name —
+// blocked too — only to a node that asks for them with `?notices=1`, read under the same signature; `?seen=`: the
+// highest notice id the node has, so those are never carried again. An older node asks for none: it stores the whole
+// answer in its saved address (routes/public-address.ts on main spreads it in), so a notice carried to it would sit there
+// with its live reply link, never shown and never seen (#2151 review 4306341021). It is carried nothing, and nothing is
+// marked delivered to it.
 async function handleStatus(request, env) {
     const pubkey = await signer(request, env, '');
     if (pubkey instanceof Response) return pubkey;
-    await db.touchContact(env, pubkey, nowS(), requestProto(request));
-    const asked = ((await signedQuery(request, '', pubkey)).get('name') || '').toLowerCase();
+    const now = nowS();
+    await db.touchContact(env, pubkey, now, requestProto(request));
+    const query = await signedQuery(request, '', pubkey);
+    const asked = (query.get('name') || '').toLowerCase();
+    const seenText = query.get('seen') || '';
+    const seen = /^\d{1,15}$/.test(seenText) ? Number(seenText) : 0;
     const named = NAME_RE.test(asked) ? await db.getAllocation(env, asked) : null;
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
@@ -1207,6 +1219,10 @@ async function handleStatus(request, env) {
         if (token !== undefined) out.tunnelToken = token;
         // Routed, but not yet listed: the node's directory push waits until this is gone (onProbation).
         if (onProbation(a)) out.probation = true;
+    }
+    if (query.get('notices') === '1') {
+        const notices = await carryNotices(env, pubkey, seen, now);
+        if (notices.length) out.notices = notices;
     }
     return json(out);
 }
@@ -1552,7 +1568,8 @@ async function forgetRow(env, a, now, actor = ADMIN) {
     if (isOwnRow(a, a.node_pubkey))
         return json({ error: `${name} can still be taken back by the key that released it (${a.pause_reason || 'released'}): free it now first`, status: a.status, takes_back: true }, 409);
     const had = [a.tunnel_id && 'tunnel', a.dns_record_id && 'DNS record'].filter(Boolean);
-    if (!(await stopRouting(env, a, { status: 'abandoned' }))) return null;
+    // Its contact goes with it (design §3.2): nobody holds the name any more (the sweep clears any other row past its hold).
+    if (!(await stopRouting(env, a, { status: 'abandoned', contact: null }))) return null;
     const after = await db.getAllocation(env, name);
     if (after?.status === 'abandoned') await owe(env, '[FORGET_LEFT]', name, 'tunnel', after.tunnel_id);
     const left = after?.status === 'abandoned' ? [after.tunnel_id && 'tunnel', after.dns_record_id && 'DNS record'].filter(Boolean) : [];
@@ -1753,6 +1770,159 @@ async function handleSettings(env, bodyText, who = null) {
     if (problem) return json({ error: problem }, 400);
     await tell(env, () => alerts.adminSetting(env, { who: who?.email, what: reset ? `put ${b.key} back to its default` : `set ${b.key} to ${b.value}` }));
     return json(await sourcesPanel(env));
+}
+
+// --- Notices to the operators of names (slice S2, design §3.2; migration 0013; D4 decided by Marty 2026-10-18) ---
+// The admin writes to one name, a group of names (a source or a network from "New names, last 24 h", or a list) or every
+// name, from /admin; each node hears it on its own check-in — its signed /status, every 5 or 15 minutes — and says it has
+// it with `seen` on its next one. Nothing is collected to reach anyone: no address, no account, and a blocked name's node
+// still checks in, so it hears too. A reply goes through a one-use link (REPLY_URL<token>: apps/feedback's page, which asks
+// this Worker through the ReplyTokens entrypoint, src/worker.js), so the operator chooses what to say and we learn nothing
+// else. A convenience, never a dependency (no-domain-lock-in): a node that never hears one loses nothing it needs, and a
+// failure here never fails a /status.
+const NOTICE_TEXT_MAX = 500;
+const NOTICE_LEVELS = ['info', 'warning', 'action'];
+const NOTICES_PER_STATUS = 5;
+const NOTICE_DAYS = { def: 14, max: 90 };
+const NOTICE_NAMES_MAX = 50;              // D1 binds at most 100 values a query
+const NOTICE_KEEP_S = 30 * 86400;         // a notice past its time stays in /admin's list this long, then goes
+const REPLY_S = 14 * 86400;               // a reply link works this long after its notice reached the node
+const REPLY_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;   // 32 random bytes, base64url
+
+// Where a reply link points: REPLY_URL (a self-hoster's registrar with no reply page sets none, and its notices carry no
+// link), an https URL ending in '/', the token appended. Null when unset or not that.
+export function replyBase(env) {
+    const v = typeof env.REPLY_URL === 'string' ? env.REPLY_URL.trim() : '';
+    if (!v.endsWith('/')) return null;
+    try { return new URL(v).protocol === 'https:' ? v : null; } catch { return null; }
+}
+const base64url = (bytes) => globalThis.btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const sha256Hex = async (text) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+
+// What `pubkey`'s /status carries, after taking its `seen` (the highest notice id it has): up to NOTICES_PER_STATUS
+// notices it has not seen, oldest first, each about a name it still holds. One carried for the first time is marked
+// delivered and, when it carries a reply link and REPLY_URL is set, given its token: a random one, whose SHA-256 alone is
+// kept beyond the node's `seen` (reply_tokens). [] on any failure, a database without migration 0013 included.
+async function carryNotices(env, pubkey, seen, now) {
+    try {
+        if (seen > 0) await db.ackNotices(env, pubkey, seen, now);
+        const base = replyBase(env);
+        const out = [];
+        for (const r of await db.noticesFor(env, pubkey, now, NOTICES_PER_STATUS)) {
+            let token = r.reply_token;
+            if (r.delivered_at === null) {
+                token = r.reply && base ? base64url(crypto.getRandomValues(new Uint8Array(32))) : null;
+                // Another /status of this key carried it first: carried here without a link, which the next one carries.
+                if (!(await db.markDelivered(env, r.notice_id, pubkey, now, token))) token = null;
+                else if (token) {
+                    try {
+                        await db.insertReplyToken(env, { token_hash: await sha256Hex(token), notice_id: r.notice_id, node_pubkey: pubkey, name: r.name, at: now, expires_at: now + REPLY_S });
+                    } catch (e) {
+                        console.error('[NOTICE_REPLY]', r.notice_id, e.message || e);
+                        token = null;
+                        await db.forgetReplyToken(env, r.notice_id, pubkey);
+                    }
+                }
+            }
+            out.push({ id: r.notice_id, at: r.at, level: r.level, text: r.text, name: r.name, ...(token && base ? { link: `${base}${token}` } : {}) });
+        }
+        return out;
+    } catch (e) {
+        if (!/no such table/i.test(String(e?.message || e))) console.error('[NOTICES]', key16(pubkey), e.message || e);
+        return [];
+    }
+}
+
+// A reply link's token, as apps/feedback's page has it from its URL (the ReplyTokens entrypoint, src/worker.js): does it
+// still work — not used, not past its time, its name still held by the key it was made for? Says nothing else: not the
+// name, not the key.
+export async function checkReplyToken(env, token) {
+    if (typeof token !== 'string' || !REPLY_TOKEN_RE.test(token)) return { ok: false };
+    try { return { ok: await db.replyTokenLive(env, await sha256Hex(token), nowS()) }; }
+    catch (e) { console.error('[REPLY_TOKEN]', e.message || e); return { ok: false }; }
+}
+
+// The reply link's one use, when the operator sends their reply: the name and notice it answers, to the feedback Worker
+// alone (which files the reply under that name in the feedback inbox), or { ok: false } — used, past its time, its name
+// released, or never one. The admin's phone hears of it (a name and a notice number, never the words: they are in the
+// feedback inbox). `env` with waitUntil, for the alert's send.
+export async function redeemReplyToken(env, token) {
+    if (typeof token !== 'string' || !REPLY_TOKEN_RE.test(token)) return { ok: false };
+    let row;
+    try { row = await db.takeReplyToken(env, await sha256Hex(token), nowS()); }
+    catch (e) { console.error('[REPLY_TOKEN]', e.message || e); return { ok: false }; }
+    if (!row) return { ok: false };
+    await logEvent(env, row.name, 'notice-reply', `its owner answered notice #${row.notice_id} through its reply link (the words are in the feedback inbox)`);
+    await tell(env, () => alerts.noticeReply(env, { name: row.name, id: row.notice_id }));
+    return { ok: true, name: row.name, notice_id: row.notice_id };
+}
+
+// Who a notice goes to, from the admin's { to }: { names: [...] } (1 to NOTICE_NAMES_MAX), { source: <id> } or { asn: n }
+// (a group in "New names, last 24 h"), { all: true }. The recipients' description, in words, for the list and the alert;
+// or the problem.
+function noticeAudience(to) {
+    if (to?.all === true) return { to: { all: true }, words: 'every name' };
+    if (typeof to?.source === 'string' && HASH_RE.test(to.source)) return { to: { source: to.source }, words: `the names from source ${to.source.slice(0, 8)}` };
+    if (Number.isSafeInteger(to?.asn) && to.asn > 0) return { to: { asn: to.asn }, words: `the names from network AS${to.asn}` };
+    const names = Array.isArray(to?.names) ? [...new Set(to.names.map((n) => String(n).trim().toLowerCase()))] : null;
+    if (names && names.length && names.length <= NOTICE_NAMES_MAX && names.every((n) => NAME_RE.test(n)))
+        return { to: { names }, words: names.length === 1 ? names[0] : `${names.length} names (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''})` };
+    return { problem: `to must be { names: [1 to ${NOTICE_NAMES_MAX} names] }, { source: <a source id from the panel> }, { asn: <a number> } or { all: true }` };
+}
+
+// The admin's words, as a node shows them: at most NOTICE_TEXT_MAX characters, lines kept, nothing that hides or reorders
+// text. The text, or the problem.
+function noticeText(v) {
+    if (typeof v !== 'string') return { problem: 'text must be the words to send' };
+    const text = v.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!text) return { problem: 'text must be the words to send' };
+    // As a label's (BAD_TEXT), but a notice may break lines.
+    if (BAD_TEXT.test(text.replace(/\n/g, ''))) return { problem: 'text may not hold control characters or characters that reorder text' };
+    if ([...text].length > NOTICE_TEXT_MAX) return { problem: `text must be at most ${NOTICE_TEXT_MAX} characters` };
+    return { text };
+}
+
+// POST /api/local/admin/registrar/notices { to, text, level?, reply?, days? }: a notice, to every key holding one of the
+// audience's names now (one per key), carried by each one's next /status for `days` (default 14, at most 90). `reply`:
+// each delivery carries a one-use reply link (only with REPLY_URL set). Each name's history records it (its id and level,
+// never its words), and the admin's phone hears it was sent (how many names, never the words). Refused (400) when no
+// name of the audience is held now.
+async function handleNoticeSend(env, bodyText, who = null) {
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const aud = noticeAudience(b?.to);
+    if (aud.problem) return json({ error: aud.problem }, 400);
+    const t = noticeText(b?.text);
+    if (t.problem) return json({ error: t.problem }, 400);
+    const level = b.level === undefined ? 'info' : b.level;
+    if (!NOTICE_LEVELS.includes(level)) return json({ error: `level must be one of ${NOTICE_LEVELS.join(', ')}` }, 400);
+    const days = b.days === undefined ? NOTICE_DAYS.def : b.days;
+    if (!Number.isInteger(days) || days < 1 || days > NOTICE_DAYS.max) return json({ error: `days must be a whole number from 1 to ${NOTICE_DAYS.max}` }, 400);
+    if (b.reply === true && !replyBase(env)) return json({ error: 'reply links are off: REPLY_URL is not set (wrangler.toml)' }, 400);
+    const now = nowS();
+    const id = await db.insertNotice(env, { at: now, level, text: t.text, reply: b.reply === true, expires_at: now + days * 86400, audience: aud.words, by: who?.email });
+    const sent = await db.addRecipients(env, id, aud.to, now - SOURCE_KEEP_S);
+    if (!sent) {
+        await db.deleteNotice(env, id);
+        return json({ error: `no name in ${aud.words} is held now: nothing was sent` }, 400);
+    }
+    const actor = actorOf(who);
+    try { await db.noticeEvents(env, id, `notice #${id} (${level}${b.reply === true ? ', with a reply link' : ''}) sent by ${actor} to ${aud.words}`, now); }
+    catch (e) { console.error('[NAME_EVENT]', 'notice', id, e.message || e); }
+    await tell(env, () => alerts.noticeSent(env, { who: who?.email, id, level, names: sent, audience: aud.words }));
+    return json({ id, recipients: sent, expires_at: now + days * 86400 });
+}
+
+// GET /api/local/admin/registrar/notices: the latest notices with how many each reached and how many replied, and
+// whether reply links are on; `?id=`: that notice's recipients (each name, when it was carried and seen, replied).
+async function handleNoticeList(env, url) {
+    const id = parseInt(url.searchParams.get('id') || '', 10);
+    try {
+        if (Number.isSafeInteger(id) && id > 0) return json({ id, recipients: await db.noticeRecipients(env, id, 1000) });
+        return json({ notices: await db.listNotices(env, 50), reply_links: !!replyBase(env), text_max: NOTICE_TEXT_MAX, days: NOTICE_DAYS, names_max: NOTICE_NAMES_MAX });
+    } catch (e) {
+        if (!/no such table/i.test(String(e?.message || e))) throw e;
+        return json({ schema: false, error: 'migration 0013 is not applied: notices cannot be sent', notices: [] });
+    }
 }
 
 // --- Switchboard (Invite resolution / trampoline) ---
@@ -2053,6 +2223,7 @@ export async function attestSweep(invocationEnv) {
     await alertConditions(env, j, s);
     await finishOrphans(d1);
     await pruneSources(d1, s);
+    await noticeUpkeep(d1);
     // One send for the sweep, last: what alertConditions told, the New community alert of names it verified, and whatever still
     // waits from a failed send (a try every 5 minutes, with the cron). Under waitUntil: the sweep never waits for ntfy.
     await alerts.sendWaiting(env);
@@ -2172,6 +2343,20 @@ async function pruneSources(d1, s) {
     try { await db.pruneSources(d1.env, nowS() - SOURCE_KEEP_S); } catch (e) { console.error('[SOURCE_PRUNE]', e.message || e); }
 }
 
+// Contact retention and the notices' tidying (migration 0013, design §3.2), last, each only with queries to spare (d1Meter)
+// past the sweep's send. Every sweep: a contact is cleared once its name's hold is over, or the name is abandoned — one
+// statement (db.clearLapsedContacts). Once an hour (the first sweep of it): reply links never used past their time, and
+// notices NOTICE_KEEP_S past theirs with their recipients and links, go (three statements). Never throws.
+async function noticeUpkeep(d1) {
+    const env = d1.env;
+    const now = nowS();
+    if (d1.left() < 1 + sendD1(env)) return;
+    try { await db.clearLapsedContacts(env, now - releaseCooloffS(env)); } catch (e) { console.error('[CONTACT_RETENTION]', e.message || e); }
+    if (Math.floor(now / 300) % 12 !== 0 || d1.left() < 3 + sendD1(env)) return;
+    try { await db.pruneNotices(env, now, NOTICE_KEEP_S); }
+    catch (e) { if (!/no such table/i.test(String(e?.message || e))) console.error('[NOTICE_PRUNE]', e.message || e); }
+}
+
 async function finishOrphan(env, a, now) {
     if (await outsidePending(env, a)) {
         console.warn('[ORPHAN_LEFT]', a.name, 'pending: something the registrar did not make routes the name at Cloudflare; left for its claim or the admin');
@@ -2281,6 +2466,8 @@ export default {
             if (method === 'GET' && p === '/api/registrar/health')
                 return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
+            // The public status line of our servers (src/status.js), for beanpool.org/status: no names but ours.
+            if (method === 'GET' && p === '/api/registrar/status.json') return await handleStatusJson(env);
             if (method === 'POST' && p === '/api/registrar/claim') return await finishing(env, handleClaim(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/heal') return await finishing(env, handleHeal(request, env, bodyText));
             if (method === 'POST' && p === '/api/registrar/rotate') return await finishing(env, handleRotate(request, env, bodyText));
@@ -2334,6 +2521,10 @@ export default {
                 if (method === 'POST' && p === '/api/local/admin/registrar/sources') return await finishing(env, handleSourceAction(env, bodyText, who));
                 if (method === 'POST' && p === '/api/local/admin/registrar/blocked') return await handleBlocked(env, bodyText, who);
                 if (method === 'POST' && p === '/api/local/admin/registrar/settings') return await handleSettings(env, bodyText, who);
+                // Notices (design §3.2): the latest with how many each reached (one's recipients with ?id=), and a new one
+                // to a name, a group or every name.
+                if (method === 'GET' && p === '/api/local/admin/registrar/notices') return await handleNoticeList(env, url);
+                if (method === 'POST' && p === '/api/local/admin/registrar/notices') return await handleNoticeSend(env, bodyText, who);
                 if (method === 'GET' && p === '/api/local/admin/registrar/events') {
                     const name = (url.searchParams.get('name') || '').toLowerCase();
                     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);

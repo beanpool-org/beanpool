@@ -4,6 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
+import { t, tn } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { poolVoteBlocker } from './decision-card';
@@ -138,20 +139,18 @@ export interface AdminWordsNode {
     decisions?: boolean;
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /** One admin-queue item in words: "2 reports to review". Kinds from apps/server/src/engine/admin-queue.ts. */
 export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, node: AdminWordsNode = {}): string {
     const n = i.count;
     switch (i.kind) {
-        case 'reports': return `${plural(n, 'report', 'reports')} to review`;
-        case 'disputes': return `${plural(n, 'stalled trade', 'stalled trades')} awaiting a ruling`;
+        case 'reports': return tn(n, '{n} report to review', '{n} reports to review');
+        case 'disputes': return tn(n, '{n} stalled trade awaiting a ruling', '{n} stalled trades awaiting a ruling');
         // The phone's own words rather than the node's label, so a node whose label still speaks of a vote is not believed.
         case 'suspensions': return node.decisions === false
-            ? (n === 1 ? '1 emergency suspension in its 7 days' : `${n} emergency suspensions in their 7 days`)
-            : `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
-        case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
-        case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
+            ? tn(n, '{n} emergency suspension in its 7 days', '{n} emergency suspensions in their 7 days')
+            : tn(n, '{n} emergency suspension the community is voting on', '{n} emergency suspensions the community is voting on');
+        case 'removals': return tn(n, '{n} removal in its 7-day grace period', '{n} removals in their 7-day grace period');
+        case 'unclean_shutdown': return t('the node restarted after an unclean shutdown');
         // A kind a newer node added: its own label, with the count.
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
@@ -162,7 +161,7 @@ const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** "2 reports to review", "2 reports to review and 1 stalled trade awaiting a ruling", "A, B and C". */
 export function adminLabel(items: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>[], node: AdminWordsNode = {}): string {
     const parts = items.map(i => adminItemInWords(i, node));
-    const joined = parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+    const joined = parts.length <= 1 ? (parts[0] ?? '') : t('{items} and {last}', { items: parts.slice(0, -1).join(', '), last: parts[parts.length - 1] });
     return capitalise(joined);
 }
 
@@ -171,13 +170,13 @@ export function closesInWords(closesAt: string, now: number): string {
     const closes = new Date(closesAt);
     const ms = closes.getTime() - now;
     const hours = Math.floor(ms / 3600_000);
-    if (hours < 1) return 'closes within the hour';
-    if (hours < 12) return `closes in ${plural(hours, 'hour', 'hours')}`;
+    if (hours < 1) return t('closes within the hour');
+    if (hours < 12) return tn(hours, 'closes in {n} hour', 'closes in {n} hours');
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const days = Math.round((startOfDay(closes) - startOfDay(new Date(now))) / 86400_000);
-    if (days <= 0) return closes.getHours() >= 17 ? 'closes tonight' : 'closes later today';
-    if (days === 1) return 'closes tomorrow';
-    return `closes in ${days} days`;
+    if (days <= 0) return closes.getHours() >= 17 ? t('closes tonight') : t('closes later today');
+    if (days === 1) return t('closes tomorrow');
+    return tn(days, 'closes in {n} day', 'closes in {n} days');
 }
 
 /** A step that is the member's to take: accept a request made to them, or finish a deal in progress. */
@@ -208,7 +207,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         const [first] = deals;
         out.push({
             kind: 'deal', count: deals.length, accent: true,
-            label: deals.length === 1 ? 'A deal is waiting for you' : `${deals.length} deals waiting for you`,
+            label: deals.length === 1 ? t('A deal is waiting for you') : tn(deals.length, '{n} deal waiting for you', '{n} deals waiting for you'),
             target: deals.length === 1 && first.postId ? { to: 'deal', postId: first.postId, txId: first.id } : { to: 'my-deals' },
         });
     }
@@ -227,7 +226,9 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
             out.push({
                 kind: 'vote', count: votes.length,
                 accent: Date.parse(soonest) - i.now <= VOTE_ACCENT_WINDOW_MS,
-                label: votes.length === 1 ? `Vote ${when}` : `${votes.length} votes to cast, the first ${when}`,
+                label: votes.length === 1
+                    ? t('Vote {closes}', { closes: when })
+                    : tn(votes.length, '{n} vote to cast, the first {closes}', '{n} votes to cast, the first {closes}', { closes: when }),
                 target: { to: 'decide' },
             });
         }
@@ -238,8 +239,10 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         out.push({
             kind: 'message', count: dms.length, accent: false,
             label: dms.length === 1
-                ? (dms[0].unread === 1 ? `Unread message from ${dms[0].peer}` : `${dms[0].unread} unread messages from ${dms[0].peer}`)
-                : `Unread messages from ${dms.length} people`,
+                ? (dms[0].unread === 1
+                    ? t('Unread message from {name}', { name: dms[0].peer })
+                    : tn(dms[0].unread, '{n} unread message from {name}', '{n} unread messages from {name}', { name: dms[0].peer }))
+                : tn(dms.length, 'Unread messages from {n} person', 'Unread messages from {n} people'),
             target: dms.length === 1 ? { to: 'chat', conversationId: dms[0].id } : { to: 'unread-messages' },
         });
     }
@@ -251,7 +254,9 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         const [g] = groups;
         out.push({
             kind: 'group', count: groups.length, accent: false,
-            label: groups.length === 1 ? `${plural(g.unreadCount, 'new line', 'new lines')} in ${g.name}` : `New lines in ${groups.length} of your groups`,
+            label: groups.length === 1
+                ? tn(g.unreadCount, '{n} new line in {name}', '{n} new lines in {name}', { name: g.name })
+                : tn(groups.length, 'New lines in {n} of your groups', 'New lines in {n} of your groups'),
             target: groups.length === 1
                 ? (g.kind === 'event'
                     ? { to: 'chat', conversationId: g.conversationId, event: true }
@@ -288,5 +293,5 @@ export function needsYouRowOrder(fit: { shown: NeedsYouEntry[]; hidden: number }
 }
 
 export function moreLabel(hidden: number): string {
-    return hidden === 1 ? '1 more thing needs you' : `${hidden} more things need you`;
+    return tn(hidden, '{n} more thing needs you', '{n} more things need you');
 }

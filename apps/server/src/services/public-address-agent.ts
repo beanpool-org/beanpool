@@ -10,7 +10,8 @@
 // Every 5 min on a main server (every 15 while its name is live and nothing is pending: tickDue) it asks the registrar
 // about this server's name and saves a live answer; the tunnel inside
 // this server (services/tunnel-connector.ts) runs whatever token that holds. That refresh runs on any main server holding a
-// tunnel address (live, or waiting for approval), however it was claimed, and never claims a name. Only with the env above does it also claim: the
+// BeanPool name (live, or waiting for approval), tunnel or direct, however it was claimed, and never claims a name; the
+// address service's notices ride on its answer (services/registrar-notices.ts). Only with the env above does it also claim: the
 // name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved;
 // a pending name the registrar is still making ('provisioning': no approval is coming) is asked for again with a heal.
 // A name the registrar's sweep paused (another node's key, or something that is no BeanPool node, answered at it) is asked
@@ -78,12 +79,15 @@ const isEnabled = (): boolean => envEnabled() || !!requestedName();
 export const nameAskedFor = (): string | null => (isEnabled() ? desiredName() || null : null);
 
 /**
- * A tunnel address saved here, live or waiting for approval: Settings' claim, this agent's, or a take-over's. A live one's
- * token can change (the registrar re-made the tunnel); a pending one goes live when the BeanPool project approves it.
+ * A BeanPool name saved here, tunnel or direct, live or waiting for approval: Settings' claim, this agent's, or a
+ * take-over's. A live tunnel's token can change (the registrar re-made the tunnel); a pending name goes live when the
+ * BeanPool project approves it; and the address service's notices come on the answer, whatever the kind (a direct name
+ * has no tunnel to ask for it: #2151 review 4306456979). A paused or blocked answer leaves the stored name as it was (it
+ * is written on the record of names), so the name is still asked about, and still hears them.
  */
-const holdsTunnelAddress = (): boolean => {
+const holdsRegistrarName = (): boolean => {
     const pa = (getNodeConfig() as any).publicAddress;
-    return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct' && !isOwnPublicAddress(pa);
+    return !!pa && (pa.status === 'live' || pa.status === 'pending') && !isOwnPublicAddress(pa);
 };
 
 /**
@@ -268,7 +272,7 @@ export function dropAddressRequest(why: string): void {
 export async function reconcile(): Promise<void> {
     if (getNodeRole() !== 'primary') return;
     const claims = isEnabled();
-    if (!claims && !holdsTunnelAddress()) return;
+    if (!claims && !holdsRegistrarName()) return;
 
     // Every answer below is stored only if nothing wrote the address while the registrar was asked (Settings' claim or
     // Take offline, a take-over): a late answer never moves the community off a name set after this tick began.

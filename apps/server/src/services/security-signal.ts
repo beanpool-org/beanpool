@@ -13,7 +13,21 @@
  */
 
 export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name' | 'sec.agent'
-    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address';
+    | 'sec.restore' | 'sec.backups' | 'sec.members' | 'sec.settings' | 'sec.address'
+    | 'reg.notice';
+
+/**
+ * A notice from the address service (services/registrar-notices.ts, registrar slice S2): told once per notice, in these
+ * words by its level. Never the notice's own words, which only Settings shows: what goes to the owners' channel is the
+ * server's own words, as for every other alert, so nothing the address service writes reaches a third-party channel.
+ */
+export const REGISTRAR_NOTICE_WORDS = {
+    info: 'The address service sent this community a message about its address. Open Settings → Public address to read it.',
+    warning: 'The address service sent this community a warning about its address. Open Settings → Public address to read it.',
+    action: "The address service asks this community's owners to act on its address. Open Settings → Public address to read what it says.",
+    /** The hour's fold line past the per-hour bound (SECURITY_PUSHES_PER_HOUR). */
+    more: { one: 'One more message from the address service came in the hour after the first ones were pushed: Settings → Public address.', many: '{n} more messages from the address service came in the hour after the first ones were pushed: Settings → Public address.' },
+} as const;
 
 /**
  * The address alert's words (sec.name), by why a name is lost, and its end: the name watch tells a change at once, and the

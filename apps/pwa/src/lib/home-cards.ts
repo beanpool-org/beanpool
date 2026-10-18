@@ -19,7 +19,7 @@
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, type FindCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, t, type FindCommunityState } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
@@ -484,11 +484,11 @@ export function findBody(f: HomeFind): string {
                 ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
                 : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
         case 'far':
-            return `${FIND_COMMUNITY_WORDS.noneNear} ${FIND_COMMUNITY_WORDS.farLead(f.communities.length)}`;
+            return FIND_COMMUNITY_WORDS.farLine(f.communities.length);
         case 'none':
-            return FIND_COMMUNITY_WORDS.noneNear;
+            return t(FIND_COMMUNITY_WORDS.noneNear);
         case 'not_loaded':
-            return FIND_COMMUNITY_WORDS.notLoaded;
+            return t(FIND_COMMUNITY_WORDS.notLoaded);
         case 'no_point': {
             const n = knownCommunityCount(f.communityCount);
             const see = 'Share your area, or type your town, to see the nearest.';

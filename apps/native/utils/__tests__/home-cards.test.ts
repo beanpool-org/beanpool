@@ -23,7 +23,7 @@ import {
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
+import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
@@ -406,7 +406,7 @@ describe('the frame: the picker, adding, and the members who were here before (C
         // Where only admins invite, a plain member isn't offered Grow your community: never shown as locked, just not there.
         expect(types(pickerGroups({ ...LOCAL_NODE, features: { ...LOCAL_NODE.features, door: 'admins' } }, null, null))).not.toContain('invite');
         // A type's state line, from the screen ("All tips seen").
-        expect(row(pickerGroups(LOCAL_NODE, null, 'admin', [], { tips: 'All tips seen' }), 'tips')!.status).toBe('All tips seen');
+        expect(row(pickerGroups(LOCAL_NODE, null, 'admin', [], { tips: TIPS_ALL_SEEN }), 'tips')!.status).toBe('All tips seen');
     });
 
     it('the worldwide community\'s picker lists no Beans, deals, enterprise, Decide or Grow your community; Find your community only after its pin', () => {

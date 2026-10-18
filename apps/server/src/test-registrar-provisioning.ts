@@ -19,6 +19,9 @@
  *  7. Probation (registrar slice S3): a live answer with `probation: true` is stored and the directory push waits; the
  *     first live answer without it lists the community at once (one push to a local registry fixture), not at the next
  *     timed push 12 hours on.
+ *  8. Settings (settings.js) shows each status answer once: the server answers 200 whether or not the address service
+ *     answered (#2143 item 1), so only a request that never reached the server is tried again. The name service's line
+ *     shows calmly, a paused name as paused, an own address as this server's own with its certificate.
  *
  * On origin/main 583a6cb0 sections 1–5 fail (the claim throws at 5 s; a provisioning answer is stored and the agent stops;
  * /holder's pending is only said; tickDue does not exist) and 6 shows "Awaiting approval".
@@ -352,6 +355,57 @@ async function main(): Promise<void> {
                 dir.close();
                 delete process.env.DIRECTORY_REGISTRY_URL;
             }
+        });
+
+        await section('8. Settings (settings.js): each answer shown once, the name service\'s calm line, an own address (#2143 item 1)', async () => {
+            const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'static', 'settings.js'), 'utf-8');
+            const fn = (head: string) => {
+                const start = src.indexOf(head);
+                let depth = 0, end = src.indexOf('{', start);
+                for (let i = end; i < src.length; i++) {
+                    if (src[i] === '{') depth++;
+                    else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+                }
+                return src.slice(start, end);
+            };
+            const els: Record<string, any> = {};
+            for (const id of ['pubaddr-display', 'pubaddr-token-row', 'pubaddr-claim-form', 'pubaddr-offline-btn', 'pubaddr-token']) els[id] = { innerHTML: '', value: '', style: {} };
+            const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+            let fetches = 0;
+            let answer: () => Promise<unknown> = async () => ({});
+            const timers: (() => unknown)[] = [];
+            const ctx = vm.createContext({
+                document: { getElementById: (id: string) => els[id] || null }, esc, API: '/api/local', adminHeaders: () => ({}), pollLiveLogs: () => {},
+                fetch: () => { fetches++; return answer(); },
+                setTimeout: (f: () => unknown) => { timers.push(f); return 0; },
+            });
+            vm.runInContext(`${fn('async function loadPublicAddress(')}\n${fn('function renderPublicAddress(d)')}\nthis.load = loadPublicAddress;`, ctx);
+            const respond = (status: number, body: unknown) => async () => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+            const open = async (r: () => Promise<unknown>) => {
+                fetches = 0;
+                timers.length = 0;
+                answer = r;
+                await ctx.load();
+                while (timers.length) await timers.shift()!();
+                return els['pubaddr-display'].innerHTML as string;
+            };
+            const LINE = "The BeanPool name service can't be reached right now.";
+
+            const down = await open(respond(200, { success: true, status: 'live', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', cached: true, nameServiceNote: LINE }));
+            assert(fetches === 1, `a stored name with the name service unreachable: asked once, never again (${fetches} requests)`);
+            assert(/cairns\.beanpool\.org/.test(down) && down.includes(esc(LINE)) && !/#f87171/.test(down), `…the name shown, with the calm line and nothing in red (${down})`);
+            const none = await open(respond(200, { success: true, status: 'none' }));
+            assert(fetches === 1 && /No public address yet/.test(none) && !/pubaddr-name-service/.test(none), `no address: asked once, "No public address yet", no line (${none})`);
+            const paused = await open(respond(200, { success: true, status: 'paused', name: 'cairns', hostname: 'cairns.beanpool.org', reason: 'impostor' }));
+            assert(fetches === 1 && /Paused/.test(paused) && /asks for it back by itself/.test(paused) && !/reach the registrar/.test(paused),
+                `a paused name: asked once and shown as paused (until #2143 item 1: asked three times, then "Couldn't reach the registrar") (${paused})`);
+            const own = await open(respond(200, { success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', tls: { certificate: null, nextRenewalAt: null, lastError: null } }));
+            assert(/203\.0\.113\.5/.test(own) && /own address/.test(own) && /No certificate yet/.test(own) && els['pubaddr-offline-btn'].style.display === 'none',
+                `an own address: shown as this server's own, with its certificate, and no Take offline (${own})`);
+            const refused = await open(respond(401, { error: 'Unauthorized' }));
+            assert(fetches === 1 && /Couldn.t load the address/.test(refused) && /Unauthorized/.test(refused), `this server refusing: said once, not asked again (${refused})`);
+            const gone = await open(async () => { throw new TypeError('Failed to fetch'); });
+            assert(fetches === 3 && /can&#39;t be reached/.test(gone), `only this server unreachable is tried again, twice, then said (${fetches} requests: ${gone})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

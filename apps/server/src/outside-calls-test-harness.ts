@@ -1,6 +1,6 @@
 /**
  * Our domains unresolvable, for a test process (not a suite itself; DESIGN-global-mothership-fable.md §2.4, slice A4):
- * nothing in the process reaches past this machine, and every try is counted, so a suite can say which hosts a node asked
+ * nothing on the process's main thread reaches past this machine, and every try is counted, so a suite can say which hosts a node asked
  * for, in which step, from which line of ours. test-no-mothership.ts installs it in each node it boots, before the node's
  * modules load, and in its own process for the phones.
  *
@@ -12,8 +12,12 @@
  *     (TypeError "fetch failed", its cause ENOTFOUND), and the request is never made.
  *   - a socket: Socket.prototype.connect (http, https, tls, net, a libp2p dial) to a host that is not loopback is destroyed
  *     with ENOTFOUND for a name, ENETUNREACH for an address (loopback-guard-test-harness.ts reads where a connect goes).
- * Not stopped: UDP. The one sender in the server is the DNS shim (dns-shim.ts), forwarding a LAN client's query, and no
- * suite sends it one.
+ * Not stopped:
+ *   - UDP. The one sender in the server is the DNS shim (dns-shim.ts), forwarding a LAN client's query, and no suite sends
+ *     it one.
+ *   - a worker thread, which is its own isolate: none of the patches here apply in it, and its calls are neither refused
+ *     nor counted (review 4305779703). The one in the server is the S3 image store's (storage/blocking-fetch.ts), on only
+ *     with IMAGE_STORE=s3, the global node's setting; a suite that turns it on counts nothing from it.
  *
  * Each try is one JSON line in `file` (appended synchronously, so a node that exits a moment later, as a restore or a
  * take-over does, still leaves it), with the host, the watched domain it falls under, and the first line of our code on

@@ -734,12 +734,6 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                                 </div>
                             )}
 
-                            {statusData?.error && (
-                                <div className="text-xs text-red-400">
-                                    Couldn&apos;t refresh registrar status — {String(statusData.error)}
-                                </div>
-                            )}
-
                             {tunnelLine && (
                                 <div
                                     data-testid="public-address-tunnel"
@@ -846,6 +840,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         <div className="text-xs text-red-400">
                             Couldn&apos;t reach the registrar{statusData?.error ? ` — ${String(statusData.error)}` : ''}.
                         </div>
+                    )}
+
+                    {/* The server's own fault acting on an answer the address service gave (storing it, the tunnel), in every
+                        state it answers with (an error answer says it in its own red line above). */}
+                    {(isLive || isPending || isPaused || isNone) && statusData?.error && (
+                        <p data-testid="public-address-server-error" className="m-0 text-xs text-red-400 break-words">
+                            {t("This server couldn't act on the address service's answer — {error}", { error: String(statusData.error) })}
+                        </p>
                     )}
 
                     {/* The address service gave no answer to use: one calm line beside what the server holds (#2143 item 1). */}

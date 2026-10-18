@@ -232,6 +232,10 @@
             // The address service gave no answer to use: one calm line under whatever this server holds (#2143 item 1).
             const nameServiceLine = typeof d.nameServiceNote === 'string' && d.nameServiceNote
                 ? `<div id="pubaddr-name-service" style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">${esc(d.nameServiceNote)}</div>` : '';
+            // This server's own fault acting on an answer the address service did give (storing it, the tunnel): shown in
+            // every state it answers with, as this server's.
+            const errorLine = d.error && d.status !== 'error'
+                ? `<div id="pubaddr-error" style="color:#f87171; font-size:0.8rem; margin-top:4px;">This server couldn't act on the address service's answer — ${esc(d.error)}</div>` : '';
             const own = d.status === 'live' && (d.mode === 'ip' || d.mode === 'own');
 
             if (own) {
@@ -241,14 +245,13 @@
                     : d.tls && d.tls.lastError ? `No certificate yet. The last try failed: ${esc(d.tls.lastError)}`
                     : d.tls ? 'No certificate yet: this server is asking for one.' : '';
                 display.innerHTML = `🟢 <strong style="color:#34d399;">Live</strong> at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(this server's own address)</span>`
-                    + (cert ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">${cert}</div>` : '') + nameServiceLine;
+                    + (cert ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">${cert}</div>` : '') + errorLine + nameServiceLine;
                 claimForm.style.display = '';
             } else if (d.status === 'live') {
                 const badge = d.cached
                     ? `🟢 <strong style="color:#34d399;">Live</strong> <span style="color:#fbbf24; font-size:0.75rem;">(cached status)</span>`
                     : `🟢 <strong style="color:#34d399;">Live</strong>`;
-                const errorNote = d.error ? `<div style="color:#f87171; font-size:0.8rem; margin-top:4px;">Couldn't refresh registrar status — ${esc(d.error)}</div>` : '';
-                display.innerHTML = `${badge} at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(${esc(d.mode || 'tunnel')})</span>${errorNote}${nameServiceLine}`;
+                display.innerHTML = `${badge} at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(${esc(d.mode || 'tunnel')})</span>${errorLine}${nameServiceLine}`;
                 offlineBtn.style.display = '';
                 if (d.tunnelToken) {
                     tokenRow.style.display = '';
@@ -257,31 +260,31 @@
             } else if (d.status === 'pending' && d.reason === 'provisioning') {
                 // An auto name the address service has not finished making: nobody's approval is needed, and this server asks again.
                 display.innerHTML = `⏳ <strong style="color:#fbbf24;">Setting up</strong> <strong>${esc(d.name || '')}.beanpool.org</strong> `
-                    + `<span style="color:#94a3b8;">— the address service is still making it; this usually takes under a minute.</span>${nameServiceLine}`;
+                    + `<span style="color:#94a3b8;">— the address service is still making it; this usually takes under a minute.</span>${errorLine}${nameServiceLine}`;
                 offlineBtn.style.display = '';
             } else if (d.status === 'pending') {
-                display.innerHTML = `⏳ <strong style="color:#fbbf24;">Awaiting approval</strong> for <strong>${esc(d.name || '')}.beanpool.org</strong>${nameServiceLine}`;
+                display.innerHTML = `⏳ <strong style="color:#fbbf24;">Awaiting approval</strong> for <strong>${esc(d.name || '')}.beanpool.org</strong>${errorLine}${nameServiceLine}`;
                 offlineBtn.style.display = '';
             } else if (d.status === 'paused') {
                 // The name stays this community's; every pause but the BeanPool project's own is lifted by this server.
                 display.innerHTML = `⏸️ <strong style="color:#fbbf24;">Paused</strong> <strong>${esc(d.hostname || `${d.name || ''}.beanpool.org`)}</strong> `
-                    + `<span style="color:#94a3b8;">— the name stays this community's${d.reason === 'admin' ? '; the BeanPool project paused it' : ', and this server asks for it back by itself'}.</span>${nameServiceLine}`;
+                    + `<span style="color:#94a3b8;">— the name stays this community's${d.reason === 'admin' ? '; the BeanPool project paused it' : ', and this server asks for it back by itself'}.</span>${errorLine}${nameServiceLine}`;
                 offlineBtn.style.display = '';
             } else if (d.status === 'none' && d.kept && d.kept.hostname) {
                 // The address service has no record of the name, and the node keeps it: members' apps that use it are
                 // still accepted (engine/registrar-names.ts).
                 display.innerHTML = `<span style="color:#fbbf24;">The address service has no record of this community's name.</span> `
-                    + `<span style="color:#94a3b8;">This server keeps <strong>${esc(d.kept.hostname)}</strong>, and members' apps that use it are still accepted.</span>`;
+                    + `<span style="color:#94a3b8;">This server keeps <strong>${esc(d.kept.hostname)}</strong>, and members' apps that use it are still accepted.</span>${errorLine}`;
                 claimForm.style.display = '';
             } else if (d.status === 'none') {
-                display.innerHTML = `<span style="color:#94a3b8;">No public address yet. Set <code>PUBLIC_ADDRESS_NAME</code> on the node, or claim one below.</span>${nameServiceLine}`;
+                display.innerHTML = `<span style="color:#94a3b8;">No public address yet. Set <code>PUBLIC_ADDRESS_NAME</code> on the node, or claim one below.</span>${errorLine}${nameServiceLine}`;
                 claimForm.style.display = '';
             } else if (d.status === 'error') {
                 display.innerHTML = `<span style="color:#f87171;">Couldn't load the address${d.error ? ' — ' + esc(d.error) : ''}.</span>`;
                 claimForm.style.display = '';
             } else {
                 // Any other word of the address service (released, revoked, blocked…), as it gave it.
-                display.innerHTML = `<span style="color:#94a3b8;">The address service says <strong>${esc(d.status || 'nothing')}</strong>${d.hostname ? ` for <strong>${esc(d.hostname)}</strong>` : ''}.</span>${nameServiceLine}`;
+                display.innerHTML = `<span style="color:#94a3b8;">The address service says <strong>${esc(d.status || 'nothing')}</strong>${d.hostname ? ` for <strong>${esc(d.hostname)}</strong>` : ''}.</span>${errorLine}${nameServiceLine}`;
                 claimForm.style.display = '';
             }
         }

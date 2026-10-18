@@ -21,7 +21,8 @@
  *     timed push 12 hours on.
  *  8. Settings (settings.js) shows each status answer once: the server answers 200 whether or not the address service
  *     answered (#2143 item 1), so only a request that never reached the server is tried again. The name service's line
- *     shows calmly, a paused name as paused, an own address as this server's own with its certificate.
+ *     shows calmly, a paused name as paused, an own address as this server's own with its certificate, and this server's
+ *     own error in whichever state it answers with.
  *
  * On origin/main 583a6cb0 sections 1–5 fail (the claim throws at 5 s; a provisioning answer is stored and the agent stops;
  * /holder's pending is only said; tickDue does not exist) and 6 shows "Awaiting approval".
@@ -402,6 +403,13 @@ async function main(): Promise<void> {
             const own = await open(respond(200, { success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', tls: { certificate: null, nextRenewalAt: null, lastError: null } }));
             assert(/203\.0\.113\.5/.test(own) && /own address/.test(own) && /No certificate yet/.test(own) && els['pubaddr-offline-btn'].style.display === 'none',
                 `an own address: shown as this server's own, with its certificate, and no Take offline (${own})`);
+            // This server failing to act on an answer the address service gave: 200 with what it holds and `error`, shown in
+            // that state too (PR #2158 review 4307110322; until then only a live name showed it).
+            const noneErr = await open(respond(200, { success: true, status: 'none', error: 'database or disk is full' }));
+            assert(fetches === 1 && /No public address yet/.test(noneErr) && /couldn.t act on the address service.s answer — database or disk is full/.test(noneErr),
+                `no address and this server's error: both shown, once (${noneErr})`);
+            const ownErr = await open(respond(200, { success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', error: 'database or disk is full' }));
+            assert(/own address/.test(ownErr) && /couldn.t act on the address service.s answer — database or disk is full/.test(ownErr), `an own address and this server's error: both shown (${ownErr})`);
             const refused = await open(respond(401, { error: 'Unauthorized' }));
             assert(fetches === 1 && /Couldn.t load the address/.test(refused) && /Unauthorized/.test(refused), `this server refusing: said once, not asked again (${refused})`);
             const gone = await open(async () => { throw new TypeError('Failed to fetch'); });

@@ -666,6 +666,23 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.queryByRole('button', { name: /Take offline/i })).not.toBeInTheDocument();
         });
 
+        // PR #2158 review 4307110322: the server's own fault after the address service answered is 200 with what it holds
+        // and `error`; until then only a live name showed it.
+        it('the server failing to act on an answer: its error shown with no address, and with an own address', async () => {
+            serve({ success: true, status: 'none', error: 'database or disk is full' });
+            const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText(/No public address currently assigned/)).toBeInTheDocument();
+            expect(screen.getByTestId('public-address-server-error')).toHaveTextContent("This server couldn't act on the address service's answer — database or disk is full");
+            unmount();
+
+            vi.restoreAllMocks();
+            serve({ success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', error: 'database or disk is full' });
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByText("(this server's own address)")).toBeInTheDocument();
+            expect(screen.getByTestId('public-address-server-error')).toHaveTextContent('database or disk is full');
+            expect(screen.queryByText(/Couldn.t (reach|refresh)/i)).not.toBeInTheDocument();
+        });
+
         it('an own address with a certificate says until when it is valid', () => {
             expect(ownCertificateLine({ certificate: { issuedAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-12-30T00:00:00.000Z' } })).toMatch(/^Certificate valid until .*2026/);
             expect(ownCertificateLine({ certificate: null })).toBe('No certificate yet: the server is asking for one.');

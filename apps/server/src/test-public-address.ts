@@ -15,6 +15,9 @@
  * 11. Settings' status read with nothing to ask the registrar about (no address, or after Take offline) asks it nothing,
  *     and with a stored name and the registrar unreachable or faulty answers 200: the stored name and one calm line
  *     (#2143 item 1).
+ * 12. With only PUBLIC_ADDRESS_NAME and nothing stored, the registrar unreachable: none and the line, never the env's name
+ *     as live. The registrar answering and storing its answer failing: 200, what this server holds as it stands, and the
+ *     error; the next read stores it (PR #2158 review).
  *
  * The tunnel's cloudflared is the fake (__fixtures__/fake-cloudflared.mjs), and Settings' probes of Cloudflare's edge are
  * refused here: this suite reaches neither Docker nor Cloudflare (before 2026-09-28 it restarted cloudflared containers
@@ -35,6 +38,7 @@ import { useFakeCloudflared } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret } from './totp.js';
+import { db } from './db/db.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -463,6 +467,48 @@ async function run() {
         const afterBody = await afterRes.json().catch(() => ({}));
         assert(afterRes.status === 200 && afterBody.status === 'none' && registrarRequests === asksAfterOffline,
             `after Take offline, GET /status answers none and asks the registrar nothing (${afterRes.status} ${afterBody.status}, ${registrarRequests - asksAfterOffline} requests)`);
+
+        // --- Test 12: only PUBLIC_ADDRESS_NAME, nothing stored (PR #2158 review 4307110374, 4307110322) ---
+        // The agent asks for the name; nothing confirmed it, and nothing stored it: never shown as live.
+        process.env.PUBLIC_ADDRESS_NAME = 'env-only';
+        try {
+            process.env.REGISTRAR_URL = `http://127.0.0.1:${closedPort}`;
+            try {
+                const envRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+                const envBody = await envRes.json().catch(() => ({}));
+                assert(envRes.status === 200 && envBody.status === 'none' && envBody.cached === undefined && envBody.hostname === undefined
+                    && envBody.nameServiceNote === "The BeanPool name service can't be reached right now." && envBody.error === undefined,
+                    `only PUBLIC_ADDRESS_NAME, the registrar unreachable: 200, none and the calm line, not the name as live (${envRes.status} ${JSON.stringify(envBody)})`);
+                assert(!(getNodeConfig() as any).publicAddress, '…and nothing is stored');
+            } finally {
+                process.env.REGISTRAR_URL = registrarUrl;
+            }
+
+            // The registrar answers the name live, and storing it fails once (a full disk): what this server holds as it
+            // stands (nothing), and this server's error for Settings to show.
+            registrarStatus = 'live';
+            registrarName = 'env-only';
+            db.prepare(`CREATE TEMP TRIGGER pa_store_fails BEFORE INSERT ON node_config
+                WHEN json_extract(NEW.value, '$.publicAddress.name') = 'env-only' BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END`).run();
+            try {
+                const failRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+                const failBody = await failRes.json().catch(() => ({}));
+                assert(failRes.status === 200 && failBody.success === true && failBody.error === 'database or disk is full' && failBody.nameServiceNote === undefined,
+                    `the registrar answering and storing its answer failing: 200 with this server's error (${failRes.status} ${JSON.stringify(failBody)})`);
+                assert(failBody.status === 'none' && failBody.cached === undefined && failBody.hostname === undefined,
+                    `…and what this server holds as it stands: nothing stored, so none, not the env's name as live (${failBody.status} ${failBody.hostname}, cached ${failBody.cached})`);
+                assert(!(getNodeConfig() as any).publicAddress, '…and nothing was stored');
+            } finally {
+                db.prepare('DROP TRIGGER IF EXISTS temp.pa_store_fails').run();
+            }
+            const okRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+            const okBody = await okRes.json().catch(() => ({}));
+            assert(okRes.status === 200 && okBody.status === 'live' && okBody.hostname === 'env-only.beanpool.org' && okBody.error === undefined
+                && (getNodeConfig() as any).publicAddress?.name === 'env-only',
+                `storing working again, the next read stores the name and shows it live (${okRes.status} ${JSON.stringify({ status: okBody.status, hostname: okBody.hostname, error: okBody.error })})`);
+        } finally {
+            delete process.env.PUBLIC_ADDRESS_NAME;
+        }
 
         console.log(`\n⭐️ ALL ${testsPassed}/${testsRun} PUBLIC ADDRESS & TUNNEL TESTS PASSED.`);
     } finally {

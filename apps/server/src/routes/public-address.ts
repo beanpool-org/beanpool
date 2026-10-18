@@ -595,10 +595,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // agent) is shown, never stored over the newer write.
         const since = publicAddressGeneration();
         const stored = (getNodeConfig() as any).publicAddress;
-        // What this server holds, its stored name as last stored: shown when there is no registrar answer to act on.
-        const held = () => (localPa && !isOwnPublicAddress(localPa) && (localPa.hostname || localPa.name)
-            ? { ...addressFields(ctx, localPa), cached: true }
-            : ownAddressAnswer(ctx));
+        // What this server holds, read as it is shown (an answer stored before a later step failed is shown as stored): its
+        // stored name as last stored, else its own address or none. Never PUBLIC_ADDRESS_NAME alone: nothing stored it.
+        const held = () => {
+            const pa = (getNodeConfig() as any).publicAddress;
+            return pa && !isOwnPublicAddress(pa) && (pa.hostname || pa.name) ? { ...addressFields(ctx, pa), cached: true } : ownAddressAnswer(ctx);
+        };
         let result: any;
         try {
             result = await addressStatus(stored?.name);

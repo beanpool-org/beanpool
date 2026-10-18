@@ -90,4 +90,9 @@ INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0010_reserve_our_hosts.sql'
 WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('vault', 'auth', 'mullum1', 'mullum2', 'mullum3', 'test-mirror', 'p2p-mullum2')) = 7;
 
+-- 0011: its table.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0011_status.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'watch_days') = 1;
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;
